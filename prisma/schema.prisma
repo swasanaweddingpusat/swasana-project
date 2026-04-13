@@ -1,0 +1,922 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model accounts {
+  id                String  @id
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  users             users   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model activity_logs {
+  id          String    @id
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String
+  changes     Json      @default("{}")
+  description String?
+  bookingId   String?
+  createdAt   DateTime  @default(now())
+  bookings    bookings? @relation(fields: [bookingId], references: [id])
+  profiles    profiles? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+}
+
+model attendance {
+  id         String           @id
+  employeeId String
+  date       DateTime         @db.Date
+  checkIn    DateTime?
+  checkOut   DateTime?
+  status     AttendanceStatus @default(present)
+  notes      String?
+  location   String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime
+  employees  employees        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+}
+
+model booking_bonuses {
+  id              String    @id
+  bookingId       String
+  vendorType      String?
+  vendorId        String?
+  accountNumber   String?
+  accountName     String?
+  bankName        String?
+  payment1Nominal Decimal?  @db.Decimal(15, 2)
+  payment1Date    DateTime? @db.Date
+  payment2Nominal Decimal?  @db.Decimal(15, 2)
+  payment2Date    DateTime? @db.Date
+  payment3Nominal Decimal?  @db.Decimal(15, 2)
+  payment3Date    DateTime? @db.Date
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+  bookings        bookings  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  vendors         vendors?  @relation(fields: [vendorId], references: [id])
+}
+
+model booking_vendor_payments {
+  id             String    @id
+  bookingId      String
+  vendorId       String?
+  accountNumber  String?
+  accountName    String?
+  bankName       String?
+  packageNominal Decimal?  @db.Decimal(15, 2)
+  paymentNominal Decimal?  @db.Decimal(15, 2)
+  status         String?
+  dpClient       Decimal?  @db.Decimal(15, 2)
+  dpClientDate   DateTime? @db.Date
+  dpClient2      Decimal?  @db.Decimal(15, 2)
+  dpClient2Date  DateTime? @db.Date
+  dpVendor       Decimal?  @db.Decimal(15, 2)
+  dpVendorDate   DateTime? @db.Date
+  payment1       Decimal?  @db.Decimal(15, 2)
+  payment1Date   DateTime? @db.Date
+  payment2       Decimal?  @db.Decimal(15, 2)
+  payment2Date   DateTime? @db.Date
+  payment3       Decimal?  @db.Decimal(15, 2)
+  payment3Date   DateTime? @db.Date
+  payment4       Decimal?  @db.Decimal(15, 2)
+  payment4Date   DateTime? @db.Date
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+  bookings       bookings  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  vendors        vendors?  @relation(fields: [vendorId], references: [id])
+}
+
+model booking_vendors {
+  id              String   @id
+  bookingId       String
+  packageVendorId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  bookings        bookings @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, packageVendorId])
+}
+
+model bookings {
+  id                                    String                    @id
+  bookingDate                           DateTime
+  paymentMethodId                       String?
+  bookingStatus                         BookingStatus             @default(Pending)
+  salesId                               String
+  venueId                               String
+  customerId                            String
+  packageId                             String
+  packageVariantId                      String?
+  sourceOfInformationId                 String?
+  weddingSession                        WeddingSession?
+  contactPersonNumber                   String
+  contactPersonEmail                    String                    @default("")
+  paymentStatus                         String                    @default("")
+  bonus                                 String?
+  bonusFile                             String?
+  specialBonusName                      String?
+  specialBonusAmount                    Decimal?                  @db.Decimal(15, 2)
+  addons                                String?
+  notes                                 String?
+  clientAgreementFile                   String?
+  rejectionNotes                        String?
+  poNumber                              String?                   @unique
+  signatureManager                      String?
+  signatureClient                       String?
+  signatureSales                        String?
+  createdBy                             String?
+  createdAt                             DateTime                  @default(now())
+  updatedAt                             DateTime
+  activity_logs                         activity_logs[]
+  booking_bonuses                       booking_bonuses[]
+  booking_vendor_payments               booking_vendor_payments[]
+  booking_vendors                       booking_vendors[]
+  profiles_bookings_createdByToprofiles profiles?                 @relation("bookings_createdByToprofiles", fields: [createdBy], references: [id])
+  customers                             customers                 @relation(fields: [customerId], references: [id])
+  packages                              packages                  @relation(fields: [packageId], references: [id])
+  package_variants                      package_variants?         @relation(fields: [packageVariantId], references: [id])
+  payment_methods                       payment_methods?          @relation(fields: [paymentMethodId], references: [id])
+  profiles_bookings_salesIdToprofiles   profiles                  @relation("bookings_salesIdToprofiles", fields: [salesId], references: [id])
+  source_of_informations                source_of_informations?   @relation(fields: [sourceOfInformationId], references: [id])
+  venues                                venues                    @relation(fields: [venueId], references: [id])
+  purchase_orders                       purchase_orders[]
+  term_of_payments                      term_of_payments[]
+}
+
+model brands {
+  id          String       @id
+  name        String
+  code        String?      @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime
+  po_settings po_settings?
+  venues      venues[]
+}
+
+model customers {
+  id           String     @id
+  name         String
+  mobileNumber String
+  email        String
+  type         String     @default("regular")
+  club         String?
+  memberStatus String     @default("non-member")
+  notes        String?
+  nikNumber    String?
+  ktpAddress   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+  bookings     bookings[]
+}
+
+model email_verification_tokens {
+  id        String   @id
+  profileId String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model employees {
+  id                     String                   @id
+  userId                 String?                  @unique
+  employeeCode           String                   @unique
+  fullName               String
+  email                  String                   @unique
+  phoneNumber            String?
+  position               String?
+  department             String?
+  venueId                String?
+  joinDate               DateTime                 @db.Date
+  resignDate             DateTime?                @db.Date
+  status                 EmployeeStatus           @default(active)
+  salary                 Decimal?                 @db.Decimal(15, 2)
+  bankName               String?
+  bankAccount            String?
+  bankRecipient          String?
+  address                String?
+  notes                  String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  attendance             attendance[]
+  leave_requests         leave_requests[]
+  payrolls               payrolls[]
+  recruitment_applicants recruitment_applicants[]
+}
+
+model internal_conversations {
+  id                    String                  @id
+  name                  String?
+  type                  ConversationType        @default(direct)
+  status                ConversationStatus      @default(unread)
+  lastMessage           String?
+  lastMessageAt         DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime
+  internal_messages     internal_messages[]
+  internal_participants internal_participants[]
+}
+
+model internal_messages {
+  id                          String                 @id
+  conversationId              String
+  senderId                    String
+  content                     String
+  replyToMessageId            String?
+  isPinned                    Boolean                @default(false)
+  pinnedAt                    DateTime?
+  pinnedBy                    String?
+  isDeleted                   Boolean                @default(false)
+  deletedAt                   DateTime?
+  deletedBy                   String?
+  forwardedFromMessageId      String?
+  forwardedFromConversationId String?
+  forwardedBy                 String?
+  forwardedAt                 DateTime?
+  forwardedMetadata           Json?
+  createdAt                   DateTime               @default(now())
+  internal_conversations      internal_conversations @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  profiles                    profiles               @relation(fields: [senderId], references: [id])
+  message_attachments         message_attachments[]
+  message_mentions            message_mentions[]
+}
+
+model internal_participants {
+  conversationId         String
+  userId                 String
+  unreadCount            Int                    @default(0)
+  joinedAt               DateTime               @default(now())
+  role                   String                 @default("member")
+  internal_conversations internal_conversations @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  profiles               profiles               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+}
+
+model leave_requests {
+  id         String      @id
+  employeeId String
+  leaveType  LeaveType
+  startDate  DateTime    @db.Date
+  endDate    DateTime    @db.Date
+  totalDays  Int
+  reason     String
+  status     LeaveStatus @default(pending)
+  approvedBy String?
+  approvedAt DateTime?
+  rejectedBy String?
+  rejectedAt DateTime?
+  notes      String?
+  attachment String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime
+  employees  employees   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model message_attachments {
+  id                String            @id
+  messageId         String
+  fileName          String
+  filePath          String
+  fileType          String
+  fileSize          BigInt
+  mimeType          String
+  thumbnailPath     String?
+  createdAt         DateTime          @default(now())
+  internal_messages internal_messages @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model message_mentions {
+  id                String            @id
+  messageId         String
+  mentionedUserId   String
+  createdAt         DateTime          @default(now())
+  internal_messages internal_messages @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model package_internal_items {
+  id               String            @id
+  packageId        String
+  itemName         String
+  itemDescription  String
+  packageVariantId String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime
+  packages         packages          @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package_variants package_variants? @relation(fields: [packageVariantId], references: [id])
+}
+
+model package_variants {
+  id                     String                   @id
+  packageId              String
+  pax                    Int
+  price                  BigInt
+  variantName            String
+  available              Boolean                  @default(true)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  bookings               bookings[]
+  package_internal_items package_internal_items[]
+  packages               packages                 @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package_vendor_items   package_vendor_items[]
+}
+
+model package_vendor_items {
+  id                String            @id
+  packageId         String
+  vendorCategoryId  String
+  packageVariantId  String?
+  vendorId          String
+  vendorItemId      String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime
+  packages          packages          @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package_variants  package_variants? @relation(fields: [packageVariantId], references: [id])
+  vendor_categories vendor_categories @relation(fields: [vendorCategoryId], references: [id])
+  vendors           vendors           @relation(fields: [vendorId], references: [id])
+  vendor_items      vendor_items      @relation(fields: [vendorItemId], references: [id])
+}
+
+model package_vendors {
+  id        String   @id
+  packageId String
+  vendorId  String
+  createdAt DateTime @default(now())
+  packages  packages @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  vendors   vendors  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, vendorId])
+}
+
+model packages {
+  id                     String                   @id
+  packageName            String
+  available              Boolean                  @default(true)
+  venueId                String?
+  notes                  String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  bookings               bookings[]
+  package_internal_items package_internal_items[]
+  package_variants       package_variants[]
+  package_vendor_items   package_vendor_items[]
+  package_vendors        package_vendors[]
+  venues                 venues?                  @relation(fields: [venueId], references: [id])
+}
+
+model password_reset_tokens {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  profiles  profiles @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model payment_methods {
+  id                String     @id
+  venueId           String?
+  vendorId          String?
+  bankName          String?
+  bankAccountNumber String?
+  bankRecipient     String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime
+  bookings          bookings[]
+  vendors           vendors?   @relation(fields: [vendorId], references: [id])
+  venues            venues?    @relation(fields: [venueId], references: [id])
+}
+
+model payrolls {
+  id            String        @id
+  employeeId    String
+  period        String
+  periodMonth   Int
+  periodYear    Int
+  baseSalary    Decimal       @db.Decimal(15, 2)
+  allowances    Decimal       @default(0) @db.Decimal(15, 2)
+  deductions    Decimal       @default(0) @db.Decimal(15, 2)
+  bonus         Decimal       @default(0) @db.Decimal(15, 2)
+  totalAmount   Decimal       @db.Decimal(15, 2)
+  status        PayrollStatus @default(draft)
+  paymentDate   DateTime?     @db.Date
+  paymentMethod String?
+  notes         String?
+  metadata      Json?
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime
+  employees     employees     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, periodMonth, periodYear])
+}
+
+model permissions {
+  id               String             @id
+  module           String
+  action           String
+  description      String?
+  createdAt        DateTime           @default(now())
+  role_permissions role_permissions[]
+
+  @@unique([module, action])
+}
+
+model po_settings {
+  id                  String   @id
+  brandId             String?  @unique
+  brandCode           String   @unique
+  brandName           String
+  headerImageUrl      String?
+  footerImageUrl      String?
+  fontSizeTitle       Int      @default(14)
+  fontSizeSubtitle    Int      @default(9)
+  fontSizeBody        Int      @default(10)
+  fontSizeSmall       Int      @default(8)
+  fontSizeTableHeader Int      @default(9)
+  headerHeight        Int      @default(120)
+  updatedBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime
+  brands              brands?  @relation(fields: [brandId], references: [id])
+}
+
+model profiles {
+  id                                    String                  @id
+  userId                                String                  @unique
+  email                                 String                  @unique
+  fullName                              String?
+  phoneNumber                           String?
+  avatarUrl                             String?
+  roleId                                String?
+  isEmailVerified                       Boolean                 @default(false)
+  mustChangePassword                    Boolean                 @default(false)
+  lastLoginAt                           DateTime?
+  timezone                              String                  @default("Asia/Jakarta")
+  language                              String                  @default("id")
+  createdAt                             DateTime                @default(now())
+  updatedAt                             DateTime
+  activity_logs                         activity_logs[]
+  bookings_bookings_createdByToprofiles bookings[]              @relation("bookings_createdByToprofiles")
+  bookings_bookings_salesIdToprofiles   bookings[]              @relation("bookings_salesIdToprofiles")
+  internal_messages                     internal_messages[]
+  internal_participants                 internal_participants[]
+  password_reset_tokens                 password_reset_tokens[]
+  roles                                 roles?                  @relation(fields: [roleId], references: [id])
+  users                                 users                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user_venue_access                     user_venue_access[]
+}
+
+model purchase_order_items {
+  id              String          @id
+  poId            String
+  description     String
+  quantity        Decimal         @default(0) @db.Decimal(10, 2)
+  unit            String?
+  unitPrice       Decimal         @default(0) @db.Decimal(15, 2)
+  totalPrice      Decimal         @default(0) @db.Decimal(15, 2)
+  createdAt       DateTime        @default(now())
+  purchase_orders purchase_orders @relation(fields: [poId], references: [id], onDelete: Cascade)
+}
+
+model purchase_orders {
+  id                   String                 @id
+  bookingId            String?
+  poNumber             String                 @unique
+  type                 String
+  vendorName           String
+  vendorPhone          String?
+  eventName            String
+  eventDate            DateTime?              @db.Date
+  eventTime            String?
+  venueName            String?
+  packageName          String?
+  brandName            String?
+  status               PurchaseOrderStatus    @default(Pending)
+  notes                String?
+  totalAmount          Decimal?               @db.Decimal(15, 2)
+  metadata             Json?
+  approvedDate         DateTime?              @db.Date
+  approvedBy           String?
+  createdBy            String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  purchase_order_items purchase_order_items[]
+  bookings             bookings?              @relation(fields: [bookingId], references: [id])
+}
+
+model recruitment_applicants {
+  id            String            @id
+  fullName      String
+  email         String
+  phoneNumber   String?
+  position      String
+  department    String?
+  cvUrl         String?
+  portfolioUrl  String?
+  source        String?
+  status        RecruitmentStatus @default(applied)
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  interviewDate DateTime?
+  offerDate     DateTime?
+  joinDate      DateTime?         @db.Date
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime
+  employees     employees?        @relation(fields: [reviewedBy], references: [id])
+}
+
+model role_permissions {
+  id           String      @id
+  roleId       String
+  permissionId String
+  createdAt    DateTime    @default(now())
+  permissions  permissions @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  roles        roles       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model roles {
+  id               String             @id
+  name             String             @unique
+  description      String?
+  sortOrder        Int                @default(0)
+  createdAt        DateTime           @default(now())
+  profiles         profiles[]
+  role_permissions role_permissions[]
+}
+
+model sessions {
+  id           String   @id
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model source_of_informations {
+  id        String     @id
+  name      String
+  createdAt DateTime   @default(now())
+  bookings  bookings[]
+}
+
+model term_of_payments {
+  id              String              @id
+  bookingId       String
+  name            String
+  dueDate         DateTime
+  amount          Decimal             @db.Decimal(15, 2)
+  paymentStatus   TermOfPaymentStatus @default(unpaid)
+  invoiceNumber   String?
+  paymentEvidence String?
+  notes           String?
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime
+  bookings        bookings            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model user_venue_access {
+  id        String           @id
+  userId    String
+  venueId   String
+  scope     VenueAccessScope @default(individual)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime
+  profiles  profiles         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venues    venues           @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, venueId])
+}
+
+model users {
+  id            String     @id
+  name          String?
+  email         String     @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime
+  accounts      accounts[]
+  profiles      profiles?
+  sessions      sessions[]
+}
+
+model vendor_categories {
+  id                   String                 @id
+  name                 String                 @unique
+  description          String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  package_vendor_items package_vendor_items[]
+  vendors              vendors[]
+}
+
+model vendor_items {
+  id                   String                 @id
+  vendorId             String
+  venueId              String
+  name                 String
+  description          String?
+  price                BigInt                 @default(0)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  package_vendor_items package_vendor_items[]
+  vendors              vendors                @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  venues               venues                 @relation(fields: [venueId], references: [id], onDelete: Cascade)
+}
+
+model vendors {
+  id                      String                    @id
+  name                    String
+  vendorCategoryId        String?
+  phone                   String?
+  address                 String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime
+  booking_bonuses         booking_bonuses[]
+  booking_vendor_payments booking_vendor_payments[]
+  package_vendor_items    package_vendor_items[]
+  package_vendors         package_vendors[]
+  payment_methods         payment_methods[]
+  vendor_items            vendor_items[]
+  vendor_categories       vendor_categories?        @relation(fields: [vendorCategoryId], references: [id])
+}
+
+model venue_blocked_dates {
+  id          String   @id
+  venueId     String
+  blockedDate DateTime @db.Date
+  session     String?
+  reason      String?
+  blockedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  venues      venues   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+}
+
+model venue_date_holds {
+  id               String    @id
+  venueId          String
+  holdDate         DateTime  @db.Date
+  session          String
+  clientName       String
+  clientPhone      String?
+  eventType        String?
+  eventName        String?
+  eventTime        String?
+  location         String?
+  description      String?
+  status           String    @default("tentative")
+  heldBy           String?
+  expiresAt        DateTime?
+  notes            String?
+  vendorCatering   String?
+  vendorDekorasi   String?
+  vendorRiasBusana String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime
+  venues           venues    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+}
+
+model venues {
+  id                  String                @id
+  name                String
+  brandId             String?
+  address             String?
+  capacity            Int?
+  imageUrl            String?
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+  bookings            bookings[]
+  packages            packages[]
+  payment_methods     payment_methods[]
+  user_venue_access   user_venue_access[]
+  vendor_items        vendor_items[]
+  venue_blocked_dates venue_blocked_dates[]
+  venue_date_holds    venue_date_holds[]
+  brands              brands?               @relation(fields: [brandId], references: [id])
+}
+
+model verification_tokens {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model wa_conversations {
+  id              String               @id
+  phoneNumber     String               @unique
+  customerName    String?
+  status          WaConversationStatus @default(unread)
+  type            WaConversationType   @default(personal)
+  lastMessage     String?
+  lastMessageAt   DateTime?
+  unreadCount     Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime
+  wa_messages     wa_messages[]
+  wa_participants wa_participants[]
+}
+
+model wa_mentions {
+  id          String      @id
+  messageId   String
+  phone       String?
+  createdAt   DateTime    @default(now())
+  wa_messages wa_messages @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model wa_message_attachments {
+  id          String      @id
+  messageId   String
+  fileName    String?
+  filePath    String?
+  fileType    String?
+  fileSize    BigInt?
+  mimeType    String?
+  createdAt   DateTime    @default(now())
+  wa_messages wa_messages @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model wa_messages {
+  id                     String                   @id
+  conversationId         String
+  senderId               String?
+  content                String?
+  messageType            WaMessageType            @default(text)
+  status                 WaMessageStatus          @default(sent)
+  isFromMe               Boolean                  @default(false)
+  mediaUrl               String?
+  caption                String?
+  metadata               Json?
+  createdAt              DateTime                 @default(now())
+  wa_mentions            wa_mentions[]
+  wa_message_attachments wa_message_attachments[]
+  wa_conversations       wa_conversations         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model wa_participants {
+  id               String           @id
+  conversationId   String
+  phone            String
+  role             String           @default("member")
+  joinedAt         DateTime         @default(now())
+  wa_conversations wa_conversations @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, phone])
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  late
+  permission
+  sick
+}
+
+enum BookingStatus {
+  Confirmed
+  Uploaded
+  Pending
+  Rejected
+  Canceled
+  Lost
+}
+
+enum ConversationStatus {
+  unread
+  active
+  archived
+}
+
+enum ConversationType {
+  direct
+  group
+}
+
+enum EmployeeStatus {
+  active
+  inactive
+  resigned
+  terminated
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+  canceled
+}
+
+enum LeaveType {
+  annual
+  sick
+  maternity
+  paternity
+  emergency
+  unpaid
+}
+
+enum PayrollStatus {
+  draft
+  approved
+  paid
+}
+
+enum PurchaseOrderStatus {
+  Draft
+  Pending
+  Approved
+  Rejected
+  Paid
+}
+
+enum RecruitmentStatus {
+  applied
+  screening
+  interview
+  offering
+  accepted
+  rejected
+}
+
+enum TermOfPaymentStatus {
+  unpaid
+  paid
+  overdue
+  ongoing
+}
+
+enum VenueAccessScope {
+  general
+  individual
+}
+
+enum WaConversationStatus {
+  unread
+  answered
+  closed
+}
+
+enum WaConversationType {
+  group
+  personal
+}
+
+enum WaMessageStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+  received
+}
+
+enum WaMessageType {
+  text
+  image
+  video
+  audio
+  document
+  location
+  contact
+  sticker
+}
+
+enum WeddingSession {
+  Pagi
+  Malam
+  Fullday
+}
