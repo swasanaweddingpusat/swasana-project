@@ -1,4 +1,3 @@
-import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -15,37 +14,35 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 }
 
-export const proxy = auth((req: NextRequest & { auth: any }) => {
-  const { pathname } = req.nextUrl;
-  const session = req.auth;
+export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-  // Allow public paths
+  // Check JWT cookie (no DB call)
+  const sessionToken =
+    request.cookies.get("authjs.session-token")?.value ||
+    request.cookies.get("__Secure-authjs.session-token")?.value;
+
+  // Public paths
   if (isPublicPath(pathname)) {
-    // Redirect to dashboard if already logged in
-    if (session && pathname.startsWith("/auth")) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+    if (sessionToken && pathname.startsWith("/auth")) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();
   }
 
-  // Redirect to login if not authenticated
-  if (!session) {
-    const loginUrl = new URL("/auth/login", req.url);
+  // Redirect to login if no session
+  if (!sessionToken) {
+    const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Force password change
-  if (
-    session.user?.mustChangePassword &&
-    !pathname.startsWith("/dashboard/profile")
-  ) {
-    return NextResponse.redirect(new URL("/dashboard/profile", req.url));
-  }
-
+  // mustChangePassword is checked in (private)/layout.tsx via auth() session
   return NextResponse.next();
-});
+}
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|public/).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|ttf|woff|woff2)).*)"],
+  skipProxyUrlNormalize: true,
 };

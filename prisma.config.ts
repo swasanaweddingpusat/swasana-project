@@ -6,6 +6,9 @@ import { loadEnvConfig } from "@next/env";
 loadEnvConfig(path.resolve(__dirname));
 
 export default defineConfig({
+  migrations: {
+    seed: "tsx prisma/seed.ts",
+  },
   datasource: {
     url: process.env.DATABASE_URL as string,
   },

@@ -8,6 +8,7 @@ import { useTransition } from "react"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { forgotPassword } from "@/actions/auth"
 
 export function ForgotPasswordForm({
   className,
@@ -19,21 +20,15 @@ export function ForgotPasswordForm({
   const handleSubmit = async (formData: FormData) => {
     startTransition(async () => {
       try {
-        const email = formData.get("email") as string
-        const res = await fetch("/api/send-email/reset-password", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        })
+        const result = await forgotPassword(formData)
 
-        if (!res.ok) {
-          const data = await res.json()
+        if (!result.success) {
           toast.error("Gagal mengirim email", {
-            description: data.error ?? "Silakan coba lagi.",
+            description: result.error ?? "Silakan coba lagi.",
           })
         } else {
           toast.success("Link reset terkirim!", {
-            description: "Silakan cek email Anda untuk link reset password.",
+            description: result.message ?? "Silakan cek email Anda untuk link reset password.",
           })
           router.push(
             "/auth/login?message=" +

@@ -7,6 +7,7 @@ declare module "next-auth" {
       id: string;
       roleId: string | null;
       mustChangePassword: boolean;
+      isEmailVerified: boolean;
     };
   }
 
@@ -21,5 +22,6 @@ declare module "next-auth/jwt" {
     id?: string;
     roleId?: string | null;
     mustChangePassword?: boolean;
+    isEmailVerified?: boolean;
   }
 }
