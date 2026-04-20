@@ -1,6 +1,11 @@
-import { Palette } from "lucide-react";
-import { ComingSoon } from "../_components/coming-soon";
+import { getBrands } from "@/lib/queries/venues";
+import { BrandsManager } from "./_components/brands-manager";
 
-export default function BrandsSettingsPage() {
-  return <ComingSoon icon={Palette} />;
+export default async function BrandsSettingsPage() {
+  const brands = await getBrands();
+  return (
+    <div className="px-6 py-4">
+      <BrandsManager initialData={brands} />
+    </div>
+  );
 }

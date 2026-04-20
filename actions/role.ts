@@ -112,6 +112,99 @@ export async function deleteRole(roleId: string) {
   }
 }
 
+export async function reorderRoles(orderedIds: string[]) {
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { error: permResult.error };
+
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.role.update({ where: { id: orderedIds[i] }, data: { sortOrder: i } });
+    }
+    revalidateTag("roles", "max");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menyimpan urutan role" };
+  }
+}
+
+export async function updatePermission(permissionId: string, action: string) {
+  const permResult = await requirePermission({ module: "role_permission", action: "edit" });
+  if (permResult.error) return { error: permResult.error };
+
+  try {
+    const permission = await db.permission.update({
+      where: { id: permissionId },
+      data: { action: action.trim().toLowerCase() },
+    });
+    revalidateTag("roles", "max");
+    return { success: true, permission };
+  } catch {
+    return { error: "Gagal mengupdate permission" };
+  }
+}
+
+export async function reorderModules(moduleOrder: string[]) {
+  const permResult = await requirePermission({ module: "role_permission", action: "edit" });
+  if (permResult.error) return { error: permResult.error };
+
+  try {
+    for (let i = 0; i < moduleOrder.length; i++) {
+      await db.permission.updateMany({
+        where: { module: moduleOrder[i] },
+        data: { moduleSortOrder: i },
+      });
+    }
+    revalidateTag("roles", "max");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menyimpan urutan module" };
+  }
+}
+
+export async function deletePermission(permissionId: string) {
+  const permResult = await requirePermission({ module: "role_permission", action: "delete" });
+  if (permResult.error) return { error: permResult.error };
+
+  try {
+    await db.permission.delete({ where: { id: permissionId } });
+    revalidateTag("roles", "max");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menghapus permission" };
+  }
+}
+
+export async function deleteModulePermissions(module: string) {
+  const permResult = await requirePermission({ module: "role_permission", action: "delete" });
+  if (permResult.error) return { error: permResult.error };
+
+  try {
+    await db.permission.deleteMany({ where: { module } });
+    revalidateTag("roles", "max");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menghapus module permissions" };
+  }
+}
+
+export async function createPermission(module: string, action: string) {
+  const permResult = await requirePermission({ module: "role_permission", action: "create" });
+  if (permResult.error) return { error: permResult.error };
+
+  try {
+    const permission = await db.permission.create({ data: { module, action } });
+    // Auto-assign to Super Admin
+    const superAdmin = await db.role.findFirst({ where: { name: { equals: "Super Admin", mode: "insensitive" } } });
+    if (superAdmin) {
+      await db.rolePermission.create({ data: { roleId: superAdmin.id, permissionId: permission.id } });
+    }
+    revalidateTag("roles", "max");
+    return { success: true, permission };
+  } catch {
+    return { error: "Permission sudah ada atau gagal dibuat" };
+  }
+}
+
 export async function updateRolePermissions(
   roleId: string,
   permissionIds: string[]

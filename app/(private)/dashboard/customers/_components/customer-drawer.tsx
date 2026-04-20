@@ -1,0 +1,227 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Drawer } from "@/components/shared/drawer";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { customerSchema, type CustomerInput } from "@/lib/validations/customer";
+import { useCreateCustomer, useUpdateCustomer } from "@/hooks/use-customers";
+import { createSourceOfInformation } from "@/actions/source-of-information";
+import { createMemberStatus } from "@/actions/member-status";
+import type { CustomerItem } from "@/lib/queries/customers";
+
+interface CustomerDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editCustomer?: CustomerItem | null;
+}
+
+type OptionItem = { id: string; name: string };
+
+async function fetchOptions(url: string): Promise<OptionItem[]> {
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDrawerProps) {
+  const isEdit = !!editCustomer;
+  const createMut = useCreateCustomer();
+  const updateMut = useUpdateCustomer();
+  const qc = useQueryClient();
+
+  const { data: sourceOptions = [] } = useQuery({
+    queryKey: ["source-of-informations"],
+    queryFn: () => fetchOptions("/api/source-of-informations"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: memberStatusOptions = [] } = useQuery({
+    queryKey: ["member-statuses"],
+    queryFn: () => fetchOptions("/api/member-statuses"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Store selected names (SearchableSelect uses id, but we store name in Customer)
+  const [typeValue, setTypeValue] = useState("");
+  const [memberStatusValue, setMemberStatusValue] = useState("");
+
+  const form = useForm<CustomerInput>({
+    defaultValues: { name: "", mobileNumber: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "" },
+  });
+
+  useEffect(() => {
+    if (open) {
+      const tv = editCustomer?.type ?? "";
+      const mv = editCustomer?.memberStatus ?? "Non-Member";
+      setTypeValue(tv);
+      setMemberStatusValue(mv);
+      form.reset({
+        name: editCustomer?.name ?? "",
+        mobileNumber: editCustomer?.mobileNumber ?? "",
+        email: editCustomer?.email ?? "",
+        nikNumber: editCustomer?.nikNumber ?? "",
+        ktpAddress: editCustomer?.ktpAddress ?? "",
+        type: tv,
+        club: editCustomer?.club ?? "",
+        memberStatus: mv,
+        notes: editCustomer?.notes ?? "",
+      });
+    }
+  }, [open, editCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleAddSourceOfInfo(name: string) {
+    const result = await createSourceOfInformation(name);
+    if (!result.success) { toast.error(result.error); return; }
+    qc.invalidateQueries({ queryKey: ["source-of-informations"] });
+    // Select the newly added item
+    setTypeValue(name);
+    form.setValue("type", name);
+    toast.success(`"${name}" ditambahkan.`);
+  }
+
+  async function handleAddMemberStatus(name: string) {
+    const result = await createMemberStatus(name);
+    if (!result.success) { toast.error(result.error); return; }
+    qc.invalidateQueries({ queryKey: ["member-statuses"] });
+    setMemberStatusValue(name);
+    form.setValue("memberStatus", name);
+    toast.success(`"${name}" ditambahkan.`);
+  }
+
+  // Convert name-based value to option id for SearchableSelect
+  function nameToId(options: OptionItem[], name: string) {
+    return options.find((o) => o.name === name)?.id ?? name;
+  }
+
+  function idToName(options: OptionItem[], id: string) {
+    return options.find((o) => o.id === id)?.name ?? id;
+  }
+
+  async function onSubmit(values: CustomerInput) {
+    const parsed = customerSchema.safeParse(values);
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
+
+    const result = isEdit
+      ? await updateMut.mutateAsync({ id: editCustomer!.id, ...parsed.data })
+      : await createMut.mutateAsync(parsed.data);
+
+    if (!result.success) { toast.error(result.error); return; }
+    toast.success(isEdit ? "Customer diperbarui." : "Customer ditambahkan.");
+    onOpenChange(false);
+  }
+
+  const isPending = createMut.isPending || updateMut.isPending;
+
+  return (
+    <Drawer isOpen={open} onClose={() => onOpenChange(false)} title={isEdit ? "Edit Customer" : "Tambah Customer"}>
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto">
+          <Form {...form}>
+            <form className="space-y-4">
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem><FormLabel>Nama Lengkap *</FormLabel><FormControl>
+                  <Input {...field} placeholder="e.g. John Doe & Jane Doe" />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="mobileNumber" render={({ field }) => (
+                <FormItem><FormLabel>No. HP *</FormLabel><FormControl>
+                  <Input {...field} placeholder="08123456789" inputMode="numeric"
+                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ""))} />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem><FormLabel>Email *</FormLabel><FormControl>
+                  <Input {...field} placeholder="nama@email.com" />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="nikNumber" render={({ field }) => (
+                <FormItem><FormLabel>NIK (16 digit)</FormLabel><FormControl>
+                  <Input {...field} placeholder="3275010101010001" inputMode="numeric" maxLength={16}
+                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 16))} />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="ktpAddress" render={({ field }) => (
+                <FormItem><FormLabel>Alamat KTP</FormLabel><FormControl>
+                  <Textarea {...field} placeholder="Jl. Melati No. 10, Jakarta Selatan" rows={2} />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+
+              {/* Type — SearchableSelect from source_of_informations */}
+              <FormField control={form.control} name="type" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Source of Information *</FormLabel>
+                  <SearchableSelect
+                    options={sourceOptions}
+                    value={nameToId(sourceOptions, field.value)}
+                    onChange={(id) => {
+                      const name = idToName(sourceOptions, id);
+                      setTypeValue(name);
+                      field.onChange(name);
+                    }}
+                    placeholder="Pilih atau tambah sumber lead..."
+                    searchPlaceholder="Cari sumber..."
+                    emptyText="Tidak ada data"
+                    onAdd={handleAddSourceOfInfo}
+                    addingLabel="Menambahkan..."
+                  />
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="club" render={({ field }) => (
+                <FormItem><FormLabel>Club (opsional)</FormLabel><FormControl>
+                  <Input {...field} />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+
+              {/* Member Status — SearchableSelect from customer_member_statuses */}
+              <FormField control={form.control} name="memberStatus" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Member Status</FormLabel>
+                  <SearchableSelect
+                    options={memberStatusOptions}
+                    value={nameToId(memberStatusOptions, field.value)}
+                    onChange={(id) => {
+                      const name = idToName(memberStatusOptions, id);
+                      setMemberStatusValue(name);
+                      field.onChange(name);
+                    }}
+                    placeholder="Pilih atau tambah status..."
+                    searchPlaceholder="Cari status..."
+                    emptyText="Tidak ada data"
+                    onAdd={handleAddMemberStatus}
+                    addingLabel="Menambahkan..."
+                  />
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem><FormLabel>Notes</FormLabel><FormControl>
+                  <Input {...field} placeholder="Prefer tanggal weekend..." />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+            </form>
+          </Form>
+        </div>
+        <div className="sticky bottom-0 bg-white pt-4">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1 cursor-pointer text-red-600 border-red-600 hover:bg-red-50" disabled={isPending}>
+              Batal
+            </Button>
+            <Button onClick={form.handleSubmit(onSubmit)} className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer" disabled={isPending}>
+              {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Drawer>
+  );
+}

@@ -65,44 +65,44 @@ model VerificationToken {
 // ─── Profile & RBAC ──────────────────────────────────────────────────────────
 
 model Profile {
-  id                      String                   @id @default(uuid())
-  userId                  String                   @unique
-  email                   String                   @unique
-  fullName                String?
-  nickName                String?
-  phoneNumber             String?
-  avatarUrl               String?
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  email       String  @unique
+  fullName    String?
+  nickName    String?
+  phoneNumber String?
+  avatarUrl   String?
 
   // Personal data
-  placeOfBirth            String?
-  dateOfBirth             DateTime?
-  ktpAddress              String?
-  currentAddress          String?
-  motherName              String?
-  maritalStatus           String?
-  numberOfChildren        Int?
-  lastEducation           String?
+  placeOfBirth     String?
+  dateOfBirth      DateTime?
+  ktpAddress       String?
+  currentAddress   String?
+  motherName       String?
+  maritalStatus    String?
+  numberOfChildren Int?
+  lastEducation    String?
 
   // Emergency contact
-  emergencyContactName    String?
-  emergencyContactRel     String?
-  emergencyContactPhone   String?
+  emergencyContactName  String?
+  emergencyContactRel   String?
+  emergencyContactPhone String?
 
   // Access control
-  roleId                  String?
-  dataScope               DataScope                @default(own)
-  status                  ProfileStatus            @default(active)
+  roleId    String?
+  dataScope DataScope     @default(own)
+  status    ProfileStatus @default(active)
 
   // Metadata
-  invitedBy               String?
-  invitedAt               DateTime?
-  isEmailVerified         Boolean                  @default(false)
-  mustChangePassword      Boolean                  @default(false)
-  lastLoginAt             DateTime?
-  timezone                String                   @default("Asia/Jakarta")
-  language                String                   @default("id")
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
+  invitedBy          String?
+  invitedAt          DateTime?
+  isEmailVerified    Boolean   @default(false)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  timezone           String    @default("Asia/Jakarta")
+  language           String    @default("id")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
@@ -112,6 +112,10 @@ model Profile {
   userVenueAccess         UserVenueAccess[]
   dataGroupMemberships    UserGroupMember[]
   ledGroups               UserGroup[]              @relation("GroupLeader")
+  bookingsAsSales         Booking[]                @relation("BookingSales")
+  bookingsAsManager       Booking[]                @relation("BookingManager")
+  uploadedDocuments       BookingDocument[]
+  createdRefunds          BookingRefund[]
 
   @@index([roleId])
   @@index([dataScope])
@@ -135,6 +139,7 @@ model Permission {
   module          String
   action          String
   description     String?
+  moduleSortOrder Int              @default(0)
   createdAt       DateTime         @default(now())
   rolePermissions RolePermission[]
 
@@ -238,6 +243,7 @@ model Venue {
   userVenueAccess UserVenueAccess[]
   packages        Package[]
   paymentMethods  PaymentMethod[]
+  bookings        Booking[]
 
   @@map("venues")
 }
@@ -312,15 +318,17 @@ model Vendor {
 }
 
 model PaymentMethod {
-  id                String   @id @default(uuid())
+  id                String          @id @default(uuid())
   vendorId          String?
   venueId           String?
   bankName          String
   bankAccountNumber String
   bankRecipient     String
-  createdAt         DateTime @default(now())
-  vendor            Vendor?  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  venue             Venue?   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  vendor            Vendor?         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  venue             Venue?          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  bookings          Booking[]
+  bookingRefunds    BookingRefund[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -339,22 +347,23 @@ model Package {
   updatedAt   DateTime         @updatedAt
   venue       Venue?           @relation(fields: [venueId], references: [id])
   variants    PackageVariant[]
+  bookings    Booking[]
 
   @@index([venueId])
   @@map("packages")
 }
 
 model PackageVariant {
-  id          String               @id @default(uuid())
-  packageId   String
-  variantName String
-  pax         Int
-  price       Int
-  available   Boolean              @default(true)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
-  package     Package              @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  vendorItems PackageVendorItem[]
+  id            String                @id @default(uuid())
+  packageId     String
+  variantName   String
+  pax           Int
+  price         Int
+  available     Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  package       Package               @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  vendorItems   PackageVendorItem[]
   internalItems PackageInternalItem[]
 
   @@index([packageId])
@@ -387,12 +396,46 @@ model PackageInternalItem {
   @@map("package_internal_items")
 }
 
-// ─── Source of Information ────────────────────────────────────────────────────
+// ─── Customers ───────────────────────────────────────────────────────────────
 
-model SourceOfInformation {
+model Customer {
+  id           String    @id @default(uuid())
+  name         String
+  mobileNumber String
+  email        String
+  nikNumber    String?
+  ktpAddress   String?
+  type         String
+  club         String?
+  memberStatus String    @default("Non-Member")
+  notes        String?
+  updatedBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  bookings     Booking[]
+
+  @@index([name])
+  @@index([mobileNumber])
+  @@map("customers")
+}
+
+// ─── Customer Member Status ───────────────────────────────────────────────────
+
+model CustomerMemberStatus {
   id        String   @id @default(uuid())
   name      String   @unique
   createdAt DateTime @default(now())
+
+  @@map("customer_member_statuses")
+}
+
+// ─── Source of Information ────────────────────────────────────────────────────
+
+model SourceOfInformation {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  bookings  Booking[]
 
   @@map("source_of_informations")
 }
@@ -414,4 +457,288 @@ enum DataScope {
 enum VenueAccessScope {
   general
   individual
+}
+
+// ─── Bookings ────────────────────────────────────────────────────────────────
+
+model Booking {
+  id                    String          @id @default(uuid())
+  bookingDate           DateTime
+  bookingStatus         BookingStatus   @default(Pending)
+  paymentStatus         String          @default("")
+  weddingSession        WeddingSession?
+  weddingType           WeddingType?
+  poNumber              String?
+  rejectionNotes        String?
+  signingLocation       String?
+  signatures            Json?
+  vendorComments        Json?           @default("{}")
+  salesId               String
+  managerId             String?
+  customerId            String
+  venueId               String
+  packageId             String
+  packageVariantId      String?
+  paymentMethodId       String?
+  sourceOfInformationId String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  sales               Profile              @relation("BookingSales", fields: [salesId], references: [id])
+  manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
+  customer            Customer             @relation(fields: [customerId], references: [id])
+  venue               Venue                @relation(fields: [venueId], references: [id])
+  package             Package              @relation(fields: [packageId], references: [id])
+  paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
+  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id])
+
+  // Snapshot relations (1:1)
+  snapCustomer       SnapCustomer?
+  snapVenue          SnapVenue?
+  snapPackage        SnapPackage?
+  snapPackageVariant SnapPackageVariant?
+
+  // Snapshot relations (1:many)
+  snapPackageInternalItems SnapPackageInternalItem[]
+  snapPackageVendorItems   SnapPackageVendorItem[]
+  snapBonuses              SnapBonus[]
+  snapVendorItems          SnapVendorItem[]
+
+  // Live relations
+  termOfPayments   TermOfPayment[]
+  bookingDocuments BookingDocument[]
+  bookingRefunds   BookingRefund[]
+
+  @@index([salesId])
+  @@index([managerId])
+  @@index([customerId])
+  @@index([venueId])
+  @@index([packageId])
+  @@index([bookingStatus])
+  @@index([bookingDate])
+  @@map("bookings")
+}
+
+// ─── Snapshot Tables ─────────────────────────────────────────────────────────
+
+model SnapCustomer {
+  id           String   @id @default(uuid())
+  bookingId    String   @unique
+  customerId   String
+  name         String
+  email        String
+  mobileNumber String
+  nikNumber    String?
+  ktpAddress   String?
+  createdAt    DateTime @default(now())
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("snap_customers")
+}
+
+model SnapVenue {
+  id              String   @id @default(uuid())
+  bookingId       String   @unique
+  venueId         String
+  venueName       String
+  address         String?
+  description     String?
+  extraHoursPrice BigInt?
+  brandName       String?
+  brandCode       String?
+  createdAt       DateTime @default(now())
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("snap_venues")
+}
+
+model SnapPackage {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  packageId   String
+  packageName String
+  notes       String?
+  createdAt   DateTime @default(now())
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("snap_packages")
+}
+
+model SnapPackageVariant {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  variantId   String
+  variantName String
+  pax         Int
+  price       BigInt
+  createdAt   DateTime @default(now())
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("snap_package_variants")
+}
+
+model SnapPackageInternalItem {
+  id              String   @id @default(uuid())
+  bookingId       String
+  itemName        String
+  itemDescription String   @default("")
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("snap_package_internal_items")
+}
+
+model SnapPackageVendorItem {
+  id           String   @id @default(uuid())
+  bookingId    String
+  categoryName String
+  itemText     String
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("snap_package_vendor_items")
+}
+
+model SnapBonus {
+  id               String   @id @default(uuid())
+  bookingId        String
+  vendorId         String
+  vendorCategoryId String
+  vendorName       String
+  description      String?
+  qty              Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("snap_bonuses")
+}
+
+model SnapVendorItem {
+  id                 String   @id @default(uuid())
+  bookingId          String
+  vendorCategoryId   String
+  vendorCategoryName String
+  vendorId           String
+  vendorName         String
+  itemName           String
+  itemPrice          BigInt   @default(0)
+  qty                Int      @default(1)
+  unit               String?
+  totalPrice         BigInt   @default(0)
+  isAddons           Boolean  @default(false)
+  paketData          Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  booking            Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("snap_vendor_items")
+}
+
+// ─── Booking Live Tables ─────────────────────────────────────────────────────
+
+model TermOfPayment {
+  id              String              @id @default(uuid())
+  bookingId       String
+  name            String
+  amount          BigInt
+  dueDate         DateTime
+  paymentStatus   TermOfPaymentStatus @default(unpaid)
+  paymentEvidence String?
+  invoiceNumber   String?
+  notes           String?
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  booking         Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("term_of_payments")
+}
+
+model BookingDocument {
+  id          String   @id @default(uuid())
+  bookingId   String
+  name        String
+  description String?
+  filePath    String
+  fileName    String
+  fileSize    Int      @default(0)
+  fileType    String?
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  uploader    Profile? @relation(fields: [uploadedBy], references: [id])
+
+  @@index([bookingId])
+  @@map("booking_documents")
+}
+
+model BookingRefund {
+  id               String              @id @default(uuid())
+  bookingId        String
+  vendorId         String
+  vendorCategoryId String
+  amount           BigInt              @default(0)
+  paymentMethodId  String
+  status           BookingRefundStatus @default(pending)
+  notes            String?
+  refundDate       DateTime?
+  createdBy        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  paymentMethod    PaymentMethod       @relation(fields: [paymentMethodId], references: [id])
+  creator          Profile?            @relation(fields: [createdBy], references: [id])
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("booking_refunds")
+}
+
+// ─── Booking Enums ───────────────────────────────────────────────────────────
+
+enum BookingStatus {
+  Pending
+  Uploaded
+  Confirmed
+  Rejected
+  Canceled
+  Lost
+}
+
+enum WeddingSession {
+  morning
+  afternoon
+  evening
+  fullday
+}
+
+enum WeddingType {
+  wedding
+  engagement
+  akad
+  resepsi
+  other
+}
+
+enum TermOfPaymentStatus {
+  unpaid
+  paid
+  partial
+}
+
+enum BookingRefundStatus {
+  pending
+  completed
+  cancelled
 }

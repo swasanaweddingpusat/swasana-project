@@ -51,46 +51,46 @@ export async function inviteUser(formData: FormData) {
       return { success: false, error: "Email sudah terdaftar." };
     }
 
-    // Temp password is hashed — never sent plain text. User sets own password via token link.
+    // Temp password — never sent plain text. User sets own password via token link.
     const tempPassword = crypto.randomBytes(8).toString("hex");
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
 
-    // User + profile + token + venue access in ONE nested create — atomic at DB level
+    // Sequential writes — Neon HTTP adapter does NOT support nested creates (implicit transactions)
     const user = await db.user.create({
-      data: {
-        email,
-        name: fullName,
-        password: hashedPassword,
-        profile: {
-          create: {
-            email,
-            fullName,
-            roleId,
-            dataScope,
-            isEmailVerified: false,
-            mustChangePassword: true,
-            invitedAt: new Date(),
-            emailVerificationTokens: {
-              create: { token, expiresAt },
-            },
-            ...(venueIds.length > 0 && {
-              userVenueAccess: {
-                create: venueIds.map((venueId) => ({
-                  venueId,
-                  scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
-                })),
-              },
-            }),
-          },
-        },
-      },
-      include: { profile: true },
+      data: { email, name: fullName, password: hashedPassword },
     });
 
-    const profile = user.profile!;
+    const profile = await db.profile.create({
+      data: {
+        userId: user.id,
+        email,
+        fullName,
+        roleId,
+        dataScope,
+        isEmailVerified: false,
+        mustChangePassword: true,
+        invitedAt: new Date(),
+      },
+    });
+
+    await db.emailVerificationToken.create({
+      data: { profileId: profile.id, token, expiresAt },
+    });
+
+    if (venueIds.length > 0) {
+      for (const venueId of venueIds) {
+        await db.userVenueAccess.create({
+          data: {
+            userId: profile.id,
+            venueId,
+            scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+          },
+        });
+      }
+    }
 
     // Send invitation email — OUTSIDE the DB write so a mail failure doesn't roll back user creation
     const baseUrl = await getBaseUrl();
@@ -304,11 +304,14 @@ export async function resendInvitation(userId: string) {
       return { success: false, error: "Email pengguna sudah diverifikasi." };
     }
 
-    // Invalidate existing tokens
-    await db.emailVerificationToken.updateMany({
+    // Invalidate existing tokens (updateMany not supported in Neon HTTP)
+    const existingTokens = await db.emailVerificationToken.findMany({
       where: { profileId: userId, usedAt: null },
-      data: { usedAt: new Date() },
+      select: { id: true },
     });
+    for (const t of existingTokens) {
+      await db.emailVerificationToken.update({ where: { id: t.id }, data: { usedAt: new Date() } });
+    }
 
     // Create new token
     const token = crypto.randomBytes(32).toString("hex");

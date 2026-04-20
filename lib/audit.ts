@@ -14,8 +14,6 @@ interface AuditLogInput {
 
 export async function logAudit(params: AuditLogInput): Promise<void> {
   try {
-    // ActivityLog.userId FK references Profile.id
-    // Resolve: if passed value is a User.id, look up the Profile.id
     let profileId = params.userId;
     if (profileId) {
       const profile = await db.profile.findUnique({
@@ -24,8 +22,17 @@ export async function logAudit(params: AuditLogInput): Promise<void> {
       });
       if (profile) {
         profileId = profile.id;
+      } else {
+        // Check if it's already a profileId
+        const directProfile = await db.profile.findUnique({
+          where: { id: profileId },
+          select: { id: true },
+        });
+        if (!directProfile) {
+          // Profile not found — skip audit log silently
+          return;
+        }
       }
-      // If no profile found by userId, assume it's already a profileId
     }
 
     await db.activityLog.create({

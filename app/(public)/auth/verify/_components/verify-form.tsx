@@ -21,12 +21,9 @@ export function VerifyForm() {
   const [errorMessage, setErrorMessage] = useState<string>("")
 
   useEffect(() => {
-    // If only a message param exists (no token), show it and redirect
     if (message && !token) {
       toast.info(message)
-      const timer = setTimeout(() => {
-        router.push("/auth/login")
-      }, 3000)
+      const timer = setTimeout(() => { router.push("/auth/login") }, 3000)
       return () => clearTimeout(timer)
     }
 
@@ -40,6 +37,11 @@ export function VerifyForm() {
       if (result.success) {
         setState("verified")
         toast.success("Email berhasil diverifikasi!")
+        if (result.setupToken) {
+          setTimeout(() => {
+            router.push(`/auth/reset-password?token=${result.setupToken}&setup=true`)
+          }, 1500)
+        }
       } else {
         setErrorMessage(result.error ?? "Verifikasi gagal.")
         setState("error")
@@ -65,12 +67,8 @@ export function VerifyForm() {
           <>
             <CheckCircle2 className="h-10 w-10 text-green-600" />
             <p className="font-semibold">Email berhasil diverifikasi!</p>
-            <p className="text-sm text-muted-foreground">
-              Email terverifikasi, silakan login
-            </p>
-            <Link href="/auth/login">
-              <Button className="w-full">Masuk Sekarang</Button>
-            </Link>
+            <p className="text-sm text-muted-foreground">Mengarahkan ke halaman buat password...</p>
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </>
         )}
 

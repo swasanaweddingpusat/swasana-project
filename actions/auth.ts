@@ -90,6 +90,7 @@ export async function resetPassword(formData: FormData) {
   });
 
   if (!resetToken) {
+    console.error("[resetPassword] Token not found:", token.substring(0, 20) + "...");
     return { success: false, error: "Token tidak valid atau sudah digunakan." };
   }
 
@@ -115,6 +116,15 @@ export async function resetPassword(formData: FormData) {
     where: { id: resetToken.id },
     data: { usedAt: new Date() },
   });
+
+  // Delete all sessions so user must re-login with new password
+  const sessions = await db.session.findMany({
+    where: { userId: resetToken.profile.userId },
+    select: { id: true },
+  });
+  for (const s of sessions) {
+    await db.session.delete({ where: { id: s.id } });
+  }
 
   revalidateTag("users", "max");
 
@@ -173,5 +183,17 @@ export async function verifyEmail(token: string) {
     description: "Email berhasil diverifikasi",
   });
 
-  return { success: true, message: "Email berhasil diverifikasi." };
+  // Generate password setup token so user can set their password
+  const crypto = await import("crypto");
+  const rawToken = crypto.randomBytes(32).toString("hex");
+
+  await db.passwordResetToken.create({
+    data: {
+      userId: verificationToken.profileId,
+      token: rawToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+    },
+  });
+
+  return { success: true, setupToken: rawToken, message: "Email berhasil diverifikasi." };
 }

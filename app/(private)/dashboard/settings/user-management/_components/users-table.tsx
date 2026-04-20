@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Trash2, PenLine, Mail, MoreHorizontal, ArrowLeft, ArrowRight,
-  X, UserPlus, SlidersHorizontal,
+  X, UserPlus, SlidersHorizontal, RefreshCw,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ interface UsersTableProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
-  const { data } = useUsers(initialData);
+  const { data, refetch, isRefetching } = useUsers(initialData);
   const users: UserQueryItem[] = useMemo(() => data?.users ?? [], [data]);
   const deleteUserMutation = useDeleteUser();
 
@@ -238,6 +238,16 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                     {allVenues.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={isRefetching}
+                  className="h-8 px-2 border-gray-200 bg-[#F0F2F5] hover:bg-gray-200"
+                  title="Refresh data"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", isRefetching && "animate-spin")} />
+                </Button>
                 {hasFilters && (
                   <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-gray-400 hover:text-gray-600">
                     <X className="h-3.5 w-3.5" />

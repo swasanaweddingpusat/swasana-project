@@ -1,15 +1,45 @@
 "use client";
 
 import Image from "next/image";
-import { navItems } from "./sidebar-config";
+import { navItems, type NavItem, type SubMenuItem } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
+import { usePermissions } from "@/hooks/use-permissions";
 
 interface SidebarNavProps {
   collapsed?: boolean;
   onNavigate?: () => void;
 }
 
+type CanFn = (module: string, action: string) => boolean;
+
+function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
+  return items.flatMap((item) => {
+    if (item.permission && !can(item.permission.module, item.permission.action)) return [];
+    if (item.submenu) {
+      const filtered = filterSubMenus(item.submenu, can);
+      if (!item.permission && filtered.length === 0) return [];
+      return [{ ...item, submenu: filtered }];
+    }
+    return [item];
+  });
+}
+
+function filterNavItems(items: NavItem[], can: CanFn): NavItem[] {
+  return items.flatMap((item) => {
+    if (item.permission && !can(item.permission.module, item.permission.action)) return [];
+    if (item.submenu) {
+      const filtered = filterSubMenus(item.submenu, can);
+      if (!item.permission && filtered.length === 0) return [];
+      return [{ ...item, submenu: filtered }];
+    }
+    return [item];
+  });
+}
+
 export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
+  const { can } = usePermissions();
+  const visibleItems = filterNavItems(navItems, can);
+
   return (
     <>
       {/* Logo */}
@@ -31,7 +61,7 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
             alt="Swasana Wedding"
             width={100}
             height={100}
-            style={{ width: "90%", height: "auto" }}
+            style={{ width: "65%", height: "auto" }}
             priority
           />
         )}
@@ -39,7 +69,7 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto overflow-x-hidden" onClick={onNavigate}>
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <NavItemRow key={item.href} item={item} collapsed={collapsed} />
         ))}
       </nav>

@@ -1,16 +1,11 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env" });
 
-import { PrismaClient, ProfileStatus } from ".prisma/client";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import { neonConfig } from "@neondatabase/serverless";
-import ws from "ws";
+import { PrismaClient, ProfileStatus } from "@prisma/client";
+import { PrismaNeonHttp } from "@prisma/adapter-neon";
 import bcrypt from "bcryptjs";
 
-// Node.js doesn't have native WebSocket — use ws package
-neonConfig.webSocketConstructor = ws;
-
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
+const adapter = new PrismaNeonHttp(process.env.DATABASE_URL!, {});
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -35,6 +30,9 @@ async function main() {
   await prisma.role.deleteMany();
   await prisma.venue.deleteMany();
   await prisma.brand.deleteMany();
+  await prisma.sourceOfInformation.deleteMany();
+  await prisma.customerMemberStatus.deleteMany();
+  await prisma.customer.deleteMany();
   console.log("🗑️  Database truncated");
 
   // ─── Roles ────────────────────────────────────────────────────────────────
@@ -96,11 +94,9 @@ async function main() {
     { module: "dashboard", action: "create" },
     { module: "dashboard", action: "edit" },
     { module: "dashboard", action: "delete" },
-    // addons
-    { module: "addons", action: "view" },
-    { module: "addons", action: "create" },
-    { module: "addons", action: "edit" },
-    { module: "addons", action: "delete" },
+    // addons - removed
+    // purchase_order - removed
+    // venue - removed (use venue_management instead)
     // finance_ap
     { module: "finance_ap", action: "view" },
     { module: "finance_ap", action: "create" },
@@ -134,11 +130,7 @@ async function main() {
     { module: "payment_methods", action: "create", description: "Create payment methods" },
     { module: "payment_methods", action: "edit", description: "Edit payment methods" },
     { module: "payment_methods", action: "delete", description: "Delete payment methods" },
-    // purchase_order
-    { module: "purchase_order", action: "view" },
-    { module: "purchase_order", action: "create" },
-    { module: "purchase_order", action: "edit" },
-    { module: "purchase_order", action: "delete" },
+    // purchase_order removed
     // role_permission
     { module: "role_permission", action: "view", description: "View role & permission" },
     { module: "role_permission", action: "create", description: "Create role & permission" },
@@ -164,12 +156,7 @@ async function main() {
     { module: "vendor", action: "create" },
     { module: "vendor", action: "edit" },
     { module: "vendor", action: "delete" },
-    // venue
-    { module: "venue", action: "view" },
-    { module: "venue", action: "create" },
-    { module: "venue", action: "edit" },
-    { module: "venue", action: "delete" },
-    { module: "venue", action: "view_all", description: "View all venues (bypass venue assignment)" },
+    // venue removed (use venue_management)
     // venue_management
     { module: "venue_management", action: "view", description: "View venue management" },
     { module: "venue_management", action: "create", description: "Create venue management" },
@@ -221,6 +208,28 @@ async function main() {
     venues.push(venue);
   }
   console.log(`✅ ${venues.length} Venues seeded`);
+
+  // ─── Payment Methods ──────────────────────────────────────────────────────
+  await prisma.paymentMethod.create({
+    data: {
+      venueId: venues[0].id,
+      bankName: "BCA",
+      bankAccountNumber: "1234567890",
+      bankRecipient: "PT Swasana Venue Mastery",
+    },
+  });
+  console.log("✅ 1 Payment Method seeded");
+
+  // ─── Payment Methods (Venue) ──────────────────────────────────────────────
+  await prisma.paymentMethod.create({
+    data: {
+      venueId: venues[0].id,
+      bankName: "BCA",
+      bankAccountNumber: "1234567890",
+      bankRecipient: "PT Swasana Venue Mastery",
+    },
+  });
+  console.log("✅ 1 Payment Method seeded");
 
   // ─── Packages + Variants ────────────────────────────────────────────────────
   const venueByCode = Object.fromEntries(venues.map((v) => [v.code, v.id]));
@@ -297,22 +306,25 @@ async function main() {
   ];
 
   for (const pkg of packageData) {
-    await prisma.package.create({
+    const createdPkg = await prisma.package.create({
       data: {
         packageName: pkg.packageName,
         available: true,
         venueId: venueByCode[pkg.venueCode],
         notes: "",
-        variants: {
-          create: pkg.variants.map((v) => ({
-            variantName: v.variantName,
-            pax: v.pax,
-            price: v.price,
-            available: true,
-          })),
-        },
       },
     });
+    for (const v of pkg.variants) {
+      await prisma.packageVariant.create({
+        data: {
+          packageId: createdPkg.id,
+          variantName: v.variantName,
+          pax: v.pax,
+          price: v.price,
+          available: true,
+        },
+      });
+    }
   }
   console.log(`✅ ${packageData.length} Packages with variants seeded`);
 

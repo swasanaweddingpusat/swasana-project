@@ -12,6 +12,7 @@ declare module "next-auth" {
       mustChangePassword: boolean;
       isEmailVerified: boolean;
       status: ProfileStatus;
+      profileMissing?: boolean;
     };
   }
 
@@ -31,5 +32,7 @@ declare module "next-auth/jwt" {
     mustChangePassword?: boolean;
     isEmailVerified?: boolean;
     status?: ProfileStatus;
+    profileCachedAt?: number;
+    profileMissing?: boolean;
   }
 }

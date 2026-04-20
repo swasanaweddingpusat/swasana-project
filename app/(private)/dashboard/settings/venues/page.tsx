@@ -1,6 +1,11 @@
-import { MapPinHouse } from "lucide-react";
-import { ComingSoon } from "../_components/coming-soon";
+import { getVenues, getBrands } from "@/lib/queries/venues";
+import { VenuesTable } from "./_components/venues-table";
 
-export default function VenuesSettingsPage() {
-  return <ComingSoon icon={MapPinHouse} />;
+export default async function VenuesSettingsPage() {
+  const [venues, brands] = await Promise.all([getVenues(), getBrands()]);
+  return (
+    <div className="px-6 py-4">
+      <VenuesTable initialVenues={venues} brands={brands} />
+    </div>
+  );
 }

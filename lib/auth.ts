@@ -134,7 +134,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.mustChangePassword = user.mustChangePassword ?? false;
         token.isEmailVerified = user.isEmailVerified ?? false;
         token.status = user.status ?? "active";
-        token.profileCachedAt = Date.now();
+        token.profileCachedAt = 0; // Force re-fetch on next request to get fresh DB values
       }
 
       // Only refresh profile from DB when cache has expired (reduces DB load)
@@ -163,11 +163,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.status = profile.status;
             token.name = profile.fullName;
             token.picture = profile.avatarUrl;
+            token.profileCachedAt = Date.now();
           } else {
-            // User no longer exists in DB (truncated/deleted) — invalidate session
-            return {} as typeof token;
+            // Profile row gone from DB — log for diagnosis, mark for clean logout.
+            // Preserving token.id means AuthGate fires force-logout exactly once
+            // instead of looping (old "return {}" caused id="" → loop).
+            console.error("[jwt] Profile not found for userId:", token.id, "— forcing logout");
+            token.profileMissing = true;
+            token.profileCachedAt = Date.now();
           }
-          token.profileCachedAt = Date.now();
         } catch {
           // DB call failed (AbortError, timeout, etc.) — use stale token data
           // Extend cache so we don't retry immediately
@@ -185,6 +189,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.mustChangePassword = (token.mustChangePassword as boolean) ?? false;
         session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
         session.user.status = (token.status as "active" | "inactive" | "suspended") ?? "active";
+        session.user.profileMissing = (token.profileMissing as boolean) ?? false;
       }
       return session;
     },

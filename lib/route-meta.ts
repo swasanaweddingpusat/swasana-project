@@ -62,6 +62,18 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Vendors",
     subtitle: "Kelola vendor dan supplier",
   },
+
+  // ─── Bookings ───────────────────────────────────────────────────────────────
+  "/dashboard/bookings": {
+    title: "Bookings",
+    subtitle: "Kelola data booking",
+  },
+
+  // ─── Customers ─────────────────────────────────────────────────────────────
+  "/dashboard/customers": {
+    title: "Customers",
+    subtitle: "Kelola data customer",
+  },
 };
 
 export interface Breadcrumb {

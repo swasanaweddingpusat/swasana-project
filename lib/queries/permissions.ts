@@ -7,7 +7,7 @@ export async function getPermissions() {
   cacheLife("hours");
 
   return db.permission.findMany({
-    orderBy: [{ module: "asc" }, { action: "asc" }],
+    orderBy: [{ moduleSortOrder: "asc" }, { module: "asc" }, { action: "asc" }],
   });
 }
 

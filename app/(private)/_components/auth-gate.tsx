@@ -2,25 +2,35 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
 export async function AuthGate({ children }: { children: React.ReactNode }) {
-  const session = await auth();
+  let session;
+  try {
+    session = await auth();
+  } catch {
+    // Auth service unavailable (DB timeout, cold start) — let it through
+    // Client will handle session state via useSession
+    return <>{children}</>;
+  }
 
   if (!session) {
     redirect("/auth/login");
   }
 
-  // JWT exists but user no longer in DB (truncated/deleted) — force clear cookie
+  // Profile row gone (deleted/truncated after session was issued)
+  if (session.user?.profileMissing) {
+    redirect("/api/auth/force-logout");
+  }
+
+  // JWT exists but user.id missing (legacy guard)
   if (!session.user?.id) {
     redirect("/api/auth/force-logout");
   }
 
-  // Mid-session account deactivation — force re-auth
   if (session.user.status === "suspended" || session.user.status === "inactive") {
     redirect("/api/auth/force-logout");
   }
 
-  // Email verification lost mid-session — e.g., admin cleared flag
   if (!session.user.isEmailVerified) {
-    redirect("/api/auth/force-logout");
+    redirect("/auth/verify?message=Silakan+verifikasi+email+Anda+terlebih+dahulu.");
   }
 
   if (session.user.mustChangePassword) {

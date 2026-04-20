@@ -13,17 +13,22 @@ import { resetPassword } from "@/actions/auth"
 
 export function ResetPasswordForm({
   className,
+  token,
+  force,
+  message,
+  setup,
   ...props
-}: React.ComponentPropsWithoutRef<"form">) {
+}: React.ComponentPropsWithoutRef<"form"> & {
+  token?: string | null
+  force?: string | null
+  message?: string | null
+  setup?: string | null
+}) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const searchParams = useSearchParams()
   const router = useRouter()
 
-  const token = searchParams.get("token")
-  const force = searchParams.get("force")
-  const message = searchParams.get("message")
   const isForceReset = force === "true"
 
   if (!token && !isForceReset) {
@@ -53,7 +58,9 @@ export function ResetPasswordForm({
     startTransition(async () => {
       try {
         if (token) formData.set("token", token)
+        // setup=true (invitation flow) and force=true both require mustChangePassword reset
         if (force) formData.set("force", force)
+        if (setup === "true") formData.set("force", "true")
 
         const result = await resetPassword(formData)
 
@@ -179,7 +186,16 @@ export function ResetPasswordWrapper() {
         </div>
       }
     >
-      <ResetPasswordForm />
+      <ResetPasswordFormInner />
     </Suspense>
   )
+}
+
+function ResetPasswordFormInner() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get("token")
+  const force = searchParams.get("force")
+  const message = searchParams.get("message")
+  const setup = searchParams.get("setup")
+  return <ResetPasswordForm token={token} force={force} message={message} setup={setup} />
 }

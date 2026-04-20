@@ -69,7 +69,6 @@ export function LoginForm({
             description: "Redirecting to dashboard...",
           })
           router.push(callbackUrl)
-          router.refresh()
         }
       } catch {
         toast.error("Terjadi kesalahan", {
