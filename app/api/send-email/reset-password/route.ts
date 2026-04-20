@@ -30,8 +30,8 @@ export async function POST(request: Request) {
 
     // Invalidate old tokens
     await db.passwordResetToken.updateMany({
-      where: { userId: user.profile!.id, used: false },
-      data: { used: true },
+      where: { userId: user.profile!.id, usedAt: null },
+      data: { usedAt: new Date() },
     });
 
     // Create new token

@@ -8,7 +8,7 @@ export async function getVenues() {
 
   return db.venue.findMany({
     where: { isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: { createdAt: "desc" },
     include: {
       brand: {
         select: { id: true, name: true, code: true },

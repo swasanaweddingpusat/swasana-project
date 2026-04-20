@@ -74,9 +74,9 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="flex items-center justify-between px-6 pb-4 border-b">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold">List Customers</h2>
+              <h2 className="text-base font-semibold text-gray-900">List Customers</h2>
               <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {filtered.length} {search ? `dari ${customers.length}` : "member"}
               </span>

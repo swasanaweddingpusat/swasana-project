@@ -78,9 +78,9 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 py-4">
+          <div className="flex justify-between items-center px-6 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-gray-900">Brand Management</span>
+              <span className="text-base font-semibold text-gray-900">Brand Management</span>
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {brands.length} brands
               </span>

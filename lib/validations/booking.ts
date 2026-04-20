@@ -25,6 +25,8 @@ export const bookingSchema = z.object({
     dueDate: z.string().min(1),
     sortOrder: z.coerce.number().int().default(0),
   })).optional().default([]),
+  signingLocation: z.string().optional().nullable(),
+  signatureSales: z.string().optional().nullable(),
 });
 
 export const updateBookingSchema = z.object({

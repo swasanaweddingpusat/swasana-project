@@ -24,13 +24,7 @@ export async function createPackage(data: unknown) {
   const parsed = createPackageSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const pkg = await db.package.create({
-    data: parsed.data,
-    include: {
-      venue: { select: { id: true, name: true, address: true, brandId: true } },
-      variants: { include: { vendorItems: true, internalItems: true } },
-    },
-  });
+  const pkg = await db.package.create({ data: parsed.data });
 
   await logAudit({
     userId: session.user.id,
@@ -52,9 +46,9 @@ export async function updatePackage(id: string, data: unknown) {
   const parsed = updatePackageSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const pkg = await db.package.update({
+  await db.package.update({ where: { id }, data: parsed.data });
+  const pkg = await db.package.findUnique({
     where: { id },
-    data: parsed.data,
     include: {
       venue: { select: { id: true, name: true, address: true, brandId: true } },
       variants: { include: { vendorItems: true, internalItems: true } },
@@ -121,10 +115,7 @@ export async function createVariant(data: unknown) {
   const parsed = createVariantSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const variant = await db.packageVariant.create({
-    data: parsed.data,
-    include: { vendorItems: true, internalItems: true },
-  });
+  const variant = await db.packageVariant.create({ data: parsed.data });
 
   return { success: true, data: variant };
 }
@@ -138,11 +129,7 @@ export async function updateVariant(id: string, data: unknown) {
   const parsed = updateVariantSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const variant = await db.packageVariant.update({
-    where: { id },
-    data: parsed.data,
-    include: { vendorItems: true, internalItems: true },
-  });
+  const variant = await db.packageVariant.update({ where: { id }, data: parsed.data });
 
   return { success: true, data: variant };
 }

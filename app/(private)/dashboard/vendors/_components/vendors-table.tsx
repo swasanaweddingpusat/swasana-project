@@ -94,9 +94,9 @@ export function VendorsTable() {
 
       <Card className="shadow-none">
         <CardContent className="p-0">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 py-4 gap-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 pb-4 gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold">List Vendors</span>
+              <span className="text-base font-semibold text-gray-900">List Vendors</span>
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border rounded-full">
                 {filtered.length} vendor
               </span>

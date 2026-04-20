@@ -24,7 +24,7 @@ export default function SettingsLayout({
   return (
     <div className="flex-1 min-w-0">
       {crumbs.length > 1 && (
-        <div className="px-6 pt-4">
+        <div className="px-6 py-4">
           <Breadcrumb>
             <BreadcrumbList>
               {crumbs.map((crumb, i) => {

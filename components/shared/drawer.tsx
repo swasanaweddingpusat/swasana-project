@@ -20,10 +20,10 @@ interface DrawerProps {
   maxWidth?: string;
   stepperType?: "short" | "long";
   stepperSteps?: Array<{
-    id: string;
+    id: number;
     title: string;
     subtitle: string;
-    icon: React.ReactNode;
+    icon: React.ComponentType<{ className?: string }>;
   }>;
   onBack?: () => void;
   backButtonLabel?: string;
@@ -95,7 +95,7 @@ export function Drawer({
         </div>
 
         {/* Long stepper - positioned below title */}
-        {stepperType === "long" && steps && (
+        {stepperType === "long" && steps && stepperSteps && (
           <Stepper currentStep={steps} steps={stepperSteps} />
         )}
 

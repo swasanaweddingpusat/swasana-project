@@ -12,7 +12,7 @@ export const customerSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const updateCustomerSchema = customerSchema.extend({
+export const updateCustomerSchema = customerSchema.partial().extend({
   id: z.string().min(1),
 });
 

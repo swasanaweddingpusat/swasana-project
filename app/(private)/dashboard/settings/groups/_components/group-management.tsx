@@ -153,7 +153,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
   }
 
   return (
-    <div className="px-6 py-4 w-full">
+    <div className="px-6 pb-4 w-full">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Group Management</h1>

@@ -349,7 +349,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col my-6 px-2">
+    <div className="flex flex-col mb-6 px-2">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
         {/* ── Roles List ── */}

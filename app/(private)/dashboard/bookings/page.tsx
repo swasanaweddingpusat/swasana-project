@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function BookingsPage() {
   const bookings = await getBookings();
   return (
-    <div className="flex flex-col my-6 px-2">
+    <div className="flex flex-col mb-6 px-2">
       <BookingsTable initialData={bookings} />
     </div>
   );

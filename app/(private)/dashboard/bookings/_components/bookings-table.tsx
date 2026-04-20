@@ -46,6 +46,7 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
     const q = search.toLowerCase();
     return (
       (b.snapCustomer?.name ?? "").toLowerCase().includes(q) ||
+      (b.snapCustomer?.mobileNumber ?? "").toLowerCase().includes(q) ||
       (b.snapVenue?.venueName ?? "").toLowerCase().includes(q) ||
       (b.snapPackage?.packageName ?? "").toLowerCase().includes(q) ||
       (b.sales?.fullName ?? "").toLowerCase().includes(q)
@@ -68,9 +69,9 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="flex items-center justify-between px-6 pb-4 border-b">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold">List Bookings</h2>
+              <h2 className="text-base font-semibold text-gray-900">List Bookings</h2>
               <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {filtered.length} {search ? `dari ${bookings.length}` : "booking"}
               </span>
@@ -99,11 +100,12 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="min-w-[1100px] text-sm">
+              <Table className="min-w-[1200px] text-sm">
                 <TableHeader>
                   <TableRow className="bg-gray-50">
                     <TableHead className="px-3 w-[50px]">No</TableHead>
                     <TableHead className="px-3">Customer</TableHead>
+                    <TableHead className="px-3">No. HP</TableHead>
                     <TableHead className="px-3">Venue</TableHead>
                     <TableHead className="px-3">Package</TableHead>
                     <TableHead className="px-3">Variant</TableHead>
@@ -118,6 +120,7 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
                     <TableRow key={booking.id} className="hover:bg-gray-50">
                       <TableCell className="px-3">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
                       <TableCell className="px-3 font-medium">{booking.snapCustomer?.name ?? "—"}</TableCell>
+                      <TableCell className="px-3 text-gray-500">{booking.snapCustomer?.mobileNumber ?? "—"}</TableCell>
                       <TableCell className="px-3">{booking.snapVenue?.venueName ?? "—"}{booking.snapVenue?.brandCode ? ` (${booking.snapVenue.brandCode})` : ""}</TableCell>
                       <TableCell className="px-3">{booking.snapPackage?.packageName ?? "—"}</TableCell>
                       <TableCell className="px-3">
@@ -135,7 +138,7 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
                           <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(true)}>
+                          <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}>
                             <PencilIcon className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteTarget(booking)}>

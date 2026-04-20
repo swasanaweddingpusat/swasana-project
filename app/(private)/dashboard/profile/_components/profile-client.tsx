@@ -183,7 +183,7 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
                 <div className="p-2 bg-blue-50 rounded-lg"><TrendingUp className="h-5 w-5 text-blue-600" /></div>
                 <div>
                   <p className="text-xs text-muted-foreground">Active Leads</p>
-                  <p className="text-xl font-bold">—</p>
+                  <p className="text-base font-semibold text-gray-900">—</p>
                 </div>
               </CardContent>
             </Card>
@@ -192,7 +192,7 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
                 <div className="p-2 bg-green-50 rounded-lg"><BarChart3 className="h-5 w-5 text-green-600" /></div>
                 <div>
                   <p className="text-xs text-muted-foreground">Bookings</p>
-                  <p className="text-xl font-bold">—</p>
+                  <p className="text-base font-semibold text-gray-900">—</p>
                 </div>
               </CardContent>
             </Card>
@@ -201,7 +201,7 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
                 <div className="p-2 bg-purple-50 rounded-lg"><Users className="h-5 w-5 text-purple-600" /></div>
                 <div>
                   <p className="text-xs text-muted-foreground">Customers</p>
-                  <p className="text-xl font-bold">—</p>
+                  <p className="text-base font-semibold text-gray-900">—</p>
                 </div>
               </CardContent>
             </Card>
@@ -210,7 +210,7 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
                 <div className="p-2 bg-orange-50 rounded-lg"><Calendar className="h-5 w-5 text-orange-600" /></div>
                 <div>
                   <p className="text-xs text-muted-foreground">Events</p>
-                  <p className="text-xl font-bold">—</p>
+                  <p className="text-base font-semibold text-gray-900">—</p>
                 </div>
               </CardContent>
             </Card>

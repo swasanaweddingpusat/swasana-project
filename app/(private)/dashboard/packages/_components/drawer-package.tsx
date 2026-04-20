@@ -5,13 +5,16 @@ import { Drawer } from "@/components/shared/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SimpleEditor } from "@/components/ui/simple-editor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Package, Users, Settings, Plus, Trash2, ChevronDown } from "lucide-react";
+import { Stepper } from "@/components/ui/stepper";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCreatePackage, useUpdatePackage, useCreateVariant, useUpdateVariant, useDeleteVariant, useSaveVendorItems, useSaveInternalItems } from "@/hooks/use-packages";
+import { useVendorCategories } from "@/hooks/use-vendors";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,7 +39,7 @@ interface LocalVariant {
 }
 
 interface VendorItemsByVariant {
-  [variantIdx: number]: { categoryName: string; itemText: string }[];
+  [variantIdx: number]: { [categoryName: string]: string };
 }
 
 interface InternalItemsByVariant {
@@ -65,6 +68,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   const deleteVariantMut = useDeleteVariant();
   const saveVendorItemsMut = useSaveVendorItems();
   const saveInternalItemsMut = useSaveInternalItems();
+  const { data: vendorCategoriesData = [] } = useVendorCategories();
+  const vendorCats = vendorCategoriesData.map((c) => ({ id: c.id, name: c.name }));
 
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -80,11 +85,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   // Collapsible state
   const [openVariants, setOpenVariants] = useState<Set<number>>(new Set());
 
-  // Step 2: Vendor items per variant
+  // Step 2: Vendor items per variant per category
   const [vendorItems, setVendorItems] = useState<VendorItemsByVariant>({});
-  const [viCategory, setViCategory] = useState("");
-  const [viText, setViText] = useState("");
-  const [viVariantIdx, setViVariantIdx] = useState(0);
 
   // Step 3: Internal items per variant
   const [internalItems, setInternalItems] = useState<InternalItemsByVariant>({});
@@ -107,13 +109,16 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
           available: v.available,
         }))
       );
-      // Load vendor items
+      // Load vendor items (group by category)
       const vi: VendorItemsByVariant = {};
       (editingPackage.variants ?? []).forEach((v, idx) => {
-        vi[idx] = (v.vendorItems ?? []).map((item) => ({
-          categoryName: item.categoryName,
-          itemText: item.itemText,
-        }));
+        vi[idx] = {};
+        (v.vendorItems ?? []).forEach((item) => {
+          const cat = item.categoryName;
+          vi[idx][cat] = vi[idx][cat]
+            ? `${vi[idx][cat]}; ${item.itemText}`
+            : item.itemText;
+        });
       });
       setVendorItems(vi);
       // Load internal items
@@ -245,9 +250,12 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
         }
         if (variantId) {
           variantIds.push(variantId);
-          // Save vendor items for this variant
-          const vi = vendorItems[i] ?? [];
-          if (vi.length > 0) await saveVendorItemsMut.mutateAsync({ variantId, items: vi });
+          // Save vendor items for this variant (convert per-category map to array)
+          const viMap = vendorItems[i] ?? {};
+          const viItems = Object.entries(viMap)
+            .filter(([, html]) => html.replace(/<[^>]*>/g, "").trim().length > 0)
+            .map(([categoryName, itemText]) => ({ categoryName, itemText }));
+          if (viItems.length > 0) await saveVendorItemsMut.mutateAsync({ variantId, items: viItems });
           // Save internal items for this variant
           const ii = internalItems[i] ?? [];
           if (ii.length > 0) await saveInternalItemsMut.mutateAsync({ variantId, items: ii.map((item) => ({ itemName: item.itemName, itemDescription: item.itemDescription })) });
@@ -269,25 +277,6 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
     } finally {
       setSubmitting(false);
     }
-  }
-
-  // ─── Vendor item helpers ────────────────────────────────────────────────────
-
-  function addVendorItem(variantIdx: number) {
-    if (!viCategory.trim() || !viText.trim()) { toast.error("Kategori dan teks wajib diisi"); return; }
-    setVendorItems((prev) => ({
-      ...prev,
-      [variantIdx]: [...(prev[variantIdx] ?? []), { categoryName: viCategory, itemText: viText }],
-    }));
-    setViCategory("");
-    setViText("");
-  }
-
-  function removeVendorItem(variantIdx: number, itemIdx: number) {
-    setVendorItems((prev) => ({
-      ...prev,
-      [variantIdx]: (prev[variantIdx] ?? []).filter((_, j) => j !== itemIdx),
-    }));
   }
 
   // ─── Internal item helpers ──────────────────────────────────────────────────
@@ -319,28 +308,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
     <Drawer isOpen={isOpen} onClose={handleClose} title={isEdit ? "Edit Package" : "Create Package"} maxWidth="sm:max-w-[630px]">
       <div className="flex flex-col h-full">
         {/* Stepper */}
-        <div className="flex items-center gap-2 mb-4 px-1">
-          {stepperSteps.map((s, idx) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => {
-                if (s.id < currentStep) setCurrentStep(s.id);
-              }}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-xs transition-colors cursor-default",
-                currentStep === s.id
-                  ? "border-gray-900 bg-gray-900/5 shadow-sm"
-                  : s.id < currentStep
-                    ? "border-gray-300 bg-white hover:bg-gray-50 cursor-pointer"
-                    : "border-gray-200 bg-white"
-              )}
-            >
-              <s.icon className={cn("h-4 w-4 shrink-0", currentStep === s.id ? "text-gray-900" : s.id < currentStep ? "text-gray-600" : "text-gray-400")} />
-              <span className={cn("font-medium truncate", currentStep === s.id ? "text-gray-900" : s.id < currentStep ? "text-gray-600" : "text-gray-400")}>{s.title}</span>
-            </button>
-          ))}
-        </div>
+        <Stepper currentStep={currentStep} steps={stepperSteps} />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-1">
@@ -474,7 +442,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
             <div className="space-y-4">
               <div>
                 <h3 className="text-lg font-medium">Item Vendor</h3>
-                <p className="text-sm text-gray-600">Tambahkan item vendor untuk setiap varian.</p>
+                <p className="text-sm text-gray-600">Tambahkan item vendor per kategori untuk setiap varian.</p>
               </div>
 
               {variants.length === 0 ? (
@@ -489,35 +457,30 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                       <button
                         type="button"
                         className="w-full px-4 py-3 hover:bg-gray-50 flex items-center justify-between cursor-pointer"
-                        onClick={() => { setViVariantIdx(variantIdx); toggleVariant(variantIdx); }}
+                        onClick={() => toggleVariant(variantIdx)}
                       >
                         <div className="text-left">
                           <h4 className="font-medium text-gray-900 text-sm">{variant.variantName}</h4>
                           <p className="text-xs text-gray-500">{variant.pax} PAX • Rp. {formatCurrency(variant.price)}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{(vendorItems[variantIdx] ?? []).length} items</span>
-                          <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
-                        </div>
+                        <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
                       </button>
 
                       {openVariants.has(variantIdx) && (
-                        <div className="px-4 pb-4 space-y-3">
-                          {/* Existing items */}
-                          {(vendorItems[variantIdx] ?? []).map((item, itemIdx) => (
-                            <div key={itemIdx} className="flex items-center justify-between border rounded p-2 text-sm bg-gray-50">
-                              <div><span className="font-medium">{item.categoryName}:</span> {item.itemText}</div>
-                              <button className="p-1 hover:bg-gray-200 rounded cursor-pointer" onClick={() => removeVendorItem(variantIdx, itemIdx)}>
-                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                              </button>
+                        <div className="px-4 pb-4 space-y-4">
+                          {vendorCats.map((cat) => (
+                            <div key={cat.id} className="space-y-2">
+                              <Label className="text-sm font-medium text-gray-700">{cat.name}</Label>
+                              <SimpleEditor
+                                value={vendorItems[variantIdx]?.[cat.name] || ""}
+                                onChange={(html) => setVendorItems((prev) => ({
+                                  ...prev,
+                                  [variantIdx]: { ...prev[variantIdx], [cat.name]: html },
+                                }))}
+                                placeholder={`Masukkan item ${cat.name.toLowerCase()}...`}
+                              />
                             </div>
                           ))}
-                          {/* Add form */}
-                          <div className="grid grid-cols-5 gap-2">
-                            <Input className="col-span-2 text-sm" placeholder="Kategori" value={viVariantIdx === variantIdx ? viCategory : ""} onChange={(e) => { setViVariantIdx(variantIdx); setViCategory(e.target.value); }} />
-                            <Input className="col-span-2 text-sm" placeholder="Item text" value={viVariantIdx === variantIdx ? viText : ""} onChange={(e) => { setViVariantIdx(variantIdx); setViText(e.target.value); }} />
-                            <Button size="sm" onClick={() => addVendorItem(variantIdx)} className="text-xs"><Plus className="h-3 w-3" /></Button>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -574,11 +537,10 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
-                              <Textarea
+                              <SimpleEditor
                                 value={item.itemDescription}
-                                onChange={(e) => updateInternalItem(variantIdx, item.id, "itemDescription", e.target.value)}
+                                onChange={(html) => updateInternalItem(variantIdx, item.id, "itemDescription", html)}
                                 placeholder="Deskripsi item..."
-                                className="text-sm min-h-[60px] border-gray-300"
                               />
                             </div>
                           ))}

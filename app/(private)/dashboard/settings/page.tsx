@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePagePermission } from "@/lib/require-page-permission";
 import {
   UsersRound,
   Users,
@@ -80,9 +81,10 @@ const GROUPS: SettingGroup[] = [
   },
 ];
 
-export default function SettingsHubPage() {
+export default async function SettingsHubPage() {
+  await requirePagePermission("settings");
   return (
-    <div className="px-6 py-6 space-y-8">
+    <div className="px-6 pb-6 space-y-8">
       {GROUPS.map((group) => (
         <section key={group.title} className="space-y-3">
           <div>

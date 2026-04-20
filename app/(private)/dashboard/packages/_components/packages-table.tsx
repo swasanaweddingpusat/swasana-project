@@ -151,9 +151,9 @@ export function PackagesTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-4 border-b">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 pb-4 border-b">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold">Packages</h2>
+              <h2 className="text-base font-semibold text-gray-900">Packages</h2>
               <span className="text-sm text-muted-foreground">({filtered.length})</span>
             </div>
             <div className="flex items-center gap-2">

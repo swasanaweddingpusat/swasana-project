@@ -42,7 +42,7 @@ export async function updateCustomer(data: unknown) {
       data: {
         ...rest,
         nikNumber: rest.nikNumber || null,
-        updatedBy: session.user.name ?? session.user.email,
+        updatedBy: session!.user.name ?? session!.user.email,
       },
     });
     revalidateTag("customers", "max");

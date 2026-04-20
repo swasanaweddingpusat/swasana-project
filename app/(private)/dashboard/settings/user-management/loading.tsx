@@ -4,7 +4,7 @@ export default function UserManagementLoading() {
   return (
     <div className="flex flex-col my-6 px-2">
       <div className="space-y-4">
-        <div className="flex justify-between items-center px-6 py-4">
+        <div className="flex justify-between items-center px-6 pb-4">
           <div className="flex items-center gap-2">
             <Skeleton className="h-6 w-32" />
             <Skeleton className="h-5 w-24" />

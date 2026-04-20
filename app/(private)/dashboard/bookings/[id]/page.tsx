@@ -12,7 +12,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const booking = await getBookingById(id);
   if (!booking) notFound();
   return (
-    <div className="flex flex-col my-6 px-2 gap-6">
+    <div className="flex flex-col mb-6 px-2 gap-6">
       <BookingDetailView booking={booking} />
     </div>
   );

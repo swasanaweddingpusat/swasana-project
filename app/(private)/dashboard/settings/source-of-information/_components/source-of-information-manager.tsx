@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import {
   createSourceOfInformation, updateSourceOfInformation, deleteSourceOfInformation,
 } from "@/actions/source-of-information";
+import { usePermissions } from "@/hooks/use-permissions";
 import type { SourceOfInformationsResult, SourceOfInformationItem } from "@/lib/queries/source-of-information";
 
 interface Props {
@@ -28,6 +29,7 @@ interface Props {
 const ROWS_PER_PAGE = 10;
 
 export function SourceOfInformationManager({ initialData }: Props) {
+  const { can, isAdmin } = usePermissions();
   const [items, setItems] = useState(initialData);
   const [currentPage, setCurrentPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
@@ -81,18 +83,20 @@ export function SourceOfInformationManager({ initialData }: Props) {
   }
 
   return (
-    <div className="px-6 py-4">
+    <div className="px-6 pb-4">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-900">Source of Information</h1>
+          <h1 className="text-base font-semibold text-gray-900">Source of Information</h1>
           <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
             {items.length} items
           </span>
         </div>
-        <Button onClick={handleOpenAdd} className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer">
-          <Plus className="w-4 h-4 mr-2" /> Tambah
-        </Button>
+        {(can("source_of_information", "create") || isAdmin) && (
+          <Button onClick={handleOpenAdd} className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer">
+            <Plus className="w-4 h-4 mr-2" /> Tambah
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -115,12 +119,16 @@ export function SourceOfInformationManager({ initialData }: Props) {
                   <TableCell className="px-4">{item.name}</TableCell>
                   <TableCell className="px-4">
                     <div className="flex gap-1 justify-end">
-                      <button onClick={() => handleOpenEdit(item)} className="p-1.5 hover:bg-gray-100 rounded cursor-pointer" title="Edit">
-                        <PenLine className="w-4 h-4 text-gray-700" />
-                      </button>
-                      <button onClick={() => setDeleteTarget(item)} className="p-1.5 hover:bg-red-50 rounded cursor-pointer" title="Hapus">
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </button>
+                      {(can("source_of_information", "edit") || isAdmin) && (
+                        <button onClick={() => handleOpenEdit(item)} className="p-1.5 hover:bg-gray-100 rounded cursor-pointer" title="Edit">
+                          <PenLine className="w-4 h-4 text-gray-700" />
+                        </button>
+                      )}
+                      {(can("source_of_information", "delete") || isAdmin) && (
+                        <button onClick={() => setDeleteTarget(item)} className="p-1.5 hover:bg-red-50 rounded cursor-pointer" title="Hapus">
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

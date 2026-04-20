@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const parsed = changePasswordSchema.safeParse(body);
     if (!parsed.success) {
       return Response.json(
-        { error: parsed.error.errors[0].message },
+        { error: parsed.error.issues[0]?.message ?? "Validasi gagal" },
         { status: 400 }
       );
     }
@@ -54,19 +54,19 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    // Sequential writes — HTTP adapter doesn't support $transaction
-    await db.user.update({
-      where: { id: session.user.id },
-      data: { password: hashedPassword },
-    });
-    await db.profile.update({
-      where: { userId: session.user.id },
-      data: { mustChangePassword: false },
-    });
-    // Invalidate all other sessions after password change
-    await db.session.deleteMany({
-      where: { userId: session.user.id },
-    });
+    await db.$transaction([
+      db.user.update({
+        where: { id: session.user.id },
+        data: { password: hashedPassword },
+      }),
+      db.profile.update({
+        where: { userId: session.user.id },
+        data: { mustChangePassword: false },
+      }),
+      db.session.deleteMany({
+        where: { userId: session.user.id },
+      }),
+    ]);
 
     await logAudit({
       userId: session.user.profileId,

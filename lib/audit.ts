@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
 interface AuditLogInput {
   userId?: string;
@@ -42,7 +43,7 @@ export async function logAudit(params: AuditLogInput): Promise<void> {
         result: params.result ?? "success",
         entityType: params.entityType,
         entityId: params.entityId,
-        changes: params.changes ?? {},
+        changes: (params.changes ?? {}) as Prisma.InputJsonValue,
         description: params.description,
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,

@@ -123,7 +123,7 @@ export default function PaymentMethodsPage() {
 
   if (loading) {
     return (
-      <div className="px-2 py-6">
+      <div className="px-2 pb-6">
         <Card className="shadow-none"><CardContent className="p-6 space-y-3">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center space-x-4 py-3">
@@ -136,13 +136,13 @@ export default function PaymentMethodsPage() {
   }
 
   return (
-    <div className="px-2 py-6">
+    <div className="px-2 pb-6">
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 py-4">
+          <div className="flex justify-between items-center px-6 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold">Payment Methods</span>
+              <span className="text-base font-semibold text-gray-900">Payment Methods</span>
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border rounded-full">
                 {filtered.length} methods
               </span>

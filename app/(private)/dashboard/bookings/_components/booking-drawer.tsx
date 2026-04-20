@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { CalendarIcon, Plus, X } from "lucide-react";
+import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
+import { SimpleEditor } from "@/components/shared/SimpleEditor";
+import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
+import { createCustomer, updateCustomer } from "@/actions/customer";
 import type { BookingInput } from "@/lib/validations/booking";
 
 interface BookingDrawerProps {
@@ -24,41 +29,12 @@ interface BookingDrawerProps {
 }
 
 type Option = { id: string; name: string };
-
-interface PackageData {
-  id: string;
-  packageName: string;
-  variants: { id: string; variantName: string; pax: number; price: number }[];
-}
-
-interface VendorCategoryData {
-  id: string;
-  name: string;
-  vendors: { id: string; name: string; categoryId: string }[];
-}
-
-interface PaymentMethodData {
-  id: string;
-  bankName: string;
-  bankAccountNumber: string;
-  bankRecipient: string;
-  venueId: string | null;
-}
-
-interface BonusRow {
-  vendorId: string;
-  vendorCategoryId: string;
-  vendorName: string;
-  description: string;
-  qty: number;
-}
-
-interface TermRow {
-  name: string;
-  amount: number;
-  dueDate: string;
-  sortOrder: number;
-}
+interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null }
+interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; price: number }[] }
+interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
+interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
+interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number }
+interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -66,234 +42,310 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
-const DEFAULT_TERMS: TermRow[] = [
-  { name: "Booking Fee", amount: 0, dueDate: "", sortOrder: 0 },
-  { name: "DP", amount: 0, dueDate: "", sortOrder: 1 },
-  { name: "Pelunasan", amount: 0, dueDate: "", sortOrder: 2 },
-];
-
 function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
 }
 
+const DEFAULT_TERMS: TermRow[] = [
+  { name: "Booking Fee", amount: 0, dueDate: "", sortOrder: 0 },
+  { name: "DP", amount: 0, dueDate: "", sortOrder: 1 },
+  { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2 },
+  { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3 },
+  { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4 },
+  { name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5 },
+  { name: "Final", amount: 0, dueDate: "", sortOrder: 6 },
+];
+
 export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const createMut = useCreateBooking();
+  const qc = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 2;
+  const totalSteps = 3;
 
-  // Dropdown data
-  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => fetchJson<Option[]>("/api/customers"), staleTime: 5 * 60_000 });
+  const sigSalesRef = useRef<SignatureCanvas>(null);
+  const [signatureSales, setSignatureSales] = useState("");
+  const [signingLocation, setSigningLocation] = useState("");
+  const [specialBonusName, setSpecialBonusName] = useState("Cashback");
+  const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
+  const [contactNumbers, setContactNumbers] = useState<string[]>([]);
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactNik, setContactNik] = useState("");
+  const [contactKtpAddress, setContactKtpAddress] = useState("");
+  const [noteDateEvent, setNoteDateEvent] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const contactInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => fetchJson<CustomerOption[]>("/api/customers"), staleTime: 5 * 60_000 });
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
   const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
 
-  // Venue-dependent data
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const { data: packages = [] } = useQuery({ queryKey: ["packages", selectedVenueId], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
   const { data: paymentMethods = [] } = useQuery({ queryKey: ["payment-methods"], queryFn: () => fetchJson<PaymentMethodData[]>("/api/payment-methods"), staleTime: 5 * 60_000 });
-
   const venuePaymentMethods = paymentMethods.filter((pm) => pm.venueId === selectedVenueId);
 
-  // Package → variant
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const selectedPackage = packages.find((p) => p.id === selectedPackageId);
   const variants = selectedPackage?.variants ?? [];
+  const [selectedVariantPrice, setSelectedVariantPrice] = useState(0);
 
-  // Bonuses
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id, categoryName: c.name })));
+  const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
 
-  // Terms
   const [terms, setTerms] = useState<TermRow[]>(DEFAULT_TERMS);
 
   const form = useForm<BookingInput>({
     defaultValues: {
-      bookingDate: "",
-      customerId: "",
-      venueId: "",
-      packageId: "",
-      packageVariantId: null,
-      paymentMethodId: null,
-      sourceOfInformationId: null,
-      weddingSession: null,
-      weddingType: null,
-      bonuses: [],
-      termOfPayments: [],
+      bookingDate: "", customerId: "", venueId: "", packageId: "",
+      packageVariantId: null, paymentMethodId: null, sourceOfInformationId: null,
+      weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
+      specialBonusName: null, specialBonusAmount: null,
+      signingLocation: null, signatureSales: null,
     },
   });
 
-  // Reset on open
   useEffect(() => {
     if (open) {
       form.reset();
-      setSelectedVenueId("");
-      setSelectedPackageId("");
-      setBonuses([]);
-      setTerms(DEFAULT_TERMS.map((t) => ({ ...t })));
-      setCurrentStep(1);
+      setSelectedVenueId(""); setSelectedPackageId(""); setSelectedVariantPrice(0);
+      setBonuses([]); setTerms(DEFAULT_TERMS.map((t) => ({ ...t })));
+      setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
+      setSpecialBonusName("Cashback"); setSpecialBonusAmount(0);
+      setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setNoteDateEvent(""); setCustomerName("");
+      sigSalesRef.current?.clear();
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Flatten vendors for bonus picker
-  const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
+  const getBasePrice = () => selectedVariantPrice;
+  const getPriceAfterCashback = () => Math.max(0, getBasePrice() - specialBonusAmount);
+  const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
+  const getDifference = () => getTotalTerms() - getPriceAfterCashback();
 
-  // Step 1 validation
-  const watchedValues = form.watch();
-  const isStep1Complete = !!(
-    watchedValues.customerId &&
-    watchedValues.venueId &&
-    watchedValues.packageId &&
-    watchedValues.bookingDate
-  );
+  const allocatePrice = (price: number, cashback: number) => {
+    const total = Math.max(0, price - cashback);
+    const n = terms.length || 1;
+    const base = Math.floor(total / n);
+    const remainder = total % n;
+    setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
+  };
+
+  const w = form.watch();
+  const isStep1Complete = !!(customerName.trim() && w.venueId && w.packageId && w.bookingDate);
+  const isStep3Complete = !!signatureSales;
 
   const handleNext = () => {
-    if (currentStep === 1 && !isStep1Complete) {
-      toast.error("Lengkapi field yang wajib diisi terlebih dahulu.");
-      return;
+    if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi terlebih dahulu."); return; }
+    if (currentStep === 2) {
+      const diff = getDifference();
+      if (getBasePrice() > 0 && diff !== 0) {
+        toast.error(`Total term (Rp${fmtRp(getTotalTerms())}) tidak sama dengan harga setelah cashback (Rp${fmtRp(getPriceAfterCashback())}). Selisih: Rp${fmtRp(Math.abs(diff))}`);
+        return;
+      }
     }
     if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
   };
 
-  const handlePrevious = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
+  const handlePrevious = () => { if (currentStep > 1) setCurrentStep(currentStep - 1); };
 
   async function onSubmit(values: BookingInput) {
+    let customerId = values.customerId;
+
+    // If no existing customer selected but name typed → create new customer
+    if (!customerId && customerName) {
+      const result = await createCustomer({
+        name: customerName,
+        mobileNumber: contactNumbers.join(",") || "-",
+        email: contactEmail || "-@placeholder.com",
+        nikNumber: contactNik || "",
+        ktpAddress: contactKtpAddress || "",
+        type: "Other",
+        memberStatus: "Non-Member",
+      });
+      if (!result.success) { toast.error(result.error ?? "Gagal membuat customer."); return; }
+      customerId = result.customer!.id;
+      qc.invalidateQueries({ queryKey: ["customers"] });
+    } else if (customerId) {
+      // Existing customer selected → update with any changed contact data
+      const updates: Record<string, string> = {};
+      if (contactNumbers.length > 0) updates.mobileNumber = contactNumbers.join(",");
+      if (contactEmail) updates.email = contactEmail;
+      if (contactNik) updates.nikNumber = contactNik;
+      if (contactKtpAddress) updates.ktpAddress = contactKtpAddress;
+      if (Object.keys(updates).length > 0) {
+        await updateCustomer({ id: customerId, ...updates });
+      }
+    }
+
+    if (!customerId) { toast.error("Customer wajib diisi."); return; }
+
     const payload: BookingInput = {
       ...values,
-      bonuses: bonuses.map((b) => ({
-        vendorId: b.vendorId,
-        vendorCategoryId: b.vendorCategoryId,
-        vendorName: b.vendorName,
-        description: b.description || null,
-        qty: b.qty,
-      })),
-      termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({
-        name: t.name,
-        amount: t.amount,
-        dueDate: t.dueDate,
-        sortOrder: t.sortOrder,
-      })),
+      customerId,
+      specialBonusName: specialBonusName || null,
+      specialBonusAmount: specialBonusAmount || null,
+      signingLocation: signingLocation || null,
+      signatureSales: signatureSales || null,
+      bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty })),
+      termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
     };
-
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
     toast.success("Booking berhasil dibuat.");
     onOpenChange(false);
   }
 
+  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (currentStep === 3 && !isStep3Complete) || createMut.isPending;
+
   return (
-    <Drawer
-      isOpen={open}
-      onClose={() => onOpenChange(false)}
-      title="Tambah Booking"
-      maxWidth="sm:max-w-xl"
-      steps={currentStep}
-      totalSteps={totalSteps}
-    >
+    <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
       <div className="flex flex-col justify-between h-full">
         <div className="flex-1 overflow-y-auto px-2">
           <Form {...form}>
             <form className="space-y-4">
               {/* ─── Step 1: Data Booking ─── */}
               {currentStep === 1 && (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {/* Customer */}
-                  <FormField control={form.control} name="customerId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer *</FormLabel>
-                      <SearchableSelect
-                        options={customers.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))}
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Pilih customer..."
-                        searchPlaceholder="Cari customer..."
-                        emptyText="Tidak ada customer"
+                  {/* Customer */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">Customer Name *</FormLabel>
+                    <AutocompleteInput
+                      options={customers.map((c) => ({ id: c.id, name: c.name }))}
+                      value={customerName}
+                      onChange={(val) => {
+                        setCustomerName(val);
+                        form.setValue("customerId", "");
+                      }}
+                      onSelect={(opt) => {
+                        setCustomerName(opt.name);
+                        form.setValue("customerId", opt.id);
+                        const c = customers.find((x) => x.id === opt.id);
+                        if (c) {
+                          if (c.mobileNumber) setContactNumbers(c.mobileNumber.split(",").map((n) => n.trim()).filter(Boolean));
+                          if (c.email) setContactEmail(c.email);
+                          if (c.nikNumber) setContactNik(c.nikNumber);
+                          if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
+                        }
+                      }}
+                      placeholder="e.g. John Doe & Jane Doe"
+                      className="mt-1"
+                    />
+                  </div>
+
+                  {/* Contact Person — chip input */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">Contact Person *</FormLabel>
+                    <div className="flex flex-wrap gap-2 bg-white border border-gray-300 rounded-lg px-2 py-2 mt-1">
+                      {contactNumbers.map((num, idx) => (
+                        <span key={idx} className="flex items-center bg-[#FAFAFA] border rounded-lg px-3 text-sm font-normal text-black gap-2">
+                          {num}
+                          <button type="button" className="ml-1 text-red-600 hover:bg-red-100 rounded-full p-1" onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))} aria-label="Remove">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        ref={contactInputRef}
+                        type="text"
+                        inputMode="numeric"
+                        className="flex-1 min-w-[120px] border-none outline-none bg-transparent text-sm px-2"
+                        placeholder="e.g. 081234567890"
+                        onKeyDown={(e) => {
+                          const val = e.currentTarget.value.trim();
+                          if ((e.key === "Enter" || e.key === ",") && val) {
+                            e.preventDefault();
+                            if (!contactNumbers.includes(val)) setContactNumbers((prev) => [...prev, val]);
+                            e.currentTarget.value = "";
+                          }
+                        }}
                       />
+                    </div>
+                  </div>
+
+                  {/* Sumber Informasi */}
+                  <FormField control={form.control} name="sourceOfInformationId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-gray-700">Sumber Informasi</FormLabel>
+                      <SearchableSelect options={sourceOptions} value={field.value ?? ""} onChange={field.onChange} placeholder="Pilih sumber informasi" searchPlaceholder="Cari sumber..." emptyText="Tidak ada data" />
                       <FormMessage />
                     </FormItem>
                   )} />
+
+                  {/* Email */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">Email</FormLabel>
+                    <Input placeholder="e.g. nama@email.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className="mt-1" />
+                  </div>
+
+                  {/* NIK */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">NIK Number</FormLabel>
+                    <Input placeholder="e.g. 3275010101010001" value={contactNik} onChange={(e) => setContactNik(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
+                  </div>
+
+                  {/* Alamat KTP */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">Alamat (sesuai KTP)</FormLabel>
+                    <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} rows={3} className="mt-1" />
+                  </div>
 
                   {/* Venue */}
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Venue *</FormLabel>
-                      <SearchableSelect
-                        options={venues}
-                        value={field.value}
-                        onChange={(id) => {
-                          field.onChange(id);
-                          setSelectedVenueId(id);
-                          setSelectedPackageId("");
-                          form.setValue("packageId", "");
-                          form.setValue("packageVariantId", null);
-                          form.setValue("paymentMethodId", null);
-                        }}
-                        placeholder="Pilih venue..."
-                        searchPlaceholder="Cari venue..."
-                        emptyText="Tidak ada venue"
-                      />
+                      <FormLabel className="text-sm font-medium text-gray-700">Venue *</FormLabel>
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantPrice(0); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
                     </FormItem>
                   )} />
 
-                  {/* Package */}
+                  {/* Pilih Paket */}
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Package *</FormLabel>
-                      <SearchableSelect
-                        options={packages.map((p) => ({ id: p.id, name: p.packageName }))}
-                        value={field.value}
-                        onChange={(id) => {
-                          field.onChange(id);
-                          setSelectedPackageId(id);
-                          form.setValue("packageVariantId", null);
-                        }}
-                        placeholder={selectedVenueId ? "Pilih package..." : "Pilih venue dulu"}
-                        disabled={!selectedVenueId}
-                        searchPlaceholder="Cari package..."
-                        emptyText="Tidak ada package"
-                      />
+                      <FormLabel className="text-sm font-medium text-gray-700">Pilih Paket *</FormLabel>
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={selectedVenueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!selectedVenueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       <FormMessage />
                     </FormItem>
                   )} />
 
-                  {/* Variant */}
+                  {/* Pilih Tipe Paket */}
                   {variants.length > 0 && (
                     <FormField control={form.control} name="packageVariantId" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Variant</FormLabel>
-                        <SearchableSelect
-                          options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} pax · Rp ${fmtRp(v.price)}` }))}
-                          value={field.value ?? ""}
-                          onChange={field.onChange}
-                          placeholder="Pilih variant..."
-                          searchPlaceholder="Cari variant..."
-                          emptyText="Tidak ada variant"
-                        />
+                        <FormLabel className="text-sm font-medium text-gray-700">Pilih Tipe Paket *</FormLabel>
+                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(v.price)}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { setSelectedVariantPrice(v.price); allocatePrice(v.price, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
                         <FormMessage />
                       </FormItem>
                     )} />
                   )}
 
-                  {/* Booking Date */}
+                  {/* Event Date */}
                   <FormField control={form.control} name="bookingDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tanggal Booking *</FormLabel>
+                      <FormLabel className="text-sm font-medium text-gray-700">Event Date *</FormLabel>
                       <Popover>
-                        <PopoverTrigger
-                          render={
-                            <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {field.value ? format(new Date(field.value), "dd MMM yyyy") : "Pilih tanggal"}
-                            </Button>
-                          }
-                        />
+                        <PopoverTrigger render={
+                          <Button
+                            variant="outline"
+                            disabled={!selectedVenueId}
+                            className={cn("w-full justify-start text-left font-normal", !field.value && "text-gray-400")}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {selectedVenueId
+                              ? (field.value ? format(new Date(field.value), "PPP") : "Pilih tanggal event")
+                              : "Pilih venue terlebih dahulu"}
+                          </Button>
+                        } />
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
+                            captionLayout="dropdown"
                             selected={field.value ? new Date(field.value) : undefined}
                             onSelect={(date) => field.onChange(date ? date.toISOString() : "")}
+                            disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                            fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                            defaultMonth={field.value ? new Date(field.value) : new Date()}
                           />
                         </PopoverContent>
                       </Popover>
@@ -301,162 +353,224 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     </FormItem>
                   )} />
 
-                  {/* Wedding Type & Session */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField control={form.control} name="weddingType" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Wedding Type</FormLabel>
-                        <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="wedding">Wedding</SelectItem>
-                            <SelectItem value="engagement">Engagement</SelectItem>
-                            <SelectItem value="akad">Akad</SelectItem>
-                            <SelectItem value="resepsi">Resepsi</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="weddingSession" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Session</FormLabel>
-                        <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Pilih session" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="morning">Morning</SelectItem>
-                            <SelectItem value="afternoon">Afternoon</SelectItem>
-                            <SelectItem value="evening">Evening</SelectItem>
-                            <SelectItem value="fullday">Full Day</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-
-                  {/* Source of Information */}
-                  <FormField control={form.control} name="sourceOfInformationId" render={({ field }) => (
+                  {/* Event Session */}
+                  <FormField control={form.control} name="weddingSession" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Source of Information</FormLabel>
-                      <SearchableSelect
-                        options={sourceOptions}
-                        value={field.value ?? ""}
-                        onChange={field.onChange}
-                        placeholder="Pilih sumber info..."
-                        searchPlaceholder="Cari..."
-                        emptyText="Tidak ada data"
-                      />
+                      <FormLabel className="text-sm font-medium text-gray-700">Event Session *</FormLabel>
+                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="morning">Pagi</SelectItem>
+                          <SelectItem value="afternoon">Siang</SelectItem>
+                          <SelectItem value="evening">Malam</SelectItem>
+                          <SelectItem value="fullday">Fullday</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
 
-                  {/* Bonuses / Complimentary */}
+                  {/* Event Type */}
+                  <FormField control={form.control} name="weddingType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-gray-700">Event Type *</FormLabel>
+                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="resepsi">Resepsi</SelectItem>
+                          <SelectItem value="akad">Akad & Resepsi</SelectItem>
+                          <SelectItem value="wedding">Pemberkatan Resepsi</SelectItem>
+                          <SelectItem value="engagement">Teapai</SelectItem>
+                          <SelectItem value="other">Venue Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Note Date Event */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">Note Date Event</FormLabel>
+                    <Textarea placeholder="Add note for date event" value={noteDateEvent} onChange={(e) => setNoteDateEvent(e.target.value)} rows={3} className="mt-1" />
+                  </div>
+
+                  {/* Complimentary (Bonus) */}
                   <div className="space-y-2">
-                    <FormLabel>Complimentary (Bonus)</FormLabel>
+                    <FormLabel className="text-sm font-medium text-gray-700">Complimentary (Bonus)</FormLabel>
                     <SearchableSelect
                       options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
                       value=""
-                      onChange={(vendorId) => {
-                        const v = allVendors.find((x) => x.id === vendorId);
-                        if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1 }]);
-                      }}
+                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1 }]); }}
                       placeholder="Pilih vendor..."
                       searchPlaceholder="Cari vendor..."
                       emptyText="Tidak ada vendor"
                     />
                     {bonuses.map((b, idx) => (
-                      <div key={b.vendorId} className="bg-gray-50 border rounded-md px-3 py-2 space-y-1.5">
+                      <div key={b.vendorId} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold">{b.vendorName}</span>
-                          <button type="button" className="text-red-500 hover:text-red-700" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
+                          <span className="text-xs font-semibold text-gray-900">{b.vendorName}</span>
+                          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
                             <X className="h-3 w-3" />
-                          </button>
+                          </Button>
                         </div>
-                        <Input
-                          placeholder="Keterangan bonus..."
-                          value={b.description}
-                          onChange={(e) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))}
-                          className="text-xs h-8"
-                        />
+                        <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-[60px]" />
                       </div>
                     ))}
                     {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}
                   </div>
                 </div>
               )}
-
               {/* ─── Step 2: Term of Payments ─── */}
               {currentStep === 2 && (
                 <div className="space-y-4">
+                  {/* Package price */}
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700">Total Harga Package</FormLabel>
+                    <Input disabled value={`Rp${fmtRp(getPriceAfterCashback())}`} className="mt-1" />
+                  </div>
+
                   {/* Payment Method */}
                   <FormField control={form.control} name="paymentMethodId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Pembayaran Melalui</FormLabel>
-                      <SearchableSelect
-                        options={venuePaymentMethods.map((pm) => ({ id: pm.id, name: `${pm.bankName} - ${pm.bankAccountNumber} (${pm.bankRecipient})` }))}
-                        value={field.value ?? ""}
-                        onChange={field.onChange}
-                        placeholder={selectedVenueId ? "Pilih metode bayar..." : "Pilih venue dulu"}
-                        disabled={!selectedVenueId}
-                        searchPlaceholder="Cari..."
-                        emptyText="Tidak ada payment method"
-                      />
+                      <FormLabel className="text-sm font-medium text-gray-700">Pembayaran Melalui</FormLabel>
+                      <SearchableSelect options={venuePaymentMethods.map((pm) => ({ id: pm.id, name: `Bank ${pm.bankName} - ${pm.bankAccountNumber} a.n. ${pm.bankRecipient}` }))} value={field.value ?? ""} onChange={field.onChange} placeholder={selectedVenueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!selectedVenueId} searchPlaceholder="Cari..." emptyText="Tidak ada payment method" />
                       <FormMessage />
                     </FormItem>
                   )} />
 
                   {/* Term of Payments */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <FormLabel>Term of Payments</FormLabel>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setTerms((prev) => [...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }])}>
-                        <Plus className="h-3 w-3 mr-1" /> Tambah
-                      </Button>
-                    </div>
-                    {terms.map((t, idx) => (
-                      <div key={idx} className="space-y-2">
-                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                          <div>
-                            <label className="text-xs text-muted-foreground">Nama</label>
-                            <Input value={t.name} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} className="h-8 text-xs" placeholder="e.g. Booking Fee" />
-                          </div>
-                          <div>
-                            <label className="text-xs text-muted-foreground">Amount</label>
-                            <Input type="number" value={t.amount || ""} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: Number(e.target.value) } : x))} className="h-8 text-xs" placeholder="0" />
-                          </div>
-                          <button type="button" className="text-red-500 hover:text-red-700 pb-1" onClick={() => setTerms((prev) => prev.filter((_, i) => i !== idx))}>
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <Popover>
-                          <PopoverTrigger
-                            render={
-                              <Button variant="outline" size="sm" className={cn("w-full justify-start text-left text-xs h-8", !t.dueDate && "text-muted-foreground")}>
-                                <CalendarIcon className="mr-2 h-3 w-3" />
-                                {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Pilih due date"}
-                              </Button>
-                            }
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700 mb-2 block">Term of Payments</FormLabel>
+                    <div className="space-y-4">
+                      {terms.map((t, idx) => (
+                        <div key={idx} className="space-y-2">
+                          {/* Term name — inline editable */}
+                          <Input
+                            value={t.name}
+                            onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                            placeholder="Term name"
+                            className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
                           />
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
+                          {/* Amount + Date row */}
+                          <div className="flex gap-3 items-center">
+                            <div className="flex-[2]">
+                              <Input
+                                value={t.amount ? fmtRp(t.amount) : ""}
+                                onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }}
+                                placeholder="Amount"
+                                inputMode="numeric"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <Popover>
+                                <PopoverTrigger render={
+                                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
+                                  </Button>
+                                } />
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
                               mode="single"
+                              captionLayout="dropdown"
                               selected={t.dueDate ? new Date(t.dueDate) : undefined}
                               onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
+                              disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                              fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
                             />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    ))}
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+                          {/* Divider between terms */}
+                          {idx < terms.length - 1 && <div className="border-b border-gray-100 pt-1" />}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add / Remove buttons */}
+                    <div className="flex gap-2 mt-4">
+                      <Button type="button" variant="outline" className="flex-1 border-red-500 text-red-500" onClick={() => setTerms((prev) => prev.length > 1 ? prev.slice(0, -1) : prev)} disabled={terms.length <= 1}>
+                        Hapus Payment
+                      </Button>
+                      <Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => [...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }])}>
+                        Tambah Payment
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Cashback / Special Bonus */}
+                  <div className="flex flex-col gap-2 border-y py-4">
+                    <Input
+                      placeholder="Nama bonus (e.g. Cashback)"
+                      value={specialBonusName}
+                      onChange={(e) => setSpecialBonusName(e.target.value)}
+                      className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                    />
+                    <Input
+                      placeholder="IDR. 0"
+                      value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
+                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
+                      inputMode="numeric"
+                    />
+                    <p className="text-xs text-gray-500">Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat cashback diubah.</p>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Harga Paket:</span>
+                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getBasePrice())}</span>
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-red-600">{specialBonusName || "Cashback"}:</span>
+                      <span className="text-sm font-medium text-red-600">- Rp{fmtRp(specialBonusAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center mb-2 border-t pt-2">
+                      <span className="text-sm font-medium text-gray-700">Harga Setelah Cashback:</span>
+                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getPriceAfterCashback())}</span>
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Total Input User:</span>
+                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getTotalTerms())}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Selisih:</span>
+                      <span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-red-600" : "text-gray-700")}>
+                        Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* ─── Step 3: Signature ─── */}
+              {currentStep === 3 && (
+                <div className="space-y-6">
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700 mb-2 block">Lokasi Tanda Tangan *</FormLabel>
+                    <Input placeholder="Contoh: Jakarta, Bandung, Surabaya..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} />
+                  </div>
+                  <div>
+                    <FormLabel className="text-sm font-medium text-gray-700 mb-2 block">Tanda Tangan Sales *</FormLabel>
+                    <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-gray-50", !signatureSales ? "border-red-300" : "border-gray-300")}>
+                      <SignatureCanvas
+                        ref={sigSalesRef}
+                        penColor="black"
+                        canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
+                        onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      {!signatureSales && <p className="text-xs text-red-500">Tanda tangan sales wajib diisi</p>}
+                      <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-red-500 hover:text-red-700 underline ml-auto">Hapus tanda tangan</button>
+                    </div>
                   </div>
                 </div>
               )}
             </form>
           </Form>
         </div>
-
-        {/* Footer — step navigation */}
+        {/* Footer */}
         <div className="bg-white sticky bottom-0 z-10">
           <div className="flex py-4 gap-2">
             <Button
@@ -465,23 +579,17 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
               disabled={createMut.isPending}
               className={cn(
                 "flex-[40%] cursor-pointer",
-                currentStep === 1
-                  ? "text-red-600 border-red-600 hover:bg-red-50"
-                  : "border-black text-black hover:bg-gray-100"
+                currentStep === 1 ? "text-red-600 border-red-600 hover:bg-red-50" : "border-black text-black hover:bg-gray-100"
               )}
             >
               {currentStep === 1 ? "Cancel" : "Previous"}
             </Button>
             <Button
               onClick={currentStep < totalSteps ? handleNext : form.handleSubmit(onSubmit)}
-              disabled={createMut.isPending || (currentStep === 1 && !isStep1Complete)}
-              className="flex-[60%] bg-black text-white hover:bg-gray-800 cursor-pointer"
+              disabled={isContinueDisabled}
+              className={cn("flex-[60%] bg-black text-white hover:bg-gray-800 cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
             >
-              {currentStep < totalSteps
-                ? "Continue"
-                : createMut.isPending
-                  ? "Menyimpan..."
-                  : "Tambah Booking"}
+              {currentStep < totalSteps ? "Continue" : createMut.isPending ? "Creating..." : "Create New Booking"}
             </Button>
           </div>
         </div>

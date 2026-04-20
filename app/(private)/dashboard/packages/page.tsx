@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PackagesTable } from "./_components/packages-table";
+import { requirePagePermission } from "@/lib/require-page-permission";
 
 export const metadata: Metadata = {
   title: "Packages - SWASANA",
   description: "Kelola paket wedding",
 };
 
-export default function PackagesPage() {
+export default async function PackagesPage() {
+  await requirePagePermission("package");
   return (
-    <div className="flex flex-col my-6 px-2">
+    <div className="flex flex-col mb-6 px-2">
       <Suspense fallback={null}>
         <PackagesTable />
       </Suspense>

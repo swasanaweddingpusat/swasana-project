@@ -14,6 +14,8 @@ async function main() {
   // ─── Truncate (urutan penting: child tables dulu, baru parent) ────────────
   await prisma.activityLog.deleteMany();
   await prisma.userVenueAccess.deleteMany();
+  await prisma.userGroupMember.deleteMany();
+  await prisma.userGroup.deleteMany();
   await prisma.emailVerificationToken.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.rolePermission.deleteMany();
@@ -210,17 +212,6 @@ async function main() {
   console.log(`✅ ${venues.length} Venues seeded`);
 
   // ─── Payment Methods ──────────────────────────────────────────────────────
-  await prisma.paymentMethod.create({
-    data: {
-      venueId: venues[0].id,
-      bankName: "BCA",
-      bankAccountNumber: "1234567890",
-      bankRecipient: "PT Swasana Venue Mastery",
-    },
-  });
-  console.log("✅ 1 Payment Method seeded");
-
-  // ─── Payment Methods (Venue) ──────────────────────────────────────────────
   await prisma.paymentMethod.create({
     data: {
       venueId: venues[0].id,

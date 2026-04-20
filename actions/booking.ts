@@ -2,12 +2,13 @@
 
 import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { bookingSchema, updateBookingSchema } from "@/lib/validations/booking";
 
 export async function createBooking(data: unknown) {
-  const { session, error } = await requirePermission({ module: "bookings", action: "create" });
+  const { session, error } = await requirePermission({ module: "booking", action: "create" });
   if (error) return { success: false, error };
 
   const parsed = bookingSchema.safeParse(data);
@@ -28,9 +29,13 @@ export async function createBooking(data: unknown) {
         : null,
     ]);
 
-    const booking = await db.$transaction(async (tx) => {
-      const b = await tx.booking.create({
+    const bookingId = crypto.randomUUID();
+
+    // Build array-form transaction (Neon HTTP compatible)
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.booking.create({
         data: {
+          id: bookingId,
           bookingDate: new Date(input.bookingDate),
           salesId: session!.user.profileId!,
           customerId: input.customerId,
@@ -41,12 +46,15 @@ export async function createBooking(data: unknown) {
           sourceOfInformationId: input.sourceOfInformationId ?? null,
           weddingSession: input.weddingSession ?? null,
           weddingType: input.weddingType ?? null,
+          signingLocation: input.signingLocation ?? null,
+          signatures: input.signatureSales
+            ? { sales: { signature: input.signatureSales, signedAt: new Date().toISOString() } }
+            : undefined,
         },
-      });
-
-      await tx.snapCustomer.create({
+      }),
+      db.snapCustomer.create({
         data: {
-          bookingId: b.id,
+          bookingId,
           customerId: customer.id,
           name: customer.name,
           email: customer.email,
@@ -54,11 +62,10 @@ export async function createBooking(data: unknown) {
           nikNumber: customer.nikNumber,
           ktpAddress: customer.ktpAddress,
         },
-      });
-
-      await tx.snapVenue.create({
+      }),
+      db.snapVenue.create({
         data: {
-          bookingId: b.id,
+          bookingId,
           venueId: venue.id,
           venueName: venue.name,
           address: venue.address,
@@ -66,90 +73,68 @@ export async function createBooking(data: unknown) {
           brandName: venue.brand?.name ?? null,
           brandCode: venue.brand?.code ?? null,
         },
-      });
-
-      await tx.snapPackage.create({
+      }),
+      db.snapPackage.create({
         data: {
-          bookingId: b.id,
+          bookingId,
           packageId: pkg.id,
           packageName: pkg.packageName,
           notes: pkg.notes,
         },
-      });
+      }),
+    ];
 
-      if (variant) {
-        await tx.snapPackageVariant.create({
-          data: {
-            bookingId: b.id,
-            variantId: variant.id,
-            variantName: variant.variantName,
-            pax: variant.pax,
-            price: variant.price,
-          },
-        });
-
-        if (variant.internalItems.length > 0) {
-          await tx.snapPackageInternalItem.createMany({
-            data: variant.internalItems.map((item, i) => ({
-              bookingId: b.id,
-              itemName: item.itemName,
-              itemDescription: item.itemDescription,
-              sortOrder: i,
-            })),
-          });
-        }
-
-        if (variant.vendorItems.length > 0) {
-          await tx.snapPackageVendorItem.createMany({
-            data: variant.vendorItems.map((item, i) => ({
-              bookingId: b.id,
-              categoryName: item.categoryName,
-              itemText: item.itemText,
-              sortOrder: i,
-            })),
-          });
-        }
+    if (variant) {
+      ops.push(
+        db.snapPackageVariant.create({
+          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
+        })
+      );
+      if (variant.internalItems.length > 0) {
+        ops.push(
+          ...variant.internalItems.map((item, i) =>
+            db.snapPackageInternalItem.create({ data: { bookingId, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
+          )
+        );
       }
-
-      if (input.bonuses && input.bonuses.length > 0) {
-        await tx.snapBonus.createMany({
-          data: input.bonuses.map((bonus) => ({
-            bookingId: b.id,
-            vendorId: bonus.vendorId,
-            vendorCategoryId: bonus.vendorCategoryId,
-            vendorName: bonus.vendorName,
-            description: bonus.description ?? null,
-            qty: bonus.qty,
-          })),
-        });
+      if (variant.vendorItems.length > 0) {
+        ops.push(
+          ...variant.vendorItems.map((item, i) =>
+            db.snapPackageVendorItem.create({ data: { bookingId, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
+          )
+        );
       }
+    }
 
-      if (input.termOfPayments && input.termOfPayments.length > 0) {
-        await tx.termOfPayment.createMany({
-          data: input.termOfPayments.map((t) => ({
-            bookingId: b.id,
-            name: t.name,
-            amount: BigInt(t.amount),
-            dueDate: new Date(t.dueDate),
-            sortOrder: t.sortOrder,
-          })),
-        });
-      }
+    if (input.bonuses && input.bonuses.length > 0) {
+      ops.push(
+        ...input.bonuses.map((bonus) =>
+          db.snapBonus.create({ data: { bookingId, vendorId: bonus.vendorId, vendorCategoryId: bonus.vendorCategoryId, vendorName: bonus.vendorName, description: bonus.description ?? null, qty: bonus.qty } })
+        )
+      );
+    }
 
-      return b;
-    });
+    if (input.termOfPayments && input.termOfPayments.length > 0) {
+      ops.push(
+        ...input.termOfPayments.map((t) =>
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: BigInt(t.amount), dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } })
+        )
+      );
+    }
+
+    await db.$transaction(ops);
 
     await logAudit({
       userId: session!.user.id,
       action: "created",
       entityType: "booking",
-      entityId: booking.id,
+      entityId: bookingId,
       changes: { customerId: input.customerId, venueId: input.venueId, packageId: input.packageId },
       description: `Created booking for ${customer.name}`,
     });
 
     revalidateTag("bookings", "max");
-    return { success: true, bookingId: booking.id };
+    return { success: true, bookingId };
   } catch (e) {
     console.error("[createBooking]", e);
     return { success: false, error: "Gagal membuat booking." };
@@ -157,7 +142,7 @@ export async function createBooking(data: unknown) {
 }
 
 export async function updateBooking(data: unknown) {
-  const { session, error } = await requirePermission({ module: "bookings", action: "update" });
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
 
   const parsed = updateBookingSchema.safeParse(data);
@@ -195,7 +180,7 @@ export async function updateBooking(data: unknown) {
 }
 
 export async function deleteBooking(id: string) {
-  const { session, error } = await requirePermission({ module: "bookings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "booking", action: "delete" });
   if (error) return { success: false, error };
 
   try {

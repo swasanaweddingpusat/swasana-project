@@ -459,6 +459,12 @@ enum VenueAccessScope {
   individual
 }
 
+enum EventSession {
+  pagi
+  malam
+  fullday
+}
+
 // ─── Bookings ────────────────────────────────────────────────────────────────
 
 model Booking {

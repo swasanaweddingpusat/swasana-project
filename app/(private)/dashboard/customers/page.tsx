@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function CustomersPage() {
   const customers = await getCustomers();
   return (
-    <div className="flex flex-col my-6 px-2">
+    <div className="flex flex-col mb-6 px-2">
       <CustomersTable initialData={customers} />
     </div>
   );
