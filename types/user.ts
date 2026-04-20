@@ -47,7 +47,7 @@ export interface UserVenueAccess {
   venue: { id: string; name: string };
 }
 
-export interface UserDataGroupMembership {
+export interface UserGroupMembership {
   group: { id: string; name: string };
 }
 
@@ -60,7 +60,7 @@ export interface UserWithVenues {
   profile: (UserProfile & {
     role?: { id: string; name: string } | null;
     userVenueAccess: UserVenueAccess[];
-    dataGroupMemberships: UserDataGroupMembership[];
+    dataGroupMemberships: UserGroupMembership[];
   }) | null;
 }
 
@@ -102,7 +102,7 @@ export interface UpdateUserInput {
 
 // ─── Data Groups ─────────────────────────────────────────────────────────────
 
-export interface UserDataGroupMember {
+export interface UserGroupMember {
   userId: string;
   sortOrder: number;
   profile: {
@@ -114,7 +114,7 @@ export interface UserDataGroupMember {
   };
 }
 
-export interface UserDataGroup {
+export interface UserGroup {
   id: string;
   name: string;
   description?: string | null;
@@ -123,7 +123,7 @@ export interface UserDataGroup {
   createdAt: string;
   updatedAt: string;
   leader?: { id: string; fullName?: string | null; email: string } | null;
-  members: UserDataGroupMember[];
+  members: UserGroupMember[];
   _count?: { members: number };
 }
 

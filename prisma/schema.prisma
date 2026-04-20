@@ -9,7 +9,7 @@ datasource db {
 // ─── Auth Models ─────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id @default(uuid())
   name          String?
   email         String    @unique
   emailVerified DateTime?
@@ -25,7 +25,7 @@ model User {
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String  @id @default(uuid())
   userId            String
   type              String
   provider          String
@@ -44,7 +44,7 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
+  id           String   @id @default(uuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
@@ -65,7 +65,7 @@ model VerificationToken {
 // ─── Profile & RBAC ──────────────────────────────────────────────────────────
 
 model Profile {
-  id                      String                   @id @default(cuid())
+  id                      String                   @id @default(uuid())
   userId                  String                   @unique
   email                   String                   @unique
   fullName                String?
@@ -110,8 +110,8 @@ model Profile {
   role                    Role?                    @relation(fields: [roleId], references: [id])
   user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userVenueAccess         UserVenueAccess[]
-  dataGroupMemberships    UserDataGroupMember[]
-  ledGroups               UserDataGroup[]          @relation("GroupLeader")
+  dataGroupMemberships    UserGroupMember[]
+  ledGroups               UserGroup[]              @relation("GroupLeader")
 
   @@index([roleId])
   @@index([dataScope])
@@ -119,7 +119,7 @@ model Profile {
 }
 
 model Role {
-  id              String           @id @default(cuid())
+  id              String           @id @default(uuid())
   name            String           @unique
   description     String?
   sortOrder       Int              @default(0)
@@ -131,7 +131,7 @@ model Role {
 }
 
 model Permission {
-  id              String           @id @default(cuid())
+  id              String           @id @default(uuid())
   module          String
   action          String
   description     String?
@@ -143,7 +143,7 @@ model Permission {
 }
 
 model RolePermission {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
   roleId       String
   permissionId String
   createdAt    DateTime   @default(now())
@@ -157,7 +157,7 @@ model RolePermission {
 // ─── Auth Tokens ─────────────────────────────────────────────────────────────
 
 model PasswordResetToken {
-  id        String    @id @default(cuid())
+  id        String    @id @default(uuid())
   userId    String
   token     String    @unique
   expiresAt DateTime
@@ -169,7 +169,7 @@ model PasswordResetToken {
 }
 
 model EmailVerificationToken {
-  id        String    @id @default(cuid())
+  id        String    @id @default(uuid())
   profileId String
   token     String    @unique
   expiresAt DateTime
@@ -182,38 +182,38 @@ model EmailVerificationToken {
 
 // ─── Data Groups (untuk scope = 'group') ─────────────────────────────────────
 
-model UserDataGroup {
-  id          String                @id @default(cuid())
+model UserGroup {
+  id          String            @id @default(uuid())
   name        String
   description String?
   leaderId    String?
-  sortOrder   Int                   @default(0)
+  sortOrder   Int               @default(0)
   createdBy   String?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  leader      Profile?              @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
-  members     UserDataGroupMember[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  leader      Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  members     UserGroupMember[]
 
-  @@map("user_data_groups")
+  @@map("user_groups")
 }
 
-model UserDataGroupMember {
+model UserGroupMember {
   groupId   String
   userId    String
-  sortOrder Int           @default(0)
-  createdAt DateTime      @default(now())
-  group     UserDataGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  profile   Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([groupId, userId])
   @@index([userId])
-  @@map("user_data_group_members")
+  @@map("user_group_members")
 }
 
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
 
 model Brand {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   name      String
   code      String   @unique
   createdAt DateTime @default(now())
@@ -223,7 +223,7 @@ model Brand {
 }
 
 model Venue {
-  id              String            @id @default(cuid())
+  id              String            @id @default(uuid())
   name            String
   description     String?
   address         String?
@@ -236,12 +236,14 @@ model Venue {
   updatedAt       DateTime          @updatedAt
   brand           Brand?            @relation(fields: [brandId], references: [id])
   userVenueAccess UserVenueAccess[]
+  packages        Package[]
+  paymentMethods  PaymentMethod[]
 
   @@map("venues")
 }
 
 model UserVenueAccess {
-  id        String           @id @default(cuid())
+  id        String           @id @default(uuid())
   userId    String
   venueId   String
   scope     VenueAccessScope @default(individual)
@@ -258,7 +260,7 @@ model UserVenueAccess {
 // ─── Audit Logging ───────────────────────────────────────────────────────────
 
 model ActivityLog {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   userId      String?
   action      String
   result      String   @default("success")
@@ -277,6 +279,122 @@ model ActivityLog {
   @@index([action, createdAt])
   @@index([entityType, entityId, createdAt])
   @@map("activity_logs")
+}
+
+// ─── Vendors ─────────────────────────────────────────────────────────────────
+
+model VendorCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  vendors     Vendor[]
+
+  @@map("vendor_categories")
+}
+
+model Vendor {
+  id             String          @id @default(uuid())
+  name           String
+  categoryId     String
+  description    String?
+  phone          String?
+  address        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  category       VendorCategory  @relation(fields: [categoryId], references: [id])
+  paymentMethods PaymentMethod[]
+
+  @@index([categoryId])
+  @@map("vendors")
+}
+
+model PaymentMethod {
+  id                String   @id @default(uuid())
+  vendorId          String?
+  venueId           String?
+  bankName          String
+  bankAccountNumber String
+  bankRecipient     String
+  createdAt         DateTime @default(now())
+  vendor            Vendor?  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  venue             Venue?   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([venueId])
+  @@map("payment_methods")
+}
+
+// ─── Packages ────────────────────────────────────────────────────────────────
+
+model Package {
+  id          String           @id @default(uuid())
+  packageName String
+  available   Boolean          @default(true)
+  venueId     String?
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  venue       Venue?           @relation(fields: [venueId], references: [id])
+  variants    PackageVariant[]
+
+  @@index([venueId])
+  @@map("packages")
+}
+
+model PackageVariant {
+  id          String               @id @default(uuid())
+  packageId   String
+  variantName String
+  pax         Int
+  price       Int
+  available   Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  package     Package              @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  vendorItems PackageVendorItem[]
+  internalItems PackageInternalItem[]
+
+  @@index([packageId])
+  @@map("package_variants")
+}
+
+model PackageVendorItem {
+  id               String         @id @default(uuid())
+  packageVariantId String
+  categoryName     String
+  itemText         String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
+
+  @@index([packageVariantId])
+  @@map("package_vendor_items")
+}
+
+model PackageInternalItem {
+  id               String         @id @default(uuid())
+  packageVariantId String
+  itemName         String
+  itemDescription  String         @default("")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
+
+  @@index([packageVariantId])
+  @@map("package_internal_items")
+}
+
+// ─── Source of Information ────────────────────────────────────────────────────
+
+model SourceOfInformation {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("source_of_informations")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────

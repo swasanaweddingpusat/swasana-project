@@ -1,6 +1,6 @@
 import { getUsers } from "@/lib/queries/users";
 import { getGroups } from "@/lib/queries/groups";
-import { GroupsTable } from "../user-management/_components/groups-table";
+import { GroupManagement } from "./_components/group-management";
 
 export default async function GroupsSettingsPage() {
   const [users, groups] = await Promise.all([
@@ -8,9 +8,5 @@ export default async function GroupsSettingsPage() {
     getGroups(),
   ]);
 
-  return (
-    <div className="px-6 py-4">
-      <GroupsTable initialData={groups} users={users} />
-    </div>
-  );
+  return <GroupManagement initialGroups={groups} users={users} />;
 }

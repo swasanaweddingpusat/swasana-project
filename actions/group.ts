@@ -10,15 +10,16 @@ import { headers } from "next/headers";
 // ─── Create Group ─────────────────────────────────────────────────────────────
 
 export async function createGroup(data: unknown) {
-  const { session, error: authError } = await requirePermission({ module: "settings", action: "create" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "create" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
 
   const parsed = createGroupSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
-    const lastGroup = await db.userDataGroup.findFirst({ orderBy: { sortOrder: "desc" } });
-    const group = await db.userDataGroup.create({
+    const lastGroup = await db.userGroup.findFirst({ orderBy: { sortOrder: "desc" } });
+    const group = await db.userGroup.create({
       data: {
         name: parsed.data.name,
         description: parsed.data.description,
@@ -51,16 +52,17 @@ export async function createGroup(data: unknown) {
 // ─── Update Group ─────────────────────────────────────────────────────────────
 
 export async function updateGroup(data: unknown) {
-  const { session, error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
 
   const parsed = updateGroupSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   const { id, name, description, leaderId } = parsed.data;
 
   try {
-    const group = await db.userDataGroup.update({
+    const group = await db.userGroup.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
@@ -91,14 +93,15 @@ export async function updateGroup(data: unknown) {
 // ─── Delete Group ─────────────────────────────────────────────────────────────
 
 export async function deleteGroup(groupId: string) {
-  const { session, error: authError } = await requirePermission({ module: "settings", action: "delete" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "delete" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
 
   try {
-    const group = await db.userDataGroup.findUnique({ where: { id: groupId } });
+    const group = await db.userGroup.findUnique({ where: { id: groupId } });
     if (!group) return { success: false, error: "Grup tidak ditemukan." };
 
-    await db.userDataGroup.delete({ where: { id: groupId } });
+    await db.userGroup.delete({ where: { id: groupId } });
 
     revalidateTag("groups", "max");
 
@@ -123,16 +126,16 @@ export async function deleteGroup(groupId: string) {
 // ─── Add Member ───────────────────────────────────────────────────────────────
 
 export async function addGroupMember(groupId: string, userId: string) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { success: false, error: permResult.error };
 
   try {
-    const lastMember = await db.userDataGroupMember.findFirst({
+    const lastMember = await db.userGroupMember.findFirst({
       where: { groupId },
       orderBy: { sortOrder: "desc" },
     });
 
-    await db.userDataGroupMember.create({
+    await db.userGroupMember.create({
       data: {
         groupId,
         userId,
@@ -150,11 +153,11 @@ export async function addGroupMember(groupId: string, userId: string) {
 // ─── Remove Member ────────────────────────────────────────────────────────────
 
 export async function removeGroupMember(groupId: string, userId: string) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { success: false, error: permResult.error };
 
   try {
-    await db.userDataGroupMember.delete({ where: { groupId_userId: { groupId, userId } } });
+    await db.userGroupMember.delete({ where: { groupId_userId: { groupId, userId } } });
     revalidateTag("groups", "max");
     return { success: true };
   } catch {
@@ -165,12 +168,12 @@ export async function removeGroupMember(groupId: string, userId: string) {
 // ─── Reorder Groups ───────────────────────────────────────────────────────────
 
 export async function reorderGroups(orderedIds: string[]) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { success: false, error: permResult.error };
 
   try {
     for (let index = 0; index < orderedIds.length; index++) {
-      await db.userDataGroup.update({ where: { id: orderedIds[index] }, data: { sortOrder: index + 1 } });
+      await db.userGroup.update({ where: { id: orderedIds[index] }, data: { sortOrder: index + 1 } });
     }
     revalidateTag("groups", "max");
     return { success: true };
@@ -182,12 +185,12 @@ export async function reorderGroups(orderedIds: string[]) {
 // ─── Reorder Members ──────────────────────────────────────────────────────────
 
 export async function reorderGroupMembers(groupId: string, orderedUserIds: string[]) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { success: false, error: permResult.error };
 
   try {
     for (let index = 0; index < orderedUserIds.length; index++) {
-      await db.userDataGroupMember.update({
+      await db.userGroupMember.update({
         where: { groupId_userId: { groupId, userId: orderedUserIds[index] } },
         data: { sortOrder: index + 1 },
       });

@@ -7,8 +7,8 @@ import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/permissions";
 
 export async function createRole(formData: FormData) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "create" });
-  if (authError) return { error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "create" });
+  if (permResult.error) return { error: permResult.error };
   const raw = {
     name: formData.get("name") as string,
     description: (formData.get("description") as string) || undefined,
@@ -16,7 +16,7 @@ export async function createRole(formData: FormData) {
 
   const parsed = createRoleSchema.safeParse(raw);
   if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
+    return { error: parsed.error.issues[0].message };
   }
 
   try {
@@ -43,8 +43,8 @@ export async function createRole(formData: FormData) {
 }
 
 export async function updateRole(formData: FormData) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { error: permResult.error };
   const raw = {
     id: formData.get("id") as string,
     name: formData.get("name") as string,
@@ -53,7 +53,7 @@ export async function updateRole(formData: FormData) {
 
   const parsed = updateRoleSchema.safeParse(raw);
   if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
+    return { error: parsed.error.issues[0].message };
   }
 
   try {
@@ -81,8 +81,8 @@ export async function updateRole(formData: FormData) {
 }
 
 export async function deleteRole(roleId: string) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "delete" });
-  if (authError) return { error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "delete" });
+  if (permResult.error) return { error: permResult.error };
 
   try {
     const role = await db.role.findUnique({ where: { id: roleId } });
@@ -116,8 +116,8 @@ export async function updateRolePermissions(
   roleId: string,
   permissionIds: string[]
 ) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { error: permResult.error };
 
   try {
     // Delete all existing, then insert new ones atomically via array transaction

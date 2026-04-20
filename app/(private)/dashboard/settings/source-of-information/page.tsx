@@ -1,6 +1,7 @@
-import { Info } from "lucide-react";
-import { ComingSoon } from "../_components/coming-soon";
+import { getSourceOfInformations } from "@/lib/queries/source-of-information";
+import { SourceOfInformationManager } from "./_components/source-of-information-manager";
 
-export default function SourceOfInformationSettingsPage() {
-  return <ComingSoon icon={Info} />;
+export default async function SourceOfInformationSettingsPage() {
+  const data = await getSourceOfInformations();
+  return <SourceOfInformationManager initialData={data} />;
 }

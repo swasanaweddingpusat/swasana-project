@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" className={`${openSans.variable} h-full antialiased`}>
-      <body className="min-h-full font-sans">
+      <body className="min-h-full font-sans" suppressHydrationWarning>
         <SessionProvider>
           <QueryProvider>
             <TooltipProvider>

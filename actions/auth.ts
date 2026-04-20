@@ -23,7 +23,7 @@ export async function forgotPassword(formData: FormData) {
 
   const parsed = forgotPasswordSchema.safeParse(raw);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    return { success: false, error: parsed.error.issues[0].message };
   }
 
   const { email } = parsed.data;
@@ -81,7 +81,7 @@ export async function resetPassword(formData: FormData) {
 
   const parsed = resetPasswordSchema.safeParse(raw);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    return { success: false, error: parsed.error.issues[0].message };
   }
 
   const resetToken = await db.passwordResetToken.findUnique({

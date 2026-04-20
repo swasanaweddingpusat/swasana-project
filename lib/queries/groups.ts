@@ -6,7 +6,7 @@ export async function getGroups() {
   cacheTag("groups");
   cacheLife("minutes");
 
-  return db.userDataGroup.findMany({
+  return db.userGroup.findMany({
     select: {
       id: true,
       name: true,
@@ -45,7 +45,7 @@ export async function getGroupById(groupId: string) {
   cacheTag("groups");
   cacheLife("minutes");
 
-  return db.userDataGroup.findUnique({
+  return db.userGroup.findUnique({
     where: { id: groupId },
     select: {
       id: true,

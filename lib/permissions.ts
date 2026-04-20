@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import type { Session } from "next-auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export async function hasPermission(
 export async function requirePermission(
   check: PermissionCheck
 ): Promise<
-  | { session: NonNullable<Awaited<ReturnType<typeof auth>>>; error: null }
+  | { session: Session; error: null }
   | { session: null; error: string }
 > {
   const session = await auth();
@@ -63,7 +64,7 @@ export async function requirePermission(
 export async function requirePermissionForRoute(
   check: PermissionCheck
 ): Promise<
-  | { session: NonNullable<Awaited<ReturnType<typeof auth>>>; response: null }
+  | { session: Session; response: null }
   | { session: null; response: Response }
 > {
   const session = await auth();

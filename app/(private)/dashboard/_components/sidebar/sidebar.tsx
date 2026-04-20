@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { navItems } from "./sidebar-config";
-import { NavItemRow } from "./nav-item";
+import { SidebarNav } from "./sidebar-nav";
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -13,42 +11,14 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "relative bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-200 shrink-0",
+        "relative bg-white border-r border-gray-200 flex-col h-screen transition-all duration-200 shrink-0",
+        "hidden lg:flex",
         collapsed ? "w-20" : "w-64"
       )}
     >
-      {/* Logo */}
-      <div className="sticky top-0 bg-white z-10 border-b border-gray-200 h-16 flex items-center px-5">
-        {collapsed ? (
-          <div className="w-full flex justify-center">
-            <Image
-              src="/logo-sgp.svg"
-              alt="SGP"
-              width={100}
-              height={100}
-              priority
-            />
-          </div>
-        ) : (
-          <Image
-            src="/logo-swasana.svg"
-            alt="Swasana Wedding"
-            width={120}
-            height={100}
-            style={{ width: "auto", height: "auto" }}
-            priority
-          />
-        )}
-      </div>
+      <SidebarNav collapsed={collapsed} />
 
-      {/* Nav */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item) => (
-          <NavItemRow key={item.href} item={item} collapsed={collapsed} />
-        ))}
-      </nav>
-
-      {/* Collapse toggle — pinned to the right edge, aligned with header */}
+      {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}

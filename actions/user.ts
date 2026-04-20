@@ -20,8 +20,9 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 // ─── Invite User ──────────────────────────────────────────────────────────────
 
 export async function inviteUser(formData: FormData) {
-  const { session, error: authError } = await requirePermission({ module: "settings", action: "create" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "create" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
 
   const h = await headers();
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
@@ -38,7 +39,7 @@ export async function inviteUser(formData: FormData) {
 
   const parsed = inviteUserSchema.safeParse(raw);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    return { success: false, error: parsed.error.issues[0].message };
   }
 
   const { email, fullName, roleId, venueIds, venueScopes, dataScope } = parsed.data;
@@ -126,12 +127,13 @@ export async function inviteUser(formData: FormData) {
 // ─── Update User ──────────────────────────────────────────────────────────────
 
 export async function updateUser(data: Record<string, unknown>) {
-  const { session, error: authError } = await requirePermission({ module: "settings", action: "update" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "update" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
 
   const parsed = updateUserSchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    return { success: false, error: parsed.error.issues[0].message };
   }
 
   const {
@@ -252,8 +254,8 @@ export async function updateUser(data: Record<string, unknown>) {
 // ─── Delete User ──────────────────────────────────────────────────────────────
 
 export async function deleteUser(userId: string) {
-  const { error: authError } = await requirePermission({ module: "settings", action: "delete" });
-  if (authError) return { success: false, error: authError };
+  const permResult = await requirePermission({ module: "settings", action: "delete" });
+  if (permResult.error) return { success: false, error: permResult.error };
 
   try {
     const profile = await db.profile.findUnique({ where: { id: userId } });

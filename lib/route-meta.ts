@@ -50,6 +50,18 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Sumber informasi customer untuk tracking lead",
     parent: "/dashboard/settings",
   },
+
+  // ─── Packages ──────────────────────────────────────────────────────────────
+  "/dashboard/packages": {
+    title: "Packages",
+    subtitle: "Kelola paket wedding",
+  },
+
+  // ─── Vendors ───────────────────────────────────────────────────────────────
+  "/dashboard/vendors": {
+    title: "Vendors",
+    subtitle: "Kelola vendor dan supplier",
+  },
 };
 
 export interface Breadcrumb {
@@ -61,7 +73,7 @@ export function getBreadcrumbs(pathname: string): Breadcrumb[] {
   const crumbs: Breadcrumb[] = [];
   let current: string | undefined = pathname;
   while (current) {
-    const meta = ROUTE_META[current];
+    const meta: RouteMeta | undefined = ROUTE_META[current];
     if (!meta) break;
     crumbs.unshift({ href: current, title: meta.title });
     current = meta.parent;
