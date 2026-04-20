@@ -29,21 +29,19 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Neon HTTP adapter supports array-form transactions (not callback form)
-    await db.$transaction([
-      db.user.update({
-        where: { id: resetToken.profile.userId },
-        data: { password: hashedPassword },
-      }),
-      db.passwordResetToken.update({
-        where: { id: resetToken.id },
-        data: { usedAt: new Date() },
-      }),
-      db.profile.update({
-        where: { id: resetToken.userId },
-        data: { mustChangePassword: false },
-      }),
-    ]);
+    // Sequential writes — HTTP adapter doesn't support $transaction
+    await db.user.update({
+      where: { id: resetToken.profile.userId },
+      data: { password: hashedPassword },
+    });
+    await db.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { usedAt: new Date() },
+    });
+    await db.profile.update({
+      where: { id: resetToken.userId },
+      data: { mustChangePassword: false },
+    });
 
     await logAudit({
       userId: resetToken.userId,

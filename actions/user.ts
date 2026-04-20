@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getBaseUrl } from "@/lib/url";
 import { inviteUserSchema, updateUserSchema } from "@/lib/validations/user";
@@ -31,6 +32,7 @@ export async function inviteUser(formData: FormData) {
     fullName: formData.get("fullName") as string,
     roleId: formData.get("roleId") as string,
     venueIds: JSON.parse(formData.get("venueIds") as string),
+    venueScopes: JSON.parse((formData.get("venueScopes") as string) || "{}"),
     dataScope: (formData.get("dataScope") as string) || "own",
   };
 
@@ -39,7 +41,7 @@ export async function inviteUser(formData: FormData) {
     return { success: false, error: parsed.error.errors[0].message };
   }
 
-  const { email, fullName, roleId, venueIds, dataScope } = parsed.data;
+  const { email, fullName, roleId, venueIds, venueScopes, dataScope } = parsed.data;
 
   try {
     // Check if user already exists
@@ -55,7 +57,7 @@ export async function inviteUser(formData: FormData) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
 
-    // Create user + profile atomically
+    // User + profile + token + venue access in ONE nested create — atomic at DB level
     const user = await db.user.create({
       data: {
         email,
@@ -73,6 +75,14 @@ export async function inviteUser(formData: FormData) {
             emailVerificationTokens: {
               create: { token, expiresAt },
             },
+            ...(venueIds.length > 0 && {
+              userVenueAccess: {
+                create: venueIds.map((venueId) => ({
+                  venueId,
+                  scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+                })),
+              },
+            }),
           },
         },
       },
@@ -80,15 +90,6 @@ export async function inviteUser(formData: FormData) {
     });
 
     const profile = user.profile!;
-
-    // Create venue access entries
-    if (venueIds.length > 0) {
-      await db.$transaction(
-        venueIds.map((venueId) =>
-          db.userVenueAccess.create({ data: { userId: profile.id, venueId } })
-        )
-      );
-    }
 
     // Send invitation email — OUTSIDE the DB write so a mail failure doesn't roll back user creation
     const baseUrl = await getBaseUrl();
@@ -101,11 +102,11 @@ export async function inviteUser(formData: FormData) {
       html: invitationEmailHtml({ fullName, verificationLink }),
     });
 
-    revalidateTag("users");
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
-      userId: session.user.id,
+      userId: session.user.profileId,
       action: "user.invited",
       entityType: "profile",
       entityId: profile.id,
@@ -134,7 +135,7 @@ export async function updateUser(data: Record<string, unknown>) {
   }
 
   const {
-    userId, fullName, nickName, phoneNumber, roleId, venueIds, status, dataScope,
+    userId, fullName, nickName, phoneNumber, roleId, venueIds, venueScopes, status, dataScope,
     placeOfBirth, dateOfBirth, ktpAddress, currentAddress, motherName,
     maritalStatus, numberOfChildren, lastEducation,
     emergencyContactName, emergencyContactRel, emergencyContactPhone,
@@ -144,6 +145,55 @@ export async function updateUser(data: Record<string, unknown>) {
     const profile = await db.profile.findUnique({ where: { id: userId } });
     if (!profile) return { success: false, error: "Pengguna tidak ditemukan." };
 
+    // Diff venues (reads outside the transaction)
+    const venueOps: Prisma.PrismaPromise<unknown>[] = [];
+    if (venueIds !== undefined) {
+      const existing = await db.userVenueAccess.findMany({
+        where: { userId },
+        select: { venueId: true, scope: true },
+      });
+      const existingMap = new Map(existing.map((e) => [e.venueId, e.scope]));
+      const nextSet = new Set(venueIds);
+
+      const toDelete = existing.filter((e) => !nextSet.has(e.venueId));
+      const toCreate = venueIds.filter((id) => !existingMap.has(id));
+      const toUpdate = venueIds.filter((id) => {
+        const cur = existingMap.get(id);
+        const nxt = (venueScopes?.[id] ?? "individual") as "individual" | "general";
+        return cur !== undefined && cur !== nxt;
+      });
+
+      for (const e of toDelete) {
+        venueOps.push(
+          db.userVenueAccess.delete({
+            where: { userId_venueId: { userId, venueId: e.venueId } },
+          })
+        );
+      }
+      for (const venueId of toCreate) {
+        venueOps.push(
+          db.userVenueAccess.create({
+            data: {
+              userId,
+              venueId,
+              scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+            },
+          })
+        );
+      }
+      for (const venueId of toUpdate) {
+        venueOps.push(
+          db.userVenueAccess.update({
+            where: { userId_venueId: { userId, venueId } },
+            data: {
+              scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+            },
+          })
+        );
+      }
+    }
+
+    // Sequential writes — Neon HTTP adapter doesn't support $transaction
     await db.profile.update({
       where: { id: userId },
       data: {
@@ -168,25 +218,21 @@ export async function updateUser(data: Record<string, unknown>) {
     });
 
     if (fullName !== undefined) {
-      await db.user.update({ where: { id: profile.userId }, data: { name: fullName } });
+      await db.user.update({
+        where: { id: profile.userId },
+        data: { name: fullName },
+      });
     }
 
-    if (venueIds !== undefined) {
-      await db.userVenueAccess.deleteMany({ where: { userId } });
-      if (venueIds.length > 0) {
-        await db.$transaction(
-          venueIds.map((venueId) =>
-            db.userVenueAccess.create({ data: { userId, venueId } })
-          )
-        );
-      }
+    for (const op of venueOps) {
+      await op;
     }
 
-    revalidateTag("users");
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
-      userId: session.user.id,
+      userId: session.user.profileId,
       action: "user.updated",
       entityType: "profile",
       entityId: userId,
@@ -215,17 +261,15 @@ export async function deleteUser(userId: string) {
       return { success: false, error: "Pengguna tidak ditemukan." };
     }
 
-    // Delete in FK order — array transaction ensures atomicity on Neon HTTP
-    await db.$transaction([
-      db.userVenueAccess.deleteMany({ where: { userId } }),
-      db.emailVerificationToken.deleteMany({ where: { profileId: userId } }),
-      db.passwordResetToken.deleteMany({ where: { userId } }),
-      db.activityLog.deleteMany({ where: { userId } }),
-      db.profile.delete({ where: { id: userId } }),
-      db.user.delete({ where: { id: profile.userId } }),
-    ]);
+    // Sequential deletes in FK order — HTTP adapter doesn't support $transaction
+    await db.userVenueAccess.deleteMany({ where: { userId } });
+    await db.emailVerificationToken.deleteMany({ where: { profileId: userId } });
+    await db.passwordResetToken.deleteMany({ where: { userId } });
+    await db.activityLog.deleteMany({ where: { userId } });
+    await db.profile.delete({ where: { id: userId } });
+    await db.user.delete({ where: { id: profile.userId } });
 
-    revalidateTag("users");
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({

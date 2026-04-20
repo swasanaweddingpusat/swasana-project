@@ -22,9 +22,9 @@ export default function GlobalError({
         <Button variant="outline" onClick={() => reset()}>
           Coba Lagi
         </Button>
-        <Button asChild>
-          <Link href="/dashboard">Kembali ke Dashboard</Link>
-        </Button>
+        <Link href="/dashboard">
+          <Button>Kembali ke Dashboard</Button>
+        </Link>
       </div>
     </div>
   );

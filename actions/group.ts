@@ -28,11 +28,11 @@ export async function createGroup(data: unknown) {
       },
     });
 
-    revalidateTag("groups");
+    revalidateTag("groups", "max");
 
     const h = await headers();
     await logAudit({
-      userId: session.user.id,
+      userId: session.user.profileId,
       action: "group.created",
       entityType: "group",
       entityId: group.id,
@@ -69,11 +69,11 @@ export async function updateGroup(data: unknown) {
       },
     });
 
-    revalidateTag("groups");
+    revalidateTag("groups", "max");
 
     const h = await headers();
     await logAudit({
-      userId: session.user.id,
+      userId: session.user.profileId,
       action: "group.updated",
       entityType: "group",
       entityId: id,
@@ -100,11 +100,11 @@ export async function deleteGroup(groupId: string) {
 
     await db.userDataGroup.delete({ where: { id: groupId } });
 
-    revalidateTag("groups");
+    revalidateTag("groups", "max");
 
     const h = await headers();
     await logAudit({
-      userId: session.user.id,
+      userId: session.user.profileId,
       action: "group.deleted",
       entityType: "group",
       entityId: groupId,
@@ -140,7 +140,7 @@ export async function addGroupMember(groupId: string, userId: string) {
       },
     });
 
-    revalidateTag("groups");
+    revalidateTag("groups", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menambahkan anggota." };
@@ -155,7 +155,7 @@ export async function removeGroupMember(groupId: string, userId: string) {
 
   try {
     await db.userDataGroupMember.delete({ where: { groupId_userId: { groupId, userId } } });
-    revalidateTag("groups");
+    revalidateTag("groups", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menghapus anggota." };
@@ -169,12 +169,10 @@ export async function reorderGroups(orderedIds: string[]) {
   if (authError) return { success: false, error: authError };
 
   try {
-    await db.$transaction(
-      orderedIds.map((id, index) =>
-        db.userDataGroup.update({ where: { id }, data: { sortOrder: index + 1 } })
-      )
-    );
-    revalidateTag("groups");
+    for (let index = 0; index < orderedIds.length; index++) {
+      await db.userDataGroup.update({ where: { id: orderedIds[index] }, data: { sortOrder: index + 1 } });
+    }
+    revalidateTag("groups", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menyimpan urutan grup." };
@@ -188,15 +186,13 @@ export async function reorderGroupMembers(groupId: string, orderedUserIds: strin
   if (authError) return { success: false, error: authError };
 
   try {
-    await db.$transaction(
-      orderedUserIds.map((userId, index) =>
-        db.userDataGroupMember.update({
-          where: { groupId_userId: { groupId, userId } },
-          data: { sortOrder: index + 1 },
-        })
-      )
-    );
-    revalidateTag("groups");
+    for (let index = 0; index < orderedUserIds.length; index++) {
+      await db.userDataGroupMember.update({
+        where: { groupId_userId: { groupId, userId: orderedUserIds[index] } },
+        data: { sortOrder: index + 1 },
+      });
+    }
+    revalidateTag("groups", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menyimpan urutan anggota." };

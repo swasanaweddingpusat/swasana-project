@@ -1,257 +1,876 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Drawer } from "@/components/shared/drawer";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { ChevronDown, Building2, Globe, User, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useInviteUser, useUpdateUser } from "@/hooks/use-users";
-import { inviteUserSchema, updateUserSchema } from "@/lib/validations/user";
+import {
+  useGroups, useCreateGroup, useAddGroupMember, useRemoveGroupMember,
+} from "@/hooks/use-groups";
 import type { UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
-import type { VenuesQueryResult } from "@/lib/queries/venues";
-import type { z } from "zod";
-
-type InviteFormValues = z.infer<typeof inviteUserSchema>;
-type UpdateFormValues = z.infer<typeof updateUserSchema>;
+import type { BrandsQueryResult } from "@/lib/queries/venues";
 
 interface InviteDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   roles: RolesQueryResult;
-  venues: VenuesQueryResult;
+  brands: BrandsQueryResult;
   editUser?: UserQueryItem | null;
 }
 
+type VenueScope = "individual" | "general";
+type DataScope = "own" | "group" | "all";
+
+const initialFormData = {
+  email: "",
+  fullName: "",
+  nickName: "",
+  phoneNumber: "",
+  placeOfBirth: "",
+  dateOfBirth: "",
+  ktpAddress: "",
+  currentAddress: "",
+  motherName: "",
+  maritalStatus: "",
+  numberOfChildren: "",
+  lastEducation: "",
+  emergencyContactName: "",
+  emergencyContactRel: "",
+  emergencyContactPhone: "",
+  roleId: "",
+  venueIds: [] as string[],
+  venueScopes: {} as Record<string, VenueScope>,
+  dataScope: "own" as DataScope,
+};
+
+const inputClass =
+  "mt-1 border-[#CCCCCC] bg-[#F9F9F9] focus:border-[#CCCCCC] focus:ring-[#CCCCCC]";
+const errorInputClass =
+  "border-[#E80606] focus:border-[#E80606] focus:ring-[#E80606]";
+
 export function InviteDrawer({
-  open,
-  onOpenChange,
-  roles,
-  venues,
-  editUser,
+  open, onOpenChange, roles, brands, editUser,
 }: InviteDrawerProps) {
   const isEdit = !!editUser;
   const inviteUser = useInviteUser();
   const updateUser = useUpdateUser();
+  const { data: groups = [] } = useGroups();
+  const createGroup = useCreateGroup();
+  const addMember = useAddGroupMember();
+  const removeMember = useRemoveGroupMember();
 
-  const inviteForm = useForm<InviteFormValues>({
-    resolver: zodResolver(inviteUserSchema),
-    defaultValues: { email: "", fullName: "", roleId: "", venueIds: [] },
-  });
+  const [formData, setFormData] = useState(initialFormData);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const editForm = useForm<UpdateFormValues>({
-    resolver: zodResolver(updateUserSchema),
-    defaultValues: { userId: "", fullName: "", roleId: "", venueIds: [] },
-  });
-
-  const form = isEdit ? editForm : inviteForm;
   const isPending = isEdit ? updateUser.isPending : inviteUser.isPending;
 
-  // Populate edit form when editUser changes
+  // Populate when opening
   useEffect(() => {
-    if (editUser) {
-      const venueIds =
-        editUser.profile?.userVenueAccess?.map((v) => v.venue.id) ?? [];
-      editForm.reset({
-        userId: editUser.profile?.id ?? "",
-        fullName: editUser.profile?.fullName ?? "",
-        roleId: editUser.profile?.role?.id ?? "",
+    if (!open) return;
+
+    if (editUser?.profile) {
+      const p = editUser.profile;
+      const venueIds = p.userVenueAccess?.map((v) => v.venue.id) ?? [];
+      const venueScopes: Record<string, VenueScope> = {};
+      p.userVenueAccess?.forEach((v) => {
+        venueScopes[v.venue.id] = (v.scope as VenueScope) ?? "individual";
+      });
+
+      setFormData({
+        email: editUser.email,
+        fullName: p.fullName ?? "",
+        nickName: p.nickName ?? "",
+        phoneNumber: p.phoneNumber ?? "",
+        placeOfBirth: p.placeOfBirth ?? "",
+        dateOfBirth: p.dateOfBirth
+          ? new Date(p.dateOfBirth).toISOString().slice(0, 10)
+          : "",
+        ktpAddress: p.ktpAddress ?? "",
+        currentAddress: p.currentAddress ?? "",
+        motherName: p.motherName ?? "",
+        maritalStatus: p.maritalStatus ?? "",
+        numberOfChildren: p.numberOfChildren?.toString() ?? "",
+        lastEducation: p.lastEducation ?? "",
+        emergencyContactName: p.emergencyContactName ?? "",
+        emergencyContactRel: p.emergencyContactRel ?? "",
+        emergencyContactPhone: p.emergencyContactPhone ?? "",
+        roleId: p.role?.id ?? "",
         venueIds,
+        venueScopes,
+        dataScope: (p.dataScope as DataScope) ?? "own",
+      });
+
+      // Expand brands that own selected venues
+      const brandIds = brands
+        .filter((b) => b.venues.some((v) => venueIds.includes(v.id)))
+        .map((b) => b.id);
+      setSelectedBrands(brandIds);
+
+      // Current group memberships
+      const groupIds =
+        p.dataGroupMemberships?.map((m) => m.group.id) ?? [];
+      setSelectedGroupIds(groupIds);
+    } else {
+      setFormData(initialFormData);
+      setSelectedBrands([]);
+      setSelectedGroupIds([]);
+    }
+    setErrors({});
+  }, [open, editUser, brands]);
+
+  const clearError = (field: string) => {
+    if (errors[field]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
+  const handleInput = (field: keyof typeof formData, value: string) => {
+    setFormData((p) => ({ ...p, [field]: value }));
+    clearError(field);
+  };
+
+  const validate = () => {
+    const next: Record<string, string> = {};
+    if (!isEdit && !formData.email.trim()) next.email = "Email wajib diisi";
+    else if (
+      !isEdit &&
+      formData.email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
+    )
+      next.email = "Format email tidak valid";
+    if (!formData.fullName.trim()) next.fullName = "Nama wajib diisi";
+    if (!formData.roleId) next.roleId = "Role wajib dipilih";
+    if (formData.venueIds.length === 0)
+      next.venueIds = "Minimal satu venue harus dipilih";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  // ─── Venue + brand helpers ────────────────────────────────────────────────
+
+  const allVenueIds = useMemo(
+    () => brands.flatMap((b) => b.venues.map((v) => v.id)),
+    [brands]
+  );
+  const allVenuesCount = allVenueIds.length;
+  const allVenuesSelected =
+    allVenuesCount > 0 && formData.venueIds.length >= allVenuesCount;
+
+  const toggleVenue = (venueId: string, checked: boolean) => {
+    setFormData((prev) => {
+      const newVenues = checked
+        ? [...prev.venueIds, venueId]
+        : prev.venueIds.filter((id) => id !== venueId);
+      const newScopes = { ...prev.venueScopes };
+      if (checked) newScopes[venueId] = newScopes[venueId] ?? "individual";
+      else delete newScopes[venueId];
+      return { ...prev, venueIds: newVenues, venueScopes: newScopes };
+    });
+    clearError("venueIds");
+  };
+
+  const selectAllForBrand = (brandId: string) => {
+    const brand = brands.find((b) => b.id === brandId);
+    if (!brand) return;
+    const venueIds = brand.venues.map((v) => v.id);
+    const allSelected = venueIds.every((id) => formData.venueIds.includes(id));
+
+    setFormData((prev) => {
+      if (allSelected) {
+        const newVenues = prev.venueIds.filter((id) => !venueIds.includes(id));
+        const newScopes = { ...prev.venueScopes };
+        venueIds.forEach((id) => delete newScopes[id]);
+        return { ...prev, venueIds: newVenues, venueScopes: newScopes };
+      } else {
+        const newVenues = [...new Set([...prev.venueIds, ...venueIds])];
+        const newScopes = { ...prev.venueScopes };
+        venueIds.forEach((id) => {
+          if (!newScopes[id]) newScopes[id] = "individual";
+        });
+        return { ...prev, venueIds: newVenues, venueScopes: newScopes };
+      }
+    });
+    clearError("venueIds");
+  };
+
+  const toggleAllVenues = (checked: boolean) => {
+    const allBrandIds = brands.map((b) => b.id);
+    if (checked) {
+      setSelectedBrands(allBrandIds);
+      setFormData((prev) => {
+        const newScopes = { ...prev.venueScopes };
+        allVenueIds.forEach((id) => {
+          if (!newScopes[id]) newScopes[id] = "individual";
+        });
+        return { ...prev, venueIds: [...allVenueIds], venueScopes: newScopes };
       });
     } else {
-      inviteForm.reset({ email: "", fullName: "", roleId: "", venueIds: [] });
+      setFormData((prev) => ({ ...prev, venueIds: [], venueScopes: {} }));
     }
-  }, [editUser, open]); // eslint-disable-line react-hooks/exhaustive-deps
+    clearError("venueIds");
+  };
 
-  async function onSubmit(values: InviteFormValues | UpdateFormValues) {
-    const formData = new FormData();
-    formData.set("venueIds", JSON.stringify(values.venueIds ?? []));
+  // ─── Submit ────────────────────────────────────────────────────────────────
 
-    if (isEdit) {
-      const v = values as UpdateFormValues;
-      formData.set("userId", editUser!.profile!.id);
-      if (v.fullName) formData.set("fullName", v.fullName);
-      if (v.roleId) formData.set("roleId", v.roleId);
+  const handleSubmit = async () => {
+    if (!validate()) return;
 
-      const result = await updateUser.mutateAsync(formData);
-      if (result.success) {
-        toast.success(result.message);
-        onOpenChange(false);
-      } else {
+    if (isEdit && editUser?.profile) {
+      const payload: Record<string, unknown> = {
+        userId: editUser.profile.id,
+        fullName: formData.fullName,
+        nickName: formData.nickName || undefined,
+        phoneNumber: formData.phoneNumber || undefined,
+        roleId: formData.roleId,
+        venueIds: formData.venueIds,
+        venueScopes: formData.venueScopes,
+        dataScope: formData.dataScope,
+        placeOfBirth: formData.placeOfBirth || undefined,
+        dateOfBirth: formData.dateOfBirth || undefined,
+        ktpAddress: formData.ktpAddress || undefined,
+        currentAddress: formData.currentAddress || undefined,
+        motherName: formData.motherName || undefined,
+        maritalStatus: formData.maritalStatus || undefined,
+        numberOfChildren: formData.numberOfChildren
+          ? Number(formData.numberOfChildren)
+          : undefined,
+        lastEducation: formData.lastEducation || undefined,
+        emergencyContactName: formData.emergencyContactName || undefined,
+        emergencyContactRel: formData.emergencyContactRel || undefined,
+        emergencyContactPhone: formData.emergencyContactPhone || undefined,
+      };
+
+      const result = await updateUser.mutateAsync(payload);
+      if (!result.success) {
         toast.error(result.error);
+        return;
       }
+
+      // Sync group memberships
+      const existing =
+        editUser.profile.dataGroupMemberships?.map((m) => m.group.id) ?? [];
+      const toAdd = selectedGroupIds.filter((id) => !existing.includes(id));
+      const toRemove = existing.filter((id) => !selectedGroupIds.includes(id));
+      const profileId = editUser.profile.id;
+
+      await Promise.all([
+        ...toAdd.map((gid) =>
+          addMember.mutateAsync({ groupId: gid, userId: profileId })
+        ),
+        ...toRemove.map((gid) =>
+          removeMember.mutateAsync({ groupId: gid, userId: profileId })
+        ),
+      ]);
+
+      toast.success(result.message ?? "User berhasil diperbarui.");
+      onOpenChange(false);
     } else {
-      const v = values as InviteFormValues;
-      formData.set("email", v.email);
-      formData.set("fullName", v.fullName);
-      formData.set("roleId", v.roleId);
+      const fd = new FormData();
+      fd.set("email", formData.email);
+      fd.set("fullName", formData.fullName);
+      fd.set("roleId", formData.roleId);
+      fd.set("venueIds", JSON.stringify(formData.venueIds));
+      fd.set("venueScopes", JSON.stringify(formData.venueScopes));
+      fd.set("dataScope", formData.dataScope);
 
-      const result = await inviteUser.mutateAsync(formData);
-      if (result.success) {
-        toast.success(result.message);
-        onOpenChange(false);
-      } else {
+      const result = await inviteUser.mutateAsync(fd);
+      if (!result.success) {
         toast.error(result.error);
+        return;
       }
+      toast.success(result.message ?? "Undangan berhasil dikirim.");
+      onOpenChange(false);
     }
-  }
+  };
+
+  const handleClose = () => {
+    setFormData(initialFormData);
+    setSelectedBrands([]);
+    setSelectedGroupIds([]);
+    setErrors({});
+    onOpenChange(false);
+  };
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>{isEdit ? "Edit Pengguna" : "Undang Pengguna"}</SheetTitle>
-          <SheetDescription>
-            {isEdit
-              ? "Perbarui informasi pengguna."
-              : "Kirim undangan ke pengguna baru."}
-          </SheetDescription>
-        </SheetHeader>
-
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit as (v: InviteFormValues | UpdateFormValues) => void)}
-            className="mt-6 space-y-4 px-1"
-          >
-            {/* Email — only for invite */}
+    <Drawer
+      isOpen={open}
+      onClose={handleClose}
+      title={isEdit ? "Edit User" : "Invite New User"}
+    >
+      <div className="flex flex-col justify-between h-full">
+        <div className="flex-1 overflow-y-auto scrollbar-hide">
+          <div className="space-y-3 px-2">
+            {/* Email — invite only */}
             {!isEdit && (
-              <FormField
-                control={inviteForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input placeholder="email@contoh.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              <div>
+                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                  Email *
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter email address"
+                  autoComplete="off"
+                  className={cn(inputClass, errors.email && errorInputClass)}
+                  value={formData.email}
+                  onChange={(e) => handleInput("email", e.target.value)}
+                />
+                {errors.email && (
+                  <p className="mt-1 text-sm text-[#E80606]">{errors.email}</p>
                 )}
-              />
+              </div>
             )}
 
             {/* Full Name */}
-            <FormField
-              control={form.control}
-              name="fullName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nama Lengkap</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Nama lengkap" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <div>
+              <Label htmlFor="fullName" className="text-sm font-medium text-gray-700">
+                Full Name *
+              </Label>
+              <Input
+                id="fullName"
+                placeholder="Enter full name"
+                autoComplete="off"
+                className={cn(inputClass, errors.fullName && errorInputClass)}
+                value={formData.fullName}
+                onChange={(e) => handleInput("fullName", e.target.value)}
+              />
+              {errors.fullName && (
+                <p className="mt-1 text-sm text-[#E80606]">{errors.fullName}</p>
               )}
-            />
+            </div>
+
+            {/* Personal + Emergency sections — edit only */}
+            {isEdit && (
+              <>
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-800">Data Personal</h3>
+
+                  <div>
+                    <Label htmlFor="nickName" className="text-sm font-medium text-gray-700">
+                      Nama Panggilan
+                    </Label>
+                    <Input
+                      id="nickName"
+                      placeholder="Nama panggilan"
+                      className={inputClass}
+                      value={formData.nickName}
+                      onChange={(e) => handleInput("nickName", e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="phoneNumber" className="text-sm font-medium text-gray-700">
+                      No. Telepon
+                    </Label>
+                    <Input
+                      id="phoneNumber"
+                      placeholder="08xxxxxxxxxx"
+                      className={inputClass}
+                      value={formData.phoneNumber}
+                      onChange={(e) => handleInput("phoneNumber", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="placeOfBirth" className="text-sm font-medium text-gray-700">
+                        Tempat Lahir
+                      </Label>
+                      <Input
+                        id="placeOfBirth"
+                        placeholder="Kota kelahiran"
+                        className={inputClass}
+                        value={formData.placeOfBirth}
+                        onChange={(e) => handleInput("placeOfBirth", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700">
+                        Tanggal Lahir
+                      </Label>
+                      <Input
+                        id="dateOfBirth"
+                        type="date"
+                        className={inputClass}
+                        value={formData.dateOfBirth}
+                        onChange={(e) => handleInput("dateOfBirth", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="ktpAddress" className="text-sm font-medium text-gray-700">
+                      Alamat KTP
+                    </Label>
+                    <Input
+                      id="ktpAddress"
+                      placeholder="Alamat sesuai KTP"
+                      className={inputClass}
+                      value={formData.ktpAddress}
+                      onChange={(e) => handleInput("ktpAddress", e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="currentAddress" className="text-sm font-medium text-gray-700">
+                      Alamat Tinggal
+                    </Label>
+                    <Input
+                      id="currentAddress"
+                      placeholder="Alamat domisili sekarang"
+                      className={inputClass}
+                      value={formData.currentAddress}
+                      onChange={(e) => handleInput("currentAddress", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="motherName" className="text-sm font-medium text-gray-700">
+                        Nama Ibu Kandung
+                      </Label>
+                      <Input
+                        id="motherName"
+                        placeholder="Nama ibu kandung"
+                        className={inputClass}
+                        value={formData.motherName}
+                        onChange={(e) => handleInput("motherName", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="maritalStatus" className="text-sm font-medium text-gray-700">
+                        Marital Status
+                      </Label>
+                      <Select
+                        value={formData.maritalStatus}
+                        onValueChange={(v) => handleInput("maritalStatus", v)}
+                      >
+                        <SelectTrigger className="mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]">
+                          <SelectValue placeholder="Pilih status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single">Single</SelectItem>
+                          <SelectItem value="married">Menikah</SelectItem>
+                          <SelectItem value="divorced">Cerai</SelectItem>
+                          <SelectItem value="widowed">Duda/Janda</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="numberOfChildren" className="text-sm font-medium text-gray-700">
+                        Jumlah Anak
+                      </Label>
+                      <Input
+                        id="numberOfChildren"
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        className={inputClass}
+                        value={formData.numberOfChildren}
+                        onChange={(e) => handleInput("numberOfChildren", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastEducation" className="text-sm font-medium text-gray-700">
+                        Pendidikan Terakhir
+                      </Label>
+                      <Input
+                        id="lastEducation"
+                        placeholder="SMA / D3 / S1 / S2"
+                        className={inputClass}
+                        value={formData.lastEducation}
+                        onChange={(e) => handleInput("lastEducation", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-800">Kontak Darurat</h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="emergencyContactName" className="text-sm font-medium text-gray-700">
+                        Nama Kontak Darurat
+                      </Label>
+                      <Input
+                        id="emergencyContactName"
+                        placeholder="Nama kontak"
+                        className={inputClass}
+                        value={formData.emergencyContactName}
+                        onChange={(e) => handleInput("emergencyContactName", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="emergencyContactRel" className="text-sm font-medium text-gray-700">
+                        Hubungan
+                      </Label>
+                      <Input
+                        id="emergencyContactRel"
+                        placeholder="Ayah / Ibu / Pasangan"
+                        className={inputClass}
+                        value={formData.emergencyContactRel}
+                        onChange={(e) => handleInput("emergencyContactRel", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="emergencyContactPhone" className="text-sm font-medium text-gray-700">
+                      No Kontak Darurat
+                    </Label>
+                    <Input
+                      id="emergencyContactPhone"
+                      placeholder="08xxxxxxxxxx"
+                      className={inputClass}
+                      value={formData.emergencyContactPhone}
+                      onChange={(e) => handleInput("emergencyContactPhone", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Role */}
-            <FormField
-              control={form.control}
-              name="roleId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Role</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih role" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.id} value={role.id}>
-                          {role.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+            <div className="w-full">
+              <Label htmlFor="roleId" className="text-sm font-medium text-gray-700">
+                Role *
+              </Label>
+              <Select
+                value={formData.roleId}
+                onValueChange={(v) => handleInput("roleId", v)}
+              >
+                <SelectTrigger
+                  className={cn(
+                    "mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]",
+                    errors.roleId && errorInputClass
+                  )}
+                >
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      <span className="capitalize">{role.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.roleId && (
+                <p className="mt-1 text-sm text-[#E80606]">{errors.roleId}</p>
               )}
-            />
+            </div>
 
-            {/* Venues */}
-            <FormField
-              control={form.control}
-              name="venueIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Akses Venue</FormLabel>
-                  <ScrollArea className="h-40 rounded-md border p-3">
-                    <div className="space-y-2">
-                      {venues.map((venue) => {
-                        const checked = (field.value as string[] | undefined)?.includes(venue.id) ?? false;
+            {/* Data Access */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700">Data Access</Label>
+              <p className="text-xs text-gray-500 mt-1 mb-2">
+                Controls which booking data this user can see
+              </p>
+              <div className="flex gap-2">
+                {(["own", "group", "all"] as const).map((scope) => {
+                  const icons = {
+                    own: <User className="h-3 w-3" />,
+                    group: <Users className="h-3 w-3" />,
+                    all: <Globe className="h-3 w-3" />,
+                  };
+                  const labels = { own: "Own", group: "Group", all: "All" };
+                  const descs = {
+                    own: "Only their own bookings",
+                    group: "Bookings from group members",
+                    all: "All bookings",
+                  };
+                  const isActive = formData.dataScope === scope;
+                  return (
+                    <button
+                      key={scope}
+                      type="button"
+                      onClick={() =>
+                        setFormData((p) => ({ ...p, dataScope: scope }))
+                      }
+                      title={descs[scope]}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition-all flex-1 justify-center",
+                        isActive
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                      )}
+                    >
+                      {icons[scope]}
+                      {labels[scope]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {formData.dataScope === "group" && (
+                <div className="mt-3 space-y-2">
+                  {!isEdit && (
+                    <p className="text-[11px] text-amber-600">
+                      Group akan ditetapkan setelah user dibuat.
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500">Assign to groups:</p>
+                  {selectedGroupIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {selectedGroupIds.map((gid) => {
+                        const g = groups.find((x) => x.id === gid);
+                        if (!g) return null;
                         return (
-                          <div key={venue.id} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`venue-${venue.id}`}
-                              checked={checked}
-                              onCheckedChange={(val) => {
-                                const current = (field.value as string[]) ?? [];
-                                if (val) {
-                                  field.onChange([...current, venue.id]);
-                                } else {
-                                  field.onChange(current.filter((id) => id !== venue.id));
-                                }
-                              }}
-                            />
-                            <label
-                              htmlFor={`venue-${venue.id}`}
-                              className="cursor-pointer text-sm"
+                          <span
+                            key={gid}
+                            className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full"
+                          >
+                            {g.name}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedGroupIds((prev) =>
+                                  prev.filter((id) => id !== gid)
+                                )
+                              }
+                              className="ml-0.5 hover:text-gray-300"
                             >
-                              {venue.name}
-                            </label>
-                          </div>
+                              ×
+                            </button>
+                          </span>
                         );
                       })}
                     </div>
-                  </ScrollArea>
-                  <FormMessage />
-                </FormItem>
+                  )}
+                  <SearchableSelect
+                    options={groups
+                      .filter((g) => !selectedGroupIds.includes(g.id))
+                      .map((g) => ({ id: g.id, name: g.name }))}
+                    value={undefined}
+                    onChange={(gid) => {
+                      if (gid && !selectedGroupIds.includes(gid)) {
+                        setSelectedGroupIds((prev) => [...prev, gid]);
+                      }
+                    }}
+                    placeholder="Tambah ke group..."
+                    searchPlaceholder="Cari atau buat group..."
+                    emptyText="Tidak ada group"
+                    onAdd={async (name) => {
+                      const result = await createGroup.mutateAsync({ name });
+                      if (result.success && result.group) {
+                        setSelectedGroupIds((prev) => [...prev, result.group!.id]);
+                      } else {
+                        toast.error(result.error ?? "Gagal membuat group");
+                      }
+                    }}
+                  />
+                </div>
               )}
-            />
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Batal
-              </Button>
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Kirim Undangan"}
-              </Button>
             </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+
+            {/* Assigned Venues */}
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium text-gray-700">
+                  Assigned Venues
+                </Label>
+                {allVenuesCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-400">All</span>
+                    <Switch
+                      checked={allVenuesSelected}
+                      onCheckedChange={toggleAllVenues}
+                      className="scale-75"
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1 mb-2">
+                Select brands and venues that this user will have access to
+              </p>
+              {errors.venueIds && (
+                <p className="mb-2 text-sm text-[#E80606]">{errors.venueIds}</p>
+              )}
+
+              <div className="space-y-2">
+                {brands.map((brand) => {
+                  const isExpanded = selectedBrands.includes(brand.id);
+                  const brandVenues = brand.venues ?? [];
+                  const selectedCount = brandVenues.filter((v) =>
+                    formData.venueIds.includes(v.id)
+                  ).length;
+                  const allSelectedForBrand =
+                    brandVenues.length > 0 &&
+                    selectedCount === brandVenues.length;
+
+                  return (
+                    <div
+                      key={brand.id}
+                      className={cn(
+                        "rounded-lg border transition-all duration-200",
+                        isExpanded
+                          ? "border-gray-300 bg-white shadow-sm"
+                          : "border-gray-200 bg-gray-50/50"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedBrands((prev) =>
+                            prev.includes(brand.id)
+                              ? prev.filter((id) => id !== brand.id)
+                              : [...prev, brand.id]
+                          )
+                        }
+                        className="flex items-center w-full px-3 py-2.5 gap-2.5"
+                      >
+                        <Building2
+                          className={cn(
+                            "h-4 w-4 shrink-0 transition-colors",
+                            isExpanded ? "text-gray-900" : "text-gray-400"
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-sm flex-1 text-left transition-colors",
+                            isExpanded
+                              ? "font-semibold text-gray-900"
+                              : "font-medium text-gray-600"
+                          )}
+                        >
+                          {brand.name}
+                        </span>
+                        {selectedCount > 0 && (
+                          <span className="text-[10px] font-medium bg-black text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                            {selectedCount}
+                          </span>
+                        )}
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200",
+                            isExpanded && "rotate-180"
+                          )}
+                        />
+                      </button>
+
+                      {isExpanded && (
+                        <div className="px-3 pb-3">
+                          {brandVenues.length > 0 && (
+                            <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
+                              <span className="text-[11px] text-gray-400 uppercase tracking-wider">
+                                {brandVenues.length} venue
+                                {brandVenues.length > 1 ? "s" : ""}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => selectAllForBrand(brand.id)}
+                                className="text-[11px] font-medium text-gray-500 hover:text-gray-900 transition-colors"
+                              >
+                                {allSelectedForBrand
+                                  ? "Deselect all"
+                                  : "Select all"}
+                              </button>
+                            </div>
+                          )}
+
+                          {brandVenues.length === 0 ? (
+                            <p className="text-xs text-gray-400 py-2 text-center">
+                              No venues available
+                            </p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {brandVenues.map((venue) => {
+                                const isSelected = formData.venueIds.includes(
+                                  venue.id
+                                );
+                                return (
+                                  <div
+                                    key={venue.id}
+                                    className={cn(
+                                      "flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer",
+                                      isSelected
+                                        ? "bg-gray-900 text-white"
+                                        : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                                    )}
+                                    onClick={() =>
+                                      toggleVenue(venue.id, !isSelected)
+                                    }
+                                  >
+                                    <Checkbox
+                                      id={venue.id}
+                                      checked={isSelected}
+                                      onCheckedChange={(checked) =>
+                                        toggleVenue(venue.id, checked as boolean)
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={cn(
+                                        "shrink-0 border-gray-300",
+                                        isSelected &&
+                                          "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900"
+                                      )}
+                                    />
+                                    <span className="text-xs font-medium flex-1 truncate">
+                                      {venue.name}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="bg-white sticky bottom-0 z-10">
+          <div className="flex py-4 gap-2">
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              className="flex-1 cursor-pointer text-[#E80606] border-[#E80606] hover:bg-[#FFD6D6]"
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer"
+              disabled={isPending}
+            >
+              {isPending
+                ? "Processing..."
+                : isEdit
+                ? "Update User"
+                : "Send Invitation"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Drawer>
   );
 }

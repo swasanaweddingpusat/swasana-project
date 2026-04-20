@@ -1,19 +1,54 @@
-import { SettingsNav } from "./_components/settings-nav";
+"use client";
+
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { getBreadcrumbs } from "@/lib/route-meta";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const crumbs = getBreadcrumbs(pathname);
+
   return (
-    <div className="flex gap-8 p-6">
-      <aside className="w-48 shrink-0">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Settings
-        </h2>
-        <SettingsNav />
-      </aside>
-      <main className="flex-1 min-w-0">{children}</main>
+    <div className="flex-1 min-w-0">
+      {crumbs.length > 1 && (
+        <div className="px-6 pt-4">
+          <Breadcrumb>
+            <BreadcrumbList>
+              {crumbs.map((crumb, i) => {
+                const isLast = i === crumbs.length - 1;
+                return (
+                  <React.Fragment key={crumb.href}>
+                    {i > 0 && <BreadcrumbSeparator />}
+                    <BreadcrumbItem>
+                      {isLast ? (
+                        <BreadcrumbPage>{crumb.title}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink render={<Link href={crumb.href} />}>
+                          {crumb.title}
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </React.Fragment>
+                );
+              })}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+      )}
+      {children}
     </div>
   );
 }

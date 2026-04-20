@@ -68,9 +68,9 @@ export function VerifyForm() {
             <p className="text-sm text-muted-foreground">
               Email terverifikasi, silakan login
             </p>
-            <Button asChild className="w-full">
-              <Link href="/auth/login">Masuk Sekarang</Link>
-            </Button>
+            <Link href="/auth/login">
+              <Button className="w-full">Masuk Sekarang</Button>
+            </Link>
           </>
         )}
 
@@ -79,9 +79,9 @@ export function VerifyForm() {
             <XCircle className="h-10 w-10 text-red-600" />
             <p className="font-semibold text-red-600">Verifikasi Gagal</p>
             <p className="text-sm text-muted-foreground">{errorMessage}</p>
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/auth/login">Kembali ke Login</Link>
-            </Button>
+            <Link href="/auth/login">
+              <Button variant="outline" className="w-full">Kembali ke Login</Button>
+            </Link>
           </>
         )}
       </CardContent>

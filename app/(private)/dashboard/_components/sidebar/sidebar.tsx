@@ -13,52 +13,53 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-200",
-        collapsed ? "w-16" : "w-60"
+        "relative bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-200 shrink-0",
+        collapsed ? "w-20" : "w-64"
       )}
     >
       {/* Logo */}
-      <div
-        className={cn(
-          "flex items-center border-b border-gray-200 h-14 shrink-0",
-          collapsed ? "justify-center px-2" : "px-4 gap-2"
-        )}
-      >
-        <Image
-          src="/swasana-logo.png"
-          alt="Swasana"
-          width={32}
-          height={32}
-          className="object-contain shrink-0"
-        />
-        {!collapsed && (
-          <span className="font-bold text-sm text-gray-900 truncate">
-            Swasana Wedding
-          </span>
+      <div className="sticky top-0 bg-white z-10 border-b border-gray-200 h-16 flex items-center px-5">
+        {collapsed ? (
+          <div className="w-full flex justify-center">
+            <Image
+              src="/logo-sgp.svg"
+              alt="SGP"
+              width={100}
+              height={100}
+              priority
+            />
+          </div>
+        ) : (
+          <Image
+            src="/logo-swasana.svg"
+            alt="Swasana Wedding"
+            width={120}
+            height={100}
+            style={{ width: "auto", height: "auto" }}
+            priority
+          />
         )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto overflow-x-hidden">
         {navItems.map((item) => (
           <NavItemRow key={item.href} item={item} collapsed={collapsed} />
         ))}
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="border-t border-gray-200 shrink-0 px-2 py-2 flex justify-end">
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center justify-center p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" />
-          )}
-        </button>
-      </div>
+      {/* Collapse toggle — pinned to the right edge, aligned with header */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="absolute top-7 -translate-y-1/2 -right-3.5 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm hover:bg-gray-50 transition-colors"
+      >
+        {collapsed ? (
+          <PanelLeftOpen className="h-3.5 w-3.5 text-gray-500" />
+        ) : (
+          <PanelLeftClose className="h-3.5 w-3.5 text-gray-500" />
+        )}
+      </button>
     </aside>
   );
 }

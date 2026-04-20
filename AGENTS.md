@@ -6,6 +6,67 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ---
 
+# Agent Behavior — MANDATORY
+
+## Think Hard Before Acting
+
+Before writing ANY code:
+
+1. **Read first** — Open and read every file you're about to change. Read files that import from it or are imported by it.
+2. **Impact analysis** — If you change component A, identify ALL components that depend on A (imports, props, shared state, shared types). List them. Verify your change won't break them.
+3. **Plan the change** — State what you'll do and why before doing it. If the change touches >3 files, outline the plan first.
+4. **Verify after** — After making changes, run the build or check for TypeScript errors. Don't declare "done" without verification.
+
+## No Hallucination Policy
+
+- **Never assume an API exists** — check `node_modules/next/dist/docs/` for Next.js APIs, check the actual codebase for project utilities.
+- **Never invent props, fields, or methods** — if unsure, read the source file or `prisma/schema.prisma` first.
+- **Never guess file paths** — confirm a file exists before importing from it.
+- **If you don't know, say so** — don't confidently write wrong code.
+- **Next.js 16 is NOT your training data** — always read docs before using any Next.js API.
+
+## Impact Analysis Protocol
+
+When modifying any file, answer these BEFORE writing code:
+
+- **Who imports this file?** — Search for imports of the file you're changing.
+- **Does the interface change?** — If you change exported types, function signatures, or component props, every consumer must be updated.
+- **Does the behavior change?** — If a function now returns a different shape, trace all callers.
+- **Side effects on shared state?** — Changes to providers, contexts, or global stores affect the entire subtree.
+
+If any of these reveals a cascade, handle ALL affected files in the same change.
+
+## Code Quality Gates
+
+### Absolutely Forbidden
+- ❌ `console.log()` in runtime code — use `console.error()` only in catch blocks
+- ❌ `any` type — use `unknown` and narrow
+- ❌ `middleware.ts` — it's `proxy.ts` in Next.js 16
+- ❌ `cookies()` / `headers()` without `await`
+- ❌ Editing `components/ui/*` — shadcn-generated
+- ❌ `findMany()` without pagination
+- ❌ Skipping rate limiting on any endpoint
+- ❌ Leaving unused imports or variables
+- ❌ Declaring "done" without verifying build passes
+
+### Always Required
+- ✅ Read the file before editing it
+- ✅ Zod validation on all inputs
+- ✅ `requirePermission()` before mutations
+- ✅ `db.$transaction()` for multi-table writes
+- ✅ `logAudit()` for sensitive actions
+- ✅ Explicit return types on exported functions
+- ✅ `@/` alias for imports
+
+## When Stuck
+
+- Build fails? Read the actual error. Trace to source.
+- Same approach failed twice? Stop. Diagnose root cause. Try a different approach.
+- Unsure about Next.js 16? Read `node_modules/next/dist/docs/`.
+- Unsure about Prisma/Neon? Check `prisma/schema.prisma` and `lib/db.ts`.
+
+---
+
 # Swasana Project — Agent Rules
 
 ## 1. Stack (authoritative)

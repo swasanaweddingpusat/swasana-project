@@ -40,11 +40,11 @@ export async function POST(request: Request) {
     const isValid = await bcrypt.compare(currentPassword, user.password);
     if (!isValid) {
       await logAudit({
-        userId: session.user.id,
+        userId: session.user.profileId,
         action: "auth.password_change_failed",
         result: "failure",
         entityType: "profile",
-        entityId: session.user.id,
+        entityId: session.user.profileId,
         description: "Password lama tidak sesuai",
         ipAddress: ip,
         userAgent: request.headers.get("user-agent") ?? undefined,
@@ -54,28 +54,26 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    // Neon HTTP adapter supports array-form transactions (not callback form)
-    await db.$transaction([
-      db.user.update({
-        where: { id: session.user.id },
-        data: { password: hashedPassword },
-      }),
-      db.profile.update({
-        where: { userId: session.user.id },
-        data: { mustChangePassword: false },
-      }),
-      // Invalidate all other sessions after password change
-      db.session.deleteMany({
-        where: { userId: session.user.id },
-      }),
-    ]);
+    // Sequential writes — HTTP adapter doesn't support $transaction
+    await db.user.update({
+      where: { id: session.user.id },
+      data: { password: hashedPassword },
+    });
+    await db.profile.update({
+      where: { userId: session.user.id },
+      data: { mustChangePassword: false },
+    });
+    // Invalidate all other sessions after password change
+    await db.session.deleteMany({
+      where: { userId: session.user.id },
+    });
 
     await logAudit({
-      userId: session.user.id,
+      userId: session.user.profileId,
       action: "auth.password_changed",
       result: "success",
       entityType: "profile",
-      entityId: session.user.id,
+      entityId: session.user.profileId,
       description: "Password berhasil diubah",
       ipAddress: ip,
       userAgent: request.headers.get("user-agent") ?? undefined,

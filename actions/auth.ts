@@ -103,22 +103,20 @@ export async function resetPassword(formData: FormData) {
 
   const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
 
-  await db.$transaction([
-    db.user.update({
-      where: { id: resetToken.profile.userId },
-      data: { password: hashedPassword },
-    }),
-    db.profile.update({
-      where: { id: resetToken.userId },
-      data: force ? { mustChangePassword: false } : {},
-    }),
-    db.passwordResetToken.update({
-      where: { id: resetToken.id },
-      data: { usedAt: new Date() },
-    }),
-  ]);
+  await db.user.update({
+    where: { id: resetToken.profile.userId },
+    data: { password: hashedPassword },
+  });
+  await db.profile.update({
+    where: { id: resetToken.userId },
+    data: force ? { mustChangePassword: false } : {},
+  });
+  await db.passwordResetToken.update({
+    where: { id: resetToken.id },
+    data: { usedAt: new Date() },
+  });
 
-  revalidateTag("users");
+  revalidateTag("users", "max");
 
   const h = await headers();
   await logAudit({
@@ -158,16 +156,14 @@ export async function verifyEmail(token: string) {
     return { success: false, error: "Token sudah kadaluarsa." };
   }
 
-  await db.$transaction([
-    db.profile.update({
-      where: { id: verificationToken.profileId },
-      data: { isEmailVerified: true },
-    }),
-    db.emailVerificationToken.update({
-      where: { id: verificationToken.id },
-      data: { usedAt: new Date() },
-    }),
-  ]);
+  await db.profile.update({
+    where: { id: verificationToken.profileId },
+    data: { isEmailVerified: true },
+  });
+  await db.emailVerificationToken.update({
+    where: { id: verificationToken.id },
+    data: { usedAt: new Date() },
+  });
 
   await logAudit({
     userId: verificationToken.profileId,

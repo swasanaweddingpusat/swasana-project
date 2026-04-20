@@ -1,371 +1,347 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useState, useMemo, useCallback } from "react";
+import { ShieldCheck, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   useRoles,
   useCreateRole,
-  useUpdateRole,
-  useDeleteRole,
   useUpdateRolePermissions,
 } from "@/hooks/use-roles";
-import { createRoleSchema, updateRoleSchema } from "@/lib/validations/user";
 import type { RolesQueryResult, RoleQueryItem } from "@/lib/queries/roles";
-import type { PermissionsQueryResult } from "@/lib/queries/permissions";
-import type { z } from "zod";
+import type { PermissionsQueryResult, PermissionQueryItem } from "@/lib/queries/permissions";
 
-type CreateRoleValues = z.infer<typeof createRoleSchema>;
-type UpdateRoleValues = z.infer<typeof updateRoleSchema>;
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const ACTIONS = ["view", "create", "update", "delete"] as const;
+
+const roleColors: Record<string, string> = {
+  "super admin": "bg-gray-900 text-white",
+  manager: "bg-gray-700 text-white",
+  sales: "bg-gray-500 text-white",
+  finance: "bg-gray-600 text-white",
+  "vendor specialist": "bg-gray-400 text-white",
+  operational: "bg-gray-500 text-white",
+  "direktur sales": "bg-gray-700 text-white",
+  "direktur operational": "bg-gray-700 text-white",
+  "human resource": "bg-gray-600 text-white",
+};
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface RolesManagerProps {
   initialRoles: RolesQueryResult;
   initialPermissions: PermissionsQueryResult;
 }
 
-const ACTIONS = ["view", "create", "update", "delete"];
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function RolesManager({ initialRoles, initialPermissions }: RolesManagerProps) {
   const { data: roles } = useRoles(initialRoles);
-  const createRole = useCreateRole();
-  const updateRole = useUpdateRole();
-  const deleteRole = useDeleteRole();
-  const updateRolePermissions = useUpdateRolePermissions();
+  const createRoleMutation = useCreateRole();
+  const updatePermsMutation = useUpdateRolePermissions();
 
-  const [selectedRole, setSelectedRole] = useState<RoleQueryItem | null>(null);
-  const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<RoleQueryItem | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(
+    initialRoles[0]?.id ?? null
+  );
 
-  const createForm = useForm<CreateRoleValues>({
-    resolver: zodResolver(createRoleSchema),
-    defaultValues: { name: "", description: "" },
+  // Local editable permission state: roleId → Set<permissionId>
+  const [localPerms, setLocalPerms] = useState<Record<string, Set<string>>>(() => {
+    const state: Record<string, Set<string>> = {};
+    initialRoles.forEach((r: RoleQueryItem) => {
+      state[r.id] = new Set(r.rolePermissions.map((rp) => rp.permission.id));
+    });
+    return state;
   });
+  const [isDirty, setIsDirty] = useState(false);
 
-  const editForm = useForm<UpdateRoleValues>({
-    resolver: zodResolver(updateRoleSchema),
-    defaultValues: { id: "", name: "", description: "" },
-  });
+  // Add role inline form
+  const [showAddRole, setShowAddRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleDesc, setNewRoleDesc] = useState("");
 
-  function openCreate() {
-    createForm.reset({ name: "", description: "" });
-    setDialogMode("create");
-  }
+  // Permission lookup: "module:action" → permissionId
+  const permLookup = useMemo(() => {
+    const map: Record<string, string> = {};
+    initialPermissions.forEach((p: PermissionQueryItem) => {
+      map[`${p.module}:${p.action}`] = p.id;
+    });
+    return map;
+  }, [initialPermissions]);
 
-  function openEdit(role: RoleQueryItem) {
-    editForm.reset({ id: role.id, name: role.name, description: role.description ?? "" });
-    setDialogMode("edit");
-  }
+  // Unique modules from permissions
+  const modules = useMemo(() => {
+    const seen = new Set<string>();
+    return initialPermissions
+      .map((p: PermissionQueryItem) => p.module)
+      .filter((m: string) => {
+        if (seen.has(m)) return false;
+        seen.add(m);
+        return true;
+      })
+      .sort();
+  }, [initialPermissions]);
 
-  async function onCreateSubmit(values: CreateRoleValues) {
-    const fd = new FormData();
-    fd.set("name", values.name);
-    if (values.description) fd.set("description", values.description);
-    const result = await createRole.mutateAsync(fd);
+  const selectedRole = roles?.find((r: RoleQueryItem) => r.id === selectedRoleId) ?? null;
+  const isSuperAdmin = selectedRole?.name.toLowerCase() === "super admin";
+  const currentPerms = selectedRoleId
+    ? localPerms[selectedRoleId] ?? new Set<string>()
+    : new Set<string>();
+
+  // ─── Handlers ─────────────────────────────────────────────────────────────
+
+  const togglePermission = useCallback(
+    (moduleId: string, action: string) => {
+      if (!selectedRoleId || isSuperAdmin) return;
+      const pid = permLookup[`${moduleId}:${action}`];
+      if (!pid) return;
+      setLocalPerms((prev) => {
+        const next = { ...prev };
+        const set = new Set(next[selectedRoleId]);
+        if (set.has(pid)) set.delete(pid);
+        else set.add(pid);
+        next[selectedRoleId] = set;
+        return next;
+      });
+      setIsDirty(true);
+    },
+    [selectedRoleId, isSuperAdmin, permLookup]
+  );
+
+  const toggleAllForModule = useCallback(
+    (moduleId: string) => {
+      if (!selectedRoleId || isSuperAdmin) return;
+      const pids = ACTIONS.map((a) => permLookup[`${moduleId}:${a}`]).filter(Boolean);
+      setLocalPerms((prev) => {
+        const next = { ...prev };
+        const set = new Set(next[selectedRoleId]);
+        const allChecked = pids.every((pid) => set.has(pid));
+        pids.forEach((pid) => (allChecked ? set.delete(pid) : set.add(pid)));
+        next[selectedRoleId] = set;
+        return next;
+      });
+      setIsDirty(true);
+    },
+    [selectedRoleId, isSuperAdmin, permLookup]
+  );
+
+  const handleSave = async () => {
+    if (!selectedRoleId) return;
+    const result = await updatePermsMutation.mutateAsync({
+      roleId: selectedRoleId,
+      permissionIds: Array.from(currentPerms),
+    });
     if (result.success) {
+      toast.success("Permissions berhasil disimpan");
+      setIsDirty(false);
+    } else {
+      toast.error(result.error ?? "Gagal menyimpan permissions");
+    }
+  };
+
+  const handleReset = () => {
+    if (!selectedRoleId) return;
+    const role = initialRoles.find((r: RoleQueryItem) => r.id === selectedRoleId);
+    if (!role) return;
+    setLocalPerms((prev) => ({
+      ...prev,
+      [selectedRoleId]: new Set(role.rolePermissions.map((rp) => rp.permission.id)),
+    }));
+    setIsDirty(false);
+  };
+
+  const handleCreateRole = async () => {
+    if (!newRoleName.trim()) return;
+    const fd = new FormData();
+    fd.set("name", newRoleName.trim());
+    if (newRoleDesc.trim()) fd.set("description", newRoleDesc.trim());
+    const result = await createRoleMutation.mutateAsync(fd);
+    if (result.success && result.role) {
       toast.success("Role berhasil dibuat");
-      setDialogMode(null);
+      setNewRoleName("");
+      setNewRoleDesc("");
+      setShowAddRole(false);
+      setSelectedRoleId(result.role.id);
+      setLocalPerms((prev) => ({ ...prev, [result.role!.id]: new Set<string>() }));
     } else {
       toast.error(result.error ?? "Gagal membuat role");
     }
-  }
+  };
 
-  async function onEditSubmit(values: UpdateRoleValues) {
-    const fd = new FormData();
-    fd.set("id", values.id);
-    fd.set("name", values.name);
-    if (values.description) fd.set("description", values.description);
-    const result = await updateRole.mutateAsync(fd);
-    if (result.success) {
-      toast.success("Role berhasil diperbarui");
-      setDialogMode(null);
-    } else {
-      toast.error(result.error ?? "Gagal memperbarui role");
-    }
-  }
-
-  async function onDelete() {
-    if (!deleteTarget) return;
-    const result = await deleteRole.mutateAsync(deleteTarget.id);
-    setDeleteTarget(null);
-    if (result.success) {
-      toast.success("Role berhasil dihapus");
-      if (selectedRole?.id === deleteTarget.id) setSelectedRole(null);
-    } else {
-      toast.error(result.error ?? "Gagal menghapus role");
-    }
-  }
-
-  // Build permission matrix for selected role
-  const modules = [...new Set(initialPermissions.map((p) => p.module))].sort();
-  const selectedRoleData = roles?.find((r) => r.id === selectedRole?.id);
-  const activePermIds = new Set(
-    selectedRoleData?.rolePermissions.map((rp) => rp.permission.id) ?? []
-  );
-
-  async function handlePermissionToggle(permId: string, checked: boolean) {
-    if (!selectedRoleData) return;
-    const current = new Set(activePermIds);
-    if (checked) current.add(permId);
-    else current.delete(permId);
-    const result = await updateRolePermissions.mutateAsync({
-      roleId: selectedRoleData.id,
-      permissionIds: [...current],
-    });
-    if (!result.success) toast.error(result.error ?? "Gagal memperbarui permission");
-  }
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Role & Permission</h1>
-          <p className="text-sm text-muted-foreground">Kelola role dan hak akses pengguna.</p>
-        </div>
-        <Button onClick={openCreate} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Tambah Role
-        </Button>
-      </div>
+    <div className="flex flex-col my-6 px-2">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
-      {/* Role list */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {roles?.map((role) => (
-          <Card
-            key={role.id}
-            className={`cursor-pointer transition-all ${
-              selectedRole?.id === role.id ? "ring-2 ring-primary" : "hover:shadow-md"
-            }`}
-            onClick={() => setSelectedRole(role)}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-semibold">{role.name}</CardTitle>
-                </div>
-                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(role)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  {role.name.toLowerCase() !== "admin" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => setDeleteTarget(role)}
+        {/* ── Roles List (Left) ── */}
+        <div className="lg:col-span-1">
+          <div className="bg-white border border-gray-200 rounded-lg">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Roles</h2>
+              <button
+                onClick={() => setShowAddRole(!showAddRole)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Add Role"
+              >
+                <Plus className="h-4 w-4 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-2">
+              {/* Inline Add Role Form */}
+              {showAddRole && (
+                <div className="mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Nama role"
+                    value={newRoleName}
+                    onChange={(e) => setNewRoleName(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400"
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    placeholder="Deskripsi (opsional)"
+                    value={newRoleDesc}
+                    onChange={(e) => setNewRoleDesc(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCreateRole}
+                      disabled={!newRoleName.trim() || createRoleMutation.isPending}
+                      className="flex-1 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
+                      {createRoleMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                      Tambah
+                    </button>
+                    <button
+                      onClick={() => { setShowAddRole(false); setNewRoleName(""); setNewRoleDesc(""); }}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Batal
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-xs text-muted-foreground">{role.description ?? "—"}</p>
-              <Badge variant="secondary" className="mt-2 text-xs">
-                {role._count.profiles} pengguna
-              </Badge>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              )}
 
-      {/* Permission matrix */}
-      {selectedRoleData && (
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold">
-            Permission untuk: <span className="text-primary">{selectedRoleData.name}</span>
-          </h2>
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-40">Modul</TableHead>
-                  {ACTIONS.map((a) => (
-                    <TableHead key={a} className="text-center capitalize w-24">
-                      {a}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {modules.map((module) => (
-                  <TableRow key={module}>
-                    <TableCell className="font-medium capitalize">{module}</TableCell>
-                    {ACTIONS.map((action) => {
-                      const perm = initialPermissions.find(
-                        (p) => p.module === module && p.action === action
-                      );
-                      if (!perm) return <TableCell key={action} />;
-                      return (
-                        <TableCell key={action} className="text-center">
-                          <Checkbox
-                            checked={activePermIds.has(perm.id)}
-                            onCheckedChange={(val) =>
-                              handlePermissionToggle(perm.id, !!val)
-                            }
-                            disabled={updateRolePermissions.isPending}
-                          />
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+              {/* Role buttons */}
+              {roles?.map((role: RoleQueryItem) => (
+                <button
+                  key={role.id}
+                  onClick={() => { setSelectedRoleId(role.id); setIsDirty(false); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                    selectedRoleId === role.id
+                      ? "bg-gray-100 text-gray-900"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    roleColors[role.name.toLowerCase()] ?? "bg-gray-300 text-white"
+                  }`}>
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate capitalize">{role.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{role.description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Create Dialog */}
-      <Dialog open={dialogMode === "create"} onOpenChange={(o) => !o && setDialogMode(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Tambah Role Baru</DialogTitle>
-          </DialogHeader>
-          <Form {...createForm}>
-            <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
-              <FormField
-                control={createForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nama Role</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nama role" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={createForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Deskripsi</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Deskripsi (opsional)" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogMode(null)}>
-                  Batal
-                </Button>
-                <Button type="submit" disabled={createRole.isPending}>
-                  {createRole.isPending ? "Menyimpan..." : "Simpan"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+        {/* ── Permission Matrix (Right) ── */}
+        <div className="lg:col-span-3">
+          <div className="bg-white border border-gray-200 rounded-lg">
+            {/* Header with Save/Reset */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 sticky top-0 bg-white z-10 rounded-t-lg">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Permissions — <span className="capitalize">{selectedRole?.name ?? "—"}</span>
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">{selectedRole?.description}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReset}
+                  disabled={!isDirty || isSuperAdmin}
+                  className="px-4 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={!isDirty || isSuperAdmin || updatePermsMutation.isPending}
+                  className="px-4 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {updatePermsMutation.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={dialogMode === "edit"} onOpenChange={(o) => !o && setDialogMode(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Role</DialogTitle>
-          </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
-              <FormField
-                control={editForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nama Role</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nama role" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Deskripsi</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Deskripsi (opsional)" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogMode(null)}>
-                  Batal
-                </Button>
-                <Button type="submit" disabled={updateRole.isPending}>
-                  {updateRole.isPending ? "Menyimpan..." : "Simpan"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 w-48">
+                      Module
+                    </th>
+                    {ACTIONS.map((action) => (
+                      <th key={action} className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 w-24">
+                        {action}
+                      </th>
+                    ))}
+                    <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 w-24">
+                      All
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modules.map((mod: string) => {
+                    const modPids = ACTIONS.map((a) => permLookup[`${mod}:${a}`]).filter(Boolean);
+                    const allChecked = isSuperAdmin || modPids.every((pid) => currentPerms.has(pid));
+                    return (
+                      <tr key={mod} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-medium text-gray-900 capitalize">{mod}</span>
+                        </td>
+                        {ACTIONS.map((action) => {
+                          const pid = permLookup[`${mod}:${action}`];
+                          const checked = isSuperAdmin || (pid ? currentPerms.has(pid) : false);
+                          return (
+                            <td key={action} className="text-center px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => togglePermission(mod, action)}
+                                disabled={isSuperAdmin}
+                                className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500 focus:ring-offset-0 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                              />
+                            </td>
+                          );
+                        })}
+                        <td className="text-center px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={allChecked}
+                            onChange={() => toggleAllForModule(mod)}
+                            disabled={isSuperAdmin}
+                            className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500 focus:ring-offset-0 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
-      {/* Delete AlertDialog */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Role</AlertDialogTitle>
-            <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus role{" "}
-              <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Hapus
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </div>
     </div>
   );
 }

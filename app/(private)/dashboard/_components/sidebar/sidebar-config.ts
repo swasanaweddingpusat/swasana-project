@@ -27,12 +27,6 @@ import {
   Wrench,
   CheckCircle,
   Settings,
-  UsersRound,
-  Users2,
-  ShieldCheck,
-  MapPinHouse,
-  Palette,
-  Info,
   type LucideIcon,
 } from "lucide-react";
 
@@ -149,16 +143,7 @@ export const navItems: NavItem[] = [
   },
   {
     name: "Settings",
-    href: "/dashboard/settings/user-management",
+    href: "/dashboard/settings",
     icon: Settings,
-    submenu: [
-      { name: "Users Management", href: "/dashboard/settings/user-management", icon: UsersRound },
-      { name: "Group Management", href: "/dashboard/settings/group-management", icon: Users2 },
-      { name: "Role & Permission", href: "/dashboard/settings/roles", icon: ShieldCheck },
-      { name: "Venue Management", href: "/dashboard/settings/venues", icon: MapPinHouse },
-      { name: "Brand Management", href: "/dashboard/settings/brands", icon: Palette },
-      { name: "Payment Methods", href: "/dashboard/settings/payment-methods", icon: CreditCard },
-      { name: "Source of Information", href: "/dashboard/settings/source-of-information", icon: Info },
-    ],
   },
 ];

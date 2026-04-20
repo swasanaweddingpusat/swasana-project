@@ -27,7 +27,7 @@ export async function createRole(formData: FormData) {
       },
     });
 
-    revalidateTag("roles");
+    revalidateTag("roles", "max");
     await logAudit({
       action: "role.created",
       entityType: "role",
@@ -65,7 +65,7 @@ export async function updateRole(formData: FormData) {
       },
     });
 
-    revalidateTag("roles");
+    revalidateTag("roles", "max");
     await logAudit({
       action: "role.updated",
       entityType: "role",
@@ -91,13 +91,13 @@ export async function deleteRole(roleId: string) {
       return { error: "Role tidak ditemukan" };
     }
 
-    if (role.name.toLowerCase() === "admin") {
-      return { error: "Role admin tidak dapat dihapus" };
+    if (role.name.toLowerCase() === "super admin") {
+      return { error: "Role Super Admin tidak dapat dihapus" };
     }
 
     await db.role.delete({ where: { id: roleId } });
 
-    revalidateTag("roles");
+    revalidateTag("roles", "max");
     await logAudit({
       action: "role.deleted",
       entityType: "role",
@@ -124,14 +124,12 @@ export async function updateRolePermissions(
     await db.rolePermission.deleteMany({ where: { roleId } });
 
     if (permissionIds.length > 0) {
-      await db.$transaction(
-        permissionIds.map((permissionId) =>
-          db.rolePermission.create({ data: { roleId, permissionId } })
-        )
-      );
+      for (const permissionId of permissionIds) {
+        await db.rolePermission.create({ data: { roleId, permissionId } });
+      }
     }
 
-    revalidateTag("roles");
+    revalidateTag("roles", "max");
     await logAudit({
       action: "permission.changed",
       entityType: "role",

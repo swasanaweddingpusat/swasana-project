@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,8 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { Lock, User, Eye, EyeOff, Loader2, AlertTriangle } from "lucide-react"
-import { getInitials } from "@/lib/utils"
-import { cn } from "@/lib/utils"
+import { getInitials, cn } from "@/lib/utils"
 
 interface ProfileClientProps {
   user: {
@@ -24,12 +22,10 @@ interface ProfileClientProps {
 }
 
 export function ProfileClient({ user }: ProfileClientProps) {
-  const router = useRouter()
   const [activeTab, setActiveTab] = useState<"profile" | "security">(
     user.mustChangePassword ? "security" : "profile"
   )
 
-  // Password change state
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -41,9 +37,9 @@ export function ProfileClient({ user }: ProfileClientProps) {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (newPassword.length < 8) {
+    if (newPassword.length < 12) {
       toast.error("Password terlalu pendek", {
-        description: "Password baru minimal 8 karakter.",
+        description: "Password baru minimal 12 karakter.",
       })
       return
     }
@@ -61,8 +57,9 @@ export function ProfileClient({ user }: ProfileClientProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            currentPassword: user.mustChangePassword ? undefined : currentPassword,
+            currentPassword,
             newPassword,
+            confirmPassword,
           }),
         })
 
@@ -83,10 +80,12 @@ export function ProfileClient({ user }: ProfileClientProps) {
         setNewPassword("")
         setConfirmPassword("")
 
-        // Sign out to clear the old JWT, then redirect to login
         setTimeout(async () => {
           const { signOut } = await import("next-auth/react")
-          await signOut({ callbackUrl: "/auth/login?message=Password+berhasil+diubah.+Silakan+login+kembali." })
+          await signOut({
+            callbackUrl:
+              "/auth/login?message=Password+berhasil+diubah.+Silakan+login+kembali.",
+          })
         }, 1500)
       } catch {
         toast.error("Terjadi kesalahan", { description: "Silakan coba lagi." })
@@ -99,7 +98,7 @@ export function ProfileClient({ user }: ProfileClientProps) {
       {/* Force change password banner */}
       {user.mustChangePassword && (
         <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold text-sm">Ganti Password Diperlukan</p>
             <p className="text-sm mt-0.5">
@@ -233,9 +232,9 @@ export function ProfileClient({ user }: ProfileClientProps) {
                     type={showNewPw ? "text" : "password"}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimal 8 karakter"
+                    placeholder="Minimal 12 karakter"
                     required
-                    minLength={8}
+                    minLength={12}
                     disabled={isPending}
                   />
                   <Button
@@ -255,7 +254,9 @@ export function ProfileClient({ user }: ProfileClientProps) {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="confirmPassword">Konfirmasi Password Baru</Label>
+                <Label htmlFor="confirmPassword">
+                  Konfirmasi Password Baru
+                </Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
@@ -264,7 +265,7 @@ export function ProfileClient({ user }: ProfileClientProps) {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Ulangi password baru"
                     required
-                    minLength={8}
+                    minLength={12}
                     disabled={isPending}
                   />
                   <Button

@@ -212,15 +212,29 @@ model UserDataGroupMember {
 
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
 
+model Brand {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  venues    Venue[]
+
+  @@map("brands")
+}
+
 model Venue {
   id              String            @id @default(cuid())
   name            String
+  description     String?
   address         String?
   capacity        Int?
   imageUrl        String?
+  code            String            @default("KODE")
+  brandId         String?
   isActive        Boolean           @default(true)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+  brand           Brand?            @relation(fields: [brandId], references: [id])
   userVenueAccess UserVenueAccess[]
 
   @@map("venues")

@@ -11,9 +11,9 @@ export default function DashboardNotFound() {
         Halaman yang Anda cari tidak tersedia di dashboard ini.
       </p>
       <div className="mt-6">
-        <Button asChild>
-          <Link href="/dashboard">Kembali ke Dashboard</Link>
-        </Button>
+        <Link href="/dashboard">
+          <Button>Kembali ke Dashboard</Button>
+        </Link>
       </div>
     </div>
   );

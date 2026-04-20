@@ -10,18 +10,23 @@ import { loginSchema } from "@/lib/validations/auth";
 const DUMMY_HASH = "$2b$12$aaaaaaaaaaaaaaaaaaaaaOaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 async function isAccountLocked(email: string): Promise<boolean> {
-  const since = new Date(Date.now() - LOCKOUT_WINDOW_MS);
-  const recentFailures = await db.activityLog.count({
-    where: {
-      action: "auth.login_failed",
-      entityId: email,
-      createdAt: { gte: since },
-    },
-  });
-  return recentFailures >= MAX_FAILED_ATTEMPTS;
+  try {
+    const since = new Date(Date.now() - LOCKOUT_WINDOW_MS);
+    const recentFailures = await db.activityLog.count({
+      where: {
+        action: "auth.login_failed",
+        entityId: email,
+        createdAt: { gte: since },
+      },
+    });
+    return recentFailures >= MAX_FAILED_ATTEMPTS;
+  } catch {
+    // If DB is unavailable, don't lock out — fail open for login
+    return false;
+  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -115,6 +120,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           image: user.profile?.avatarUrl ?? user.image,
           roleId: user.profile?.roleId ?? null,
           mustChangePassword: user.profile?.mustChangePassword ?? false,
+          isEmailVerified: true, // If authorize() passes, user is verified
+          status: user.profile?.status ?? "active",
         };
       },
     }),
@@ -125,6 +132,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.roleId = user.roleId ?? null;
         token.mustChangePassword = user.mustChangePassword ?? false;
+        token.isEmailVerified = user.isEmailVerified ?? false;
+        token.status = user.status ?? "active";
         token.profileCachedAt = Date.now();
       }
 
@@ -133,22 +142,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const cacheExpired = Date.now() - cachedAt > PROFILE_CACHE_TTL_MS;
 
       if (token.id && cacheExpired) {
-        const profile = await db.profile.findUnique({
-          where: { userId: token.id as string },
-          select: {
-            roleId: true,
-            mustChangePassword: true,
-            fullName: true,
-            avatarUrl: true,
-            isEmailVerified: true,
-          },
-        });
-        if (profile) {
-          token.roleId = profile.roleId;
-          token.mustChangePassword = profile.mustChangePassword;
-          token.isEmailVerified = profile.isEmailVerified;
-          token.name = profile.fullName;
-          token.picture = profile.avatarUrl;
+        try {
+          const profile = await db.profile.findUnique({
+            where: { userId: token.id as string },
+            select: {
+              id: true,
+              roleId: true,
+              mustChangePassword: true,
+              fullName: true,
+              avatarUrl: true,
+              isEmailVerified: true,
+              status: true,
+            },
+          });
+          if (profile) {
+            token.profileId = profile.id;
+            token.roleId = profile.roleId;
+            token.mustChangePassword = profile.mustChangePassword;
+            token.isEmailVerified = profile.isEmailVerified;
+            token.status = profile.status;
+            token.name = profile.fullName;
+            token.picture = profile.avatarUrl;
+          } else {
+            // User no longer exists in DB (truncated/deleted) — invalidate session
+            return {} as typeof token;
+          }
+          token.profileCachedAt = Date.now();
+        } catch {
+          // DB call failed (AbortError, timeout, etc.) — use stale token data
+          // Extend cache so we don't retry immediately
           token.profileCachedAt = Date.now();
         }
       }
@@ -158,9 +180,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = (token.id as string) ?? "";
+        session.user.profileId = (token.profileId as string) ?? "";
         session.user.roleId = (token.roleId as string | null) ?? null;
         session.user.mustChangePassword = (token.mustChangePassword as boolean) ?? false;
         session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
+        session.user.status = (token.status as "active" | "inactive" | "suspended") ?? "active";
       }
       return session;
     },

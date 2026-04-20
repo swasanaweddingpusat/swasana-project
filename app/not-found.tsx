@@ -11,9 +11,9 @@ export default function NotFound() {
         Maaf, halaman yang Anda cari tidak ditemukan atau telah dipindahkan.
       </p>
       <div className="mt-6">
-        <Button asChild>
-          <Link href="/dashboard">Kembali ke Dashboard</Link>
-        </Button>
+        <Link href="/dashboard">
+          <Button>Kembali ke Dashboard</Button>
+        </Link>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SubMenuItem } from "./sidebar-config";
 
@@ -14,9 +14,7 @@ function isPathActive(href: string, pathname: string): boolean {
 
 function hasActiveChild(submenu: SubMenuItem[], pathname: string): boolean {
   return submenu.some(
-    (s) =>
-      isPathActive(s.href, pathname) ||
-      (s.submenu && hasActiveChild(s.submenu, pathname))
+    (s) => isPathActive(s.href, pathname) || (s.submenu && hasActiveChild(s.submenu, pathname))
   );
 }
 
@@ -43,29 +41,29 @@ export function SubMenuItemRow({
   if (item.submenu) {
     return (
       <div>
-        <button
-          onClick={() => setOpen(!open)}
+        <div
           className={cn(
-            "w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-colors",
-            depth === 1 ? "pl-9" : "pl-14",
+            "flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors",
             active || childActive
-              ? "text-primary font-medium"
-              : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+              ? "bg-gray-100 text-gray-900"
+              : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
           )}
         >
-          {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
-          {!collapsed && <span className="flex-1 text-left">{item.name}</span>}
+          <Link href={item.href} className="flex items-center flex-1 min-w-0">
+            {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" style={{ color: "#A4A7AE" }} />}
+            {!collapsed && <span>{item.name}</span>}
+          </Link>
           {!collapsed && (
-            <ChevronDown
-              className={cn(
-                "h-3 w-3 transition-transform",
-                open && "rotate-180"
-              )}
-            />
+            <button
+              onClick={() => setOpen(!open)}
+              className="p-1 rounded hover:bg-gray-200 transition-colors cursor-pointer shrink-0"
+            >
+              {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
           )}
-        </button>
+        </div>
         {open && !collapsed && (
-          <div className="mt-0.5">
+          <div className="ml-4 mt-1 space-y-1">
             {item.submenu.map((sub) => (
               <SubMenuItemRow key={sub.href} item={sub} collapsed={collapsed} depth={depth + 1} />
             ))}
@@ -79,14 +77,13 @@ export function SubMenuItemRow({
     <Link
       href={item.href}
       className={cn(
-        "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-colors",
-        depth === 1 ? "pl-9" : "pl-14",
+        "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
         active
-          ? "bg-primary/10 text-primary font-medium"
-          : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+          ? "bg-gray-100 text-gray-900"
+          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
       )}
     >
-      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+      {Icon && <Icon className="mr-2 h-4 w-4" style={{ color: "#A4A7AE" }} />}
       {!collapsed && <span>{item.name}</span>}
     </Link>
   );
