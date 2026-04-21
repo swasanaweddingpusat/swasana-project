@@ -4,10 +4,12 @@ import type { BookingDetail } from "@/lib/queries/bookings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, FileText, ShoppingCart } from "lucide-react";
+import { ArrowLeft, FileText, ShoppingCart, Copy, RefreshCw, Link2 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useState, useTransition } from "react";
+import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
 
 const statusColor: Record<string, string> = {
   Pending: "bg-yellow-100 text-yellow-800",
@@ -227,7 +229,139 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
             )}
           </CardContent>
         </Card>
+
+        {/* Card 9: Client Agreement */}
+        <ClientAgreementSection booking={booking} />
       </div>
     </>
+  );
+}
+
+const agreementStatusColor: Record<string, string> = {
+  Pending: "bg-gray-100 text-gray-700",
+  Sent: "bg-blue-100 text-blue-800",
+  Viewed: "bg-yellow-100 text-yellow-800",
+  Signed: "bg-green-100 text-green-800",
+};
+
+function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
+  const [agreement, setAgreement] = useState(booking.clientAgreement);
+  const [isPending, startTransition] = useTransition();
+
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const agreementUrl = agreement ? `${baseUrl}/client-agreement?token=${agreement.token}` : null;
+
+  const handleGenerate = () => {
+    startTransition(async () => {
+      const result = await generateAgreementToken(booking.id);
+      if (!result.success) { toast.error(result.error); return; }
+      setAgreement(result.agreement);
+      toast.success("Link agreement berhasil di-generate");
+    });
+  };
+
+  const handleCopyLink = () => {
+    if (!agreementUrl) return;
+    navigator.clipboard.writeText(agreementUrl);
+    toast.success("Link disalin");
+  };
+
+  const handleCopyCode = () => {
+    if (!agreement) return;
+    navigator.clipboard.writeText(agreement.accessCode);
+    toast.success("Kode akses disalin");
+  };
+
+  const handleMarkSent = () => {
+    startTransition(async () => {
+      const result = await markAgreementSent(booking.id);
+      if (!result.success) { toast.error(result.error); return; }
+      setAgreement((prev) => prev ? { ...prev, status: "Sent", sentAt: new Date() } : prev);
+      toast.success("Status diupdate ke Sent");
+    });
+  };
+
+  const signatures = booking.signatures as Record<string, unknown> | null;
+  const clientSig = signatures?.client as Record<string, unknown> | null;
+
+  return (
+    <Card className="md:col-span-2">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Client Agreement</CardTitle>
+          {agreement && (
+            <Badge className={agreementStatusColor[agreement.status]}>{agreement.status}</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!agreement ? (
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <Link2 className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Belum ada link agreement untuk booking ini.</p>
+            <Button onClick={handleGenerate} disabled={isPending} size="sm">
+              {isPending ? "Generating..." : "Generate Link"}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Link */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Link Agreement</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-gray-50 border rounded px-3 py-2 truncate">{agreementUrl}</code>
+                <Button variant="outline" size="sm" onClick={handleCopyLink}><Copy className="h-3.5 w-3.5" /></Button>
+              </div>
+            </div>
+
+            {/* Access Code */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Kode Akses</p>
+              <div className="flex items-center gap-2">
+                <code className="text-lg font-mono font-bold tracking-widest bg-gray-50 border rounded px-3 py-2">{agreement.accessCode}</code>
+                <Button variant="outline" size="sm" onClick={handleCopyCode}><Copy className="h-3.5 w-3.5" /></Button>
+              </div>
+            </div>
+
+            {/* Expiry */}
+            <p className="text-xs text-muted-foreground">
+              Berlaku hingga: <span className="font-medium">{format(new Date(agreement.expiresAt), "dd MMM yyyy HH:mm")}</span>
+            </p>
+
+            {/* Timeline */}
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {agreement.sentAt && <p>Dikirim: {format(new Date(agreement.sentAt), "dd MMM yyyy HH:mm")}</p>}
+              {agreement.viewedAt && <p>Dilihat: {format(new Date(agreement.viewedAt), "dd MMM yyyy HH:mm")}</p>}
+              {agreement.signedAt && <p>Ditandatangani: {format(new Date(agreement.signedAt), "dd MMM yyyy HH:mm")}</p>}
+            </div>
+
+            {/* Client Signature Preview */}
+            {clientSig?.signature && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground font-medium">Tanda Tangan Client</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={clientSig.signature as string} alt="Client signature" className="h-20 border rounded bg-white p-1" />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
+              {agreement.status === "Sent" || agreement.status === "Pending" ? (
+                agreement.status === "Pending" && (
+                  <Button variant="outline" size="sm" onClick={handleMarkSent} disabled={isPending}>
+                    Tandai Sudah Dikirim
+                  </Button>
+                )
+              ) : null}
+              {agreement.status !== "Signed" && (
+                <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isPending}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" />Regenerate
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

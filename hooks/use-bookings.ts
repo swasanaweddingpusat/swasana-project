@@ -2,8 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BookingsResult, BookingDetail } from "@/lib/queries/bookings";
-import { createBooking, updateBooking, deleteBooking } from "@/actions/booking";
-import type { BookingInput, UpdateBookingInput } from "@/lib/validations/booking";
+import { createBooking, updateBooking, deleteBooking, transferBooking, approveBooking } from "@/actions/booking";
+import type { BookingInput, UpdateBookingInput, ApproveBookingInput } from "@/lib/validations/booking";
 
 async function fetchBookings(): Promise<BookingsResult> {
   const res = await fetch("/api/bookings");
@@ -52,6 +52,23 @@ export function useDeleteBooking() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteBooking(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+  });
+}
+
+export function useTransferBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, targetSalesId }: { bookingId: string; targetSalesId: string }) =>
+      transferBooking(bookingId, targetSalesId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+  });
+}
+
+export function useApproveBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ApproveBookingInput) => approveBooking(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
   });
 }

@@ -7,5 +7,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const data = await getBookingById(id);
   if (!data) return Response.json({ error: "Not found" }, { status: 404 });
-  return Response.json(data);
+  return new Response(JSON.stringify(data, (_k, v) => (typeof v === "bigint" ? Number(v) : v)), {
+    headers: { "content-type": "application/json" },
+  });
 }

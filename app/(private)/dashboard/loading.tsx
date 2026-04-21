@@ -12,7 +12,7 @@ export default function DashboardLoading() {
           {[...Array(8)].map((_, i) => (
             <div key={i} className="flex items-center gap-3 px-3 py-2">
               <div className="h-5 w-5 bg-gray-200 rounded" />
-              <div className="h-4 bg-gray-200 rounded" style={{ width: `${60 + Math.random() * 40}%` }} />
+              <div className="h-4 bg-gray-200 rounded" style={{ width: `${60 + i * 5}%` }} />
             </div>
           ))}
         </div>

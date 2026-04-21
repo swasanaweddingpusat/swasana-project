@@ -4,7 +4,12 @@ export const bookingSchema = z.object({
   bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
   weddingSession: z.enum(["morning", "afternoon", "evening", "fullday"]).optional().nullable(),
   weddingType: z.enum(["wedding", "engagement", "akad", "resepsi", "other"]).optional().nullable(),
-  customerId: z.string().min(1, "Customer wajib dipilih"),
+  customerId: z.string().optional().default(""),
+  customerName: z.string().optional().default(""),
+  contactNumbers: z.string().optional().default(""),
+  contactEmail: z.string().optional().default(""),
+  contactNik: z.string().optional().default(""),
+  contactKtpAddress: z.string().optional().default(""),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().min(1, "Package wajib dipilih"),
   packageVariantId: z.string().optional().nullable(),
@@ -37,9 +42,36 @@ export const updateBookingSchema = z.object({
   weddingSession: z.enum(["morning", "afternoon", "evening", "fullday"]).optional().nullable(),
   weddingType: z.enum(["wedding", "engagement", "akad", "resepsi", "other"]).optional().nullable(),
   rejectionNotes: z.string().optional().nullable(),
+  lostReason: z.string().optional().nullable(),
   paymentMethodId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
 });
 
+export const editBookingSchema = z.object({
+  id: z.string().min(1),
+  bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
+  weddingSession: z.enum(["morning", "afternoon", "evening", "fullday"]).optional().nullable(),
+  weddingType: z.enum(["wedding", "engagement", "akad", "resepsi", "other"]).optional().nullable(),
+  venueId: z.string().min(1, "Venue wajib dipilih"),
+  packageId: z.string().min(1, "Package wajib dipilih"),
+  packageVariantId: z.string().optional().nullable(),
+  paymentMethodId: z.string().optional().nullable(),
+  sourceOfInformationId: z.string().optional().nullable(),
+  signingLocation: z.string().optional().nullable(),
+  // Customer fields
+  customerName: z.string().min(1, "Nama customer wajib diisi"),
+  contactNumbers: z.string().optional().default(""),
+  contactEmail: z.string().optional().default(""),
+  contactNik: z.string().optional().default(""),
+  contactKtpAddress: z.string().optional().default(""),
+});
+
+export const approveBookingSchema = z.object({
+  id: z.string().min(1),
+  signatureManager: z.string().min(1, "Tanda tangan manager wajib diisi"),
+});
+
 export type BookingInput = z.infer<typeof bookingSchema>;
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
+export type EditBookingInput = z.infer<typeof editBookingSchema>;
+export type ApproveBookingInput = z.infer<typeof approveBookingSchema>;

@@ -1,45 +1,101 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import SignatureCanvas from "react-signature-canvas";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { PencilIcon, Trash2, Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Phone, KeyRound, Printer } from "lucide-react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
-import { useBookings, useDeleteBooking } from "@/hooks/use-bookings";
+import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useApproveBooking } from "@/hooks/use-bookings";
+import { generateAgreementToken } from "@/actions/client-agreement";
 import { BookingDrawer } from "./booking-drawer";
-import type { BookingsResult, BookingListItem } from "@/lib/queries/bookings";
+import { ActivityLogModal } from "./activity-log-modal";
+import { BookingDetailModal } from "./booking-detail-modal";
+import { EditBookingDrawer } from "./EditBookingDrawer";
+import { SetVendorDrawer } from "./set-vendor-drawer";
+import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
 
 const ROWS_PER_PAGE = 10;
 
-const STATUS_COLORS: Record<string, string> = {
-  Pending: "bg-yellow-100 text-yellow-800",
-  Uploaded: "bg-blue-100 text-blue-800",
-  Confirmed: "bg-green-100 text-green-800",
-  Rejected: "bg-red-100 text-red-800",
-  Canceled: "bg-gray-100 text-gray-700",
-  Lost: "bg-purple-100 text-purple-800",
+const STATUS_DOT: Record<string, string> = {
+  Confirmed: "bg-green-500",
+  Uploaded: "bg-orange-500",
+  Pending: "bg-blue-500",
+  Rejected: "bg-red-600",
+  Canceled: "bg-red-600",
+  Lost: "bg-orange-500",
 };
 
-function formatPrice(price: unknown) {
-  return `Rp ${new Intl.NumberFormat("id-ID").format(Number(price))}`;
+const STATUS_TEXT: Record<string, string> = {
+  Confirmed: "text-green-700 border-green-200",
+  Uploaded: "text-orange-700 border-orange-200",
+  Pending: "text-blue-700 border-blue-200",
+  Rejected: "text-red-700 border-red-200",
+  Canceled: "text-red-700 border-red-200",
+  Lost: "text-orange-700 border-orange-200",
+};
+
+const SESSION_STYLE: Record<string, string> = {
+  morning: "bg-amber-100 text-amber-700",
+  evening: "bg-indigo-100 text-indigo-700",
+  fullday: "bg-emerald-100 text-emerald-700",
+};
+
+const SESSION_LABEL: Record<string, string> = {
+  morning: "Pagi",
+  evening: "Malam",
+  fullday: "Fullday",
+};
+
+function copyText(text: string) {
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.style.position = "fixed";
+  el.style.opacity = "0";
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand("copy");
+  document.body.removeChild(el);
 }
 
-export function BookingsTable({ initialData }: { initialData: BookingsResult }) {
-  const router = useRouter();
-  const { data: bookings = initialData } = useBookings(initialData);
+function fmtRp(n: unknown) {
+  return `Rp ${new Intl.NumberFormat("id-ID").format(Number(n))}`;
+}
+
+export function BookingsTable({ initialData, salesProfiles }: { initialData: BookingsResult; salesProfiles: SalesProfile[] }) {
+  const { data: bookings = initialData, refetch, isFetching } = useBookings(initialData);
   const deleteMut = useDeleteBooking();
+  const updateMut = useUpdateBooking();
+  const transferMut = useTransferBooking();
+  const approveMut = useApproveBooking();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
+  const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
+  const [approveTarget, setApproveTarget] = useState<BookingListItem | null>(null);
+  const [hasSigned, setHasSigned] = useState(false);
+  const sigRef = useRef<SignatureCanvas>(null);
+  const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
+  const [rejectNotes, setRejectNotes] = useState("");
+  const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
+  const [lostReason, setLostReason] = useState("");
+  const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
+  const [transferSalesId, setTransferSalesId] = useState("");
+  const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
+  const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
+  const [detailTarget, setDetailTarget] = useState<string | null>(null);
+  const [vendorTarget, setVendorTarget] = useState<BookingListItem | null>(null);
+  const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
 
   const filtered = bookings.filter((b: BookingListItem) => {
     if (!search.trim()) return true;
@@ -49,7 +105,11 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
       (b.snapCustomer?.mobileNumber ?? "").toLowerCase().includes(q) ||
       (b.snapVenue?.venueName ?? "").toLowerCase().includes(q) ||
       (b.snapPackage?.packageName ?? "").toLowerCase().includes(q) ||
-      (b.sales?.fullName ?? "").toLowerCase().includes(q)
+      (b.sales?.fullName ?? "").toLowerCase().includes(q) ||
+      (b.bookingStatus ?? "").toLowerCase().includes(q) ||
+      (b.poNumber ?? "").toLowerCase().includes(q) ||
+      (b.paymentMethod?.bankName ?? "").toLowerCase().includes(q) ||
+      (b.sourceOfInformation?.name ?? "").toLowerCase().includes(q)
     );
   });
 
@@ -60,7 +120,7 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
     if (!deleteTarget) return;
     const result = await deleteMut.mutateAsync(deleteTarget.id);
     if (!result.success) toast.error(result.error);
-    else toast.success("Booking dihapus.");
+    else { toast.success("Booking dihapus."); refetch(); }
     setDeleteTarget(null);
   }
 
@@ -69,22 +129,21 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 pb-4 border-b">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 pb-4 gap-3">
             <div className="flex items-center gap-3">
-              <h2 className="text-base font-semibold text-gray-900">List Bookings</h2>
-              <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
-                {filtered.length} {search ? `dari ${bookings.length}` : "booking"}
+              <h2 className="text-lg sm:text-xl font-bold">Wedding Bookings</h2>
+              <span className="text-gray-700 text-sm rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+                {filtered.length} {search ? `dari ${bookings.length}` : "Bookings"}
               </span>
+              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} className="cursor-pointer flex items-center gap-1.5">
+                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                <span className="text-xs">Refresh</span>
+              </Button>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Cari booking..."
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 w-[220px]"
-                />
+                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-[220px]" />
               </div>
               <Button onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
                 <Plus className="h-4 w-4 mr-2" /> Tambah Booking
@@ -99,51 +158,223 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[1200px] text-sm">
-                <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="px-3 w-[50px]">No</TableHead>
-                    <TableHead className="px-3">Customer</TableHead>
-                    <TableHead className="px-3">No. HP</TableHead>
-                    <TableHead className="px-3">Venue</TableHead>
-                    <TableHead className="px-3">Package</TableHead>
-                    <TableHead className="px-3">Variant</TableHead>
-                    <TableHead className="px-3">Booking Date</TableHead>
-                    <TableHead className="px-3">Status</TableHead>
-                    <TableHead className="px-3">Sales</TableHead>
-                    <TableHead className="px-3 w-[100px]"></TableHead>
+            <div className="w-full overflow-x-auto">
+              <Table className="w-full text-sm">
+                <TableHeader className="bg-[#F9FAFB]">
+                  <TableRow>
+                    <TableHead className="px-2 py-2 text-[#475467] text-center w-[3%]">No</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467]">Customer</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[15%]">Venue & PO</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[14%]">Package</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] w-[10%]">Event Date</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] hidden lg:table-cell w-[8%]">Activity</TableHead>
+                    <TableHead className="px-1 py-2 text-[#475467] text-right pr-5 w-[15%]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginated.map((booking: BookingListItem, idx: number) => (
-                    <TableRow key={booking.id} className="hover:bg-gray-50">
-                      <TableCell className="px-3">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
-                      <TableCell className="px-3 font-medium">{booking.snapCustomer?.name ?? "—"}</TableCell>
-                      <TableCell className="px-3 text-gray-500">{booking.snapCustomer?.mobileNumber ?? "—"}</TableCell>
-                      <TableCell className="px-3">{booking.snapVenue?.venueName ?? "—"}{booking.snapVenue?.brandCode ? ` (${booking.snapVenue.brandCode})` : ""}</TableCell>
-                      <TableCell className="px-3">{booking.snapPackage?.packageName ?? "—"}</TableCell>
-                      <TableCell className="px-3">
-                        {booking.snapPackageVariant ? `${booking.snapPackageVariant.variantName} · ${booking.snapPackageVariant.pax} pax · ${formatPrice(booking.snapPackageVariant.price)}` : "—"}
+                    <TableRow key={booking.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
+                      <TableCell className="px-2 py-2 text-center">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+
+                      {/* Customer cell */}
+                      <TableCell className="px-2 py-2">
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-medium text-gray-900 truncate">{booking.snapCustomer?.name ?? "—"}</p>
+                          <p className="text-xs text-gray-400 truncate mt-0.5">
+                            {booking.snapCustomer?.mobileNumber ?? ""}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {/* Status badge */}
+                            <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-white", STATUS_TEXT[booking.bookingStatus] ?? "text-gray-600 border-gray-200")}>
+                              <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-gray-400")} />
+                              {booking.bookingStatus}
+                            </span>
+                            {/* Payment method badge */}
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600 text-[10px] font-medium">
+                              {booking.paymentMethod?.bankName ?? "N/A"}
+                            </span>
+                            {/* Session badge */}
+                            {booking.weddingSession && (
+                              <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-gray-100 text-gray-600")}>
+                                {SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}
+                              </span>
+                            )}
+                            {/* Source of information badge */}
+                            {booking.sourceOfInformation?.name && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">
+                                {booking.sourceOfInformation.name}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
+                            className="cursor-pointer mt-1 text-[10px] text-sky-500 hover:text-sky-700 underline underline-offset-2 text-left lg:hidden"
+                          >
+                            Lihat Activity
+                          </button>
+                        </div>
                       </TableCell>
-                      <TableCell className="px-3 whitespace-nowrap">{format(new Date(booking.bookingDate), "dd MMM yyyy")}</TableCell>
-                      <TableCell className="px-3">
-                        <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[booking.bookingStatus] ?? "")}>
-                          {booking.bookingStatus}
-                        </Badge>
+
+                      {/* Venue cell */}
+                      <TableCell className="px-2 py-2 hidden sm:table-cell">
+                        <div className="leading-tight">
+                          <span className="block truncate text-sm font-medium">{booking.snapVenue?.venueName ?? "—"}</span>
+                          {booking.poNumber ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
+                              className="inline-flex items-center max-w-full px-1.5 py-0.5 rounded bg-gray-100 text-[10px] font-mono text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer truncate mt-0.5"
+                            >
+                              <span className="truncate">{booking.poNumber}</span>
+                            </button>
+                          ) : (
+                            <span className="text-gray-300 text-[10px] block mt-0.5">No PO</span>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="px-3 text-gray-500">{booking.sales?.fullName ?? "—"}</TableCell>
-                      <TableCell className="px-3">
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}>
-                            <PencilIcon className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteTarget(booking)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+
+                      {/* Package cell */}
+                      <TableCell className="px-2 py-2 hidden sm:table-cell">
+                        <div className="leading-tight">
+                          <span className="truncate block">{booking.snapPackage?.packageName ?? "—"}</span>
+                          {booking.snapPackageVariant && (
+                            <span className="text-xs text-gray-400 block">
+                              {booking.snapPackageVariant.pax} PAX · {fmtRp(booking.snapPackageVariant.price)}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      {/* Event Date */}
+                      <TableCell className="px-2 py-2 whitespace-nowrap text-sm">
+                        {format(new Date(booking.bookingDate), "MMM dd, yyyy")}
+                      </TableCell>
+
+                      {/* Activity */}
+                      <TableCell className="px-2 py-2 hidden lg:table-cell">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
+                          className="cursor-pointer text-xs text-sky-500 hover:text-sky-700 underline underline-offset-2"
+                        >
+                          Lihat Activity
+                        </button>
+                      </TableCell>
+
+                      {/* Action */}
+                      <TableCell className="px-1 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 justify-end">
+                          {/* Set Vendor Bawaan */}
+                          <TooltipProvider delay={200}>
+                            <Tooltip>
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
+                                <Store className="h-4 w-4" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p className="text-xs">Set Vendor Bawaan</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+
+                          {/* Agreement dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()} title="Agreement">
+                                <FileSignature className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                  <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                                    const result = await generateAgreementToken(booking.id);
+                                    if (!result.success) { toast.error(result.error); return; }
+                                    const url = `${window.location.origin}/client-agreement?token=${result.agreement.token}`;
+                                    copyText(url); toast.success("Link copied!");
+                                  }}>
+                                    <Copy className="mr-2 h-4 w-4" /> Copy Link
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                                    const result = await generateAgreementToken(booking.id);
+                                    if (!result.success) { toast.error(result.error); return; }
+                                    const phone = booking.snapCustomer?.mobileNumber;
+                                    if (!phone) { toast.error("Nomor WhatsApp customer tidak tersedia"); return; }
+                                    const url = `${window.location.origin}/client-agreement?token=${result.agreement.token}`;
+                                    const msg = encodeURIComponent(`Halo ${booking.snapCustomer?.name ?? ""},\n\nBerikut link untuk menandatangani Agreement booking Anda:\n${url}\n\nKode Akses: ${result.agreement.accessCode}\n\nTerima kasih.`);
+                                    const clean = phone.replace(/\D/g, "").replace(/^0/, "62");
+                                    window.open(`https://wa.me/${clean}?text=${msg}`, "_blank");
+                                  }}>
+                                    <Phone className="mr-2 h-4 w-4" /> Kirim via WhatsApp
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                                    const result = await generateAgreementToken(booking.id);
+                                    if (!result.success) { toast.error(result.error); return; }
+                                    copyText(result.agreement.accessCode); toast.success("Kode akses dicopy!");
+                                  }}>
+                                    <KeyRound className="mr-2 h-4 w-4" /> Copy Kode Akses
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                          </DropdownMenu>
+
+                          {/* More actions dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="cursor-pointer">
+                                <EllipsisVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
+                                <Eye className="mr-2 h-4 w-4" /> Lihat Detail
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
+                                <Pencil className="mr-2 h-4 w-4" /> Edit Booking
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
+                                <ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer Booking
+                              </DropdownMenuItem>
+                              {booking.bookingStatus === "Confirmed" && (
+                                <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={async () => {
+                                  setIsGeneratingPO(booking.id);
+                                  const t = toast.loading("Membuat PDF...");
+                                  try {
+                                    const res = await fetch("/api/render-po", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId: booking.id }) });
+                                    if (!res.ok) throw new Error();
+                                    const blob = await res.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    toast.success("PDF siap!", { id: t });
+                                    window.open(url, "_blank");
+                                    setTimeout(() => URL.revokeObjectURL(url), 10000);
+                                  } catch {
+                                    toast.error("Gagal membuat PDF", { id: t });
+                                  } finally {
+                                    setIsGeneratingPO(null);
+                                  }
+                                }}>
+                                  <Printer className="mr-2 h-4 w-4" /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              {booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
+                                <DropdownMenuItem className="cursor-pointer" onClick={() => setApproveTarget(booking)}>
+                                  <CheckSquare className="mr-2 h-4 w-4" /> Approve Booking
+                                </DropdownMenuItem>
+                              )}
+                              {booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
+                                <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
+                                  <SquareX className="mr-2 h-4 w-4 text-red-500" /> Reject Booking
+                                </DropdownMenuItem>
+                              )}
+                              {booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
+                                <DropdownMenuItem className="cursor-pointer text-orange-600 focus:text-orange-600" onClick={() => setLostTarget(booking)}>
+                                  <SquareX className="mr-2 h-4 w-4" /> Lost Booking
+                                </DropdownMenuItem>
+                              )}
+                              {(booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
+                                <DropdownMenuItem className="cursor-pointer text-blue-600 focus:text-blue-600" onClick={() => setRestoreTarget(booking)}>
+                                  <RotateCcw className="mr-2 h-4 w-4" /> Restore Booking
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(booking)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Hapus
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -177,22 +408,304 @@ export function BookingsTable({ initialData }: { initialData: BookingsResult }) 
 
       <BookingDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
 
+      <EditBookingDrawer booking={editTarget} open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }} />
+
+      {/* Delete */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Booking</AlertDialogTitle>
-            <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus booking <strong>{deleteTarget?.snapCustomer?.name ?? "ini"}</strong>? Tindakan ini tidak dapat dibatalkan.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Apakah Anda yakin ingin menghapus booking <strong>{deleteTarget?.snapCustomer?.name ?? "ini"}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Hapus
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Hapus</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Approve — signature canvas modal */}
+      {approveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-[#19202C]">Approve Booking</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Tanda tangan manager diperlukan untuk menyetujui booking{" "}
+                  <span className="font-semibold text-gray-800">{approveTarget.snapCustomer?.name}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+                onClick={() => { setApproveTarget(null); setHasSigned(false); sigRef.current?.clear(); }}
+                aria-label="Tutup"
+              >
+                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-700 mb-2 block">Tanda Tangan Manager</label>
+              <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50">
+                <SignatureCanvas
+                  ref={sigRef}
+                  penColor="black"
+                  canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
+                  onEnd={() => setHasSigned(true)}
+                />
+              </div>
+              <button
+                type="button"
+                className="mt-1.5 text-xs text-red-500 hover:text-red-700 underline"
+                onClick={() => { sigRef.current?.clear(); setHasSigned(false); }}
+              >
+                Hapus tanda tangan
+              </button>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 bg-black text-white rounded-lg py-2 font-medium text-sm hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+                disabled={!hasSigned || approveMut.isPending}
+                onClick={async () => {
+                  if (!hasSigned || sigRef.current?.isEmpty()) {
+                    toast.error("Tanda tangan manager harus diisi");
+                    return;
+                  }
+                  const signatureData = sigRef.current!.toDataURL("image/png");
+                  const r = await approveMut.mutateAsync({ id: approveTarget.id, signatureManager: signatureData });
+                  if (!r.success) toast.error(r.error);
+                  else { toast.success("Booking berhasil di-approve."); refetch(); }
+                  setApproveTarget(null);
+                  setHasSigned(false);
+                  sigRef.current?.clear();
+                }}
+              >
+                {approveMut.isPending ? "Menyetujui..." : "Setujui"}
+              </button>
+              <button
+                type="button"
+                className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition"
+                onClick={() => { setApproveTarget(null); setHasSigned(false); sigRef.current?.clear(); }}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject */}
+      {rejectTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-[#19202C]">Reject Booking</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Reject booking <span className="font-semibold text-gray-800">{rejectTarget.snapCustomer?.name}</span>?
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+                onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
+                aria-label="Tutup"
+              >
+                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-700 mb-2 block">Alasan Penolakan</label>
+              <Input placeholder="Alasan penolakan (opsional)..." value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="flex-1 bg-red-600 text-white rounded-lg py-2 font-medium text-sm hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={updateMut.isPending}
+                onClick={async () => {
+                  const r = await updateMut.mutateAsync({ id: rejectTarget.id, bookingStatus: "Rejected", rejectionNotes: rejectNotes || null });
+                  if (!r.success) toast.error(r.error); else { toast.success("Booking di-reject."); refetch(); }
+                  setRejectTarget(null); setRejectNotes("");
+                }}
+              >
+                {updateMut.isPending ? "Memproses..." : "Reject"}
+              </button>
+              <button
+                type="button"
+                className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition"
+                onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AlertDialog open={!!lostTarget} onOpenChange={(open) => { if (!open) { setLostTarget(null); setLostReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lost Booking</AlertDialogTitle>
+            <AlertDialogDescription>Tandai booking <strong>{lostTarget?.snapCustomer?.name}</strong> sebagai Lost?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-6 pb-2">
+            <Input placeholder="Alasan lost (opsional)..." value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              if (!lostTarget) return;
+              const r = await updateMut.mutateAsync({ id: lostTarget.id, bookingStatus: "Lost", lostReason: lostReason || null });
+              if (!r.success) toast.error(r.error); else { toast.success("Booking ditandai Lost."); refetch(); }
+              setLostTarget(null); setLostReason("");
+            }} className="bg-orange-600 text-white hover:bg-orange-700">Lost Booking</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Restore Booking Modal */}
+      {restoreTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-[#19202C]">Restore Booking</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Restore booking <span className="font-semibold text-gray-800">{restoreTarget.snapCustomer?.name}</span> ke status Pending?
+                </p>
+              </div>
+              <button type="button" className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0" onClick={() => setRestoreTarget(null)} aria-label="Tutup">
+                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="flex-1 bg-blue-600 text-white rounded-lg py-2 font-medium text-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={updateMut.isPending}
+                onClick={async () => {
+                  const r = await updateMut.mutateAsync({ id: restoreTarget.id, bookingStatus: "Pending" });
+                  if (!r.success) toast.error(r.error); else { toast.success("Booking di-restore ke Pending."); refetch(); }
+                  setRestoreTarget(null);
+                }}
+              >
+                {updateMut.isPending ? "Memproses..." : "Restore"}
+              </button>
+              <button type="button" className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition" onClick={() => setRestoreTarget(null)}>
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Booking Modal */}
+      {transferTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-[#19202C]">Transfer Booking</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Memindahkan kepemilikan data booking dari sales sebelumnya ke sales yang dipilih.
+                </p>
+              </div>
+              <button
+                className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+                onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
+                type="button"
+                aria-label="Tutup"
+              >
+                <X className="h-5 w-5 text-red-500" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-xs text-gray-400 mb-1">Sales saat ini</p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-800">
+                  {transferTarget.sales?.fullName ?? <span className="text-gray-400 italic">Tidak ada</span>}
+                </span>
+                {transferTarget.sales?.fullName && (
+                  <span className="text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-500">sales</span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Pilih Sales</p>
+              <SearchableSelect
+                options={salesProfiles
+                  .filter((s) => s.id !== transferTarget.salesId)
+                  .map((s) => ({ id: s.id, name: s.fullName ?? s.id, badge: "sales" }))}
+                value={transferSalesId}
+                onChange={setTransferSalesId}
+                placeholder="Pilih sales tujuan..."
+                searchPlaceholder="Cari nama sales..."
+                emptyText="Sales tidak ditemukan"
+              />
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                className="flex-1 border border-gray-300 rounded-lg py-2 font-medium hover:bg-gray-100 transition text-sm"
+                onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
+                disabled={transferMut.isPending}
+                type="button"
+              >
+                Batal
+              </button>
+              <button
+                className="flex-1 bg-black text-white rounded-lg py-2 font-medium hover:bg-gray-900 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!transferSalesId || transferMut.isPending}
+                type="button"
+                onClick={async () => {
+                  const result = await transferMut.mutateAsync({ bookingId: transferTarget.id, targetSalesId: transferSalesId });
+                  if (!result.success) toast.error(result.error);
+                  else {
+                    toast.success("Booking berhasil ditransfer");
+                    refetch();
+                    setTransferTarget(null);
+                    setTransferSalesId("");
+                  }
+                }}
+              >
+                {transferMut.isPending ? "Mentransfer..." : "Transfer Booking"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Activity Log Modal */}
+      <ActivityLogModal
+        open={!!activityLogTarget}
+        onClose={() => setActivityLogTarget(null)}
+        bookingId={activityLogTarget?.id ?? ""}
+        customerName={activityLogTarget?.snapCustomer?.name}
+      />
+
+      {/* Booking Detail Modal */}
+      <BookingDetailModal
+        open={!!detailTarget}
+        onClose={() => setDetailTarget(null)}
+        bookingId={detailTarget}
+      />
+
+      <SetVendorDrawer
+        open={!!vendorTarget}
+        onClose={() => setVendorTarget(null)}
+        booking={vendorTarget}
+        onSaved={() => refetch()}
+      />
     </>
   );
 }

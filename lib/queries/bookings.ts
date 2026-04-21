@@ -8,6 +8,9 @@ const bookingListInclude = {
   snapPackageVariant: { select: { variantName: true, pax: true, price: true } },
   sales: { select: { id: true, fullName: true } },
   manager: { select: { id: true, fullName: true } },
+  paymentMethod: { select: { bankName: true } },
+  sourceOfInformation: { select: { name: true } },
+  clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
 } as const;
 
 const bookingDetailInclude = {
@@ -25,13 +28,10 @@ const bookingDetailInclude = {
   bookingRefunds: { orderBy: { createdAt: "desc" as const } },
   paymentMethod: true,
   sourceOfInformation: true,
+  clientAgreement: true,
 } as const;
 
 export async function getBookings() {
-  "use cache";
-  cacheTag("bookings");
-  cacheLife("minutes");
-
   return db.booking.findMany({
     orderBy: { createdAt: "desc" },
     take: 500,
@@ -49,3 +49,17 @@ export async function getBookingById(id: string) {
 export type BookingsResult = Awaited<ReturnType<typeof getBookings>>;
 export type BookingListItem = BookingsResult[number];
 export type BookingDetail = NonNullable<Awaited<ReturnType<typeof getBookingById>>>;
+
+export async function getSalesProfiles() {
+  "use cache";
+  cacheTag("users");
+  cacheLife("minutes");
+
+  return db.profile.findMany({
+    where: { status: "active", role: { name: "sales" } },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: "asc" },
+  });
+}
+
+export type SalesProfile = Awaited<ReturnType<typeof getSalesProfiles>>[number];

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { CalendarIcon, Plus, X } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
@@ -20,7 +20,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
-import { createCustomer, updateCustomer } from "@/actions/customer";
 import type { BookingInput } from "@/lib/validations/booking";
 
 interface BookingDrawerProps {
@@ -56,9 +55,39 @@ const DEFAULT_TERMS: TermRow[] = [
   { name: "Final", amount: 0, dueDate: "", sortOrder: 6 },
 ];
 
+const DRAFT_KEY = "booking_draft";
+
+interface BookingDraft {
+  currentStep: number;
+  customerName: string;
+  contactNumbers: string[];
+  contactEmail: string;
+  contactNik: string;
+  contactKtpAddress: string;
+  noteDateEvent: string;
+  signingLocation: string;
+  specialBonusName: string;
+  specialBonusAmount: number;
+  selectedVenueId: string;
+  selectedPackageId: string;
+  selectedVariantPrice: number;
+  bonuses: BonusRow[];
+  terms: TermRow[];
+  formValues: Record<string, unknown>;
+}
+
+function saveDraft(d: BookingDraft) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ }
+}
+function loadDraft(): BookingDraft | null {
+  try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+}
+
 export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const createMut = useCreateBooking();
-  const qc = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 3;
 
@@ -108,15 +137,51 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   useEffect(() => {
     if (open) {
-      form.reset();
-      setSelectedVenueId(""); setSelectedPackageId(""); setSelectedVariantPrice(0);
-      setBonuses([]); setTerms(DEFAULT_TERMS.map((t) => ({ ...t })));
-      setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
-      setSpecialBonusName("Cashback"); setSpecialBonusAmount(0);
-      setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setNoteDateEvent(""); setCustomerName("");
-      sigSalesRef.current?.clear();
+      const draft = loadDraft();
+      if (draft) {
+        setCurrentStep(draft.currentStep);
+        setCustomerName(draft.customerName);
+        setContactNumbers(draft.contactNumbers);
+        setContactEmail(draft.contactEmail);
+        setContactNik(draft.contactNik);
+        setContactKtpAddress(draft.contactKtpAddress);
+        setNoteDateEvent(draft.noteDateEvent);
+        setSigningLocation(draft.signingLocation);
+        setSpecialBonusName(draft.specialBonusName);
+        setSpecialBonusAmount(draft.specialBonusAmount);
+        setSelectedVenueId(draft.selectedVenueId);
+        setSelectedPackageId(draft.selectedPackageId);
+        setSelectedVariantPrice(draft.selectedVariantPrice);
+        setBonuses(draft.bonuses);
+        setTerms(draft.terms);
+        form.reset(draft.formValues as BookingInput);
+      } else {
+        form.reset();
+        setSelectedVenueId(""); setSelectedPackageId(""); setSelectedVariantPrice(0);
+        setBonuses([]); setTerms(DEFAULT_TERMS.map((t) => ({ ...t })));
+        setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
+        setSpecialBonusName("Cashback"); setSpecialBonusAmount(0);
+        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setNoteDateEvent(""); setCustomerName("");
+        sigSalesRef.current?.clear();
+      }
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-save draft (debounced)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => {
+      saveDraft({
+        currentStep, customerName, contactNumbers, contactEmail, contactNik,
+        contactKtpAddress, noteDateEvent, signingLocation, specialBonusName,
+        specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice,
+        bonuses, terms, formValues: form.getValues(),
+      });
+    }, 500);
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
+  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice, bonuses, terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBasePrice = () => selectedVariantPrice;
   const getPriceAfterCashback = () => Math.max(0, getBasePrice() - specialBonusAmount);
@@ -150,39 +215,14 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const handlePrevious = () => { if (currentStep > 1) setCurrentStep(currentStep - 1); };
 
   async function onSubmit(values: BookingInput) {
-    let customerId = values.customerId;
-
-    // If no existing customer selected but name typed → create new customer
-    if (!customerId && customerName) {
-      const result = await createCustomer({
-        name: customerName,
-        mobileNumber: contactNumbers.join(",") || "-",
-        email: contactEmail || "-@placeholder.com",
-        nikNumber: contactNik || "",
-        ktpAddress: contactKtpAddress || "",
-        type: "Other",
-        memberStatus: "Non-Member",
-      });
-      if (!result.success) { toast.error(result.error ?? "Gagal membuat customer."); return; }
-      customerId = result.customer!.id;
-      qc.invalidateQueries({ queryKey: ["customers"] });
-    } else if (customerId) {
-      // Existing customer selected → update with any changed contact data
-      const updates: Record<string, string> = {};
-      if (contactNumbers.length > 0) updates.mobileNumber = contactNumbers.join(",");
-      if (contactEmail) updates.email = contactEmail;
-      if (contactNik) updates.nikNumber = contactNik;
-      if (contactKtpAddress) updates.ktpAddress = contactKtpAddress;
-      if (Object.keys(updates).length > 0) {
-        await updateCustomer({ id: customerId, ...updates });
-      }
-    }
-
-    if (!customerId) { toast.error("Customer wajib diisi."); return; }
-
     const payload: BookingInput = {
       ...values,
-      customerId,
+      customerId: values.customerId || "",
+      customerName: customerName || "",
+      contactNumbers: contactNumbers.join(","),
+      contactEmail,
+      contactNik,
+      contactKtpAddress,
       specialBonusName: specialBonusName || null,
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
@@ -192,6 +232,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     };
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
+    clearDraft();
     toast.success("Booking berhasil dibuat.");
     onOpenChange(false);
   }
@@ -337,7 +378,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               : "Pilih venue terlebih dahulu"}
                           </Button>
                         } />
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                           <Calendar
                             mode="single"
                             captionLayout="dropdown"
@@ -361,7 +402,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger></FormControl>
                         <SelectContent>
                           <SelectItem value="morning">Pagi</SelectItem>
-                          <SelectItem value="afternoon">Siang</SelectItem>
                           <SelectItem value="evening">Malam</SelectItem>
                           <SelectItem value="fullday">Fullday</SelectItem>
                         </SelectContent>

@@ -76,6 +76,10 @@ async function main() {
     { module: "booking", action: "approve_oprations", description: "Approve PO as oprations" },
     { module: "booking", action: "mark_lost", description: "Mark booking as lost" },
     { module: "booking", action: "restore", description: "Restore booking from lost/confirmed" },
+    // client_agreement
+    { module: "client_agreement", action: "view", description: "View client agreement" },
+    { module: "client_agreement", action: "create", description: "Generate client agreement link" },
+    { module: "client_agreement", action: "edit", description: "Update client agreement status" },
     // brand_management
     { module: "brand_management", action: "view", description: "View brand management" },
     { module: "brand_management", action: "create", description: "Create brand management" },
@@ -179,6 +183,13 @@ async function main() {
   }
 
   console.log(`✅ ${permissionData.length} Permissions seeded & all assigned to Super Admin`);
+
+  // ─── Source of Information ────────────────────────────────────────────────
+  const sourceNames = ["Instagram", "Facebook", "TikTok", "Google", "Referral", "Walk-in", "Website", "WhatsApp", "Event/Pameran", "Lainnya"];
+  for (const name of sourceNames) {
+    await prisma.sourceOfInformation.create({ data: { name } });
+  }
+  console.log(`✅ ${sourceNames.length} Source of Information seeded`);
 
   // ─── Brands ───────────────────────────────────────────────────────────────
   const brandSwn = await prisma.brand.create({ data: { name: "Swasana Venue Mastery", code: "SWN" } });

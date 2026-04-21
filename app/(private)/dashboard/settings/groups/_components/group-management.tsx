@@ -14,6 +14,10 @@ import {
   Crown, GripVertical,
 } from "lucide-react";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   createGroup, updateGroup, deleteGroup,
   addGroupMember, removeGroupMember,
   reorderGroups, reorderGroupMembers,
@@ -34,6 +38,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<GroupQueryItem | null>(null);
 
   const allProfiles = users.users
     .filter((u) => u.profile)
@@ -77,8 +82,9 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
     setDrawerOpen(false);
   }
 
-  async function handleDelete(group: GroupQueryItem) {
-    if (!confirm(`Hapus grup "${group.name}"? Semua anggota akan dikeluarkan.`)) return;
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const group = deleteTarget;
     setGroups((prev) => prev.filter((g) => g.id !== group.id));
     const result = await deleteGroup(group.id);
     if (!result.success) {
@@ -87,6 +93,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
     } else {
       toast.success("Grup dihapus.");
     }
+    setDeleteTarget(null);
   }
 
   async function handleAddMember(groupId: string, userId: string) {
@@ -218,7 +225,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                               <button type="button" onClick={() => openEdit(group)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-900 cursor-pointer">
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
-                              <button type="button" onClick={() => handleDelete(group)} className="p-1.5 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 cursor-pointer">
+                              <button type="button" onClick={() => setDeleteTarget(group)} className="p-1.5 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 cursor-pointer">
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
@@ -348,6 +355,21 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
           </div>
         </div>
       </Drawer>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Grup</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus grup <strong>{deleteTarget?.name}</strong>? Semua anggota akan dikeluarkan. Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Hapus</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

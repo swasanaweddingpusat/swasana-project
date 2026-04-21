@@ -476,6 +476,7 @@ model Booking {
   weddingType           WeddingType?
   poNumber              String?
   rejectionNotes        String?
+  lostReason            String?
   signingLocation       String?
   signatures            Json?
   vendorComments        Json?           @default("{}")
@@ -514,6 +515,7 @@ model Booking {
   termOfPayments   TermOfPayment[]
   bookingDocuments BookingDocument[]
   bookingRefunds   BookingRefund[]
+  clientAgreement  ClientAgreement?
 
   @@index([salesId])
   @@index([managerId])
@@ -747,4 +749,32 @@ enum BookingRefundStatus {
   pending
   completed
   cancelled
+}
+
+enum AgreementStatus {
+  Pending
+  Sent
+  Viewed
+  Signed
+}
+
+// ─── Client Agreement ─────────────────────────────────────────────────────────
+
+model ClientAgreement {
+  id         String          @id @default(uuid())
+  bookingId  String          @unique
+  token      String          @unique
+  accessCode String
+  status     AgreementStatus @default(Pending)
+  sentAt     DateTime?
+  viewedAt   DateTime?
+  signedAt   DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@map("client_agreements")
 }

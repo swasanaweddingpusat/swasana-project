@@ -7,12 +7,14 @@ const PUBLIC_EXACT = new Set<string>([
   "/auth/forgot-password",
   "/auth/reset-password",
   "/auth/verify",
+  "/client-agreement",
 ]);
 
 // API roots that carry dynamic segments — allow anything beneath them
 const PUBLIC_PREFIXES = [
   "/api/auth/",
   "/api/send-email/",
+  "/api/client-agreement/",
 ];
 
 function isPublicPath(pathname: string): boolean {
@@ -30,7 +32,7 @@ export function proxy(request: NextRequest) {
 
   if (isPublicPath(pathname)) {
     // Already-logged-in users never see /auth/* — bounce to dashboard
-    if (sessionToken && PUBLIC_EXACT.has(pathname)) {
+    if (sessionToken && PUBLIC_EXACT.has(pathname) && pathname.startsWith("/auth/")) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();

@@ -57,7 +57,12 @@ export function Drawer({
             <SheetTitle className="text-base sm:text-[22px] font-semibold px-2 m-0 text-[#121417] truncate max-w-[60%]">
               {title}
             </SheetTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {steps && stepperType === "short" && (
+                <span className="text-sm text-gray-500">
+                  Step {steps} / {totalSteps}
+                </span>
+              )}
               {headerActions}
               {isCloseButton && (
                 <button
@@ -70,26 +75,19 @@ export function Drawer({
               )}
             </div>
           </div>
-          {/* Back button and Steps in same row */}
-          {(onBack || (steps && stepperType === "short")) && (
-            <div className="flex items-center justify-between px-2">
-              {onBack ? (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  {backButtonLabel}
-                </button>
-              ) : <div />}
-              {steps && stepperType === "short" && (
-                <span className="text-base text-[#121417]">
-                  Step {steps} / {totalSteps}
-                </span>
-              )}
+          {/* Back button */}
+          {onBack && (
+            <div className="flex items-center px-2">
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                {backButtonLabel}
+              </button>
             </div>
           )}
         </div>
