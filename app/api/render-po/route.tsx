@@ -4,6 +4,20 @@ import { db } from "@/lib/db";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
+import path from "path";
+import fs from "fs/promises";
+
+async function loadLogoBase64(fileName: string): Promise<string | null> {
+  try {
+    const filePath = path.join(process.cwd(), "public", fileName);
+    const buffer = await fs.readFile(filePath);
+    const ext = fileName.split(".").pop()?.toLowerCase() ?? "png";
+    const mime = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+    return `data:${mime};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
@@ -58,8 +72,10 @@ export async function POST(req: Request) {
     const eventDate = booking.bookingDate.toISOString().split("T")[0];
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
+    const logoBase64 = await loadLogoBase64("swasana-logo.png");
+
     const stream = await renderToStream(
-      <POPdfDocument booking={pdfBooking} logoBase64={null} />
+      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} />
     );
 
     return new NextResponse(stream as unknown as ReadableStream, {

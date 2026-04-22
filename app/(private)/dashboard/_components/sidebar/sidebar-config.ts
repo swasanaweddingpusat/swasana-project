@@ -1,5 +1,5 @@
 import {
-  ChartColumnIncreasing,
+  LayoutDashboard,
   Users,
   Ticket,
   CalendarRange,
@@ -56,7 +56,7 @@ export const navItems: NavItem[] = [
   {
     name: "Dashboard",
     href: "/dashboard",
-    icon: ChartColumnIncreasing,
+    icon: LayoutDashboard,
   },
   {
     name: "Customers",

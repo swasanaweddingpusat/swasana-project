@@ -69,6 +69,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola data booking",
   },
 
+  // ─── Notifications ─────────────────────────────────────────────────────────
+  "/dashboard/notifications": {
+    title: "Notifikasi",
+    subtitle: "Semua notifikasi",
+  },
+
   // ─── Customers ─────────────────────────────────────────────────────────────
   "/dashboard/customers": {
     title: "Customers",

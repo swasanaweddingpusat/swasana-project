@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
@@ -184,6 +185,16 @@ export async function createBooking(data: unknown) {
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
+
+    // Notify all super admins about new booking (exclude creator)
+    notifySuperAdmins({
+      title: "Booking Baru",
+      message: `${session!.user.name ?? "User"} membuat booking untuk ${customer.name}.`,
+      type: "booking_created",
+      entityType: "booking",
+      entityId: bookingId,
+    }, session!.user.profileId!);
+
     return { success: true, bookingId };
   } catch (e) {
     // Rollback: delete newly created customer if booking failed
@@ -228,6 +239,7 @@ export async function updateBooking(data: unknown) {
     });
 
     revalidateTag("bookings", "max");
+
     return { success: true };
   } catch {
     return { success: false, error: "Gagal memperbarui booking." };
@@ -290,7 +302,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
       description: `Transfer booking dari ${booking.sales?.fullName ?? "Unknown"} ke ${targetSales.fullName}`,
     });
 
-    revalidateTag("bookings");
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mentransfer booking." };
@@ -452,7 +464,7 @@ export async function approveBooking(data: unknown) {
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { id: true, signatures: true, snapCustomer: { select: { name: true } } },
+      select: { id: true, salesId: true, signatures: true, snapCustomer: { select: { name: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
@@ -485,6 +497,7 @@ export async function approveBooking(data: unknown) {
     });
 
     revalidateTag("bookings", "max");
+
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menyetujui booking." };

@@ -149,7 +149,7 @@ function renderHtmlToPdf(html: string) {
       const tag = match[1].toLowerCase();
       const inner = stripHtml(match[2]);
       if (inner) {
-        const st: Record<string, unknown> = { fontSize: 8 };
+        const st: Record<string, string | number> = { fontSize: 8 };
         if (tag === "strong" || tag === "b") st.fontWeight = "bold";
         if (tag === "em" || tag === "i") st.fontStyle = "italic";
         if (tag === "u") st.textDecoration = "underline";
@@ -346,14 +346,11 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
                     <Text style={{ fontSize: 10, fontWeight: "bold", marginBottom: 8 }}>ATURAN PEMBAYARAN</Text>
                     <View style={{ marginBottom: 8 }}>
                       <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>1. Jadwal Pembayaran</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Booking Fee sebesar Rp 10.000.000,- (Sepuluh Juta Rupiah)</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Down Payment sebesar Rp 30.000.000,- (Tiga Puluh Juta Rupiah) - 2 minggu setelah Booking Fee</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Angsuran tahap 1 sebesar Rp 50.000.000,- (Lima Puluh Juta Rupiah) satu bulan setelah melakukan DP</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Angsuran tahap 2 sebesar Rp 50.000.000,- (Lima Puluh Juta Rupiah) satu bulan setelah melakukan Angsuran 1</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Angsuran tahap 3 sebesar Rp 50.000.000,- (Lima Puluh Juta Rupiah) satu bulan setelah melakukan Angsuran 2</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Term Pelunasan tahap 1 sebesar Rp 78.000.000,- (Tujuh Puluh Delapan Juta Rupiah) satu bulan setelah melakukan Angsuran 2 (nominal dapat berubah sesuai dengan harga paket)</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Term Pelunasan tahap 2 sebesar Rp 45.000.000,- (Empat Puluh Lima Juta Rupiah) satu bulan setelah melakukan Term Pelunasan 1</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Pelunasan sebesar Rp 132.000.000,- (Seratus Tiga Puluh Dua Juta Rupiah) - (nominal dapat berubah sesuai dengan pilihan paket dan vendor) paling lambat dibayarkan 2 (dua) bulan sebelum tanggal acara pernikahan, apabila tidak terselesaikan sampai dengan Hari-H, pengelola berhak membatalkan acara secara sepihak.</Text>
+                      {booking.termOfPayments.map((t, i) => (
+                        <Text key={t.id} style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>
+                          • {t.name} sebesar {fmtRp(t.amount)}{t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : ""}
+                        </Text>
+                      ))}
                     </View>
                     <View style={{ marginBottom: 8 }}>
                       <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>2. Metode Pembayaran</Text>
@@ -469,7 +466,7 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
           </View>
 
           {/* Closing + Signature */}
-          <View style={{ breakInside: "avoid" } as Record<string, unknown>}>
+          <View wrap={false}>
             <Text style={{ fontSize: 8, marginLeft: 20, marginBottom: 10 }}>
               Demikian Surat Purchase Order ini dibuat oleh pihak penyewa dan penyelenggara dengan keadaan sehat, tanpa paksaan dari pihak manapun. Serta mempunyai kekuatan mengikat satu dengan lainnya. Apabila dikemudian hari salah satu pihak melanggar sesuai dengan ketentuan diatas, maka perjanjian ini menjadi bukti yang sah dan sempurna di mata hukum.
             </Text>

@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import { ROUTE_META } from "@/lib/route-meta";
 import { useSidebar } from "../sidebar/sidebar-context";
 import { UserMenu } from "./user-menu";
+import { NotificationBell } from "./notification-bell";
 
 export function Header() {
   const pathname = usePathname();
@@ -35,7 +36,10 @@ export function Header() {
         )}
       </div>
 
-      <UserMenu />
+      <div className="flex items-center gap-2">
+        <NotificationBell />
+        <UserMenu />
+      </div>
     </header>
   );
 }

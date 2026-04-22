@@ -11,6 +11,7 @@ const bookingListInclude = {
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
   clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
+  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, paymentEvidence: true, notes: true } },
 } as const;
 
 const bookingDetailInclude = {
@@ -31,12 +32,37 @@ const bookingDetailInclude = {
   clientAgreement: true,
 } as const;
 
-export async function getBookings() {
+import type { DataScope } from "@/types/user";
+
+export async function getBookings(profileId?: string, dataScope?: DataScope) {
+  const where = await buildScopeFilter(profileId, dataScope);
+
   return db.booking.findMany({
+    where,
     orderBy: { createdAt: "desc" },
     take: 500,
     include: bookingListInclude,
   });
+}
+
+async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
+  if (!profileId || !dataScope || dataScope === "all") return {};
+  if (dataScope === "own") return { salesId: profileId };
+
+  // group: find all groups this user belongs to, get all member profileIds
+  const memberships = await db.userGroupMember.findMany({
+    where: { userId: profileId },
+    select: { groupId: true },
+  });
+  if (memberships.length === 0) return { salesId: profileId }; // fallback to own
+
+  const groupIds = memberships.map((m) => m.groupId);
+  const allMembers = await db.userGroupMember.findMany({
+    where: { groupId: { in: groupIds } },
+    select: { userId: true },
+  });
+  const memberIds = [...new Set(allMembers.map((m) => m.userId))];
+  return { salesId: { in: memberIds } };
 }
 
 export async function getBookingById(id: string) {

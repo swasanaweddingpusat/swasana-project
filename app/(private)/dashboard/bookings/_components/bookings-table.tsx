@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import SignatureCanvas from "react-signature-canvas";
@@ -11,16 +11,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Phone, KeyRound, Printer } from "lucide-react";
+import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Phone, KeyRound, Printer, CircleFadingPlus, FileUp, ListChecks } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useApproveBooking } from "@/hooks/use-bookings";
+import { usePermissions } from "@/hooks/use-permissions";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { BookingDrawer } from "./booking-drawer";
+import { UploadDocumentModal } from "./UploadDocumentModal";
+import { EditTopDrawer } from "./EditTopDrawer";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
 import { EditBookingDrawer } from "./EditBookingDrawer";
 import { SetVendorDrawer } from "./set-vendor-drawer";
+import { CateringSelectionDrawer } from "./catering-selection-drawer";
+import { Drawer } from "@/components/shared/drawer";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
 
 const ROWS_PER_PAGE = 10;
@@ -76,6 +81,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
   const approveMut = useApproveBooking();
+  const { can } = usePermissions();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -90,11 +96,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
   const [lostReason, setLostReason] = useState("");
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
+  const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
+  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
   const [transferSalesId, setTransferSalesId] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
   const [vendorTarget, setVendorTarget] = useState<BookingListItem | null>(null);
+  const [cateringTarget, setCateringTarget] = useState<string | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
 
   const filtered = bookings.filter((b: BookingListItem) => {
@@ -145,7 +154,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-[220px]" />
               </div>
-              <Button onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
+              <Button onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white" disabled={!can("booking", "create")}>
                 <Plus className="h-4 w-4 mr-2" /> Tambah Booking
               </Button>
             </div>
@@ -263,6 +272,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className="px-1 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-end">
                           {/* Set Vendor Bawaan */}
+                          {can("booking", "edit") && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
                               <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
@@ -271,14 +281,19 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <TooltipContent side="top"><p className="text-xs">Set Vendor Bawaan</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                          )}
 
                           {/* Agreement dropdown */}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()} title="Agreement">
-                                <FileSignature className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                          {can("client_agreement", "create") && (
+                          <TooltipProvider delay={200}>
+                            <Tooltip>
+                              <TooltipTrigger render={<span />}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                      <FileSignature className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                   <DropdownMenuItem className="cursor-pointer" onClick={async () => {
                                     const result = await generateAgreementToken(booking.id);
@@ -308,7 +323,57 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                     <KeyRound className="mr-2 h-4 w-4" /> Copy Kode Akses
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
-                          </DropdownMenu>
+                                </DropdownMenu>
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          )}
+
+                          {/* Catering dropdown — only for Confirmed bookings */}
+                          {booking.bookingStatus === "Confirmed" && (
+                            <TooltipProvider delay={200}>
+                              <Tooltip>
+                                <TooltipTrigger render={<span />}>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                        <CircleFadingPlus className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                      <DropdownMenuItem className="cursor-pointer" onClick={() => setCateringTarget(booking.id)}>
+                                        <Pencil className="mr-2 h-4 w-4" /> Edit Catering
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      {can("booking", "approve_finance") && (
+                                      <DropdownMenuItem className="cursor-pointer" disabled>
+                                        Approve Finance
+                                      </DropdownMenuItem>
+                                      )}
+                                      {can("booking", "approve_manager") && (
+                                      <DropdownMenuItem className="cursor-pointer" disabled>
+                                        Approve Direktur Ops
+                                      </DropdownMenuItem>
+                                      )}
+                                      {can("booking", "approve_oprations") && (
+                                      <DropdownMenuItem className="cursor-pointer" disabled>
+                                        Approve Oprations
+                                      </DropdownMenuItem>
+                                      )}
+                                      {(can("booking", "approve_finance") || can("booking", "approve_manager") || can("booking", "approve_oprations")) && <DropdownMenuSeparator />}
+                                      {can("booking", "print") && (
+                                      <DropdownMenuItem className="cursor-pointer" disabled>
+                                        <Printer className="mr-2 h-4 w-4" /> Cetak PO Catering
+                                      </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p className="text-xs">Catering PO</p></TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
 
                           {/* More actions dropdown */}
                           <DropdownMenu>
@@ -321,13 +386,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
                                 <Eye className="mr-2 h-4 w-4" /> Lihat Detail
                               </DropdownMenuItem>
+                              {can("booking", "edit") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
                                 <Pencil className="mr-2 h-4 w-4" /> Edit Booking
                               </DropdownMenuItem>
+                              )}
+                              {can("booking", "transfer") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
                                 <ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer Booking
                               </DropdownMenuItem>
-                              {booking.bookingStatus === "Confirmed" && (
+                              )}
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
+                                <FileUp className="mr-2 h-4 w-4" /> Upload Dokumen
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
+                                <ListChecks className="mr-2 h-4 w-4" /> Edit TOP
+                              </DropdownMenuItem>
+                              {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
                                 <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={async () => {
                                   setIsGeneratingPO(booking.id);
                                   const t = toast.loading("Membuat PDF...");
@@ -348,31 +423,33 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                   <Printer className="mr-2 h-4 w-4" /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator />
-                              {booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
+                              {((can("booking", "approve") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
+                              {can("booking", "approve") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setApproveTarget(booking)}>
                                   <CheckSquare className="mr-2 h-4 w-4" /> Approve Booking
                                 </DropdownMenuItem>
                               )}
-                              {booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
+                              {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
                                   <SquareX className="mr-2 h-4 w-4 text-red-500" /> Reject Booking
                                 </DropdownMenuItem>
                               )}
-                              {booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
+                              {can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
                                 <DropdownMenuItem className="cursor-pointer text-orange-600 focus:text-orange-600" onClick={() => setLostTarget(booking)}>
                                   <SquareX className="mr-2 h-4 w-4" /> Lost Booking
                                 </DropdownMenuItem>
                               )}
-                              {(booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
+                              {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
                                 <DropdownMenuItem className="cursor-pointer text-blue-600 focus:text-blue-600" onClick={() => setRestoreTarget(booking)}>
                                   <RotateCcw className="mr-2 h-4 w-4" /> Restore Booking
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator />
+                              {can("booking", "delete") && <DropdownMenuSeparator />}
+                              {can("booking", "delete") && (
                               <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(booking)}>
                                 <Trash2 className="mr-2 h-4 w-4" /> Hapus
                               </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -706,6 +783,61 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         booking={vendorTarget}
         onSaved={() => refetch()}
       />
+
+      {cateringTarget && (
+        <CateringDrawerWrapper bookingId={cateringTarget} onClose={() => setCateringTarget(null)} onUpdated={() => refetch()} />
+      )}
+
+      {/* Upload Document Modal */}
+      {uploadDocTarget && (
+        <UploadDocumentModal
+          open={!!uploadDocTarget}
+          onClose={() => { setUploadDocTarget(null); refetch(); }}
+          bookingId={uploadDocTarget.id}
+          bookingName={uploadDocTarget.snapCustomer?.name ?? ""}
+        />
+      )}
+
+      {/* Edit TOP Drawer */}
+      {topTarget && (
+        <EditTopDrawer
+          isOpen={!!topTarget}
+          onClose={() => { setTopTarget(null); refetch(); }}
+          bookingId={topTarget.id}
+          customerName={topTarget.snapCustomer?.name ?? ""}
+          initialTerms={(topTarget.termOfPayments ?? []).map((t) => ({
+            id: t.id, name: t.name, amount: Number(t.amount),
+            dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder,
+            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
+            paymentEvidence: t.paymentEvidence ?? null, notes: t.notes,
+          }))}
+          packagePrice={Number(topTarget.snapPackageVariant?.price ?? 0)}
+        />
+      )}
     </>
   );
+}
+
+function CateringDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: string; onClose: () => void; onUpdated: () => void }) {
+  const [booking, setBooking] = useState<import("@/lib/queries/bookings").BookingDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetch(`/api/bookings/${bookingId}`)
+      .then((r) => r.json())
+      .then(setBooking)
+      .catch(() => setBooking(null))
+      .finally(() => setLoading(false));
+  }, [bookingId]);
+
+  if (loading || !booking) {
+    return (
+      <Drawer isOpen onClose={onClose} title="Catering">
+        <div className="flex items-center justify-center h-full"><p className="text-sm text-gray-400">Memuat...</p></div>
+      </Drawer>
+    );
+  }
+
+  return <CateringSelectionDrawer isOpen onClose={onClose} booking={booking} onUpdated={onUpdated} />;
 }

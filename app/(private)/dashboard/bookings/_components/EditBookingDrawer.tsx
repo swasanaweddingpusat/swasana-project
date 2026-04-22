@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { CalendarIcon, X } from "lucide-react";
 import { Drawer } from "@/components/shared/drawer";
+import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [contactKtpAddress, setContactKtpAddress] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [detailLoaded, setDetailLoaded] = useState(false);
+  const [bonuses, setBonuses] = useState<{ vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number }[]>([]);
 
   // Fetch full booking detail (only for email, nikNumber, ktpAddress)
   const { data: detail } = useQuery({
@@ -92,18 +94,24 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setDetailLoaded(false);
   }, [booking, open, loaded]);
 
-  // Fill email/NIK/KTP when detail arrives
+  // Fill email/NIK/KTP/bonuses when detail arrives
   useEffect(() => {
     if (!detail?.snapCustomer || detailLoaded) return;
     setContactEmail(detail.snapCustomer.email ?? "");
     setContactNik(detail.snapCustomer.nikNumber ?? "");
     setContactKtpAddress(detail.snapCustomer.ktpAddress ?? "");
+    // Load bonuses from snapBonuses
+    if (detail.snapBonuses?.length > 0) {
+      setBonuses(detail.snapBonuses.map((b: { vendorId: string; vendorCategoryId: string; vendorName: string; description: string | null; qty: number }) => ({
+        vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description ?? "", qty: b.qty,
+      })));
+    }
     setDetailLoaded(true);
   }, [detail, detailLoaded]);
 
   // Reset flags when drawer closes
   useEffect(() => {
-    if (!open) { setLoaded(false); setDetailLoaded(false); }
+    if (!open) { setLoaded(false); setDetailLoaded(false); setBonuses([]); }
   }, [open]);
 
   const { data: venues = [] } = useQuery<VenueOption[]>({
@@ -131,6 +139,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     queryFn: () => fetchJson("/api/source-of-informations"),
     staleTime: 10 * 60 * 1000,
   });
+
+  const { data: allVendors = [] } = useQuery<{ id: string; name: string; categoryId: string }[]>({
+    queryKey: ["vendors-for-bonus"],
+    queryFn: () => fetchJson("/api/vendors"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const salesName = detail?.sales?.fullName ?? booking?.sales?.fullName ?? "";
 
   const selectedPkg = packages.find((p) => p.id === packageId);
   const variants = selectedPkg?.variants ?? [];
@@ -245,6 +261,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <Textarea className="mt-1" rows={3} value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} placeholder="Input alamat sesuai KTP" />
           </div>
 
+          {/* Sales PIC — disabled */}
+          <div>
+            <label className={LBL}>Sales PIC *</label>
+            <Input className="mt-1 w-full" value={salesName} disabled />
+          </div>
+
           {/* Venue — SearchableSelect */}
           <div>
             <label className={LBL}>Venue *</label>
@@ -342,21 +364,33 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <Textarea className="mt-1" rows={3} value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} placeholder="Add note for date event" />
           </div>
 
-          {/* Payment Method — SearchableSelect */}
-          {paymentMethods.length > 0 && (
-            <div>
-              <label className={LBL}>Pembayaran Melalui</label>
-              <SearchableSelect
-                options={paymentMethods.map((pm) => ({ id: pm.id, name: `Bank ${pm.bankName} - ${pm.bankAccountNumber} a.n. ${pm.bankRecipient}` }))}
-                value={paymentMethodId}
-                onChange={setPaymentMethodId}
-                placeholder={venueId ? "Pilih metode pembayaran" : "Pilih venue dulu"}
-                disabled={!venueId}
-                searchPlaceholder="Cari..."
-                emptyText="Tidak ada payment method"
-              />
-            </div>
-          )}
+          {/* Complimentary (Bonus) */}
+          <div className="space-y-2">
+            <label className={LBL}>Complimentary (Bonus)</label>
+            <SearchableSelect
+              options={allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
+              value=""
+              onChange={(vendorId) => {
+                const v = allVendors.find((x) => x.id === vendorId);
+                if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId ?? "", vendorName: v.name, description: "", qty: 1 }]);
+              }}
+              placeholder="Pilih vendor..."
+              searchPlaceholder="Cari vendor..."
+              emptyText="Tidak ada vendor"
+            />
+            {bonuses.map((b, idx) => (
+              <div key={b.vendorId} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-900">{b.vendorName}</span>
+                  <button type="button" className="h-6 w-6 p-0 text-red-500 hover:text-red-700" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-[60px]" />
+              </div>
+            ))}
+            {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}
+          </div>
 
           {/* Submit */}
           <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 pt-4">

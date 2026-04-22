@@ -75,7 +75,7 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent showCloseButton={false} className="max-w-3xl w-full rounded-2xl p-0 overflow-hidden">
+      <DialogContent showCloseButton={false} className="max-w-4xl w-full rounded-2xl p-0 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <DialogTitle className="text-lg font-semibold">Activity Log</DialogTitle>

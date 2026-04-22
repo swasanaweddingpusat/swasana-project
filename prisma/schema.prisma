@@ -116,6 +116,7 @@ model Profile {
   bookingsAsManager       Booking[]                @relation("BookingManager")
   uploadedDocuments       BookingDocument[]
   createdRefunds          BookingRefund[]
+  notifications           Notification[]
 
   @@index([roleId])
   @@index([dataScope])
@@ -777,4 +778,23 @@ model ClientAgreement {
 
   @@index([token])
   @@map("client_agreements")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  title      String
+  message    String
+  type       String
+  entityType String?
+  entityId   String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  profile    Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }

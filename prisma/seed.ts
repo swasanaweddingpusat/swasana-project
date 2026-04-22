@@ -13,6 +13,19 @@ async function main() {
 
   // ─── Truncate (urutan penting: child tables dulu, baru parent) ────────────
   await prisma.activityLog.deleteMany();
+  await prisma.bookingRefund.deleteMany();
+  await prisma.bookingDocument.deleteMany();
+  await prisma.clientAgreement.deleteMany();
+  await prisma.termOfPayment.deleteMany();
+  await prisma.snapBonus.deleteMany();
+  await prisma.snapVendorItem.deleteMany();
+  await prisma.snapPackageVendorItem.deleteMany();
+  await prisma.snapPackageInternalItem.deleteMany();
+  await prisma.snapPackageVariant.deleteMany();
+  await prisma.snapPackage.deleteMany();
+  await prisma.snapVenue.deleteMany();
+  await prisma.snapCustomer.deleteMany();
+  await prisma.booking.deleteMany();
   await prisma.userVenueAccess.deleteMany();
   await prisma.userGroupMember.deleteMany();
   await prisma.userGroup.deleteMany();
@@ -76,10 +89,15 @@ async function main() {
     { module: "booking", action: "approve_oprations", description: "Approve PO as oprations" },
     { module: "booking", action: "mark_lost", description: "Mark booking as lost" },
     { module: "booking", action: "restore", description: "Restore booking from lost/confirmed" },
+    { module: "booking", action: "transfer", description: "Transfer booking to another sales" },
+    { module: "booking", action: "reject", description: "Reject booking" },
     // client_agreement
     { module: "client_agreement", action: "view", description: "View client agreement" },
     { module: "client_agreement", action: "create", description: "Generate client agreement link" },
     { module: "client_agreement", action: "edit", description: "Update client agreement status" },
+    // notification
+    { module: "notification", action: "view", description: "View notifications" },
+    { module: "notification", action: "manage", description: "Manage notification settings" },
     // brand_management
     { module: "brand_management", action: "view", description: "View brand management" },
     { module: "brand_management", action: "create", description: "Create brand management" },

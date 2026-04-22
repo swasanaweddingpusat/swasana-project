@@ -45,15 +45,20 @@ function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
 }
 
-const DEFAULT_TERMS: TermRow[] = [
-  { name: "Booking Fee", amount: 0, dueDate: "", sortOrder: 0 },
-  { name: "DP", amount: 0, dueDate: "", sortOrder: 1 },
-  { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2 },
-  { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3 },
-  { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4 },
-  { name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5 },
-  { name: "Final", amount: 0, dueDate: "", sortOrder: 6 },
-];
+const DAY = 24 * 60 * 60 * 1000;
+
+function makeDefaultTerms(): TermRow[] {
+  const now = new Date();
+  return [
+    { name: "Booking Fee", amount: 0, dueDate: now.toISOString(), sortOrder: 0 },
+    { name: "DP", amount: 0, dueDate: new Date(now.getTime() + 14 * DAY).toISOString(), sortOrder: 1 },
+    { name: "Angsuran 1", amount: 0, dueDate: new Date(now.getTime() + 44 * DAY).toISOString(), sortOrder: 2 },
+    { name: "Angsuran 2", amount: 0, dueDate: new Date(now.getTime() + 74 * DAY).toISOString(), sortOrder: 3 },
+    { name: "Pelunasan 1", amount: 0, dueDate: new Date(now.getTime() + 104 * DAY).toISOString(), sortOrder: 4 },
+    { name: "Pelunasan 2", amount: 0, dueDate: new Date(now.getTime() + 134 * DAY).toISOString(), sortOrder: 5 },
+    { name: "Final", amount: 0, dueDate: new Date(now.getTime() + 164 * DAY).toISOString(), sortOrder: 6 },
+  ];
+}
 
 const DRAFT_KEY = "booking_draft";
 
@@ -123,7 +128,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id, categoryName: c.name })));
   const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
 
-  const [terms, setTerms] = useState<TermRow[]>(DEFAULT_TERMS);
+  const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
 
   const form = useForm<BookingInput>({
     defaultValues: {
@@ -153,12 +158,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setSelectedPackageId(draft.selectedPackageId);
         setSelectedVariantPrice(draft.selectedVariantPrice);
         setBonuses(draft.bonuses);
-        setTerms(draft.terms);
+        setTerms(draft.terms.some((t) => t.dueDate) ? draft.terms : makeDefaultTerms());
         form.reset(draft.formValues as BookingInput);
       } else {
         form.reset();
         setSelectedVenueId(""); setSelectedPackageId(""); setSelectedVariantPrice(0);
-        setBonuses([]); setTerms(DEFAULT_TERMS.map((t) => ({ ...t })));
+        setBonuses([]); setTerms(makeDefaultTerms());
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
         setSpecialBonusName("Cashback"); setSpecialBonusAmount(0);
         setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setNoteDateEvent(""); setCustomerName("");
@@ -197,8 +202,9 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   };
 
   const w = form.watch();
-  const isStep1Complete = !!(customerName.trim() && w.venueId && w.packageId && w.bookingDate);
-  const isStep3Complete = !!signatureSales;
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && w.venueId && w.packageId && w.bookingDate && w.weddingSession && w.weddingType);
+  const isStep2Complete = getBasePrice() === 0 || getDifference() === 0;
+  const isStep3Complete = !!signatureSales && !!signingLocation.trim();
 
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi terlebih dahulu."); return; }
@@ -237,7 +243,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     onOpenChange(false);
   }
 
-  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (currentStep === 3 && !isStep3Complete) || createMut.isPending;
+  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (currentStep === 2 && !isStep2Complete) || (currentStep === 3 && !isStep3Complete) || createMut.isPending;
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>

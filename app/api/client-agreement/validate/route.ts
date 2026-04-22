@@ -59,7 +59,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ booking: agreement.booking });
-  } catch {
+  } catch (e) {
+    console.error("[ca-validate]", e);
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }

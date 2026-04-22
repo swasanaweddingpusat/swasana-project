@@ -38,26 +38,25 @@ export async function POST(req: Request) {
 
     const existingSignatures = (booking?.signatures as Record<string, unknown>) ?? {};
 
-    await db.$transaction([
-      db.clientAgreement.update({
-        where: { token },
-        data: { status: "Signed", signedAt: new Date() },
-      }),
-      db.booking.update({
-        where: { id: agreement.bookingId },
-        data: {
-          signatures: {
-            ...existingSignatures,
-            client: {
-              name: signerName ?? "",
-              role: "client",
-              signature: signatureData,
-              signatureDate: new Date().toISOString(),
-            },
+    await db.clientAgreement.update({
+      where: { token },
+      data: { status: "Signed", signedAt: new Date() },
+    });
+
+    await db.booking.update({
+      where: { id: agreement.bookingId },
+      data: {
+        signatures: {
+          ...existingSignatures,
+          client: {
+            name: signerName ?? "",
+            role: "client",
+            signature: signatureData,
+            signatureDate: new Date().toISOString(),
           },
         },
-      }),
-    ]);
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch {

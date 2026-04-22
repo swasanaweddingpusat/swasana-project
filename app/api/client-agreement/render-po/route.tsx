@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Booking tidak ditemukan" }, { status: 404 });
     }
 
-    const logoBase64 = await loadImageAsBase64("logo-swasana.png");
+    const logoBase64 = await loadImageAsBase64("swasana-logo.png");
 
     const pdfBooking: import("@/components/pdf/POPdfDocument").POPdfBooking = {
       poNumber: booking.poNumber,

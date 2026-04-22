@@ -5,6 +5,7 @@ import {
   SheetContent,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 import React from "react";
 import { Stepper } from "@/components/ui/stepper";
@@ -48,7 +49,10 @@ export function Drawer({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose?.(); }}>
       <SheetContent
-        className={`w-full ${maxWidth} flex py-6 px-5 flex-col gap-6`}
+        className={cn(
+          `w-full flex py-6 px-5 flex-col gap-6`,
+          maxWidth.includes("max-w-full") ? "inset-0 !max-w-none !w-full border-none" : maxWidth
+        )}
         showCloseButton={false}
       >
         {/* Header with title, close button, and steps */}

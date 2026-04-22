@@ -28,29 +28,28 @@ export async function saveBookingVendors(
   }
 
   try {
-    // Delete existing non-addons snap vendor items, then insert new ones
-    await db.$transaction([
-      db.snapVendorItem.deleteMany({
-        where: { bookingId, isAddons: false },
-      }),
-      ...selections
-        .filter((s) => s.vendorId)
-        .map((s) =>
-          db.snapVendorItem.create({
-            data: {
-              bookingId,
-              vendorCategoryId: s.vendorCategoryId,
-              vendorCategoryName: s.vendorCategoryName,
-              vendorId: s.vendorId,
-              vendorName: s.vendorName,
-              itemName: s.vendorName,
-              itemPrice: 0,
-              qty: 1,
-              totalPrice: 0,
-            },
-          })
-        ),
-    ]);
+    // Delete existing non-addons snap vendor items
+    await db.snapVendorItem.deleteMany({
+      where: { bookingId, isAddons: false },
+    });
+
+    // Insert new selections
+    const toInsert = selections.filter((s) => s.vendorId);
+    for (const s of toInsert) {
+      await db.snapVendorItem.create({
+        data: {
+          bookingId,
+          vendorCategoryId: s.vendorCategoryId,
+          vendorCategoryName: s.vendorCategoryName,
+          vendorId: s.vendorId,
+          vendorName: s.vendorName,
+          itemName: s.vendorName,
+          itemPrice: 0,
+          qty: 1,
+          totalPrice: 0,
+        },
+      });
+    }
 
     await logAudit({
       userId: session.user.id,
