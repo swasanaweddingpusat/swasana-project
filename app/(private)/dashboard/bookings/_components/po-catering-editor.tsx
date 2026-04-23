@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Calculator, Merge } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Plus, Trash2, GripVertical, ChevronRight, Calculator, Merge } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { POCateringData, POSection, PORow, FormulaOp } from "@/types/po-catering";
-import { calculateAll, createItemRow, createHeaderRow, createSubtotalRow, createSection, createId } from "@/types/po-catering";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import type { POCateringV2, PORow } from "@/types/po-catering";
+import { calculateV2, createId } from "@/types/po-catering";
 
 function fmtRp(n: number): string {
   if (n === 0) return "Rp0";
@@ -16,230 +18,230 @@ function fmtRp(n: number): string {
 }
 
 interface Props {
-  data: POCateringData;
-  onChange: (data: POCateringData) => void;
+  data: POCateringV2;
+  onChange: (data: POCateringV2) => void;
   readOnly?: boolean;
 }
 
-export function POCateringEditor({ data, onChange, readOnly }: Props) {
-  const computed = useMemo(() => calculateAll(data), [data]);
+export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
+  const computed = useMemo(() => calculateV2(data), [data]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; rowId: string; flipUp?: boolean } | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const updateSections = useCallback(
-    (fn: (sections: POSection[]) => POSection[]) => onChange({ ...data, sections: fn(data.sections) }),
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+
+  // Determine which rows are hidden
+  const hiddenIds = useMemo(() => {
+    const hidden = new Set<string>();
+    let collapsedGroup: string | null = null;
+    let collapsedHeader: string | null = null;
+    let collapsedHeaderDepth: number = -1;
+
+    for (const row of computed.rows) {
+      if (row.type === "group" || (row.type === "blank" && (row.depth ?? 0) === 0)) {
+        collapsedGroup = collapsed.has(row.id) ? row.id : null;
+        collapsedHeader = null;
+        collapsedHeaderDepth = -1;
+      } else if (row.type === "subgroup" || (row.type === "blank" && (row.depth ?? 0) > 0)) {
+        if (collapsedGroup) {
+          hidden.add(row.id);
+        } else {
+          const depth = row.depth ?? 0;
+          // If we're inside a collapsed header at same or lower depth, hide this row
+          if (collapsedHeader && depth > collapsedHeaderDepth) {
+            hidden.add(row.id);
+          } else {
+            // New subgroup at same/higher level — update collapsed state
+            if (collapsed.has(row.id)) {
+              collapsedHeader = row.id;
+              collapsedHeaderDepth = depth;
+            } else {
+              // Only clear if this subgroup is at same or higher level
+              if (depth <= collapsedHeaderDepth) {
+                collapsedHeader = null;
+                collapsedHeaderDepth = -1;
+              }
+            }
+          }
+        }
+      } else {
+        if (collapsedGroup || collapsedHeader) hidden.add(row.id);
+      }
+    }
+    return hidden;
+  }, [computed.rows, collapsed]);
+
+  const update = useCallback(
+    (fn: (rows: PORow[]) => PORow[]) => onChange({ ...data, rows: fn(data.rows) }),
     [data, onChange]
   );
 
-  const updateRow = useCallback(
-    (sectionId: string, rowId: string, patch: Partial<PORow>) => {
-      updateSections((ss) => ss.map((s) => s.id !== sectionId ? s : { ...s, rows: s.rows.map((r) => r.id !== rowId ? r : { ...r, ...patch }) }));
-    },
-    [updateSections]
-  );
+  const updateRow = (id: string, patch: Partial<PORow>) =>
+    update((rows) => rows.map((r) => r.id !== id ? r : { ...r, ...patch }));
 
-  const addRow = useCallback(
-    (sectionId: string, row: PORow, beforeSubtotal = true) => {
-      updateSections((ss) => ss.map((s) => {
-        if (s.id !== sectionId) return s;
-        const rows = [...s.rows];
-        if (beforeSubtotal) {
-          const idx = rows.findIndex((r) => r.type === "subtotal" || r.type === "formula");
-          if (idx >= 0) { rows.splice(idx, 0, row); return { ...s, rows }; }
-        }
-        rows.push(row);
-        return { ...s, rows };
-      }));
-    },
-    [updateSections]
-  );
+  const removeRow = (id: string) => update((rows) => rows.filter((r) => r.id !== id));
 
-  const removeRow = useCallback(
-    (sectionId: string, rowId: string) => {
-      updateSections((ss) => ss.map((s) => s.id !== sectionId ? s : { ...s, rows: s.rows.filter((r) => r.id !== rowId) }));
-    },
-    [updateSections]
-  );
+  const duplicateRow = (id: string) =>
+    update((rows) => {
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx < 0) return rows;
+      const copy = { ...rows[idx], id: createId() };
+      const next = [...rows];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
 
-  const moveRow = useCallback(
-    (sectionId: string, rowId: string, dir: -1 | 1) => {
-      updateSections((ss) => ss.map((s) => {
-        if (s.id !== sectionId) return s;
-        const idx = s.rows.findIndex((r) => r.id === rowId);
-        const target = idx + dir;
-        if (idx < 0 || target < 0 || target >= s.rows.length) return s;
-        const rows = [...s.rows];
-        [rows[idx], rows[target]] = [rows[target], rows[idx]];
-        return { ...s, rows };
-      }));
-    },
-    [updateSections]
-  );
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    update((rows) => {
+      const oi = rows.findIndex((r) => r.id === active.id);
+      const ni = rows.findIndex((r) => r.id === over.id);
+      return arrayMove(rows, oi, ni);
+    });
+  };
 
-  const addSection = useCallback(
-    () => updateSections((ss) => [...ss, createSection("Section Baru")]),
-    [updateSections]
-  );
+  const addRow = (row: PORow) => update((rows) => [...rows, row]);
 
-  const removeSection = useCallback(
-    (id: string) => updateSections((ss) => ss.filter((s) => s.id !== id)),
-    [updateSections]
-  );
+  const addRowAfter = (afterId: string, row: PORow) =>
+    update((rows) => {
+      const idx = rows.findIndex((r) => r.id === afterId);
+      if (idx < 0) return [...rows, row];
+      const next = [...rows];
+      next.splice(idx + 1, 0, row);
+      return next;
+    });
 
-  const renameSection = useCallback(
-    (id: string, name: string) => updateSections((ss) => ss.map((s) => s.id !== id ? s : { ...s, name })),
-    [updateSections]
-  );
-
-  const updateSectionGrandTotal = useCallback(
-    (id: string, value: number) => updateSections((ss) => ss.map((s) => s.id !== id ? s : { ...s, manualGrandTotal: value })),
-    [updateSections]
-  );
+  // Auto-number items sequentially + track depth from parent subgroup
+  const numberedRows = useMemo(() => {
+    let counter = 0;
+    let currentDepth = 0;
+    return computed.rows.map((r) => {
+      if (r.type === "group" || (r.type === "blank" && (r.depth ?? 0) === 0)) { counter = 0; currentDepth = 0; return r; }
+      if (r.type === "subgroup" || (r.type === "blank" && (r.depth ?? 0) > 0)) { counter = 0; currentDepth = (r.depth ?? 0) + 1; return r; }
+      if (r.type === "item") { counter++; return { ...r, no: counter, _depth: currentDepth }; }
+      if (r.type === "subtotal" || r.type === "formula") { return { ...r, _depth: currentDepth }; }
+      return r;
+    });
+  }, [computed.rows]);
 
   return (
     <div className="w-full space-y-2">
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-300 text-xs">
-          <thead>
-            <tr className="bg-gray-100">
-              {!readOnly && <th className="border border-gray-300 px-1 py-1.5 w-[24px]" />}
-              <th className="border border-gray-300 px-2 py-1.5 text-left w-[4%]">NO</th>
-              <th className="border border-gray-300 px-2 py-1.5 text-left w-[34%]">DESCRIPTION</th>
-              <th className="border border-gray-300 px-2 py-1.5 text-right w-[8%]">JUMLAH</th>
-              <th className="border border-gray-300 px-2 py-1.5 text-center w-[6%]">UNIT</th>
-              <th className="border border-gray-300 px-2 py-1.5 text-right w-[14%]">HARGA SATUAN</th>
-              <th className="border border-gray-300 px-2 py-1.5 text-right w-[15%]">TOTAL</th>
-              <th className="border border-gray-300 px-2 py-1.5 text-right w-[15%]">GRAND TOTAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {computed.sections.map((section) => (
-              <SectionBlock
-                key={section.id}
-                section={section}
-                allSections={computed.sections}
-                readOnly={readOnly}
-                onUpdateRow={(rowId, patch) => updateRow(section.id, rowId, patch)}
-                onAddRow={(row, before) => addRow(section.id, row, before)}
-                onRemoveRow={(rowId) => removeRow(section.id, rowId)}
-                onMoveRow={(rowId, dir) => moveRow(section.id, rowId, dir)}
-                onRename={(name) => renameSection(section.id, name)}
-                onUpdateGrandTotal={(val) => updateSectionGrandTotal(section.id, val)}
-                onRemoveSection={() => removeSection(section.id)}
-              />
-            ))}
-          </tbody>
-        </table>
+      <div className="">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={computed.rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+            <table className="w-full border-collapse border border-gray-300 text-xs">
+              <thead>
+                <tr className="bg-gray-300">
+                  {!readOnly && <th className="border border-gray-300 w-[20px]" />}
+                  <th className="border border-gray-300 px-2 py-1.5 text-left w-[3%]">NO</th>
+                  <th className="border border-gray-300 px-2 py-1.5 text-left">DESCRIPTION</th>
+                  <th className="border border-gray-300 px-2 py-1.5 text-right w-[8%]">JUMLAH</th>
+                  <th className="border border-gray-300 px-2 py-1.5 text-center w-[6%]">UNIT</th>
+                  <th className="border border-gray-300 px-2 py-1.5 text-right w-[14%]">HARGA SATUAN</th>
+                  <th className="border border-gray-300 px-2 py-1.5 text-right w-[15%]">TOTAL</th>
+                  {!readOnly && <th className="border border-gray-300 w-[20px]" />}
+                </tr>
+              </thead>
+              <tbody>
+                {numberedRows.map((row) => hiddenIds.has(row.id) ? null : (
+                  <RowRenderer
+                    key={row.id}
+                    row={row}
+                    allRows={computed.rows}
+                    readOnly={readOnly}
+                    isCollapsed={collapsed.has(row.id)}
+                    onToggleCollapse={(row.type === "subgroup" || row.type === "group") ? () => toggleCollapse(row.id) : undefined}
+                    onUpdate={(patch) => updateRow(row.id, patch)}
+                    onRemove={() => removeRow(row.id)}
+                    onContextMenu={readOnly ? undefined : (e) => {
+                      e.preventDefault();
+                      const menuHeight = 280; // approx height
+                      const flipUp = e.clientY + menuHeight > window.innerHeight;
+                      setCtxMenu({ x: e.clientX, y: e.clientY, rowId: row.id, flipUp });
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </SortableContext>
+        </DndContext>
       </div>
 
-      {/* Add section */}
-      {!readOnly && (
-        <Button variant="outline" size="sm" onClick={addSection} className="text-xs">
-          <Plus className="h-3 w-3 mr-1" /> Tambah Section
-        </Button>
+      {/* Add row toolbar */}
+      {!readOnly && (        <div className="flex items-center gap-3 pt-1">
+          <button type="button" onClick={() => addRow({ id: createId(), type: "group", label: "Group baru", qty: undefined, unit: undefined, price: undefined })} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900 font-semibold">
+            <Plus className="h-3 w-3" /> Group
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "item", description: "", unit: "Porsi" })} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
+            <Plus className="h-3 w-3" /> Item
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "subgroup", label: "Sub-group baru", qty: undefined, unit: undefined, price: undefined })} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800">
+            <Merge className="h-3 w-3" /> Sub-group
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "subtotal", label: "Jumlah", sumRowIds: [] })} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800">
+            <Calculator className="h-3 w-3" /> Subtotal
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "formula", label: "Formula", formulaKind: "diff", formulaAIds: [], formulaBIds: [] })} className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800">
+            <Calculator className="h-3 w-3" /> Formula
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "payment", description: "", chargeType: "flat" })} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
+            <Calculator className="h-3 w-3" /> Payment
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "charge", description: "", unit: "Porsi", chargeType: "qty" })} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
+            <Calculator className="h-3 w-3" /> Charge
+          </button>
+          <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "blank", depth: 1 })} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+            <Merge className="h-3 w-3" /> Blank
+          </button>
+        </div>
+      )}
+
+      {/* Context menu */}
+      {ctxMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
+          <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[170px]" style={ctxMenu.flipUp ? { bottom: window.innerHeight - ctxMenu.y, left: ctxMenu.x } : { top: ctxMenu.y, left: ctxMenu.x }}>
+            <p className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wide">Tambah di bawah</p>
+            {([
+              { label: "Group", icon: <GripVertical className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "group" as const, label: "Group baru" }) },
+              { label: "Sub-group (L1)", icon: <Merge className="h-3 w-3" />, color: "text-purple-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 0 }) },
+              { label: "Sub-group (L2)", icon: <Merge className="h-3 w-3" />, color: "text-purple-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 1 }) },
+              { label: "Sub-group (L3)", icon: <Merge className="h-3 w-3" />, color: "text-purple-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 2 }) },
+              { label: "Item", icon: <Plus className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "item" as const, description: "", unit: "Porsi" }) },
+              { label: "Subtotal", icon: <Calculator className="h-3 w-3" />, color: "text-green-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subtotal" as const, label: "Jumlah", sumRowIds: [] }) },
+              { label: "Formula", icon: <Calculator className="h-3 w-3" />, color: "text-orange-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "formula" as const, label: "Formula", formulaKind: "diff", formulaAIds: [], formulaBIds: [] }) },
+              { label: "Charge", icon: <Calculator className="h-3 w-3" />, color: "text-red-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "charge" as const, description: "", unit: "Porsi", chargeType: "qty" }) },
+              { label: "Payment", icon: <Calculator className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "payment" as const, description: "", chargeType: "flat" }) },
+              { label: "Blank", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
+              { label: "Blank (L1)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
+              { label: "Blank (L2)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 1 }) },
+              { label: "Blank (L3)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 2 }) },
+            ] as { label: string; icon: React.ReactNode; color: string; fn: () => void }[]).map(({ label, icon, color, fn }) => (
+              <button key={label} type="button" className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 ${color}`} onClick={() => { fn(); setCtxMenu(null); }}>
+                {icon} {label}
+              </button>
+            ))}
+            <div className="border-t border-gray-100 my-1" />
+            <button type="button" className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-600" onClick={() => { duplicateRow(ctxMenu.rowId); setCtxMenu(null); }}>
+              <Plus className="h-3 w-3" /> Duplicate
+            </button>
+            <button type="button" className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600" onClick={() => { removeRow(ctxMenu.rowId); setCtxMenu(null); }}>
+              <Trash2 className="h-3 w-3" /> Delete
+            </button>
+          </div>
+        </>
       )}
     </div>
-  );
-}
-
-// ─── Section Block ───────────────────────────────────────────────────────────
-
-interface SectionProps {
-  section: POSection & { _grandTotal?: number };
-  allSections: POSection[];
-  readOnly?: boolean;
-  onUpdateRow: (rowId: string, patch: Partial<PORow>) => void;
-  onAddRow: (row: PORow, beforeSubtotal?: boolean) => void;
-  onRemoveRow: (rowId: string) => void;
-  onMoveRow: (rowId: string, dir: -1 | 1) => void;
-  onRename: (name: string) => void;
-  onUpdateGrandTotal: (value: number) => void;
-  onRemoveSection: () => void;
-}
-
-function SectionBlock({ section, allSections, readOnly, onUpdateRow, onAddRow, onRemoveRow, onMoveRow, onRename, onUpdateGrandTotal, onRemoveSection }: SectionProps) {
-  const [showAddMenu, setShowAddMenu] = useState(false);
-  const colCount = readOnly ? 8 : 9;
-
-  return (
-    <>
-      {/* Section header */}
-      <tr className="bg-gray-50 group">
-        {!readOnly && <td className="border border-gray-300 px-1 py-1" />}
-        <td colSpan={6} className="border border-gray-300 px-2 py-1.5">
-          {readOnly ? (
-            <span className="font-bold text-xs uppercase">{section.name}</span>
-          ) : (
-            <input
-              className="w-full bg-transparent outline-none font-bold text-xs uppercase"
-              value={section.name}
-              onChange={(e) => onRename(e.target.value)}
-            />
-          )}
-        </td>
-        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">
-          <div className="flex items-center justify-end gap-1">
-            {readOnly ? (
-              <span>{section._grandTotal != null ? fmtRp(section._grandTotal) : ""}</span>
-            ) : (
-              <input
-                type="text"
-                inputMode="numeric"
-                className="w-full bg-transparent outline-none text-right font-bold text-xs"
-                value={section.manualGrandTotal ? new Intl.NumberFormat("id-ID").format(section.manualGrandTotal) : ""}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, "");
-                  onUpdateGrandTotal(Number(raw) || 0);
-                }}
-                placeholder="0"
-              />
-            )}
-            {!readOnly && (
-              <button type="button" onClick={onRemoveSection} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 ml-1 shrink-0">
-                <Trash2 className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
-
-      {/* Rows */}
-      {section.rows.map((row) => (
-        <RowRenderer
-          key={row.id}
-          row={row}
-          allSections={allSections}
-          readOnly={readOnly}
-          onUpdate={(patch) => onUpdateRow(row.id, patch)}
-          onRemove={() => onRemoveRow(row.id)}
-          onMoveUp={() => onMoveRow(row.id, -1)}
-          onMoveDown={() => onMoveRow(row.id, 1)}
-        />
-      ))}
-
-      {/* Add row toolbar */}
-      {!readOnly && (
-        <tr>
-          <td colSpan={colCount} className="border border-gray-300 px-2 py-1">
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => onAddRow(createItemRow({ no: section.rows.filter((r) => r.type === "item").length + 1 }))} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
-                <Plus className="h-3 w-3" /> Item
-              </button>
-              <span className="text-gray-300">|</span>
-              <button type="button" onClick={() => onAddRow(createHeaderRow("Header baru"), true)} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800">
-                <Merge className="h-3 w-3" /> Header
-              </button>
-              <span className="text-gray-300">|</span>
-              <button type="button" onClick={() => onAddRow(createSubtotalRow("Jumlah"), false)} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800">
-                <Calculator className="h-3 w-3" /> Subtotal
-              </button>
-              <span className="text-gray-300">|</span>
-              <button type="button" onClick={() => onAddRow({ id: createId(), type: "formula", label: "Formula baru", formula: { kind: "sum" } }, false)} className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800">
-                <Calculator className="h-3 w-3" /> Formula
-              </button>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
   );
 }
 
@@ -247,181 +249,555 @@ function SectionBlock({ section, allSections, readOnly, onUpdateRow, onAddRow, o
 
 interface RowProps {
   row: PORow;
-  allSections: POSection[];
+  allRows: PORow[];
   readOnly?: boolean;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   onUpdate: (patch: Partial<PORow>) => void;
   onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-function RowRenderer({ row, allSections, readOnly, onUpdate, onRemove, onMoveUp, onMoveDown }: RowProps) {
-  const actions = !readOnly && (
-    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
-      <button type="button" onClick={onMoveUp} className="text-gray-400 hover:text-gray-600"><ChevronUp className="h-3 w-3" /></button>
-      <button type="button" onClick={onMoveDown} className="text-gray-400 hover:text-gray-600"><ChevronDown className="h-3 w-3" /></button>
-      <button type="button" onClick={onRemove} className="text-red-400 hover:text-red-600"><Trash2 className="h-3 w-3" /></button>
-    </div>
+function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, onUpdate, onRemove, onContextMenu }: RowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id, disabled: !!readOnly });
+  const dragStyle = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  const dragHandle = !readOnly && (
+    <td className="border border-gray-300 px-0.5 w-[20px] cursor-grab">
+      <div className="flex items-center justify-center opacity-0 group-hover:opacity-100" {...attributes} {...listeners}>
+        <GripVertical className="h-3.5 w-3.5 text-gray-400" />
+      </div>
+    </td>
   );
 
-  // ─── Header row (merged) ─────────────────────────────────────────────────
-  if (row.type === "header") {
+  const deleteBtn = !readOnly && (
+    <td className="border border-gray-300 px-1 w-[20px]">
+      <button type="button" onClick={onRemove} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600">
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </td>
+  );
+
+  // ─── Blank ─────────────────────────────────────────────────────────────────
+  if (row.type === "blank") {
+    const colCount = 6;
+    const indent = (row.depth ?? 0) * 12;
     return (
-      <tr className="bg-white group">
-        {!readOnly && <td className="border border-gray-300 px-1">{actions}</td>}
-        <td colSpan={7} className="border border-gray-300 px-2 py-1 font-semibold text-xs">
-          {readOnly ? row.label : (
-            <input className="w-full bg-transparent outline-none font-semibold text-xs" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="group">
+        {dragHandle}
+        <td colSpan={colCount} className="border border-gray-300 px-2 py-1" style={{ paddingLeft: indent + 8 }}>
+          {readOnly ? (
+            <span className="text-xs">{row.label ?? ""}</span>
+          ) : (
+            <input className="w-full bg-transparent outline-none text-xs" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} placeholder="" />
           )}
         </td>
+        {deleteBtn}
       </tr>
     );
   }
 
-  // ─── Subtotal / Formula row ──────────────────────────────────────────────
-  if (row.type === "subtotal" || row.type === "formula") {
-    const isNeg = (row._total ?? 0) < 0;
+  // ─── Group ────────────────────────────────────────────────────────────────
+  if (row.type === "group") {
+    const hasPrice = !!row.price;
+    const calculatedTotal = (row.qty ?? 0) * (row.price ?? 0);
     return (
-      <tr className="bg-gray-50 font-semibold group">
-        {!readOnly && <td className="border border-gray-300 px-1">{actions}</td>}
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="bg-[#e5e5e5] group">
+        {dragHandle}
+        {/* NO + Description merged */}
+        <td colSpan={2} className="border border-gray-300 px-2 py-1.5 font-bold text-xs">
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={onToggleCollapse} className="text-gray-500 hover:text-gray-800 shrink-0">
+              <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !isCollapsed && "rotate-90")} />
+            </button>
+            {readOnly ? row.label : (
+              <input className="flex-1 bg-transparent outline-none font-bold text-xs" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
+            )}
+          </div>
+        </td>
+        {/* JUMLAH */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {readOnly ? <span className="block text-right text-xs font-semibold">{row.qty ?? ""}</span> : (
+            <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.qty ?? ""} onChange={(e) => onUpdate({ qty: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} />
+          )}
+        </td>
+        {/* UNIT */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {readOnly ? <span className="block text-center text-xs font-semibold">{row.unit ?? ""}</span> : (
+            <input className="w-full bg-transparent outline-none text-center text-xs px-1" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} />
+          )}
+        </td>
+        {/* HARGA SATUAN */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {readOnly ? <span className="block text-right text-xs font-semibold">{row.price ? fmtRp(row.price) : ""}</span> : (
+            <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs px-1" value={row.price ? new Intl.NumberFormat("id-ID").format(row.price) : ""} onChange={(e) => onUpdate({ price: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} placeholder="0" />
+          )}
+        </td>
+        {/* TOTAL — calculated if price filled, manual if not */}
+        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">
+          {hasPrice ? (
+            calculatedTotal !== 0 ? fmtRp(calculatedTotal) : ""
+          ) : readOnly ? (
+            row.grandTotal ? fmtRp(row.grandTotal) : ""
+          ) : (
+            <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right font-bold text-xs" value={row.grandTotal ? new Intl.NumberFormat("id-ID").format(row.grandTotal) : ""} onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })} placeholder="Total manual" />
+          )}
+        </td>
+        {deleteBtn}
+      </tr>
+    );
+  }
+
+  // ─── Sub-group ────────────────────────────────────────────────────────────
+
+  // ─── Header ──────────────────────────────────────────────────────────────
+  if (row.type === "subgroup") {
+    const depth = row.depth ?? 0;
+    const bgColor = depth === 0 ? "bg-gray-100" : depth === 1 ? "bg-gray-50" : "bg-white border-l-2 border-gray-300";
+    const labelIndent = depth * 12;
+    return (
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className={`${bgColor} group`}>
+        {dragHandle}
+        {/* NO + Description merged */}
+        <td colSpan={2} className="border border-gray-300 px-2 py-1.5 font-bold text-xs">
+          <div className="flex items-center gap-1" style={{ paddingLeft: labelIndent }}>
+            <button type="button" onClick={onToggleCollapse} className="text-gray-400 hover:text-gray-700 shrink-0">
+              <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !isCollapsed && "rotate-90")} />
+            </button>
+            {readOnly ? row.label : (
+              <input className="flex-1 bg-transparent outline-none font-bold text-xs" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
+            )}
+          </div>
+        </td>
+        {/* JUMLAH */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {readOnly ? <span className="block text-right text-xs font-semibold">{row.qty ?? ""}</span> : (
+            <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.qty ?? ""} onChange={(e) => onUpdate({ qty: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} placeholder="0" />
+          )}
+        </td>
+        {/* UNIT */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {readOnly ? <span className="block text-center text-xs font-semibold">{row.unit ?? ""}</span> : (
+            <input className="w-full bg-transparent outline-none text-center text-xs px-1" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} placeholder="Unit" />
+          )}
+        </td>
+        {/* HARGA SATUAN — subgroup */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {readOnly ? <span className="block text-right text-xs font-semibold">{row.price ? fmtRp(row.price) : ""}</span> : (
+            <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs px-1" value={row.price ? new Intl.NumberFormat("id-ID").format(row.price) : ""} onChange={(e) => onUpdate({ price: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} placeholder="0" />
+          )}
+        </td>
+        {/* TOTAL — calculated if price filled, manual if not */}
+        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">          {row.price ? (
+            row._total != null && row._total !== 0 ? fmtRp(row._total) : ""
+          ) : readOnly ? (
+            row.grandTotal ? fmtRp(row.grandTotal) : ""
+          ) : (
+            <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right font-bold text-xs" value={row.grandTotal ? new Intl.NumberFormat("id-ID").format(row.grandTotal) : ""} onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })} placeholder="Total manual" />
+          )}
+        </td>
+        {deleteBtn}
+      </tr>
+    );
+  }
+  // ─── Charge ──────────────────────────────────────────────────────────────
+  if (row.type === "charge") {
+    const depth = (row as any)._depth ?? 0;
+    const indent = depth * 12;
+    const total = row._total ?? 0;
+    const ct = row.chargeType ?? "qty";
+    return (
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="group">
+        {dragHandle}
+        {/* NO + DESC merged */}
+        <td colSpan={2} className="border border-gray-300 px-2 py-1 text-xs" style={{ paddingLeft: indent + 8 }}>
+          <div className="flex items-center gap-1.5">
+            {!readOnly && (
+              <select className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 shrink-0" value={ct} onChange={(e) => onUpdate({ chargeType: e.target.value as "qty" | "flat" | "percent" })}>
+                <option value="qty">Qty</option>
+                <option value="flat">Flat</option>
+                <option value="percent">Persen</option>
+              </select>
+            )}
+            {readOnly ? <span>{row.description}</span> : (
+              <input className="flex-1 bg-transparent outline-none text-xs" value={row.description ?? ""} onChange={(e) => onUpdate({ description: e.target.value })} placeholder="Nama charge..." />
+            )}
+          </div>
+        </td>
+        {/* JUMLAH */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {(ct === "qty" || ct === "flat") && (
+            readOnly ? <span className="block text-right text-xs">{row.qty ?? ""}</span> : (
+              <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.qty ?? ""} onChange={(e) => onUpdate({ qty: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} />
+            )
+          )}
+          {ct === "percent" && !readOnly && (
+            <div className="flex items-center justify-end gap-0.5">
+              <input type="number" className="w-10 bg-transparent outline-none text-right text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.percentValue ?? ""} onChange={(e) => onUpdate({ percentValue: Number(e.target.value) || 0 })} placeholder="0" />
+              <span className="text-[10px] text-gray-400">%</span>
+            </div>
+          )}
+        </td>
+        {/* UNIT */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {(ct === "qty" || ct === "flat") && (
+            readOnly ? <span className="block text-center text-xs">{row.unit ?? ""}</span> : (
+              <input className="w-full bg-transparent outline-none text-center text-xs px-1" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} />
+            )
+          )}
+          {ct === "percent" && !readOnly && (
+            <RowPicker label="dari:" selectedIds={row.formulaAIds ?? []} rows={allRows} onChange={(ids) => onUpdate({ formulaAIds: ids })} />
+          )}
+        </td>
+        {/* HARGA SATUAN */}
+        <td className="border border-gray-300 px-1 py-0.5">
+          {(ct === "qty" || ct === "flat") && (
+            readOnly ? <span className="block text-right text-xs">{row.price ? fmtRp(row.price) : ""}</span> : (
+              <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs px-1" value={row.price ? new Intl.NumberFormat("id-ID").format(row.price) : ""} onChange={(e) => onUpdate({ price: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} placeholder="0" />
+            )
+          )}
+        </td>
+        {/* TOTAL — per_qty auto-calc, flat manual, percent auto-calc */}
+        <td className="border border-gray-300 px-2 py-1 text-right text-xs text-red-600 font-semibold">
+          {ct === "flat" ? (
+            readOnly ? (row.grandTotal ? fmtRp(-Math.abs(row.grandTotal)) : "") : (
+              <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs text-red-600" value={row.grandTotal ? `-Rp${new Intl.NumberFormat("id-ID").format(row.grandTotal)}` : ""} onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })} placeholder="-Rp0" />
+            )
+          ) : (
+            total !== 0 ? fmtRp(total) : ""
+          )}
+        </td>
+        {deleteBtn}
+      </tr>
+    );
+  }
+  // ─── Payment ─────────────────────────────────────────────────────────────
+  if (row.type === "payment") {
+    const depth = (row as any)._depth ?? 0;
+    const indent = depth * 12;
+    const total = row._total ?? 0;
+    const ct = row.chargeType ?? "flat";
+    return (
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="group">
+        {dragHandle}
+        <td colSpan={2} className="border border-gray-300 px-2 py-1 text-xs" style={{ paddingLeft: indent + 8 }}>
+          <div className="flex items-center gap-1.5">
+            {!readOnly && (
+              <select className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 shrink-0" value={ct} onChange={(e) => onUpdate({ chargeType: e.target.value as "qty" | "flat" | "percent" })}>
+                <option value="flat">Flat</option>
+                <option value="qty">Qty</option>
+              </select>
+            )}
+            {readOnly ? <span>{row.description}</span> : (
+              <input className="flex-1 bg-transparent outline-none text-xs" value={row.description ?? ""} onChange={(e) => onUpdate({ description: e.target.value })} placeholder="Nama pembayaran..." />
+            )}
+          </div>
+        </td>
+        <td className="border border-gray-300 px-1 py-0.5">
+          {ct === "qty" && (
+            readOnly ? <span className="block text-right text-xs">{row.qty ?? ""}</span> : (
+              <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.qty ?? ""} onChange={(e) => onUpdate({ qty: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} />
+            )
+          )}
+        </td>
+        <td className="border border-gray-300 px-1 py-0.5">
+          {ct === "qty" && (
+            readOnly ? <span className="block text-center text-xs">{row.unit ?? ""}</span> : (
+              <input className="w-full bg-transparent outline-none text-center text-xs px-1" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} />
+            )
+          )}
+        </td>
+        <td className="border border-gray-300 px-1 py-0.5">
+          {ct === "qty" && (
+            readOnly ? <span className="block text-right text-xs">{row.price ? fmtRp(row.price) : ""}</span> : (
+              <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs px-1" value={row.price ? new Intl.NumberFormat("id-ID").format(row.price) : ""} onChange={(e) => onUpdate({ price: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} placeholder="0" />
+            )
+          )}
+        </td>
+        <td className="border border-gray-300 px-2 py-1 text-right text-xs font-semibold">
+          {ct === "flat" ? (
+            readOnly ? (row.grandTotal ? fmtRp(-Math.abs(row.grandTotal)) : "") : (
+              <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs" value={row.grandTotal ? `-Rp${new Intl.NumberFormat("id-ID").format(row.grandTotal)}` : ""} onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })} placeholder="-Rp0" />
+            )
+          ) : (
+            total !== 0 ? fmtRp(total) : ""
+          )}
+        </td>
+        {deleteBtn}
+      </tr>
+    );
+  }
+
+  // ─── Subtotal ─────────────────────────────────────────────────────────────
+  if (row.type === "subtotal") {
+    const depth = (row as any)._depth ?? 0;
+    const indent = depth * 12;
+    return (
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="bg-gray-50 font-semibold group">
+        {dragHandle}
         <td className="border border-gray-300" />
-        <td colSpan={2} className="border border-gray-300 px-2 py-1 text-xs">
+        <td className="border border-gray-300 px-2 py-1 text-xs" style={{ paddingLeft: indent + 8 }}>
           {readOnly ? row.label : (
             <input className="w-full bg-transparent outline-none text-xs font-semibold" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
           )}
         </td>
-        {/* Formula selector */}
-        <td colSpan={2} className="border border-gray-300 px-1 py-0.5">
-          {!readOnly && row.formula && (
-            <FormulaSelector formula={row.formula} allSections={allSections} onChange={(f) => onUpdate({ formula: f })} />
+        <td colSpan={3} className="border border-gray-300 px-1 py-0.5">
+          {!readOnly && (
+            <RowPicker
+              label="Sum dari:"
+              selectedIds={row.sumRowIds ?? []}
+              signs={row.sumRowSigns}
+              rows={allRows}
+              onChange={(ids) => onUpdate({ sumRowIds: ids })}
+              onSignChange={(signs) => onUpdate({ sumRowSigns: signs })}
+            />
           )}
         </td>
-        <td className={cn("border border-gray-300 px-2 py-1 text-right text-xs", isNeg && "text-red-600")}>
+        <td className="border border-gray-300 px-2 py-1 text-right text-xs font-semibold">
           {fmtRp(row._total ?? 0)}
         </td>
-        <td className="border border-gray-300" />
+        {deleteBtn}
       </tr>
     );
   }
 
-  // ─── Item row ────────────────────────────────────────────────────────────
+  // ─── Formula ──────────────────────────────────────────────────────────────
+  if (row.type === "formula") {
+    const isNeg = (row._total ?? 0) < 0 || row.negative;
+    const depth = (row as any)._depth ?? 0;
+    const indent = depth * 12;
+    return (
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="bg-gray-50 font-semibold group">
+        {dragHandle}
+        <td colSpan={2} className="border border-gray-300 px-2 py-1 text-xs" style={{ paddingLeft: indent + 8 }}>
+          {readOnly ? row.label : (
+            <input className="w-full bg-transparent outline-none text-xs font-semibold" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
+          )}
+        </td>
+        <td colSpan={3} className="border border-gray-300 px-1 py-0.5">
+          {!readOnly && (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5"
+                value={row.formulaKind ?? "diff"}
+                onChange={(e) => onUpdate({ formulaKind: e.target.value as "diff" | "sum" | "percent" })}
+              >
+                <option value="diff">A − B</option>
+                <option value="sum">SUM</option>
+                <option value="percent">PERSEN (%)</option>
+              </select>
+              {row.formulaKind === "percent" && (
+                <>
+                  <input
+                    type="number"
+                    className="w-12 text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    value={row.percentValue ?? ""}
+                    onChange={(e) => onUpdate({ percentValue: Number(e.target.value) || 0 })}
+                    placeholder="0"
+                  />
+                  <span className="text-[10px] text-gray-500">% dari</span>
+                  <RowPicker label="" selectedIds={row.formulaAIds ?? []} rows={allRows} onChange={(ids) => onUpdate({ formulaAIds: ids })} />
+                </>
+              )}
+              {row.formulaKind !== "percent" && (
+                <RowPicker label="A:" selectedIds={row.formulaAIds ?? []} rows={allRows} onChange={(ids) => onUpdate({ formulaAIds: ids })} />
+              )}
+              {row.formulaKind === "diff" && (
+                <RowPicker label="B:" selectedIds={row.formulaBIds ?? []} rows={allRows} onChange={(ids) => onUpdate({ formulaBIds: ids })} />
+              )}
+              {(row.formulaKind === "sum" || row.formulaKind === "percent") && (
+                <label className="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer select-none">
+                  <Checkbox checked={row.negative ?? false} onCheckedChange={(v) => onUpdate({ negative: !!v })} />
+                  Pengurangan
+                </label>
+              )}
+            </div>
+          )}
+        </td>
+        <td className={cn("border border-gray-300 px-2 py-1 text-right text-xs font-semibold", isNeg && "text-red-600")}>
+          {fmtRp(row._total ?? 0)}
+        </td>
+        {deleteBtn}
+      </tr>
+    );
+  }
+
+  // ─── Item ─────────────────────────────────────────────────────────────────
   return (
-    <tr className="hover:bg-blue-50/30 group">
-      {!readOnly && <td className="border border-gray-300 px-1">{actions}</td>}
+    <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="hover:bg-blue-50/30 group">
+      {dragHandle}
       <td className="border border-gray-300 px-2 py-1 text-center text-xs text-gray-500">{row.no ?? ""}</td>
-      <td className="border border-gray-300 px-1 py-0.5">
+      <td className="border border-gray-300 px-1 py-0.5" style={{ paddingLeft: ((row as any)._depth ?? 0) * 12 + 4 }}>
         {readOnly ? <span className="text-xs px-1">{row.description}</span> : (
           <input className="w-full bg-transparent outline-none text-xs px-1 py-0.5" value={row.description ?? ""} onChange={(e) => onUpdate({ description: e.target.value })} placeholder="Nama item..." />
         )}
       </td>
       <td className="border border-gray-300 px-1 py-0.5">
         {readOnly ? <span className="block text-right text-xs">{row.qty ?? ""}</span> : (
-          <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.qty ?? ""} onChange={(e) => onUpdate({ qty: Number(e.target.value) || 0 })} />
+          <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.qty ?? ""} onChange={(e) => onUpdate({ qty: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} />
         )}
       </td>
       <td className="border border-gray-300 px-1 py-0.5">
         {readOnly ? <span className="block text-center text-xs">{row.unit ?? ""}</span> : (
-          <input className="w-full bg-transparent outline-none text-center text-xs px-1 py-0.5" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} />
+          <input className="w-full bg-transparent outline-none text-center text-xs px-1" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} />
         )}
       </td>
       <td className="border border-gray-300 px-1 py-0.5">
         {readOnly ? <span className="block text-right text-xs">{row.price ? fmtRp(row.price) : ""}</span> : (
-          <input type="number" className="w-full bg-transparent outline-none text-right text-xs px-1 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" value={row.price ?? ""} onChange={(e) => onUpdate({ price: Number(e.target.value) || 0 })} />
+          <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs px-1" value={row.price ? new Intl.NumberFormat("id-ID").format(row.price) : ""} onChange={(e) => onUpdate({ price: parseInt(e.target.value.replace(/[^0-9]/g, "")) || undefined })} placeholder="0" />
         )}
       </td>
-      <td className={cn("border border-gray-300 px-2 py-1 text-right text-xs", row.negative && "text-red-600")}>
-        {row._total != null && row._total !== 0 ? fmtRp(row._total) : ""}
-      </td>
-      <td className="border border-gray-300 px-2 py-1 text-center">
-        {!readOnly && (
-          <label className="flex items-center justify-center gap-1 text-[10px] text-gray-400">
-            <input type="checkbox" checked={row.negative ?? false} onChange={(e) => onUpdate({ negative: e.target.checked })} className="h-3 w-3" />
-            (-)
-          </label>
+      <td className={cn("border border-gray-300 px-2 py-1 text-right text-xs", (row.negative || (row._total ?? 0) < 0) && "text-red-600")}>
+        {row.price ? (
+          row._total != null && row._total !== 0 ? fmtRp(row._total) : ""
+        ) : readOnly ? (
+          row.grandTotal ? fmtRp(row.grandTotal) : ""
+        ) : (
+          <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs" value={row.grandTotal ? new Intl.NumberFormat("id-ID").format(row.grandTotal) : ""} onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })} placeholder="Total manual" />
         )}
       </td>
+      {deleteBtn}
     </tr>
   );
 }
 
-// ─── Formula Selector ────────────────────────────────────────────────────────
+// ─── Row Picker — multi-select with group + subgroup + item sections ────────────
 
-function FormulaSelector({ formula, allSections, onChange }: { formula: FormulaOp; allSections: POSection[]; onChange: (f: FormulaOp) => void }) {
+function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: {
+  label: string;
+  selectedIds: string[];
+  signs?: Record<string, 1 | -1>;
+  rows: PORow[];
+  onChange: (ids: string[]) => void;
+  onSignChange?: (signs: Record<string, 1 | -1>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const count = selectedIds.length;
+
+  // Build structure: group → subgroups → items
+  type SubEntry = { row: PORow; items: PORow[] };
+  type GroupEntry = { row: PORow; subs: SubEntry[]; directItems: PORow[] };
+  const structure: GroupEntry[] = [];
+  const topItems: PORow[] = [];
+  let curGroup: GroupEntry | null = null;
+  let curSub: SubEntry | null = null;
+
+  for (const row of rows) {
+    if (row.type === "group") {
+      curGroup = { row, subs: [], directItems: [] };
+      curSub = null;
+      structure.push(curGroup);
+    } else if (row.type === "subgroup") {
+      curSub = { row, items: [] };
+      if (curGroup) curGroup.subs.push(curSub);
+    } else if (row.type === "item" || row.type === "charge" || row.type === "payment") {
+      if (curSub) curSub.items.push(row);
+      else if (curGroup) curGroup.directItems.push(row);
+      else topItems.push(row);
+    } else if (row.type === "formula" || row.type === "subtotal") {
+      const calcRow = { ...row };
+      if (curSub) curSub.items.push(calcRow);
+      else if (curGroup) curGroup.directItems.push(calcRow);
+      else topItems.push(calcRow);
+    }
+    // Note: group and subgroup with values are rendered separately in the JSX
+  }
+
+  const getLabel = (r: PORow) => r.type === "subtotal" || r.type === "formula"
+    ? (r.label || "(formula)")
+    : `${r.no ? r.no + ". " : ""}${r.description || "(item)"}`;
+
+  const renderItem = (r: PORow, indent: string) => {
+    const isSelected = selectedIds.includes(r.id);
+    const sign = signs?.[r.id] ?? 1;
+    const label = getLabel(r);
+    const isCalc = r.type === "subtotal" || r.type === "formula";
+    return (
+      <div key={r.id} className={`flex items-center gap-1.5 ${indent} pr-2 py-0.5 hover:bg-gray-50 rounded`}>
+        <Checkbox checked={isSelected} onCheckedChange={(v) => toggleIds([r.id], !!v)} />
+        <span
+          className={`flex-1 min-w-0 text-[11px] cursor-pointer ${isCalc ? "italic text-gray-500" : "text-gray-600"}`}
+          title={label}
+          onClick={() => toggleIds([r.id], !isSelected)}
+        >
+          <span className="block truncate">{label}</span>
+        </span>
+        {isCalc && r._total != null && (
+          <span className={`text-[10px] shrink-0 ${r._total < 0 ? "text-red-500" : "text-gray-400"}`}>{fmtRp(r._total)}</span>
+        )}
+        {onSignChange && (
+          <div className="flex items-center gap-0.5 shrink-0" title={sign === 1 ? "Penambahan" : "Pengurangan"}>
+            <Switch
+              checked={sign === -1}
+              onCheckedChange={(v) => onSignChange({ ...(signs ?? {}), [r.id]: v ? -1 : 1 })}
+              className="scale-75"
+            />
+            <span className={`text-[9px] font-bold w-3 ${sign === -1 ? "text-red-500" : "text-green-600"}`}>{sign === -1 ? "−" : "+"}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const toggleIds = (ids: string[], checked: boolean) => {
+    const next = checked ? [...new Set([...selectedIds, ...ids])] : selectedIds.filter((id) => !ids.includes(id));
+    onChange(next);
+  };
+  const allSel = (ids: string[]) => ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+  const someSel = (ids: string[]) => ids.some((id) => selectedIds.includes(id));
+
   return (
-    <div className="flex items-center gap-1 flex-wrap">
-      <select
-        className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5"
-        value={formula.kind}
-        onChange={(e) => {
-          const kind = e.target.value as FormulaOp["kind"];
-          if (kind === "sum") onChange({ kind: "sum" });
-          else if (kind === "diff") onChange({ kind: "diff", a: allSections[0]?.id ?? "", b: allSections[1]?.id ?? "" });
-          else if (kind === "sum_sections") onChange({ kind: "sum_sections", ids: [] });
-          else if (kind === "percent") onChange({ kind: "percent", value: 0, of: allSections[0]?.id ?? "" });
-          else if (kind === "negate") onChange({ kind: "negate" });
-        }}
-      >
-        <option value="sum">SUM (section ini)</option>
-        <option value="diff">SELISIH (A - B)</option>
-        <option value="sum_sections">SUM (sections)</option>
-        <option value="percent">PERSEN (%)</option>
-        <option value="negate">NEGATE (-)</option>
-      </select>
-
-      {formula.kind === "diff" && (
+    <div className="relative inline-block">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="text-[10px] bg-white border border-gray-200 rounded px-1.5 py-0.5 hover:bg-gray-50 whitespace-nowrap">
+        {label} {count > 0 ? `${count} dipilih` : "Pilih..."}
+      </button>
+      {open && (
         <>
-          <SectionPicker label="A" value={formula.a} sections={allSections} onChange={(a) => onChange({ ...formula, a })} />
-          <span className="text-[10px]">−</span>
-          <SectionPicker label="B" value={formula.b} sections={allSections} onChange={(b) => onChange({ ...formula, b })} />
-        </>
-      )}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 bottom-full mb-1 left-0 bg-white border border-gray-200 rounded-lg shadow-xl min-w-[240px] max-w-[300px] flex flex-col" style={{ maxHeight: 300 }}>
+            {/* Sticky header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-white rounded-t-lg shrink-0">
+              <span className="text-[10px] font-semibold text-gray-600">Pilih item {count > 0 ? `(${count})` : ""}</span>
+              <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-xs leading-none">✕</button>
+            </div>
 
-      {formula.kind === "sum_sections" && (
-        <div className="flex flex-wrap gap-1">
-          {allSections.map((s) => (
-            <label key={s.id} className="flex items-center gap-0.5 text-[10px]">
-              <input
-                type="checkbox"
-                className="h-2.5 w-2.5"
-                checked={formula.ids.includes(s.id)}
-                onChange={(e) => {
-                  const ids = e.target.checked ? [...formula.ids, s.id] : formula.ids.filter((i) => i !== s.id);
-                  onChange({ ...formula, ids });
-                }}
-              />
-              {s.name.slice(0, 15)}
-            </label>
-          ))}
-        </div>
-      )}
+            {/* Scrollable list */}
+            <div className="overflow-y-auto flex-1 p-1.5">
+              {structure.length === 0 && topItems.length === 0 && (
+                <p className="text-[10px] text-gray-400 italic px-2 py-1">Belum ada item</p>
+              )}
 
-      {formula.kind === "percent" && (
-        <>
-          <input
-            type="number"
-            className="w-10 text-[10px] border border-gray-200 rounded px-1 py-0.5 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            value={formula.value}
-            onChange={(e) => onChange({ ...formula, value: Number(e.target.value) || 0 })}
-          />
-          <span className="text-[10px]">% of</span>
-          <SectionPicker label="" value={formula.of} sections={allSections} onChange={(of) => onChange({ ...formula, of })} />
+              {structure.map(({ row: g, subs, directItems }) => (
+                <div key={g.id} className="mb-1">
+                  {/* Group itself selectable if has value */}
+                  {(g._total || g.grandTotal || g.price) && renderItem({ ...g, description: g.label }, "px-2")}
+                  {subs.map(({ row: sg, items }) => {
+                    const sgIds = [sg.id, ...items.map((r) => r.id)];
+                    return (
+                      <div key={sg.id}>
+                        <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-gray-50 rounded text-[11px] font-semibold text-gray-700 bg-gray-50">
+                          <Checkbox checked={allSel(sgIds)} indeterminate={!allSel(sgIds) && someSel(sgIds)} onCheckedChange={(v) => toggleIds(sgIds, !!v)} />
+                          <span className="truncate">{sg.label || "(sub-group)"}</span>
+                        </label>
+                        {items.map((r) => renderItem(r, "pl-5"))}
+                      </div>
+                    );
+                  })}
+                  {directItems.map((r) => renderItem(r, "px-2"))}
+                </div>
+              ))}
+
+              {topItems.map((r) => renderItem(r, "px-2"))}
+            </div>
+
+            {/* Sticky footer */}
+            <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-white rounded-b-lg shrink-0">
+              <button type="button" onClick={() => onChange([])} className="text-[10px] text-gray-400 hover:text-red-500">Reset</button>
+              <button type="button" onClick={() => setOpen(false)} className="text-[10px] bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-700">Selesai</button>
+            </div>
+          </div>
         </>
       )}
     </div>
-  );
-}
-
-function SectionPicker({ label, value, sections, onChange }: { label: string; value: string; sections: POSection[]; onChange: (id: string) => void }) {
-  return (
-    <select
-      className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 max-w-[100px]"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{label || "Pilih"}</option>
-      {sections.map((s) => (
-        <option key={s.id} value={s.id}>{s.name.slice(0, 20)}</option>
-      ))}
-    </select>
   );
 }

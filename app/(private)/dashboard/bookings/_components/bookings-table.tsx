@@ -11,12 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Phone, KeyRound, Printer, CircleFadingPlus, FileUp, ListChecks } from "lucide-react";
+import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Phone, KeyRound, Printer, CircleFadingPlus, FileUp, ListChecks, Palette } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useApproveBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
 import { generateAgreementToken } from "@/actions/client-agreement";
+import { approveCategoryPO } from "@/actions/catering-approval";
 import { BookingDrawer } from "./booking-drawer";
 import { UploadDocumentModal } from "./UploadDocumentModal";
 import { EditTopDrawer } from "./EditTopDrawer";
@@ -25,6 +26,7 @@ import { BookingDetailModal } from "./booking-detail-modal";
 import { EditBookingDrawer } from "./EditBookingDrawer";
 import { SetVendorDrawer } from "./set-vendor-drawer";
 import { CateringSelectionDrawer } from "./catering-selection-drawer";
+import { DecorationSelectionDrawer } from "./decoration-selection-drawer";
 import { Drawer } from "@/components/shared/drawer";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
 
@@ -101,9 +103,15 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [transferSalesId, setTransferSalesId] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
+  const [vendorApproveModal, setVendorApproveModal] = useState<{ open: boolean; bookingId: string; role: "finance" | "dirops" | "oprations"; roleLabel: string; categoryType: "catering" | "decoration" }>({ open: false, bookingId: "", role: "finance", roleLabel: "", categoryType: "catering" });
+  const [hasVendorSigned, setHasVendorSigned] = useState(false);
+  const [isApprovingVendor, setIsApprovingVendor] = useState(false);
+  const sigVendorRef = useRef<SignatureCanvas>(null);
+  const [approvalCache, setApprovalCache] = useState<Record<string, Record<string, unknown>>>({});
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
   const [vendorTarget, setVendorTarget] = useState<BookingListItem | null>(null);
   const [cateringTarget, setCateringTarget] = useState<string | null>(null);
+  const [decorationTarget, setDecorationTarget] = useState<string | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
 
   const filtered = bookings.filter((b: BookingListItem) => {
@@ -330,40 +338,58 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           </TooltipProvider>
                           )}
 
-                          {/* Catering dropdown — only for Confirmed bookings */}
+                          {/* Catering + Decoration — only for Confirmed bookings */}
                           {booking.bookingStatus === "Confirmed" && (
-                            <TooltipProvider delay={200}>
-                              <Tooltip>
-                                <TooltipTrigger render={<span />}>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                        <CircleFadingPlus className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                      <DropdownMenuItem className="cursor-pointer" onClick={() => setCateringTarget(booking.id)}>
-                                        <Pencil className="mr-2 h-4 w-4" /> Edit Catering
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      {can("booking", "approve_finance") && (
-                                      <DropdownMenuItem className="cursor-pointer" disabled>
-                                        Approve Finance
-                                      </DropdownMenuItem>
-                                      )}
-                                      {can("booking", "approve_manager") && (
-                                      <DropdownMenuItem className="cursor-pointer" disabled>
-                                        Approve Direktur Ops
-                                      </DropdownMenuItem>
-                                      )}
+                            <>
+                              {/* Catering */}
+                              <TooltipProvider delay={200}>
+                                <Tooltip>
+                                  <TooltipTrigger render={<span />}>
+                                    <DropdownMenu onOpenChange={(open) => {
+                                      if (open) fetch(`/api/bookings/${booking.id}/catering-approval?category=catering`).then((r) => r.json()).then((d) => setApprovalCache((p) => ({ ...p, [`${booking.id}_catering`]: d }))).catch(() => {});
+                                    }}>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                          <CircleFadingPlus className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenuItem className="cursor-pointer" onClick={() => setCateringTarget(booking.id)}>
+                                          <Pencil className="mr-2 h-4 w-4" /> Edit Catering
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        {can("booking", "approve_finance") && (
+                                        <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.finance}
+                                          onClick={() => !approvalCache[`${booking.id}_catering`]?.finance && setVendorApproveModal({ open: true, bookingId: booking.id, role: "finance", roleLabel: "Finance", categoryType: "catering" })}>
+                                          {approvalCache[`${booking.id}_catering`]?.finance ? "Finance Approved ✓" : "Approve Finance"}
+                                        </DropdownMenuItem>
+                                        )}
+                                        {can("booking", "approve_manager") && (
+                                        <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.dirops}
+                                          onClick={() => !approvalCache[`${booking.id}_catering`]?.dirops && setVendorApproveModal({ open: true, bookingId: booking.id, role: "dirops", roleLabel: "Direktur Ops", categoryType: "catering" })}>
+                                          {approvalCache[`${booking.id}_catering`]?.dirops ? "Direktur Ops Approved ✓" : "Approve Direktur Ops"}
+                                        </DropdownMenuItem>
+                                        )}
                                       {can("booking", "approve_oprations") && (
-                                      <DropdownMenuItem className="cursor-pointer" disabled>
-                                        Approve Oprations
+                                      <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.oprations}
+                                        onClick={() => !approvalCache[`${booking.id}_catering`]?.oprations && setVendorApproveModal({ open: true, bookingId: booking.id, role: "oprations", roleLabel: "Oprations", categoryType: "catering" })}>
+                                        {approvalCache[`${booking.id}_catering`]?.oprations ? "Oprations Approved ✓" : "Approve Oprations"}
                                       </DropdownMenuItem>
                                       )}
                                       {(can("booking", "approve_finance") || can("booking", "approve_manager") || can("booking", "approve_oprations")) && <DropdownMenuSeparator />}
                                       {can("booking", "print") && (
-                                      <DropdownMenuItem className="cursor-pointer" disabled>
+                                      <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                                        const t = toast.loading("Membuat PDF Catering...");
+                                        try {
+                                          const res = await fetch("/api/render-catering-po", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId: booking.id }) });
+                                          if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed"); }
+                                          const blob = await res.blob();
+                                          const url = URL.createObjectURL(blob);
+                                          toast.success("PDF siap!", { id: t });
+                                          window.open(url, "_blank");
+                                          setTimeout(() => URL.revokeObjectURL(url), 10000);
+                                        } catch (e) { toast.error(e instanceof Error ? e.message : "Gagal membuat PDF", { id: t }); }
+                                      }}>
                                         <Printer className="mr-2 h-4 w-4" /> Cetak PO Catering
                                       </DropdownMenuItem>
                                       )}
@@ -373,6 +399,19 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 <TooltipContent side="top"><p className="text-xs">Catering PO</p></TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
+
+                              {/* Decoration */}
+                              <TooltipProvider delay={200}>
+                                <Tooltip>
+                                  <TooltipTrigger render={<span />}>
+                                    <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setDecorationTarget(booking.id); }}>
+                                      <Palette className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top"><p className="text-xs">Dekorasi PO</p></TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </>
                           )}
 
                           {/* More actions dropdown */}
@@ -788,6 +827,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <CateringDrawerWrapper bookingId={cateringTarget} onClose={() => setCateringTarget(null)} onUpdated={() => refetch()} />
       )}
 
+      {decorationTarget && (
+        <DecorationDrawerWrapper bookingId={decorationTarget} onClose={() => setDecorationTarget(null)} onUpdated={() => refetch()} />
+      )}
+
       {/* Upload Document Modal */}
       {uploadDocTarget && (
         <UploadDocumentModal
@@ -813,6 +856,65 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           }))}
           packagePrice={Number(topTarget.snapPackageVariant?.price ?? 0)}
         />
+      )}
+
+      {/* Vendor PO Approval Modal */}
+      {vendorApproveModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold">Approve {vendorApproveModal.roleLabel} — {vendorApproveModal.categoryType === "catering" ? "Catering" : "Dekorasi"}</h2>
+                <p className="text-sm text-gray-500 mt-1">Tanda tangan {vendorApproveModal.roleLabel} diperlukan.</p>
+              </div>
+              <button type="button" className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+                onClick={() => { setVendorApproveModal((p) => ({ ...p, open: false })); sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>
+                <X className="h-5 w-5 text-red-500" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-700 mb-2 block">Tanda Tangan {vendorApproveModal.roleLabel}</label>
+              <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50">
+                <SignatureCanvas ref={sigVendorRef} penColor="black"
+                  canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
+                  onEnd={() => setHasVendorSigned(true)} />
+              </div>
+              <button type="button" className="mt-1.5 text-xs text-red-500 hover:text-red-700 underline"
+                onClick={() => { sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>Hapus tanda tangan</button>
+            </div>
+            <div className="flex gap-3">
+              <button type="button" disabled={!hasVendorSigned || isApprovingVendor}
+                className="flex-1 bg-black text-white rounded-lg py-2 font-medium text-sm hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={async () => {
+                  if (!hasVendorSigned || sigVendorRef.current?.isEmpty()) { toast.error("Tanda tangan harus diisi"); return; }
+                  setIsApprovingVendor(true);
+                  const sig = sigVendorRef.current!.toDataURL("image/png");
+                  const r = await approveCategoryPO(vendorApproveModal.bookingId, vendorApproveModal.categoryType, vendorApproveModal.role, sig);
+                  if (!r.success) toast.error(r.error);
+                  else {
+                    toast.success(`Approval ${vendorApproveModal.roleLabel} berhasil`);
+                    setApprovalCache((p) => ({
+                      ...p,
+                      [`${vendorApproveModal.bookingId}_${vendorApproveModal.categoryType}`]: {
+                        ...(p[`${vendorApproveModal.bookingId}_${vendorApproveModal.categoryType}`] ?? {}),
+                        [vendorApproveModal.role]: { signature: sig },
+                      },
+                    }));
+                  }
+                  setIsApprovingVendor(false);
+                  setVendorApproveModal((p) => ({ ...p, open: false }));
+                  sigVendorRef.current?.clear();
+                  setHasVendorSigned(false);
+                }}>
+                {isApprovingVendor ? "Menyetujui..." : "Setujui"}
+              </button>
+              <button type="button" className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition"
+                onClick={() => { setVendorApproveModal((p) => ({ ...p, open: false })); sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
@@ -840,4 +942,28 @@ function CateringDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: s
   }
 
   return <CateringSelectionDrawer isOpen onClose={onClose} booking={booking} onUpdated={onUpdated} />;
+}
+
+function DecorationDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: string; onClose: () => void; onUpdated: () => void }) {
+  const [booking, setBooking] = useState<import("@/lib/queries/bookings").BookingDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetch(`/api/bookings/${bookingId}`)
+      .then((r) => r.json())
+      .then(setBooking)
+      .catch(() => setBooking(null))
+      .finally(() => setLoading(false));
+  }, [bookingId]);
+
+  if (loading || !booking) {
+    return (
+      <Drawer isOpen onClose={onClose} title="Dekorasi">
+        <div className="flex items-center justify-center h-full"><p className="text-sm text-gray-400">Memuat...</p></div>
+      </Drawer>
+    );
+  }
+
+  return <DecorationSelectionDrawer isOpen onClose={onClose} booking={booking} onUpdated={onUpdated} />;
 }
