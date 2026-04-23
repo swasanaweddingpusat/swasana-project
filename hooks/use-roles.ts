@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { RolesQueryResult } from "@/lib/queries/roles";
-import { createRole, updateRole, deleteRole, updateRolePermissions, reorderRoles, createPermission, deletePermission, deleteModulePermissions, updatePermission, reorderModules } from "@/actions/role";
+import { createRole, updateRole, deleteRole, updateRolePermissions, reorderRoles, createPermission, deletePermission, deleteModulePermissions, updatePermission, reorderModules, renameModule } from "@/actions/role";
 import { fetchRoles } from "@/services/role-service";
 
 export function useRoles(initialData?: RolesQueryResult) {
@@ -117,6 +117,15 @@ export function useReorderModules() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (moduleOrder: string[]) => reorderModules(moduleOrder),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["roles"] }),
+  });
+}
+
+export function useRenameModule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ oldModule, newModule }: { oldModule: string; newModule: string }) =>
+      renameModule(oldModule, newModule),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["roles"] }),
   });
 }

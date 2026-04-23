@@ -76,6 +76,13 @@ export async function createBooking(data: unknown) {
     const yy = now.getFullYear().toString().slice(-2);
     const poNumber = `${(bookingCount + 1).toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/W/${dd}-${mm}-${yy}`;
 
+    const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
+    const generateInvoiceNumber = (termIndex: number) => {
+      const bookingYear = new Date(input.bookingDate).getFullYear().toString().slice(-2);
+      const monthRoman = ROMAN[now.getMonth()];
+      return `${(termIndex).toString().padStart(2, "0")}${(bookingCount + 1).toString().padStart(2, "0")}${bookingYear}/INV/${venue.code}/${monthRoman}/${now.getFullYear()}`;
+    };
+
     // Build array-form transaction (Neon HTTP compatible)
     const ops: Promise<unknown>[] = [
       db.booking.create({
@@ -162,8 +169,8 @@ export async function createBooking(data: unknown) {
 
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
-        ...input.termOfPayments.map((t) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: BigInt(t.amount), dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } })
+        ...input.termOfPayments.map((t, i) =>
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: BigInt(t.amount), dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: generateInvoiceNumber(i + 1) } })
         )
       );
     }

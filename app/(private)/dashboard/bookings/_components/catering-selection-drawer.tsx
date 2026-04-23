@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Save, Package, Printer } from "lucide-react";
 import { toast } from "sonner";
 import type { BookingDetail } from "@/lib/queries/bookings";
-import { POCateringEditor } from "./po-catering-editor";
-import type { POCateringData } from "@/types/po-catering";
-import { createDefaultPOCatering } from "@/types/po-catering";
+import { POCateringEditorV2 } from "./po-catering-editor";
+import type { POCateringV2 } from "@/types/po-catering";
+import { createDefaultPOV2 } from "@/types/po-catering";
 
 interface Props {
   isOpen: boolean;
@@ -20,8 +20,9 @@ interface Props {
 
 export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, isViewOnly }: Props) {
   const [loading, setLoading] = React.useState(false);
-  const [poData, setPOData] = React.useState<POCateringData>(createDefaultPOCatering());
+  const [poData, setPOData] = React.useState<POCateringV2>(createDefaultPOV2());
   const skipReloadRef = React.useRef(false);
+  const isLoadedRef = React.useRef(false);
 
   const cateringItem = React.useMemo(() => {
     return booking.snapVendorItems.find((v) => v.vendorCategoryName.toLowerCase().includes("catering") && !v.isAddons);
@@ -30,30 +31,52 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
   const cateringVendorName = cateringItem?.vendorName ?? "Catering";
   const draftKey = `po-catering-draft:${booking.id}`;
 
+  // Reset loaded flag when drawer closes
+  React.useEffect(() => {
+    if (!isOpen) { isLoadedRef.current = false; }
+  }, [isOpen]);
+
   // Load PO data — draft first, then DB, then default
   React.useEffect(() => {
     if (!isOpen || !cateringItem) return;
     if (skipReloadRef.current) { skipReloadRef.current = false; return; }
 
-    // Try draft from localStorage
+    // 1. Try localStorage draft
     try {
       const draft = localStorage.getItem(draftKey);
-      if (draft) { setPOData(JSON.parse(draft)); return; }
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed?.version === 2) { setPOData(parsed); isLoadedRef.current = true; return; }
+      }
     } catch {}
 
-    // Fall back to DB data
+    // 2. Try DB data
     const raw = cateringItem.paketData;
-    if (raw && typeof raw === "object" && (raw as Record<string, unknown>).version === 1) {
-      setPOData(raw as unknown as POCateringData);
-    } else {
-      setPOData(createDefaultPOCatering());
+    if (raw && typeof raw === "object" && (raw as Record<string, unknown>).version === 2) {
+      const dbData = raw as unknown as POCateringV2;
+      setPOData(dbData);
+      try { localStorage.setItem(draftKey, JSON.stringify(dbData)); } catch {}
+      isLoadedRef.current = true;
+      return;
     }
+
+    // 3. Create default
+    const defaultData = createDefaultPOV2();
+    setPOData(defaultData);
+    try { localStorage.setItem(draftKey, JSON.stringify(defaultData)); } catch {}
+    isLoadedRef.current = true;
   }, [isOpen, cateringItem]);
 
-  // Auto-save to localStorage on every change
+  // Auto-save to localStorage — only after initial load, with small delay
+  const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
-    if (!isOpen) return;
-    try { localStorage.setItem(draftKey, JSON.stringify(poData)); } catch {}
+    if (!isOpen || !isLoadedRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (!isLoadedRef.current) return;
+      try { localStorage.setItem(draftKey, JSON.stringify(poData)); } catch {}
+    }, 300);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [poData, isOpen, draftKey]);
 
   const handleSubmit = async () => {
@@ -85,8 +108,35 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
     );
   }
 
+  const [isPrinting, setIsPrinting] = React.useState(false);
+
+  const handlePrintPO = async () => {
+    setIsPrinting(true);
+    const t = toast.loading("Sedang membuat PDF...");
+    try {
+      const res = await fetch("/api/render-catering-po", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: booking.id }),
+      });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      toast.success("PDF siap!", { id: t });
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch {
+      toast.error("Gagal membuat PDF", { id: t });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const headerActions = (
     <div className="flex items-center gap-2">
+      <Button size="sm" variant="outline" onClick={handlePrintPO} disabled={isPrinting} className="h-8 px-3 text-xs cursor-pointer">
+        <Printer className="h-3.5 w-3.5 mr-1" />{isPrinting ? "..." : "Cetak PO"}
+      </Button>
       {!isViewOnly && (
         <Button size="sm" onClick={handleSubmit} disabled={loading} className="h-8 px-3 text-xs cursor-pointer">
           <Save className="h-3.5 w-3.5 mr-1" />{loading ? "Menyimpan..." : "Simpan"}
@@ -97,9 +147,9 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} title={`Catering — ${booking.snapCustomer?.name ?? "-"} • ${cateringVendorName}`} maxWidth="sm:max-w-full" headerActions={headerActions}>
-      <div className="flex flex-col h-full overflow-hidden">
-        <div className="overflow-y-auto overflow-x-hidden p-4">
-          <POCateringEditor data={poData} onChange={setPOData} readOnly={isViewOnly} />
+      <div className="flex flex-col h-full">
+        <div className="p-4">
+          <POCateringEditorV2 data={poData} onChange={setPOData} readOnly={isViewOnly} />
         </div>
       </div>
     </Drawer>

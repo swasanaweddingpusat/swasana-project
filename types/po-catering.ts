@@ -1,220 +1,178 @@
-// ─── PO Catering Table Types ─────────────────────────────────────────────────
-// Flat table structure — each section has rows that can be items, headers,
-// subtotals, or formula rows. Stored as JSON in DB.
+// ─── PO Catering v2 — Flat row structure ─────────────────────────────────────
 
-export type RowType = "header" | "item" | "subtotal" | "formula";
-
-export type FormulaOp =
-  | { kind: "sum" }                                    // sum all items in this section
-  | { kind: "diff"; a: string; b: string }             // sectionId_a total - sectionId_b total
-  | { kind: "sum_sections"; ids: string[] }             // sum totals of multiple sections
-  | { kind: "percent"; value: number; of: string }      // percentage of a section total
-  | { kind: "negate" };                                  // negate: -(qty × price)
+export type RowType = "group" | "subgroup" | "item" | "subtotal" | "formula" | "blank" | "charge" | "payment";
 
 export interface PORow {
   id: string;
   type: RowType;
   // header
   label?: string;
-  colSpan?: number;
+  grandTotal?: number;
+  depth?: number;           // nesting level for subgroup (0 = top, 1 = nested, 2 = deeper)          // manual grand total shown on header row (optional)
   // item
   no?: number;
   description?: string;
   qty?: number;
   unit?: string;
   price?: number;
-  negative?: boolean;       // charges render as negative
-  // subtotal / formula
-  formula?: FormulaOp;
-  // computed (not stored, calculated at runtime)
+  negative?: boolean;
+  // subtotal: sum selected row IDs
+  sumRowIds?: string[];
+  sumRowSigns?: Record<string, 1 | -1>;  // per-row sign: 1 = add, -1 = subtract
+  // formula: diff or sum or percent
+  formulaKind?: "diff" | "sum" | "percent";
+  formulaAIds?: string[];       // row IDs for group A (or sum list, or percent base)
+  formulaBIds?: string[];       // row IDs for group B (diff only)
+  percentValue?: number;        // percentage value (for percent kind)
+  // charge-specific
+  chargeType?: "qty" | "flat" | "percent";  // per_qty = qty×price, flat = manual, percent = % dari base
+  // computed at runtime
   _total?: number;
-  _grandTotal?: number;
 }
 
-export interface POSection {
-  id: string;
-  name: string;
-  grandTotalLabel?: string;
-  grandTotalFormula?: FormulaOp;
-  manualGrandTotal?: number;       // user can override with manual value
+export interface POCateringV2 {
+  version: 2;
   rows: PORow[];
 }
 
-export interface POCateringData {
-  version: 1;
-  sections: POSection[];
-}
+// ─── Calculation ─────────────────────────────────────────────────────────────
 
-// ─── Calculation Engine ──────────────────────────────────────────────────────
-
-/** Calculate total for a single item row */
-function calcItemTotal(row: PORow): number {
+function rowTotal(row: PORow): number {
   const t = (row.qty ?? 0) * (row.price ?? 0);
   return row.negative ? -t : t;
 }
 
-/** Sum all item rows in a section */
-function sumSection(section: POSection): number {
-  return section.rows
-    .filter((r) => r.type === "item")
-    .reduce((sum, r) => sum + calcItemTotal(r), 0);
+function sumIds(rows: PORow[], ids: string[]): number {
+  return rows
+    .filter((r) => ids.includes(r.id))
+    .reduce((s, r) => {
+      if (r.type === "item" || r.type === "subgroup" || r.type === "group" || r.type === "charge" || r.type === "payment") return s + (r._total ?? rowTotal(r));
+      if (r.type === "formula" || r.type === "subtotal") return s + (r._total ?? 0);
+      return s;
+    }, 0);
 }
 
-/** Get section by id */
-function getSection(sections: POSection[], id: string): POSection | undefined {
-  return sections.find((s) => s.id === id);
-}
-
-/** Evaluate a formula */
-function evalFormula(formula: FormulaOp, currentSection: POSection, allSections: POSection[]): number {
-  switch (formula.kind) {
-    case "sum":
-      return sumSection(currentSection);
-    case "diff": {
-      const a = getSection(allSections, formula.a);
-      const b = getSection(allSections, formula.b);
-      return (a ? sumSection(a) : 0) - (b ? sumSection(b) : 0);
+export function calculateV2(data: POCateringV2): POCateringV2 {
+  // Multi-pass with mutable updates so formulas referencing earlier formulas resolve
+  let rows = [...data.rows];
+  for (let pass = 0; pass < 3; pass++) {
+    // Step A: items/subgroups/groups
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.type === "item" || row.type === "subgroup" || row.type === "group" || row.type === "charge" || row.type === "payment") {
+        const t = row.price ? (row.qty ?? 0) * (row.price ?? 0) : (row.grandTotal ?? 0);
+        if (row.type === "charge" || row.type === "payment") {
+          const ct = row.chargeType ?? "flat";
+          let t = 0;
+          if (ct === "qty") t = (row.qty ?? 0) * (row.price ?? 0);
+          else if (ct === "flat") t = row.grandTotal ?? row.price ?? 0;
+          else if (ct === "percent") {
+            const base = sumIds(rows, row.formulaAIds ?? []);
+            t = Math.round(base * ((row.percentValue ?? 0) / 100));
+          }
+          rows[i] = { ...row, _total: -Math.abs(t) };
+        } else {
+          rows[i] = { ...row, _total: row.negative ? -t : t };
+        }
+      }
     }
-    case "sum_sections":
-      return formula.ids.reduce((sum, id) => {
-        const s = getSection(allSections, id);
-        return sum + (s ? sumSection(s) : 0);
-      }, 0);
-    case "percent": {
-      const s = getSection(allSections, formula.of);
-      return Math.round((s ? sumSection(s) : 0) * (formula.value / 100));
+    // Step B: formulas (sequential so earlier formulas are available to later ones)
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.type === "formula") {
+        if (row.formulaKind === "diff") {
+          const a = sumIds(rows, row.formulaAIds ?? []);
+          const b = sumIds(rows, row.formulaBIds ?? []);
+          rows[i] = { ...row, _total: a - b };
+        } else if (row.formulaKind === "sum") {
+          const total = sumIds(rows, row.formulaAIds ?? []);
+          rows[i] = { ...row, _total: row.negative ? -total : total };
+        } else if (row.formulaKind === "percent") {
+          const base = sumIds(rows, row.formulaAIds ?? []);
+          const total = Math.round(base * ((row.percentValue ?? 0) / 100));
+          rows[i] = { ...row, _total: row.negative ? -total : total };
+        }
+      }
     }
-    case "negate":
-      return -sumSection(currentSection);
-    default:
-      return 0;
+    // Step C: subtotals (sequential, after all formulas resolved)
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.type === "subtotal") {
+        const signs = row.sumRowSigns ?? {};
+        const total = rows
+          .filter((r) => (row.sumRowIds ?? []).includes(r.id))
+          .reduce((s, r) => {
+            const val = r._total ?? 0;
+            const sign = signs[r.id] ?? 1;
+            return s + val * sign;
+          }, 0);
+        rows[i] = { ...row, _total: total };
+      }
+    }
   }
-}
-
-/** Calculate all rows in all sections — mutates _total and _grandTotal */
-export function calculateAll(data: POCateringData): POCateringData {
-  const sections = data.sections.map((section) => {
-    const rows = section.rows.map((row): PORow => {
-      if (row.type === "item") {
-        return { ...row, _total: calcItemTotal(row) };
-      }
-      if ((row.type === "subtotal" || row.type === "formula") && row.formula) {
-        return { ...row, _total: evalFormula(row.formula, section, data.sections) };
-      }
-      return row;
-    });
-
-    // Calculate section grand total — manual overrides formula
-    let _grandTotal: number | undefined;
-    if (section.manualGrandTotal != null && section.manualGrandTotal !== 0) {
-      _grandTotal = section.manualGrandTotal;
-    } else if (section.grandTotalFormula) {
-      _grandTotal = evalFormula(section.grandTotalFormula, { ...section, rows }, data.sections);
-    }
-
-    return { ...section, rows, _grandTotal: _grandTotal as number | undefined };
-  });
-
-  return { ...data, sections };
+  return { ...data, rows };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function createId(): string {
-  return crypto.randomUUID();
-}
+export function createId(): string { return crypto.randomUUID(); }
 
-export function createItemRow(overrides?: Partial<PORow>): PORow {
-  return { id: createId(), type: "item", description: "", qty: 0, unit: "Porsi", price: 0, ...overrides };
-}
-
-export function createHeaderRow(label: string): PORow {
-  return { id: createId(), type: "header", label, colSpan: 6 };
-}
-
-export function createSubtotalRow(label = "Jumlah"): PORow {
-  return { id: createId(), type: "subtotal", label, formula: { kind: "sum" } };
-}
-
-export function createSection(name: string, rows: PORow[] = []): POSection {
-  return { id: createId(), name, rows };
-}
-
-/** Create a default PO Catering template matching the screenshot structure */
-export function createDefaultPOCatering(): POCateringData {
-  const paketId = createId();
-  const buffetAddId = createId();
-  const gubukPaketId = createId();
-  const gubukPilihanId = createId();
-  const chargesId = createId();
+export function createDefaultPOV2(): POCateringV2 {
+  const b1 = createId(), b2 = createId(), b3 = createId(), b4 = createId(), b5 = createId(), b6 = createId();
+  const g1 = createId(), g2 = createId(), g3 = createId(), g4 = createId(), g5 = createId(), g6 = createId();
+  const p1 = createId(), p2 = createId(), p3 = createId(), p4 = createId(), p5 = createId(), p6 = createId();
 
   return {
-    version: 1,
-    sections: [
-      {
-        id: paketId,
-        name: "PEMBAYARAN PAKET TERDIRI DARI :",
-        grandTotalLabel: "Grand Total",
-        manualGrandTotal: 45000000,
-        rows: [
-          createHeaderRow("Kriteria Menu Gubuk dari Paket"),
-          createItemRow({ no: 1, description: "Buffet", qty: 600, unit: "Porsi" }),
-          createHeaderRow("Gubukan"),
-          createItemRow({ no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi" }),
-          createItemRow({ no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi" }),
-          createItemRow({ no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi" }),
-          createItemRow({ no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi" }),
-          createItemRow({ no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor" }),
-          createItemRow({ no: 6, description: "Ice Cream", qty: 200, unit: "Porsi" }),
-        ],
-      },
-      {
-        id: buffetAddId,
-        name: "Additional Pagi",
-        rows: [
-          createItemRow({ no: 1, description: "Buffet", qty: 600, unit: "Porsi", price: 85000 }),
-          { id: createId(), type: "subtotal", label: "Total Penambahan Buffet", formula: { kind: "sum" } },
-        ],
-      },
-      {
-        id: gubukPaketId,
-        name: "Additional Gubukan",
-        rows: [
-          createHeaderRow("Kriteria Menu Gubuk dari Paket"),
-          createItemRow({ no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi", price: 37000 }),
-          createItemRow({ no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi", price: 30000 }),
-          createItemRow({ no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 }),
-          createItemRow({ no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 }),
-          createItemRow({ no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 }),
-          createItemRow({ no: 6, description: "Ice Cream", qty: 200, unit: "Porsi", price: 15000 }),
-          createSubtotalRow("Jumlah"),
-        ],
-      },
-      {
-        id: gubukPilihanId,
-        name: "Kriteria Menu Gubuk yang dipilih",
-        rows: [
-          createItemRow({ no: 1, description: "Zuppa Soup", qty: 200, unit: "Porsi", price: 34000 }),
-          createItemRow({ no: 2, description: "Bakwan Malang", qty: 220, unit: "Porsi", price: 30000 }),
-          createItemRow({ no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 }),
-          createItemRow({ no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 }),
-          createItemRow({ no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 }),
-          createItemRow({ no: 6, description: "Ice Cream", qty: 200, unit: "Porsi", price: 15000 }),
-          createSubtotalRow("Jumlah"),
-          { id: createId(), type: "formula", label: "Selisih Gubukan", formula: { kind: "diff", a: gubukPilihanId, b: gubukPaketId } },
-          { id: createId(), type: "formula", label: "Total Penambahan Buffet + Gubukan", formula: { kind: "sum_sections", ids: [buffetAddId, gubukPilihanId] } },
-        ],
-      },
-      {
-        id: chargesId,
-        name: "PEMBAYARAN SWASANA BRIN THAMRIN KE CATERING",
-        rows: [
-          createItemRow({ no: 1, description: "Charge Gubukan 15%", negative: true }),
-          createItemRow({ no: 2, description: "Charge Buffet", qty: 600, unit: "Porsi", price: 30000, negative: true }),
-          createItemRow({ no: 3, description: "Sewa Meja", unit: "Pcs", negative: true }),
-          createItemRow({ no: 4, description: "Galon", qty: 7, unit: "Pcs", price: 17000, negative: true }),
-        ],
-      },
+    version: 2,
+    rows: [
+      // Section 1 — Paket
+      { id: createId(), type: "subgroup", label: "PEMBAYARAN PAKET TERDIRI DARI :", grandTotal: 45000000 },
+      { id: createId(), type: "subgroup", label: "Kriteria Menu Gubuk dari Paket" },
+      { id: b1, type: "item", no: 1, description: "Buffet", qty: 600, unit: "Porsi" },
+      { id: createId(), type: "subgroup", label: "Gubukan" },
+      { id: b2, type: "item", no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi" },
+      { id: b3, type: "item", no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi" },
+      { id: b4, type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi" },
+      { id: b5, type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi" },
+      { id: b6, type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor" },
+
+      // Section 2 — Additional Buffet
+      { id: createId(), type: "group", label: "Additional Pagi" },
+      { id: createId(), type: "subgroup", label: "Buffet" },
+      { id: g1, type: "item", no: 1, description: "Buffet", qty: 600, unit: "Porsi", price: 85000 },
+      { id: createId(), type: "subtotal", label: "Total Penambahan Buffet", sumRowIds: [g1] },
+
+      // Section 3 — Additional Gubukan (paket)
+      { id: createId(), type: "group", label: "Additional Gubukan" },
+      { id: createId(), type: "subgroup", label: "Kriteria Menu Gubuk dari Paket" },
+      { id: g2, type: "item", no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi", price: 37000 },
+      { id: g3, type: "item", no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi", price: 30000 },
+      { id: g4, type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 },
+      { id: g5, type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 },
+      { id: g6, type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 },
+      { id: createId(), type: "subtotal", label: "Jumlah", sumRowIds: [g2, g3, g4, g5, g6] },
+
+      // Section 4 — Menu Pilihan
+      { id: createId(), type: "subgroup", label: "Kriteria Menu Gubuk yang dipilih" },
+      { id: p1, type: "item", no: 1, description: "Zuppa Soup", qty: 200, unit: "Porsi", price: 34000 },
+      { id: p2, type: "item", no: 2, description: "Bakwan Malang", qty: 220, unit: "Porsi", price: 30000 },
+      { id: p3, type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 },
+      { id: p4, type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 },
+      { id: p5, type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 },
+      { id: p6, type: "item", no: 6, description: "Ice Cream", qty: 200, unit: "Porsi", price: 15000 },
+      { id: createId(), type: "subtotal", label: "Jumlah", sumRowIds: [p1, p2, p3, p4, p5, p6] },
+      { id: createId(), type: "formula", label: "Selisih Gubukan", formulaKind: "diff", formulaAIds: [p1, p2, p3, p4, p5, p6], formulaBIds: [g2, g3, g4, g5, g6] },
+      { id: createId(), type: "formula", label: "Total Penambahan Buffet + Gubukan", formulaKind: "sum", formulaAIds: [g1, p1, p2, p3, p4, p5, p6] },
+
+      // Total Makanan
+      { id: createId(), type: "subgroup", label: "TOTAL PEMBAYARAN MAKANAN", grandTotal: 96000000 },
+
+      // Charges
+      { id: createId(), type: "subgroup", label: "PEMBAYARAN SWASANA BRIN THAMRIN KE CATERING" },
+      { id: createId(), type: "item", no: 1, description: "Charge Gubukan 15%", negative: true },
+      { id: createId(), type: "item", no: 2, description: "Charge Buffet", qty: 600, unit: "Porsi", price: 30000, negative: true },
+      { id: createId(), type: "item", no: 3, description: "Sewa Meja", unit: "Pcs", negative: true },
+      { id: createId(), type: "item", no: 4, description: "Galon", qty: 7, unit: "Pcs", price: 17000, negative: true },
     ],
   };
 }

@@ -127,6 +127,25 @@ export async function reorderRoles(orderedIds: string[]) {
   }
 }
 
+export async function renameModule(oldModule: string, newModule: string) {
+  const permResult = await requirePermission({ module: "role_permission", action: "edit" });
+  if (permResult.error) return { error: permResult.error };
+
+  const trimmed = newModule.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!trimmed) return { error: "Nama module tidak boleh kosong" };
+
+  try {
+    const perms = await db.permission.findMany({ where: { module: oldModule }, select: { id: true } });
+    for (const p of perms) {
+      await db.permission.update({ where: { id: p.id }, data: { module: trimmed } });
+    }
+    revalidateTag("roles", "max");
+    return { success: true, newModule: trimmed };
+  } catch {
+    return { error: "Gagal rename module" };
+  }
+}
+
 export async function updatePermission(permissionId: string, action: string) {
   const permResult = await requirePermission({ module: "role_permission", action: "edit" });
   if (permResult.error) return { error: permResult.error };

@@ -8,7 +8,7 @@ import {
   useRoles, useCreateRole, useUpdateRole, useDeleteRole,
   useUpdateRolePermissions, useReorderRoles, useCreatePermission,
   useDeletePermission, useDeleteModulePermissions, useUpdatePermission,
-  useReorderModules,
+  useReorderModules, useRenameModule,
 } from "@/hooks/use-roles";
 import type { RolesQueryResult, RoleQueryItem } from "@/lib/queries/roles";
 import type { PermissionsQueryResult, PermissionQueryItem } from "@/lib/queries/permissions";
@@ -77,6 +77,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
   const deleteModuleMut = useDeleteModulePermissions();
   const updatePermMut = useUpdatePermission();
   const reorderModulesMut = useReorderModules();
+  const renameModuleMut = useRenameModule();
 
   // Local module order (for optimistic drag & drop)
   const [localModuleOrder, setLocalModuleOrder] = useState<string[]>([]);
@@ -326,6 +327,16 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
         return next;
       });
     } else toast.error(res.error ?? "Failed");
+  };
+
+  const handleRenameModule = async () => {
+    if (!editModuleKey || !editModuleName.trim()) return;
+    const res = await renameModuleMut.mutateAsync({ oldModule: editModuleKey, newModule: editModuleName.trim() });
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success(`Module renamed to "${res.newModule}"`);
+    setPermissions((prev) => prev.map((p) => p.module === editModuleKey ? { ...p, module: res.newModule! } : p));
+    setEditModuleKey(null);
+    setEditModuleName("");
   };
 
   const handleDeleteModule = async (mod: string) => {
@@ -635,6 +646,30 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
             <Button variant="destructive" className="flex-1" onClick={handleDeleteRole} disabled={deleteRoleMut.isPending}>
               {deleteRoleMut.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />} Hapus
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Module Label Dialog */}
+      <Dialog open={!!editModuleKey} onOpenChange={(o) => { if (!o) { setEditModuleKey(null); setEditModuleName(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogTitle>Rename Module</DialogTitle>
+          <div className="space-y-3 pt-2">
+            <div>
+              <Label className="text-xs text-gray-500">Module saat ini</Label>
+              <p className="text-sm font-medium text-gray-900">{editModuleKey}</p>
+            </div>
+            <div>
+              <Label>Nama baru</Label>
+              <Input value={editModuleName} onChange={(e) => setEditModuleName(e.target.value)} placeholder="Nama module baru..."
+                onKeyDown={(e) => { if (e.key === "Enter" && editModuleName.trim()) handleRenameModule(); }} autoFocus />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setEditModuleKey(null); setEditModuleName(""); }}>Batal</Button>
+              <Button size="sm" disabled={!editModuleName.trim() || renameModuleMut.isPending} onClick={handleRenameModule}>
+                {renameModuleMut.isPending ? "Menyimpan..." : "Simpan"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
