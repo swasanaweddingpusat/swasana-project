@@ -6,16 +6,17 @@ import { ROUTE_META } from "@/lib/route-meta";
 import { useSidebar } from "../sidebar/sidebar-context";
 import { UserMenu } from "./user-menu";
 import { NotificationBell } from "./notification-bell";
+import { useHeaderAction } from "@/components/providers/header-action-provider";
 
 export function Header() {
   const pathname = usePathname();
   const meta = ROUTE_META[pathname];
   const { toggleMobile } = useSidebar();
+  const { action } = useHeaderAction();
 
   return (
     <header className="bg-white border-b border-gray-200 px-4 lg:px-6 h-16 flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3 min-w-0">
-        {/* Hamburger — mobile only */}
         <button
           onClick={toggleMobile}
           className="lg:hidden p-1.5 -ml-1 rounded-md hover:bg-gray-100 transition-colors"
@@ -37,6 +38,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
+        {action}
         <NotificationBell />
         <UserMenu />
       </div>

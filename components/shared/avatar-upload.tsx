@@ -6,7 +6,8 @@ import type { Area } from "react-easy-crop";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Camera, Upload, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Camera, ImageUp, Pencil, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
 import { getCroppedBlob, compressToWebP } from "@/lib/image-utils";
@@ -100,29 +101,29 @@ export function AvatarUpload({ currentUrl, name, userId, onUploaded }: AvatarUpl
 
   return (
     <>
-      <div className="relative group w-fit">
+      <div className="relative w-fit">
         <Avatar className="h-20 w-20">
           <AvatarImage src={preview ?? ""} />
           <AvatarFallback className="text-xl">{getInitials(name)}</AvatarFallback>
         </Avatar>
 
-        {/* Overlay buttons */}
-        <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-1.5 bg-white/20 hover:bg-white/40 rounded-full cursor-pointer transition-colors"
-            title="Upload file"
-          >
-            <Upload className="h-3.5 w-3.5 text-white" />
-          </button>
-          <button
-            onClick={() => cameraInputRef.current?.click()}
-            className="p-1.5 bg-white/20 hover:bg-white/40 rounded-full cursor-pointer transition-colors"
-            title="Ambil foto"
-          >
-            <Camera className="h-3.5 w-3.5 text-white" />
-          </button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full shadow cursor-pointer hover:bg-primary/90 transition-colors">
+              <Pencil className="h-3 w-3" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="bottom" className="w-44">
+            <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+              <ImageUp className="h-4 w-4 mr-2" />
+              Pilih dari Galeri
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => cameraInputRef.current?.click()}>
+              <Camera className="h-4 w-4 mr-2" />
+              Ambil Selfie
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Hidden inputs */}

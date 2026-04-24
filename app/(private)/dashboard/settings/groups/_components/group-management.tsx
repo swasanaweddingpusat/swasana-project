@@ -163,7 +163,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
     <div className="px-6 pb-4 w-full">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Group Management</h1>
+          <h1 className="text-base font-bold text-[#1D1D1D]">Group Management</h1>
           <p className="text-sm text-gray-500 mt-0.5">Kelola grup data untuk scope akses user</p>
         </div>
         <Button onClick={openCreate} className="bg-gray-900 text-white hover:bg-gray-800 cursor-pointer">

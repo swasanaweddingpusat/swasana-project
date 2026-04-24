@@ -400,7 +400,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                 selectedRoleId === role.id ? "bg-gray-100" : "hover:bg-gray-50"
                               } ${snapshot.isDragging ? "shadow-md bg-white" : ""}`}
                             >
-                              <div {...drag.dragHandleProps} className="cursor-grab opacity-0 group-hover:opacity-40 hover:!opacity-70 shrink-0">
+                              <div {...drag.dragHandleProps} className="cursor-grab opacity-0 group-hover:opacity-40 hover:opacity-70! shrink-0">
                                 <GripVertical className="h-4 w-4 text-gray-400" />
                               </div>
                               <button onClick={() => { setSelectedRoleId(role.id); setIsDirty(false); }} className="flex items-center gap-2 flex-1 min-w-0 text-left">

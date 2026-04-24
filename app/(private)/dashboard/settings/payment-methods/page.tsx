@@ -140,12 +140,10 @@ export default function PaymentMethodsPage() {
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 pb-4">
+          <div className="flex justify-between items-center px-6 pb-4 border-b">
             <div className="flex items-center gap-2">
               <span className="text-base font-semibold text-gray-900">Payment Methods</span>
-              <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border rounded-full">
-                {filtered.length} methods
-              </span>
+              <span className="text-sm text-muted-foreground">({filtered.length})</span>
             </div>
             <div className="flex items-center gap-3">
               <SearchableSelect
@@ -154,7 +152,7 @@ export default function PaymentMethodsPage() {
                 onChange={(v) => { setVenueFilter(v); setCurrentPage(1); }}
                 placeholder="All Venues"
                 searchPlaceholder="Cari venue..."
-                className="w-[200px]"
+                className="w-50"
               />
               {(can("payment_methods", "create") || isAdmin) && (
                 <Button onClick={openAdd}>

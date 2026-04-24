@@ -51,14 +51,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
-    if (agreement.status !== "Viewed") {
+    const currentStatus = agreement.status as string;
+
+    if (currentStatus !== "Viewed" && currentStatus !== "Signed") {
       await db.clientAgreement.update({
         where: { token },
         data: { status: "Viewed", viewedAt: new Date() },
       });
     }
 
-    return NextResponse.json({ booking: agreement.booking });
+    return new Response(JSON.stringify({
+      booking: agreement.booking,
+      alreadySigned: currentStatus === "Signed",
+    }, (_key, val) => typeof val === "bigint" ? val.toString() : val), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (e) {
     console.error("[ca-validate]", e);
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });

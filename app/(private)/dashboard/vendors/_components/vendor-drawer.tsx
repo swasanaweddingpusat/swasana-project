@@ -101,7 +101,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
       isOpen={isOpen}
       onClose={onClose}
       title={`${isEdit ? "Edit" : "Tambah"} Vendor${selectedCatName ? ` - ${selectedCatName}` : ""}`}
-      maxWidth="sm:max-w-sm"
+      maxWidth="max-w-full"
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-4">
@@ -125,7 +125,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
 
           <div className="space-y-1">
             <Label className="text-sm font-medium">Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi vendor..." className="min-h-[60px] text-sm resize-y" />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi vendor..." className="min-h-15 text-sm resize-y" />
           </div>
 
           <div className="space-y-1">
@@ -135,7 +135,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
 
           <div className="space-y-1">
             <Label className="text-sm font-medium">Alamat</Label>
-            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Alamat vendor..." className="min-h-[60px] text-sm resize-y" />
+            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Alamat vendor..." className="min-h-15 text-sm resize-y" />
           </div>
 
           <div className="space-y-2">

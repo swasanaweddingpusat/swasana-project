@@ -73,18 +73,18 @@ function Calendar({
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "relative rounded-(--cell-radius)",
+          "relative rounded-(--cell-radius) bg-background",
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(
-          "absolute inset-0 bg-popover opacity-0",
+          "absolute inset-0 opacity-0 cursor-pointer",
           defaultClassNames.dropdown
         ),
         caption_label: cn(
-          "font-medium select-none",
+          "font-medium select-none text-foreground",
           captionLayout === "label"
             ? "text-sm"
-            : "flex items-center gap-1 rounded-(--cell-radius) text-sm [&>svg]:size-3.5 [&>svg]:text-muted-foreground",
+            : "flex items-center gap-1 rounded-(--cell-radius) text-sm px-1.5 py-0.5 hover:bg-accent [&>svg]:size-3.5 [&>svg]:text-muted-foreground",
           defaultClassNames.caption_label
         ),
         table: "w-full border-collapse",

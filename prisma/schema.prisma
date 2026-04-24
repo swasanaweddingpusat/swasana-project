@@ -68,20 +68,30 @@ model Profile {
   id          String  @id @default(uuid())
   userId      String  @unique
   email       String  @unique
+  employeeId  String? @unique
   fullName    String?
   nickName    String?
+  gender      Gender?
   phoneNumber String?
   avatarUrl   String?
 
   // Personal data
+  nik              String?
+  kkNumber         String?
   placeOfBirth     String?
   dateOfBirth      DateTime?
   ktpAddress       String?
   currentAddress   String?
+  city             String?
   motherName       String?
   maritalStatus    String?
   numberOfChildren Int?
   lastEducation    String?
+
+  // Payroll
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountHolder String?
 
   // Emergency contact
   emergencyContactName  String?
@@ -115,8 +125,10 @@ model Profile {
   bookingsAsSales         Booking[]                @relation("BookingSales")
   bookingsAsManager       Booking[]                @relation("BookingManager")
   uploadedDocuments       BookingDocument[]
-  createdRefunds          BookingRefund[]
+  createdSettlements      BookingPaymentSettlement[]
   notifications           Notification[]
+  bookingComments         BookingComment[]
+  bookingCommentReads     BookingCommentRead[]
 
   @@index([roleId])
   @@index([dataScope])
@@ -329,7 +341,7 @@ model PaymentMethod {
   vendor            Vendor?         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   venue             Venue?          @relation(fields: [venueId], references: [id], onDelete: Cascade)
   bookings          Booking[]
-  bookingRefunds    BookingRefund[]
+  settlements       BookingPaymentSettlement[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -441,12 +453,26 @@ model SourceOfInformation {
   @@map("source_of_informations")
 }
 
+model EducationLevel {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("education_levels")
+}
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum ProfileStatus {
   active
   inactive
   suspended
+}
+
+enum Gender {
+  MALE
+  FEMALE
 }
 
 enum DataScope {
@@ -515,8 +541,11 @@ model Booking {
   // Live relations
   termOfPayments   TermOfPayment[]
   bookingDocuments BookingDocument[]
-  bookingRefunds   BookingRefund[]
+  bookingRefunds   BookingPaymentSettlement[] @relation("SourceSettlements")
+  targetSettlements BookingPaymentSettlement[] @relation("TargetSettlements")
   clientAgreement  ClientAgreement?
+  bookingComments  BookingComment[]
+  commentReads     BookingCommentRead[]
 
   @@index([salesId])
   @@index([managerId])
@@ -615,40 +644,49 @@ model SnapPackageVendorItem {
 }
 
 model SnapBonus {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   bookingId        String
   vendorId         String
   vendorCategoryId String
   vendorName       String
   description      String?
-  qty              Int      @default(1)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  qty              Int          @default(1)
+  nominal          BigInt       @default(0)
+  orderStatusId    String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  booking          Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  orderStatus      OrderStatus? @relation(fields: [orderStatusId], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
+  @@index([orderStatusId])
   @@map("snap_bonuses")
 }
 
 model SnapVendorItem {
-  id                 String   @id @default(uuid())
+  id                 String        @id @default(uuid())
   bookingId          String
   vendorCategoryId   String
   vendorCategoryName String
   vendorId           String
   vendorName         String
   itemName           String
-  itemPrice          BigInt   @default(0)
-  qty                Int      @default(1)
+  itemPrice          BigInt        @default(0)
+  qty                Int           @default(1)
   unit               String?
-  totalPrice         BigInt   @default(0)
-  isAddons           Boolean  @default(false)
+  totalPrice         BigInt        @default(0)
+  isAddons           Boolean       @default(false)
   paketData          Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  booking            Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  description        String?
+  orderStatusId      String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  booking            Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  orderStatus        OrderStatus?  @relation(fields: [orderStatusId], references: [id], onDelete: SetNull)
+  settlements        BookingPaymentSettlement[]
 
   @@index([bookingId])
+  @@index([orderStatusId])
   @@map("snap_vendor_items")
 }
 
@@ -692,26 +730,65 @@ model BookingDocument {
   @@map("booking_documents")
 }
 
-model BookingRefund {
-  id               String              @id @default(uuid())
-  bookingId        String
-  vendorId         String
-  vendorCategoryId String
-  amount           BigInt              @default(0)
-  paymentMethodId  String
-  status           BookingRefundStatus @default(pending)
-  notes            String?
-  refundDate       DateTime?
-  createdBy        String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  paymentMethod    PaymentMethod       @relation(fields: [paymentMethodId], references: [id])
-  creator          Profile?            @relation(fields: [createdBy], references: [id])
+model BookingComment {
+  id        String   @id @default(uuid())
+  bookingId String
+  authorId  String
+  content   String
+  mentions  String[]
+  replyToId String?
+  edited    Boolean  @default(false)
+  attachments Json   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author  Profile         @relation(fields: [authorId], references: [id])
+  replyTo BookingComment? @relation("CommentReplies", fields: [replyToId], references: [id])
+  replies BookingComment[] @relation("CommentReplies")
 
   @@index([bookingId])
+  @@index([authorId])
+  @@map("booking_comments")
+}
+
+model BookingCommentRead {
+  profileId  String
+  bookingId  String
+  lastReadAt DateTime @default(now()) @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, bookingId])
+  @@map("booking_comment_reads")
+}
+
+model BookingPaymentSettlement {
+  id               String           @id @default(uuid())
+  bookingId        String
+  snapVendorItemId String
+  type             SettlementType
+  amount           BigInt
+  paymentMethodId  String?
+  targetBookingId  String?
+  status           SettlementStatus @default(pending)
+  notes            String?
+  settledAt        DateTime?
+  createdBy        String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  booking          Booking          @relation("SourceSettlements", fields: [bookingId], references: [id], onDelete: Cascade)
+  targetBooking    Booking?         @relation("TargetSettlements", fields: [targetBookingId], references: [id])
+  snapVendorItem   SnapVendorItem   @relation(fields: [snapVendorItemId], references: [id], onDelete: Cascade)
+  paymentMethod    PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
+  creator          Profile?         @relation(fields: [createdBy], references: [id])
+
+  @@index([bookingId])
+  @@index([snapVendorItemId])
   @@index([status])
-  @@map("booking_refunds")
+  @@map("booking_payment_settlements")
 }
 
 // ─── Booking Enums ───────────────────────────────────────────────────────────
@@ -746,7 +823,12 @@ enum TermOfPaymentStatus {
   partial
 }
 
-enum BookingRefundStatus {
+enum SettlementType {
+  refund
+  allocation
+}
+
+enum SettlementStatus {
   pending
   completed
   cancelled
@@ -757,6 +839,19 @@ enum AgreementStatus {
   Sent
   Viewed
   Signed
+}
+
+// ─── Order Status ─────────────────────────────────────────────────────────────
+
+model OrderStatus {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  snapVendorItems SnapVendorItem[]
+  snapBonuses     SnapBonus[]
+
+  @@map("order_statuses")
 }
 
 // ─── Client Agreement ─────────────────────────────────────────────────────────

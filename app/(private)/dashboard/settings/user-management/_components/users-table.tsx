@@ -214,26 +214,26 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                 placeholder="Cari nama, email..."
                 value={searchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="h-8 text-xs border-gray-200 bg-[#F0F2F5] flex-1 lg:flex-none lg:w-[260px]"
+                className="h-8 text-xs border-gray-200 bg-[#F0F2F5] flex-1 lg:flex-none lg:w-65"
               />
 
               {/* Desktop filters */}
               <div className="hidden lg:flex items-center gap-2">
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="h-8 w-[110px] text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Role" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-27.5 text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Role" /></SelectTrigger>
                   <SelectContent>
                     {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-8 w-[110px] text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-27.5 text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="verified">Verified</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={venueFilter} onValueChange={setVenueFilter}>
-                  <SelectTrigger className="h-8 w-[140px] text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Venue" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-35 text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Venue" /></SelectTrigger>
                   <SelectContent>
                     {allVenues.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                   </SelectContent>
@@ -319,7 +319,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                         <TableCell className="px-2 py-2.5">
                           {venues.length > 0 ? (
                             <div className="flex items-center gap-1 flex-wrap">
-                              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 truncate max-w-[120px]">
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 truncate max-w-30">
                                 {venues[0].venue.name}
                               </span>
                               {venues.length > 1 && (

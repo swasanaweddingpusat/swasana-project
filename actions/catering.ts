@@ -6,6 +6,48 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { headers } from "next/headers";
 import type { CateringPaketData } from "@/types/catering";
+import type { POCateringV2, PORow } from "@/types/po-catering";
+import type { SettlementType } from "@prisma/client";
+
+async function syncSettlementRows(
+  snapVendorItemId: string,
+  bookingId: string,
+  rows: PORow[],
+  createdBy: string
+) {
+  const settlementRows = rows.filter((r) => r.type === "settlement" && r.grandTotal && r.grandTotal > 0 && !r.isIncoming);
+  const rowIds = settlementRows.map((r) => r.id);
+
+  // Delete settlements no longer in rows
+  await db.bookingPaymentSettlement.deleteMany({
+    where: { snapVendorItemId, id: { notIn: rowIds }, status: { not: "completed" } },
+  });
+
+  // Upsert each settlement row
+  for (const row of settlementRows) {
+    await db.bookingPaymentSettlement.upsert({
+      where: { id: row.id },
+      create: {
+        id: row.id,
+        bookingId,
+        snapVendorItemId,
+        type: (row.settlementType ?? "refund") as SettlementType,
+        amount: BigInt(row.grandTotal!),
+        paymentMethodId: row.settlementPaymentMethodId ?? null,
+        targetBookingId: row.targetBookingId ?? null,
+        notes: row.settlementNotes ?? row.description ?? null,
+        createdBy,
+      },
+      update: {
+        type: (row.settlementType ?? "refund") as SettlementType,
+        amount: BigInt(row.grandTotal!),
+        paymentMethodId: row.settlementPaymentMethodId ?? null,
+        targetBookingId: row.targetBookingId ?? null,
+        notes: row.settlementNotes ?? row.description ?? null,
+      },
+    });
+  }
+}
 
 export async function saveCateringPaketData(
   snapVendorItemId: string,
@@ -67,10 +109,14 @@ export async function savePOCateringData(
     });
     if (!item) return { success: false, error: "Vendor item tidak ditemukan." };
 
+    const typed = poData as POCateringV2;
+
     await db.snapVendorItem.update({
       where: { id: snapVendorItemId },
       data: { paketData: JSON.parse(JSON.stringify(poData)) },
     });
+
+    await syncSettlementRows(snapVendorItemId, item.bookingId, typed.rows ?? [], session.user.id);
 
     await logAudit({
       userId: session.user.id,

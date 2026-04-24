@@ -12,18 +12,18 @@ import { useState, useTransition } from "react";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
 
 const statusColor: Record<string, string> = {
-  Pending: "bg-yellow-100 text-yellow-800",
-  Uploaded: "bg-blue-100 text-blue-800",
-  Confirmed: "bg-green-100 text-green-800",
-  Rejected: "bg-red-100 text-red-800",
-  Canceled: "bg-gray-100 text-gray-700",
-  Lost: "bg-purple-100 text-purple-800",
+  Pending: "bg-muted text-muted-foreground",
+  Uploaded: "bg-secondary text-secondary-foreground",
+  Confirmed: "bg-primary text-primary-foreground",
+  Rejected: "bg-destructive/10 text-destructive",
+  Canceled: "bg-secondary text-muted-foreground",
+  Lost: "bg-secondary text-muted-foreground",
 };
 
 const paymentStatusColor: Record<string, string> = {
-  unpaid: "bg-red-100 text-red-800",
-  paid: "bg-green-100 text-green-800",
-  partial: "bg-yellow-100 text-yellow-800",
+  unpaid: "bg-destructive/10 text-destructive",
+  paid: "bg-primary text-primary-foreground",
+  partial: "bg-muted text-muted-foreground",
 };
 
 function fmtPrice(value: bigint | number | null | undefined) {
@@ -34,8 +34,8 @@ function fmtPrice(value: bigint | number | null | undefined) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-2 py-1">
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-sm font-medium text-right">{value || "-"}</span>
+      <span className="text-muted-foreground text-sm shrink-0">{label}</span>
+      <span className="text-sm font-medium text-right break-words min-w-0">{value || "-"}</span>
     </div>
   );
 }
@@ -63,7 +63,7 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
             <span className="text-sm text-muted-foreground">{format(booking.bookingDate, "dd MMM yyyy")}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => toast("Coming soon")}>
             <FileText className="h-4 w-4 mr-1" /> Client Agreement
           </Button>
@@ -282,7 +282,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
   };
 
   const signatures = booking.signatures as Record<string, unknown> | null;
-  const clientSig = signatures?.client as Record<string, unknown> | null;
+  const clientSig = signatures?.client as { signature?: string } | null;
 
   return (
     <Card className="md:col-span-2">
@@ -340,7 +340,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground font-medium">Tanda Tangan Client</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={clientSig.signature as string} alt="Client signature" className="h-20 border rounded bg-white p-1" />
+                <img src={clientSig.signature} alt="Client signature" className="h-20 border rounded bg-white p-1" />
               </div>
             )}
 

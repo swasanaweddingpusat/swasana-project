@@ -9,6 +9,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useVendorCategories, useDeleteVendor } from "@/hooks/use-vendors";
 import type { VendorCategoryItem } from "@/lib/queries/vendors";
@@ -96,7 +97,7 @@ export function VendorsTable() {
         <CardContent className="p-0">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 pb-4 gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-base font-semibold text-gray-900">List Vendors</span>
+              <span className="text-base font-bold text-[#1D1D1D]">List Vendors</span>
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border rounded-full">
                 {filtered.length} vendor
               </span>
@@ -108,7 +109,7 @@ export function VendorsTable() {
                 onChange={(v) => { setCategoryFilter(v); setCurrentPage(1); }}
                 placeholder="All Categories"
                 searchPlaceholder="Cari kategori..."
-                className="w-[200px]"
+                className="w-50"
               />
               <SearchBar placeholder="Search vendors..." />
             </div>
@@ -138,7 +139,7 @@ export function VendorsTable() {
                     <TableCell className="font-medium">{vendor.name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{vendor.description || "-"}</TableCell>
                     <TableCell className="text-xs">{vendor.phone || "-"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{vendor.address || "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-45 truncate">{vendor.address || "-"}</TableCell>
                     <TableCell>
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{vendor.categoryName}</span>
                     </TableCell>
@@ -162,14 +163,35 @@ export function VendorsTable() {
             </TableBody>
           </Table>
 
-          {totalPages > 1 && (
+          {filtered.length > 0 && (
             <div className="flex justify-between items-center px-6 py-3 border-t">
-              <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Previous
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="text-xs h-8">
+                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Previous
               </Button>
-              <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                Next <ArrowRight className="w-4 h-4 ml-1" />
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const pages: (number | string)[] = [];
+                  if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
+                  else {
+                    pages.push(1);
+                    if (currentPage > 3) pages.push("...");
+                    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+                    if (currentPage < totalPages - 2) pages.push("...");
+                    pages.push(totalPages);
+                  }
+                  return pages.map((page, idx) =>
+                    typeof page === "string" ? (
+                      <span key={`e-${idx}`} className="px-2 py-1 text-xs text-gray-400">...</span>
+                    ) : (
+                      <button key={page} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", currentPage === page ? "bg-[#eeeeee] text-gray-900" : "text-gray-700 hover:bg-[#eeeeee]")} onClick={() => setCurrentPage(page)}>
+                        {page}
+                      </button>
+                    )
+                  );
+                })()}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="text-xs h-8">
+                Next <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
               </Button>
             </div>
           )}

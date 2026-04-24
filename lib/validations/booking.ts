@@ -23,6 +23,7 @@ export const bookingSchema = z.object({
     vendorName: z.string().min(1),
     description: z.string().optional().nullable(),
     qty: z.coerce.number().int().min(1).default(1),
+    nominal: z.coerce.number().min(0).default(0),
   })).optional().default([]),
   termOfPayments: z.array(z.object({
     name: z.string().min(1),
@@ -64,6 +65,14 @@ export const editBookingSchema = z.object({
   contactEmail: z.string().optional().default(""),
   contactNik: z.string().optional().default(""),
   contactKtpAddress: z.string().optional().default(""),
+  bonuses: z.array(z.object({
+    vendorId: z.string().min(1),
+    vendorCategoryId: z.string().min(1),
+    vendorName: z.string().min(1),
+    description: z.string().optional().nullable(),
+    qty: z.coerce.number().int().min(1).default(1),
+    nominal: z.coerce.number().min(0).default(0),
+  })).optional().default([]),
 });
 
 export const approveBookingSchema = z.object({

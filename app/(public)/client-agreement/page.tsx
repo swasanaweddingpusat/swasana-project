@@ -37,6 +37,7 @@ function ClientAgreementContent() {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "Gagal validasi"); return; }
       setBooking(data.booking);
+      if (data.alreadySigned) { setStep("done"); return; }
       const sigs = data.booking?.signatures as Record<string, unknown> | null;
       if (sigs?.client) { setStep("done"); return; }
       setStep("sign");
@@ -119,13 +120,13 @@ function ClientAgreementContent() {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="sticky top-0 z-10 bg-white border-b px-4 py-3">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <h1 className="text-sm font-semibold">Client Agreement</h1>
             <p className="text-xs text-gray-500">{(customer?.name as string) ?? "Client"}</p>
           </div>
         </div>
-        <div className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-8">
-          <div className="bg-white rounded-lg border p-4 space-y-2 text-sm text-gray-700">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4 pb-12">
+          <div className="bg-white rounded-lg border p-4 sm:p-6 space-y-2 text-sm text-gray-700">
             <p className="font-medium">Informasi Booking</p>
             <p>Nama: <span className="font-medium">{(customer?.name as string) ?? "-"}</span></p>
             <p>No. PO: <span className="font-medium">{(booking?.poNumber as string) ?? "-"}</span></p>
@@ -133,7 +134,7 @@ function ClientAgreementContent() {
           {/* PDF Preview */}
           <div className="bg-white rounded-lg border overflow-hidden">
             <div className="px-4 py-2.5 border-b bg-gray-50">
-              <p className="text-sm font-medium text-gray-700">Preview Purchase Order</p>
+              <p className="text-sm font-medium text-gray-700">Preview Agreement</p>
             </div>
             {loadingPdf ? (
               <div className="flex items-center justify-center py-16">
@@ -141,7 +142,7 @@ function ClientAgreementContent() {
                 <span className="text-sm text-gray-500">Memuat dokumen...</span>
               </div>
             ) : pdfUrl ? (
-              <iframe src={pdfUrl} className="w-full border-0" style={{ height: "65vh", minHeight: "400px" }} title="PO Preview" />
+              <iframe src={pdfUrl} className="w-full border-0" style={{ height: "75vh", minHeight: "500px" }} title="PO Preview" />
             ) : (
               <div className="flex items-center justify-center py-16">
                 <p className="text-sm text-gray-400">Preview tidak tersedia</p>
@@ -152,7 +153,7 @@ function ClientAgreementContent() {
             <div className="px-4 py-2.5 border-b bg-gray-50">
               <p className="text-sm font-medium">Tanda Tangan Client</p>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="p-4 sm:p-6 space-y-3">
               <p className="text-xs text-gray-500">Dengan menandatangani, Anda menyetujui seluruh isi dokumen.</p>
               <div className="border-2 border-dashed border-gray-300 rounded-lg overflow-hidden bg-white">
                 <SignatureCanvas
@@ -178,7 +179,7 @@ function ClientAgreementContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border p-6 space-y-5">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-sm border p-6 sm:p-8 space-y-5">
         <div className="text-center space-y-1">
           <FileText className="h-10 w-10 text-gray-700 mx-auto" />
           <h1 className="text-lg font-semibold">Client Agreement</h1>

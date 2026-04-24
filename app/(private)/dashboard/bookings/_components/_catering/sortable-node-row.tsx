@@ -43,7 +43,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           {!isViewOnly ? (
             <>
-              <Input value={node.title} onChange={(e) => onUpdateNode(sectionId, node.id, "title", e.target.value)} placeholder="Nama item" className="h-6 text-xs flex-1 min-w-[80px]" />
+              <Input value={node.title} onChange={(e) => onUpdateNode(sectionId, node.id, "title", e.target.value)} placeholder="Nama item" className="h-6 text-xs flex-1 min-w-20" />
               <Input type="number" value={node.qty ?? ""} onChange={(e) => onUpdateNode(sectionId, node.id, "qty", parseInt(e.target.value) || 0)} className="h-6 text-xs w-14 text-center" placeholder="Qty" />
               <Input value={node.unit ?? ""} onChange={(e) => onUpdateNode(sectionId, node.id, "unit", e.target.value)} placeholder="Unit" className="h-6 text-xs w-14" />
               <CurrencyInput value={node.price ?? undefined} onChange={(v) => onUpdateNode(sectionId, node.id, "price", v)} className="w-24 shrink-0" />
@@ -78,7 +78,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
         </button>
 
         {!isViewOnly ? (
-          <Input value={node.title} onChange={(e) => onUpdateNode(sectionId, node.id, "title", e.target.value)} placeholder="Nama group" className="h-6 text-xs font-semibold flex-1 min-w-[80px]" />
+          <Input value={node.title} onChange={(e) => onUpdateNode(sectionId, node.id, "title", e.target.value)} placeholder="Nama group" className="h-6 text-xs font-semibold flex-1 min-w-20" />
         ) : (
           <span className="text-xs font-semibold text-gray-900 flex-1 truncate">{node.title || "Untitled"}</span>
         )}

@@ -1,14 +1,11 @@
-import { Suspense } from "react";
-import { AuthGate } from "./_components/auth-gate";
-
 export default function PrivateLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <Suspense fallback={null}>
-      <AuthGate>{children}</AuthGate>
-    </Suspense>
-  );
+  // No auth gate here — proxy.ts handles redirect for unauthenticated users.
+  // Dashboard layout renders the shell (sidebar + header) instantly.
+  // Auth-dependent checks (mustChangePassword, suspended, etc.) are handled
+  // by AuthGate wrapping only the content area inside dashboard/layout.tsx.
+  return <>{children}</>;
 }

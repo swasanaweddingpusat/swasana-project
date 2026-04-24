@@ -9,7 +9,6 @@ export async function GET() {
 
   try {
     const result = await db.paymentMethod.findMany({
-      where: { venueId: { not: null } },
       orderBy: { createdAt: "desc" },
       include: { venue: { select: { id: true, name: true } } },
     });

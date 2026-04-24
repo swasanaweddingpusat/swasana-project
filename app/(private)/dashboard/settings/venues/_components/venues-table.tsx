@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { deleteVenue } from "@/actions/venue";
 import { VenueDrawer } from "./venue-drawer";
 import type { VenuesQueryResult, VenueQueryItem, BrandsQueryResult } from "@/lib/queries/venues";
@@ -96,12 +95,10 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 pb-4">
+          <div className="flex justify-between items-center px-6 pb-4 border-b">
             <div className="flex items-center gap-2">
-              <span className="text-base font-semibold text-gray-900">List Venues</span>
-              <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
-                {filtered.length} venue
-              </span>
+              <span className="text-base font-bold text-[#1D1D1D]">List Venues</span>
+              <span className="text-sm text-muted-foreground">({filtered.length})</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -110,7 +107,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                   placeholder="Cari venue..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 w-[200px] h-9 text-sm"
+                  className="pl-9 w-50 h-9 text-sm"
                 />
               </div>
               {selected.size > 1 && (
@@ -125,80 +122,66 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto">
-            {filtered.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada venue."}
-              </div>
-            ) : (
-              <Table className="min-w-full text-sm">
-                <TableHeader>
-                  <TableRow className="bg-gray-50 border-b-2 border-gray-200">
-                    <TableHead className="px-4 py-3 w-10">
-                      <Checkbox
-                        checked={isAllSelected}
-                        data-indeterminate={isIndeterminate}
-                        onCheckedChange={handleSelectAll}
-                        className="cursor-pointer"
-                      />
-                    </TableHead>
-                    <TableHead className="px-2 py-3 font-semibold text-gray-700 w-10">No</TableHead>
-                    <TableHead className="px-2 py-3 font-semibold text-gray-700">Brand</TableHead>
-                    <TableHead className="px-2 py-3 font-semibold text-gray-700">Nama Venue</TableHead>
-                    <TableHead className="px-2 py-3 font-semibold text-gray-700">Kode</TableHead>
-                    <TableHead className="px-2 py-3 font-semibold text-gray-700">Kapasitas (Pax)</TableHead>
-                    <TableHead className="px-2 py-3 w-20"></TableHead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10 px-4">
+                  <Checkbox checked={isAllSelected} data-indeterminate={isIndeterminate} onCheckedChange={handleSelectAll} className="cursor-pointer" />
+                </TableHead>
+                <TableHead className="w-12">#</TableHead>
+                <TableHead>Brand</TableHead>
+                <TableHead>Nama Venue</TableHead>
+                <TableHead>Kode</TableHead>
+                <TableHead>Kapasitas (Pax)</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada venue."}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginated.map((venue, idx) => (
+                  <TableRow key={venue.id}>
+                    <TableCell className="px-4">
+                      <Checkbox checked={selected.has(venue.id)} onCheckedChange={(c) => handleSelect(venue.id, c as boolean)} className="cursor-pointer" />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                    <TableCell>{venue.brand?.name ?? "—"}</TableCell>
+                    <TableCell className="font-medium">{venue.name}</TableCell>
+                    <TableCell>{venue.code}</TableCell>
+                    <TableCell>{venue.capacity ?? "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 justify-end pr-2">
+                        <button onClick={() => handleEdit(venue)} className="p-1.5 rounded-md hover:bg-muted cursor-pointer" aria-label="Edit">
+                          <PenLine className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                        <button onClick={() => setDeleteTarget(venue)} className="p-1.5 rounded-md hover:bg-muted cursor-pointer" aria-label="Hapus">
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginated.map((venue, idx) => (
-                    <TableRow key={venue.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <TableCell className="px-4 py-3">
-                        <Checkbox
-                          checked={selected.has(venue.id)}
-                          onCheckedChange={(c) => handleSelect(venue.id, c as boolean)}
-                          className="cursor-pointer"
-                        />
-                      </TableCell>
-                      <TableCell className="px-2 py-3">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
-                      <TableCell className="px-2 py-3">{venue.brand?.name ?? "—"}</TableCell>
-                      <TableCell className="px-2 py-3 font-medium">{venue.name}</TableCell>
-                      <TableCell className="px-2 py-3">{venue.code}</TableCell>
-                      <TableCell className="px-2 py-3">{venue.capacity ?? "—"}</TableCell>
-                      <TableCell className="px-2 py-3">
-                        <div className="flex gap-1 justify-end">
-                          <button onClick={() => handleEdit(venue)} className="p-1.5 hover:bg-gray-100 rounded cursor-pointer" title="Edit">
-                            <PenLine className="w-4 h-4 text-gray-700" />
-                          </button>
-                          <button onClick={() => setDeleteTarget(venue)} className="p-1.5 hover:bg-red-50 rounded cursor-pointer" title="Hapus">
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center px-6 py-4 border-t">
-              <Button variant="outline" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-                <ArrowLeft className="w-4 h-4 mr-2" /> Previous
-              </Button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button key={page} onClick={() => setCurrentPage(page)}
-                    className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === page ? "bg-gray-200 text-gray-900" : "text-gray-700 hover:bg-gray-100")}>
-                    {page}
-                  </button>
-                ))}
+            <div className="flex items-center justify-between px-6 py-3 border-t">
+              <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </div>
-              <Button variant="outline" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-                Next <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
             </div>
           )}
         </CardContent>

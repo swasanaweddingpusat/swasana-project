@@ -37,8 +37,10 @@ function filterNavItems(items: NavItem[], can: CanFn): NavItem[] {
 }
 
 export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
-  const { can } = usePermissions();
-  const visibleItems = filterNavItems(navItems, can);
+  const { can, isLoading } = usePermissions();
+  // While permissions are loading, show all items (no filtering)
+  // Once loaded, filter based on actual permissions
+  const visibleItems = isLoading ? navItems : filterNavItems(navItems, can);
 
   return (
     <>

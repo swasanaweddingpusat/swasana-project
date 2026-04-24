@@ -55,6 +55,8 @@ export async function updatePackage(id: string, data: unknown) {
     },
   });
 
+  if (!pkg) return { success: false, error: "Package tidak ditemukan." };
+
   await logAudit({
     userId: session.user.id,
     action: "packages.update",

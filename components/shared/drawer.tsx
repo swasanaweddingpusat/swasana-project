@@ -50,8 +50,10 @@ export function Drawer({
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose?.(); }}>
       <SheetContent
         className={cn(
-          `w-full flex py-6 px-5 flex-col gap-6`,
-          maxWidth.includes("max-w-full") ? "inset-0 !max-w-none !w-full border-none" : maxWidth
+          `flex py-6 px-5 flex-col gap-6`,
+          maxWidth.includes("max-w-full")
+            ? "inset-0 max-w-none! w-full! border-none"
+            : `w-screen! ${maxWidth}`
         )}
         showCloseButton={false}
       >
@@ -63,12 +65,21 @@ export function Drawer({
             </SheetTitle>
             <div className="flex items-center gap-3">
               {steps && stepperType === "short" && (
-                <span className="text-sm text-gray-500">
-                  Step {steps} / {totalSteps}
-                </span>
+                <>
+                  <span className="text-sm text-gray-500">
+                    Step {steps} / {totalSteps}
+                  </span>
+                  <button
+                    className="p-1 rounded-full bg-red-100 hover:bg-red-200 cursor-pointer"
+                    onClick={onClose}
+                    aria-label="Close"
+                  >
+                    <X className="h-6 w-6 text-red-500" />
+                  </button>
+                </>
               )}
               {headerActions}
-              {isCloseButton && (
+              {isCloseButton && !steps && (
                 <button
                   className="p-1 rounded-full bg-red-100 hover:bg-red-200 cursor-pointer"
                   onClick={onClose}

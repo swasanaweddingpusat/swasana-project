@@ -12,10 +12,10 @@ export default function UserManagementLoading() {
           <Skeleton className="h-9 w-32" />
         </div>
         <div className="flex items-center gap-2 px-6">
-          <Skeleton className="h-9 w-[280px]" />
-          <Skeleton className="h-9 w-[120px]" />
-          <Skeleton className="h-9 w-[120px]" />
-          <Skeleton className="h-9 w-[150px]" />
+          <Skeleton className="h-9 w-70" />
+          <Skeleton className="h-9 w-30" />
+          <Skeleton className="h-9 w-30" />
+          <Skeleton className="h-9 w-37.5" />
         </div>
         <div className="px-6 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (

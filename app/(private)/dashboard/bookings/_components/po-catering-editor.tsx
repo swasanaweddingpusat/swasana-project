@@ -8,6 +8,8 @@ import { Plus, Trash2, GripVertical, ChevronRight, Calculator, Merge } from "luc
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import type { POCateringV2, PORow } from "@/types/po-catering";
 import { calculateV2, createId } from "@/types/po-catering";
 
@@ -17,20 +19,29 @@ function fmtRp(n: number): string {
   return `${prefix}Rp${new Intl.NumberFormat("id-ID").format(Math.abs(n))}`;
 }
 
+interface PaymentMethodOption {
+  id: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankRecipient: string;
+}
+
 interface Props {
   data: POCateringV2;
   onChange: (data: POCateringV2) => void;
   readOnly?: boolean;
+  paymentMethods?: PaymentMethodOption[];
+  eligibleBookings?: { id: string; label: string }[];
 }
 
-export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
+export function POCateringEditorV2({ data, onChange, readOnly, paymentMethods = [], eligibleBookings = [] }: Props) {
   const computed = useMemo(() => calculateV2(data), [data]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; rowId: string; flipUp?: boolean } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const toggleCollapse = (id: string) =>
-    setCollapsed((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+    setCollapsed((prev) => { const next = new Set(prev); if (next.has(id)) { next.delete(id); } else { next.add(id); } return next; });
 
   // Determine which rows are hidden
   const hiddenIds = useMemo(() => {
@@ -135,14 +146,14 @@ export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
             <table className="w-full border-collapse border border-gray-300 text-xs">
               <thead>
                 <tr className="bg-gray-300">
-                  {!readOnly && <th className="border border-gray-300 w-[20px]" />}
+                  {!readOnly && <th className="border border-gray-300 w-5" />}
                   <th className="border border-gray-300 px-2 py-1.5 text-left w-[3%]">NO</th>
                   <th className="border border-gray-300 px-2 py-1.5 text-left">DESCRIPTION</th>
                   <th className="border border-gray-300 px-2 py-1.5 text-right w-[8%]">JUMLAH</th>
                   <th className="border border-gray-300 px-2 py-1.5 text-center w-[6%]">UNIT</th>
                   <th className="border border-gray-300 px-2 py-1.5 text-right w-[14%]">HARGA SATUAN</th>
                   <th className="border border-gray-300 px-2 py-1.5 text-right w-[15%]">TOTAL</th>
-                  {!readOnly && <th className="border border-gray-300 w-[20px]" />}
+                  {!readOnly && <th className="border border-gray-300 w-5" />}
                 </tr>
               </thead>
               <tbody>
@@ -152,6 +163,8 @@ export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
                     row={row}
                     allRows={computed.rows}
                     readOnly={readOnly}
+                    paymentMethods={paymentMethods}
+                    eligibleBookings={eligibleBookings}
                     isCollapsed={collapsed.has(row.id)}
                     onToggleCollapse={(row.type === "subgroup" || row.type === "group") ? () => toggleCollapse(row.id) : undefined}
                     onUpdate={(patch) => updateRow(row.id, patch)}
@@ -196,6 +209,10 @@ export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
             <Calculator className="h-3 w-3" /> Payment
           </button>
           <span className="text-gray-300">|</span>
+          <button type="button" onClick={() => addRow({ id: createId(), type: "settlement", description: "", settlementType: "refund", grandTotal: 0 })} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900">
+            <Calculator className="h-3 w-3" /> Settlement
+          </button>
+          <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "charge", description: "", unit: "Porsi", chargeType: "qty" })} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
             <Calculator className="h-3 w-3" /> Charge
           </button>
@@ -210,7 +227,7 @@ export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
       {ctxMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
-          <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[170px]" style={ctxMenu.flipUp ? { bottom: window.innerHeight - ctxMenu.y, left: ctxMenu.x } : { top: ctxMenu.y, left: ctxMenu.x }}>
+          <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-42.5" style={ctxMenu.flipUp ? { bottom: window.innerHeight - ctxMenu.y, left: ctxMenu.x } : { top: ctxMenu.y, left: ctxMenu.x }}>
             <p className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wide">Tambah di bawah</p>
             {([
               { label: "Group", icon: <GripVertical className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "group" as const, label: "Group baru" }) },
@@ -222,6 +239,7 @@ export function POCateringEditorV2({ data, onChange, readOnly }: Props) {
               { label: "Formula", icon: <Calculator className="h-3 w-3" />, color: "text-orange-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "formula" as const, label: "Formula", formulaKind: "diff", formulaAIds: [], formulaBIds: [] }) },
               { label: "Charge", icon: <Calculator className="h-3 w-3" />, color: "text-red-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "charge" as const, description: "", unit: "Porsi", chargeType: "qty" }) },
               { label: "Payment", icon: <Calculator className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "payment" as const, description: "", chargeType: "flat" }) },
+              { label: "Settlement", icon: <Calculator className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "settlement" as const, description: "", settlementType: "refund", grandTotal: 0 }) },
               { label: "Blank", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
               { label: "Blank (L1)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
               { label: "Blank (L2)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 1 }) },
@@ -251,6 +269,8 @@ interface RowProps {
   row: PORow;
   allRows: PORow[];
   readOnly?: boolean;
+  paymentMethods?: PaymentMethodOption[];
+  eligibleBookings?: { id: string; label: string }[];
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onUpdate: (patch: Partial<PORow>) => void;
@@ -258,12 +278,12 @@ interface RowProps {
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, onUpdate, onRemove, onContextMenu }: RowProps) {
+function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBookings = [], isCollapsed, onToggleCollapse, onUpdate, onRemove, onContextMenu }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id, disabled: !!readOnly });
   const dragStyle = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   const dragHandle = !readOnly && (
-    <td className="border border-gray-300 px-0.5 w-[20px] cursor-grab">
+    <td className="border border-gray-300 px-0.5 w-5 cursor-grab">
       <div className="flex items-center justify-center opacity-0 group-hover:opacity-100" {...attributes} {...listeners}>
         <GripVertical className="h-3.5 w-3.5 text-gray-400" />
       </div>
@@ -271,7 +291,7 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
   );
 
   const deleteBtn = !readOnly && (
-    <td className="border border-gray-300 px-1 w-[20px]">
+    <td className="border border-gray-300 px-1 w-5">
       <button type="button" onClick={onRemove} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600">
         <Trash2 className="h-3 w-3" />
       </button>
@@ -388,7 +408,8 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
           )}
         </td>
         {/* TOTAL — calculated if price filled, manual if not */}
-        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">          {row.price ? (
+        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">
+          {row.price ? (
             row._total != null && row._total !== 0 ? fmtRp(row._total) : ""
           ) : readOnly ? (
             row.grandTotal ? fmtRp(row.grandTotal) : ""
@@ -402,7 +423,7 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
   }
   // ─── Charge ──────────────────────────────────────────────────────────────
   if (row.type === "charge") {
-    const depth = (row as any)._depth ?? 0;
+    const depth = row._depth ?? 0;
     const indent = depth * 12;
     const total = row._total ?? 0;
     const ct = row.chargeType ?? "qty";
@@ -473,7 +494,7 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
   }
   // ─── Payment ─────────────────────────────────────────────────────────────
   if (row.type === "payment") {
-    const depth = (row as any)._depth ?? 0;
+    const depth = row._depth ?? 0;
     const indent = depth * 12;
     const total = row._total ?? 0;
     const ct = row.chargeType ?? "flat";
@@ -483,9 +504,10 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
         <td colSpan={2} className="border border-gray-300 px-2 py-1 text-xs" style={{ paddingLeft: indent + 8 }}>
           <div className="flex items-center gap-1.5">
             {!readOnly && (
-              <select className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 shrink-0" value={ct} onChange={(e) => onUpdate({ chargeType: e.target.value as "qty" | "flat" | "percent" })}>
+              <select className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 shrink-0" value={ct} onChange={(e) => onUpdate({ chargeType: e.target.value as "qty" | "flat" | "percent" | "sum" })}>
                 <option value="flat">Flat</option>
                 <option value="qty">Qty</option>
+                <option value="sum">Sum</option>
               </select>
             )}
             {readOnly ? <span>{row.description}</span> : (
@@ -506,6 +528,9 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
               <input className="w-full bg-transparent outline-none text-center text-xs px-1" value={row.unit ?? ""} onChange={(e) => onUpdate({ unit: e.target.value })} />
             )
           )}
+          {ct === "sum" && !readOnly && (
+            <RowPicker label="dari:" selectedIds={row.formulaAIds ?? []} rows={allRows} onChange={(ids) => onUpdate({ formulaAIds: ids })} />
+          )}
         </td>
         <td className="border border-gray-300 px-1 py-0.5">
           {ct === "qty" && (
@@ -514,7 +539,7 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
             )
           )}
         </td>
-        <td className="border border-gray-300 px-2 py-1 text-right text-xs font-semibold">
+        <td className={cn("border border-gray-300 px-2 py-1 text-right text-xs font-semibold", ct === "sum" && total > 0 && "bg-primary/5 text-primary")}>
           {ct === "flat" ? (
             readOnly ? (row.grandTotal ? fmtRp(-Math.abs(row.grandTotal)) : "") : (
               <input type="text" inputMode="numeric" className="w-full bg-transparent outline-none text-right text-xs" value={row.grandTotal ? `-Rp${new Intl.NumberFormat("id-ID").format(row.grandTotal)}` : ""} onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })} placeholder="-Rp0" />
@@ -528,9 +553,111 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
     );
   }
 
+  // ─── Settlement ───────────────────────────────────────────────────────────
+  if (row.type === "settlement") {
+    const total = row._total ?? 0;
+    const sType = row.settlementType ?? "refund";
+    const isIncoming = row.isIncoming === true;
+    const effectiveReadOnly = readOnly || isIncoming;
+    return (
+      <tr ref={setNodeRef} style={dragStyle} onContextMenu={!isIncoming ? onContextMenu : undefined} className={cn("group", isIncoming ? "bg-accent/40" : "bg-muted/30")}>
+        {dragHandle}
+        <td colSpan={2} className="border border-gray-300 px-2 py-1 text-xs">
+          <div className="flex items-center gap-1.5">
+            {!effectiveReadOnly && (
+              <select
+                className="text-[10px] bg-white border border-gray-200 rounded px-1 py-0.5 shrink-0"
+                value={sType}
+                onChange={(e) => onUpdate({ settlementType: e.target.value as "refund" | "allocation" })}
+              >
+                <option value="refund">Refund</option>
+                <option value="allocation">Alokasi</option>
+              </select>
+            )}
+            {isIncoming && <span className="text-[10px] text-muted-foreground shrink-0 italic">Masuk ←</span>}
+            {effectiveReadOnly ? (
+              <span>{row.description || `Settlement ${sType}`}</span>
+            ) : (
+              <input
+                className="flex-1 bg-transparent outline-none text-xs"
+                value={row.description ?? ""}
+                onChange={(e) => onUpdate({ description: e.target.value })}
+                placeholder="Keterangan..."
+              />
+            )}
+          </div>
+        </td>
+        {/* Rekening / target booking + sumber nominal */}
+        <td colSpan={3} className="border border-gray-300 px-1 py-0.5">
+          <div className="flex items-center gap-1">
+            {sType === "refund" && !effectiveReadOnly && (
+              <BankAccountSelect
+                className="flex-1 [&_button]:h-7 [&_button]:text-[10px] [&_button]:py-0 [&_button]:px-2"
+                value={row.settlementPaymentMethodId ?? ""}
+                onChange={(v) => onUpdate({ settlementPaymentMethodId: v || undefined })}
+                placeholder="Pilih rekening..."
+                minDropdownWidth={320}
+              />
+            )}
+            {sType === "refund" && effectiveReadOnly && (
+              <span className="text-[11px] text-muted-foreground px-1 flex-1">
+                {paymentMethods.find((pm) => pm.id === row.settlementPaymentMethodId)?.bankName ?? "-"}
+              </span>
+            )}
+            {sType === "allocation" && !effectiveReadOnly && (
+              <SearchableSelect
+                className="flex-1 [&_button]:h-7 [&_button]:text-[10px] [&_button]:py-0 [&_button]:px-2"
+                options={eligibleBookings.map((b) => ({ id: b.id, name: b.label }))}
+                value={row.targetBookingId ?? ""}
+                onChange={(v) => onUpdate({ targetBookingId: v || undefined })}
+                placeholder="Pilih booking tujuan..."
+                minDropdownWidth={320}
+              />
+            )}
+            {sType === "allocation" && effectiveReadOnly && (
+              <span className="text-[11px] text-muted-foreground px-1 italic flex-1">
+                {isIncoming ? (row.settlementSourceLabel ?? "Booking lain") : (eligibleBookings.find((b) => b.id === row.targetBookingId)?.label ?? row.settlementSourceLabel ?? "-")}
+              </span>
+            )}
+            {!effectiveReadOnly && (
+              <SearchableSelect
+                className="w-30 shrink-0 [&_button]:h-7 [&_button]:text-[10px] [&_button]:py-0 [&_button]:px-2"
+                options={allRows.filter((r) => r._total != null && r._total !== 0 && r.id !== row.id).map((r) => ({
+                  id: r.id,
+                  name: `${r.label ?? r.description ?? r.type} (${fmtRp(Math.abs(r._total!))})`,
+                }))}
+                value={row.settlementAmountRowId ?? ""}
+                onChange={(v) => onUpdate({ settlementAmountRowId: v || undefined })}
+                placeholder="Nominal manual"
+                minDropdownWidth={280}
+              />
+            )}
+          </div>
+        </td>
+        {/* Nominal */}
+        <td className="border border-gray-300 px-2 py-1 text-right text-xs font-semibold">
+          {effectiveReadOnly || row.settlementAmountRowId ? (
+            total !== 0 ? fmtRp(total) : ""
+          ) : (
+            <input
+              type="text"
+              inputMode="numeric"
+              className="w-full bg-transparent outline-none text-right text-xs font-semibold"
+              value={row.grandTotal ? new Intl.NumberFormat("id-ID").format(row.grandTotal) : ""}
+              onChange={(e) => onUpdate({ grandTotal: Number(e.target.value.replace(/\D/g, "")) || undefined })}
+              placeholder="0"
+            />
+          )}
+        </td>
+        {!isIncoming && deleteBtn}
+        {isIncoming && <td className="border border-gray-300 w-5" />}
+      </tr>
+    );
+  }
+
   // ─── Subtotal ─────────────────────────────────────────────────────────────
   if (row.type === "subtotal") {
-    const depth = (row as any)._depth ?? 0;
+    const depth = row._depth ?? 0;
     const indent = depth * 12;
     return (
       <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="bg-gray-50 font-semibold group">
@@ -564,7 +691,7 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
   // ─── Formula ──────────────────────────────────────────────────────────────
   if (row.type === "formula") {
     const isNeg = (row._total ?? 0) < 0 || row.negative;
-    const depth = (row as any)._depth ?? 0;
+    const depth = row._depth ?? 0;
     const indent = depth * 12;
     return (
       <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="bg-gray-50 font-semibold group">
@@ -627,7 +754,7 @@ function RowRenderer({ row, allRows, readOnly, isCollapsed, onToggleCollapse, on
     <tr ref={setNodeRef} style={dragStyle} onContextMenu={onContextMenu} className="hover:bg-blue-50/30 group">
       {dragHandle}
       <td className="border border-gray-300 px-2 py-1 text-center text-xs text-gray-500">{row.no ?? ""}</td>
-      <td className="border border-gray-300 px-1 py-0.5" style={{ paddingLeft: ((row as any)._depth ?? 0) * 12 + 4 }}>
+      <td className="border border-gray-300 px-1 py-0.5" style={{ paddingLeft: (row._depth ?? 0) * 12 + 4 }}>
         {readOnly ? <span className="text-xs px-1">{row.description}</span> : (
           <input className="w-full bg-transparent outline-none text-xs px-1 py-0.5" value={row.description ?? ""} onChange={(e) => onUpdate({ description: e.target.value })} placeholder="Nama item..." />
         )}
@@ -690,7 +817,7 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
     } else if (row.type === "subgroup") {
       curSub = { row, items: [] };
       if (curGroup) curGroup.subs.push(curSub);
-    } else if (row.type === "item" || row.type === "charge" || row.type === "payment") {
+    } else if (row.type === "item" || row.type === "charge" || row.type === "payment" || row.type === "blank") {
       if (curSub) curSub.items.push(row);
       else if (curGroup) curGroup.directItems.push(row);
       else topItems.push(row);
@@ -705,6 +832,10 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
 
   const getLabel = (r: PORow) => r.type === "subtotal" || r.type === "formula"
     ? (r.label || "(formula)")
+    : r.type === "blank"
+    ? (r.label || "(blank)")
+    : r.type === "subgroup"
+    ? (r.label || "(sub-group)")
     : `${r.no ? r.no + ". " : ""}${r.description || "(item)"}`;
 
   const renderItem = (r: PORow, indent: string) => {
@@ -754,7 +885,7 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute z-50 bottom-full mb-1 left-0 bg-white border border-gray-200 rounded-lg shadow-xl min-w-[240px] max-w-[300px] flex flex-col" style={{ maxHeight: 300 }}>
+          <div className="absolute z-50 bottom-full mb-1 left-0 bg-white border border-gray-200 rounded-lg shadow-xl min-w-60 max-w-75 flex flex-col" style={{ maxHeight: 300 }}>
             {/* Sticky header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-white rounded-t-lg shrink-0">
               <span className="text-[10px] font-semibold text-gray-600">Pilih item {count > 0 ? `(${count})` : ""}</span>
@@ -772,13 +903,20 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
                   {/* Group itself selectable if has value */}
                   {(g._total || g.grandTotal || g.price) && renderItem({ ...g, description: g.label }, "px-2")}
                   {subs.map(({ row: sg, items }) => {
+                    if (items.length === 0) return null;
                     const sgIds = [sg.id, ...items.map((r) => r.id)];
                     return (
                       <div key={sg.id}>
-                        <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-gray-50 rounded text-[11px] font-semibold text-gray-700 bg-gray-50">
+                        <div className="flex items-center gap-1 px-2 py-0.5 hover:bg-gray-50 rounded">
                           <Checkbox checked={allSel(sgIds)} indeterminate={!allSel(sgIds) && someSel(sgIds)} onCheckedChange={(v) => toggleIds(sgIds, !!v)} />
-                          <span className="truncate">{sg.label || "(sub-group)"}</span>
-                        </label>
+                          <span className="flex-1 text-[11px] font-semibold text-gray-700 truncate cursor-pointer" onClick={() => toggleIds(sgIds, !allSel(sgIds))}>{sg.label || "(sub-group)"}</span>
+                          {onSignChange && (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Switch checked={(signs?.[sg.id] ?? 1) === -1} onCheckedChange={(v) => onSignChange({ ...(signs ?? {}), [sg.id]: v ? -1 : 1 })} className="scale-75" />
+                              <span className={`text-[9px] font-bold w-3 ${(signs?.[sg.id] ?? 1) === -1 ? "text-red-500" : "text-green-600"}`}>{(signs?.[sg.id] ?? 1) === -1 ? "−" : "+"}</span>
+                            </div>
+                          )}
+                        </div>
                         {items.map((r) => renderItem(r, "pl-5"))}
                       </div>
                     );

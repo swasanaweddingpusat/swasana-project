@@ -384,7 +384,7 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
         </View>
 
         {/* Detail Section */}
-        <View>
+        <View break>
           {/* Mini Form */}
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
             <View style={{ flexDirection: "column", gap: 4 }}>
@@ -394,7 +394,7 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
               <Text style={{ fontSize: 9 }}>Alamat : {booking.snapCustomer?.ktpAddress ?? "_____________________"}</Text>
             </View>
             <View style={{ flexDirection: "column", gap: 4 }}>
-              <Text style={{ fontSize: 9 }}>Acara : Wedding Reception</Text>
+              <Text style={{ fontSize: 9 }}>Acara : {booking.weddingType ? booking.weddingType.replace(/\b\w/g, (c) => c.toUpperCase()) : "Wedding Reception"}</Text>
               <Text style={{ fontSize: 9 }}>Hari/Tanggal : {new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
               <Text style={{ fontSize: 9 }}>Jam : {booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "_____________________"}</Text>
               <Text style={{ fontSize: 9 }}>Tempat : {venueName}</Text>
@@ -495,8 +495,13 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
                 <Text style={s.signatureLabel}>Event Specialist</Text>
               </View>
               <View style={s.signBox}>
-                <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                <Text style={s.signerName}>(                    )</Text>
+                {sigs?.manager?.signature ? (
+                  /* eslint-disable-next-line jsx-a11y/alt-text */
+                  <Image src={sigs.manager.signature as string} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                ) : (
+                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                )}
+                <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
                 <Text style={s.signatureLabel}>Head of Marketing</Text>
               </View>
             </View>

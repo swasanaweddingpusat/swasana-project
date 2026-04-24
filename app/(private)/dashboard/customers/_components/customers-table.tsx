@@ -76,7 +76,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
           {/* Header */}
           <div className="flex items-center justify-between px-6 pb-4 border-b">
             <div className="flex items-center gap-3">
-              <h2 className="text-base font-semibold text-gray-900">List Customers</h2>
+              <h2 className="text-base font-bold text-[#1D1D1D]">List Customers</h2>
               <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {filtered.length} {search ? `dari ${customers.length}` : "member"}
               </span>
@@ -88,7 +88,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                   placeholder="Cari customer..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 w-[220px]"
+                  className="pl-9 w-55"
                 />
               </div>
               <Button onClick={handleAdd} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
@@ -105,10 +105,10 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="min-w-[900px] text-sm">
+              <Table className="min-w-225 text-sm">
                 <TableHeader>
                   <TableRow className="bg-gray-50">
-                    <TableHead className="px-3 w-[50px]">No</TableHead>
+                    <TableHead className="px-3 w-12.5">No</TableHead>
                     <TableHead className="px-3">Nama</TableHead>
                     <TableHead className="px-3">No. HP</TableHead>
                     <TableHead className="px-3">Type</TableHead>
@@ -117,14 +117,14 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                     <TableHead className="px-3">Notes</TableHead>
                     <TableHead className="px-3">Updated By</TableHead>
                     <TableHead className="px-3">Updated At</TableHead>
-                    <TableHead className="px-3 w-[80px]"></TableHead>
+                    <TableHead className="px-3 w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginated.map((customer, idx) => (
                     <TableRow key={customer.id} className="hover:bg-gray-50">
                       <TableCell className="px-3">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
-                      <TableCell className="px-3 max-w-[180px] truncate font-medium" title={customer.name}>{customer.name}</TableCell>
+                      <TableCell className="px-3 max-w-45 truncate font-medium" title={customer.name}>{customer.name}</TableCell>
                       <TableCell className="px-3">{customer.mobileNumber}</TableCell>
                       <TableCell className="px-3">{customer.type}</TableCell>
                       <TableCell className="px-3">{customer.club || "—"}</TableCell>
@@ -133,7 +133,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                           {customer.memberStatus}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-3 max-w-[150px] truncate text-gray-500" title={customer.notes ?? ""}>{customer.notes || "—"}</TableCell>
+                      <TableCell className="px-3 max-w-37.5 truncate text-gray-500" title={customer.notes ?? ""}>{customer.notes || "—"}</TableCell>
                       <TableCell className="px-3 text-gray-500">{customer.updatedBy || "—"}</TableCell>
                       <TableCell className="px-3 text-gray-500 whitespace-nowrap">{format(new Date(customer.updatedAt), "dd MMM yyyy")}</TableCell>
                       <TableCell className="px-3">

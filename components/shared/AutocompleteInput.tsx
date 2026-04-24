@@ -54,7 +54,7 @@ export function AutocompleteInput({
         className={cn("w-full", className)}
       />
       {open && value.trim() && filtered.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 max-h-[300px] overflow-auto rounded-md border bg-white shadow-lg">
+        <div className="absolute z-50 w-full mt-1 max-h-75 overflow-auto rounded-md border bg-white shadow-lg">
           <div className="py-1">
             {filtered.map((opt) => (
               <div

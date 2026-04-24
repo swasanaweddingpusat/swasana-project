@@ -1,6 +1,6 @@
 // ─── PO Catering v2 — Flat row structure ─────────────────────────────────────
 
-export type RowType = "group" | "subgroup" | "item" | "subtotal" | "formula" | "blank" | "charge" | "payment";
+export type RowType = "group" | "subgroup" | "item" | "subtotal" | "formula" | "blank" | "charge" | "payment" | "settlement";
 
 export interface PORow {
   id: string;
@@ -25,9 +25,18 @@ export interface PORow {
   formulaBIds?: string[];       // row IDs for group B (diff only)
   percentValue?: number;        // percentage value (for percent kind)
   // charge-specific
-  chargeType?: "qty" | "flat" | "percent";  // per_qty = qty×price, flat = manual, percent = % dari base
+  chargeType?: "qty" | "flat" | "percent" | "sum";  // per_qty = qty×price, flat = manual, percent = % dari base, sum = sum of selected rows
+  // settlement-specific
+  settlementType?: "refund" | "allocation";
+  settlementPaymentMethodId?: string;
+  settlementNotes?: string;
+  isIncoming?: boolean;                  // true = incoming allocation (read-only, dari booking lain)
+  settlementSourceLabel?: string;        // label booking sumber (untuk display incoming)
+  targetBookingId?: string;              // target booking untuk allocation type
+  settlementAmountRowId?: string;        // ambil nominal dari _total row ini
   // computed at runtime
   _total?: number;
+  _depth?: number;
 }
 
 export interface POCateringV2 {
@@ -46,7 +55,7 @@ function sumIds(rows: PORow[], ids: string[]): number {
   return rows
     .filter((r) => ids.includes(r.id))
     .reduce((s, r) => {
-      if (r.type === "item" || r.type === "subgroup" || r.type === "group" || r.type === "charge" || r.type === "payment") return s + (r._total ?? rowTotal(r));
+      if (r.type === "item" || r.type === "subgroup" || r.type === "group" || r.type === "charge" || r.type === "payment" || r.type === "settlement") return s + (r._total ?? rowTotal(r));
       if (r.type === "formula" || r.type === "subtotal") return s + (r._total ?? 0);
       return s;
     }, 0);
@@ -59,7 +68,7 @@ export function calculateV2(data: POCateringV2): POCateringV2 {
     // Step A: items/subgroups/groups
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      if (row.type === "item" || row.type === "subgroup" || row.type === "group" || row.type === "charge" || row.type === "payment") {
+      if (row.type === "item" || row.type === "subgroup" || row.type === "group" || row.type === "charge" || row.type === "payment" || row.type === "settlement") {
         const t = row.price ? (row.qty ?? 0) * (row.price ?? 0) : (row.grandTotal ?? 0);
         if (row.type === "charge" || row.type === "payment") {
           const ct = row.chargeType ?? "flat";
@@ -69,8 +78,14 @@ export function calculateV2(data: POCateringV2): POCateringV2 {
           else if (ct === "percent") {
             const base = sumIds(rows, row.formulaAIds ?? []);
             t = Math.round(base * ((row.percentValue ?? 0) / 100));
+          } else if (ct === "sum") {
+            // skip — resolved in Step D after subtotals
+            continue;
           }
           rows[i] = { ...row, _total: -Math.abs(t) };
+        } else if (row.type === "settlement") {
+          // settlement: positif = lebih bayar / refund keluar
+          rows[i] = { ...row, _total: row.grandTotal ?? 0 };
         } else {
           rows[i] = { ...row, _total: row.negative ? -t : t };
         }
@@ -107,6 +122,21 @@ export function calculateV2(data: POCateringV2): POCateringV2 {
             return s + val * sign;
           }, 0);
         rows[i] = { ...row, _total: total };
+      }
+    }
+    // Step D: payment/charge with chargeType "sum" + settlement with amountRowId (needs subtotals resolved first)
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if ((row.type === "charge" || row.type === "payment") && row.chargeType === "sum") {
+        const t = sumIds(rows, row.formulaAIds ?? []);
+        // t > 0 = masih kurang bayar (display negatif = payment)
+        // t < 0 = lebih bayar (display positif = kelebihan)
+        rows[i] = { ...row, _total: t > 0 ? -t : Math.abs(t) };
+      }
+      if (row.type === "settlement" && row.settlementAmountRowId) {
+        const src = rows.find((r) => r.id === row.settlementAmountRowId);
+        const t = src?._total != null ? Math.abs(src._total) : 0;
+        rows[i] = { ...row, _total: t, grandTotal: t };
       }
     }
   }

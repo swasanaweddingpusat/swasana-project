@@ -96,7 +96,7 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Deskripsi</label>
-            <Textarea value={docDescription} onChange={(e) => setDocDescription(e.target.value)} placeholder="Deskripsi singkat (opsional)" className="mt-1 min-h-[60px] resize-none" />
+            <Textarea value={docDescription} onChange={(e) => setDocDescription(e.target.value)} placeholder="Deskripsi singkat (opsional)" className="mt-1 min-h-15 resize-none" />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">File (multiple)</label>

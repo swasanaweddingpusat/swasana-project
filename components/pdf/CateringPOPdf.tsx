@@ -66,7 +66,7 @@ const s = StyleSheet.create({
   subtotalLabel: { flex: 1, textAlign: "right", paddingRight: 10, fontWeight: "bold", fontSize: 9 },
   subtotalVal: { width: 90, textAlign: "right", paddingRight: 6, fontWeight: "bold", fontSize: 9 },
   // Formula
-  formulaRow: { flexDirection: "row", paddingVertical: 5, borderTopWidth: 0.5, borderTopColor: "#999", backgroundColor: "#d9d9d9" },
+  formulaRow: { flexDirection: "row", paddingVertical: 5, borderTopWidth: 0.5, borderTopColor: "#999", backgroundColor: "#ebebeb" },
   // Signature
   sigBlock: { marginTop: 40, flexDirection: "row", justifyContent: "space-between" },
   sigCol: { width: "30%", alignItems: "center" },
@@ -140,6 +140,61 @@ function renderRow(row: PORow) {
       <View key={row.id} style={rowStyle}>
         <Text style={s.subtotalLabel}>{row.label ?? (row.type === "subtotal" ? "Subtotal" : "Total")}</Text>
         <Text style={[s.subtotalVal, isNeg ? { color: "#dc2626" } : {}]}>{total !== 0 ? (isNeg ? `-${fmt(total)}` : fmt(total)) : "-"}</Text>
+      </View>
+    );
+  }
+  if (row.type === "charge") {
+    const total = row._total ?? 0;
+    return (
+      <View key={row.id} style={s.tRow}>
+        <Text style={s.tdNo} />
+        <Text style={[s.tdDesc, { color: "#dc2626" }]}>{row.description ?? ""}</Text>
+        <Text style={s.tdQty}>{row.qty ?? ""}</Text>
+        <Text style={s.tdUnit}>{row.unit ?? ""}</Text>
+        <Text style={s.tdPrice}>{row.price ? fmt(row.price) : ""}</Text>
+        <Text style={[s.tdTotal, { color: "#dc2626" }]}>{total !== 0 ? `-${fmt(total)}` : ""}</Text>
+      </View>
+    );
+  }
+  if (row.type === "payment") {
+    const total = row._total ?? 0;
+    const isOverpaid = total > 0;
+    return (
+      <View key={row.id} style={s.tRow}>
+        <Text style={s.tdNo} />
+        <Text style={[s.tdDesc, { fontWeight: "bold" }]}>{row.description ?? ""}</Text>
+        <Text style={s.tdQty} />
+        <Text style={s.tdUnit} />
+        <Text style={s.tdPrice} />
+        <Text style={[s.tdTotal, { fontWeight: "bold", backgroundColor: isOverpaid ? "#f3f4f6" : undefined }]}>
+          {total !== 0 ? (isOverpaid ? `+${fmt(total)}` : `-${fmt(total)}`) : ""}
+        </Text>
+      </View>
+    );
+  }
+  if (row.type === "settlement") {
+    const total = row._total ?? row.grandTotal ?? 0;
+    const label = row.isIncoming
+      ? `Alokasi Masuk (${row.settlementSourceLabel ?? "Booking lain"})`
+      : row.settlementType === "refund"
+        ? `Refund`
+        : `Alokasi → ${row.settlementSourceLabel ?? "-"}`;
+    const bg = row.isIncoming ? "#e5e5e5" : "#f3f4f6";
+    return (
+      <View key={row.id} style={[s.tRow, { backgroundColor: bg }]}>
+        <Text style={s.tdNo} />
+        <Text style={[s.tdDesc, { fontStyle: "italic" }]}>{row.description ? `${label}: ${row.description}` : label}</Text>
+        <Text style={s.tdQty} />
+        <Text style={s.tdUnit} />
+        <Text style={s.tdPrice} />
+        <Text style={[s.tdTotal, { fontWeight: "bold" }]}>{total !== 0 ? fmt(total) : ""}</Text>
+      </View>
+    );
+  }
+  if (row.type === "blank") {
+    return (
+      <View key={row.id} style={[s.tRow, { paddingVertical: 2 }]}>
+        <Text style={[s.tdDesc, { flex: 1 }]}>{row.label ?? ""}</Text>
       </View>
     );
   }

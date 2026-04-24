@@ -15,7 +15,9 @@ export async function POST(req: Request) {
       return Response.json({ error: "Only WebP allowed" }, { status: 400 });
     }
 
-    const key = `profiles/${session.user.id}/${crypto.randomUUID()}.webp`;
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const randomId = Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => chars[b % chars.length]).join("");
+    const key = `${randomId}.webp`;
     const uploadUrl = await getSignedUploadUrl(key, contentType, 300); // 5 min expiry
     const publicUrl = getPublicUrl(key);
 
@@ -34,7 +36,7 @@ export async function PATCH(req: Request) {
     const { avatarUrl, oldKey } = await req.json() as { avatarUrl: string; oldKey?: string };
 
     // Delete old avatar from R2 if exists
-    if (oldKey && oldKey.startsWith("profiles/")) {
+    if (oldKey && oldKey.endsWith(".webp")) {
       await deleteFromR2(oldKey).catch(() => {}); // non-blocking
     }
 

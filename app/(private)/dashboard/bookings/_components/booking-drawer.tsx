@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { CalendarIcon, Plus, X } from "lucide-react";
+import { format, startOfMonth } from "date-fns";
+import { CalendarIcon, FileText, Plus, Trash2, X } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
@@ -18,6 +18,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { cn } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
 import type { BookingInput } from "@/lib/validations/booking";
@@ -32,8 +33,8 @@ interface CustomerOption { id: string; name: string; mobileNumber: string; email
 interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; price: number }[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
-interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number }
-interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number }
+interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
+interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number; paymentEvidence?: File | null }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -47,16 +48,23 @@ function fmtRp(n: number) {
 
 const DAY = 24 * 60 * 60 * 1000;
 
+function toLocalISO(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}T00:00:00.000Z`;
+}
+
 function makeDefaultTerms(): TermRow[] {
   const now = new Date();
   return [
-    { name: "Booking Fee", amount: 0, dueDate: now.toISOString(), sortOrder: 0 },
-    { name: "DP", amount: 0, dueDate: new Date(now.getTime() + 14 * DAY).toISOString(), sortOrder: 1 },
-    { name: "Angsuran 1", amount: 0, dueDate: new Date(now.getTime() + 44 * DAY).toISOString(), sortOrder: 2 },
-    { name: "Angsuran 2", amount: 0, dueDate: new Date(now.getTime() + 74 * DAY).toISOString(), sortOrder: 3 },
-    { name: "Pelunasan 1", amount: 0, dueDate: new Date(now.getTime() + 104 * DAY).toISOString(), sortOrder: 4 },
-    { name: "Pelunasan 2", amount: 0, dueDate: new Date(now.getTime() + 134 * DAY).toISOString(), sortOrder: 5 },
-    { name: "Final", amount: 0, dueDate: new Date(now.getTime() + 164 * DAY).toISOString(), sortOrder: 6 },
+    { name: "Booking Fee", amount: 0, dueDate: toLocalISO(now), sortOrder: 0 },
+    { name: "DP", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 14 * DAY)), sortOrder: 1 },
+    { name: "Angsuran 1", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 44 * DAY)), sortOrder: 2 },
+    { name: "Angsuran 2", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 74 * DAY)), sortOrder: 3 },
+    { name: "Pelunasan 1", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 104 * DAY)), sortOrder: 4 },
+    { name: "Pelunasan 2", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 134 * DAY)), sortOrder: 5 },
+    { name: "Final", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 164 * DAY)), sortOrder: 6 },
   ];
 }
 
@@ -99,7 +107,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
-  const [specialBonusName, setSpecialBonusName] = useState("Cashback");
+  const [specialBonusName, setSpecialBonusName] = useState("Discount");
   const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
   const [contactNumbers, setContactNumbers] = useState<string[]>([]);
   const [contactEmail, setContactEmail] = useState("");
@@ -123,6 +131,39 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const selectedPackage = packages.find((p) => p.id === selectedPackageId);
   const variants = selectedPackage?.variants ?? [];
   const [selectedVariantPrice, setSelectedVariantPrice] = useState(0);
+
+  // Venue availability
+  type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
+  const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
+  const [availLoading, setAvailLoading] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
+
+  useEffect(() => {
+    if (!selectedVenueId) { setAvailability({}); return; }
+    setAvailLoading(true);
+    const month = format(startOfMonth(visibleMonth), "yyyy-MM");
+    fetch(`/api/venues/${selectedVenueId}/availability?month=${month}`)
+      .then((r) => r.json())
+      .then((data: Record<string, DayAvail>) => setAvailability(data))
+      .catch(() => setAvailability({}))
+      .finally(() => setAvailLoading(false));
+  }, [selectedVenueId, visibleMonth]);
+
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
+    const key = format(d, "yyyy-MM-dd");
+    const a = availability[key];
+    if (!a) return "available";
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
+  }
+
+  function getAvailableSessions(dateStr: string): string[] {
+    const a = availability[dateStr];
+    if (!a) return ["morning", "evening", "fullday"];
+    return (["morning", "evening", "fullday"] as const).filter((s) => a[s]);
+  }
 
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id, categoryName: c.name })));
@@ -165,7 +206,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setSelectedVenueId(""); setSelectedPackageId(""); setSelectedVariantPrice(0);
         setBonuses([]); setTerms(makeDefaultTerms());
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
-        setSpecialBonusName("Cashback"); setSpecialBonusAmount(0);
+        setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
         setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setNoteDateEvent(""); setCustomerName("");
         sigSalesRef.current?.clear();
       }
@@ -189,12 +230,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice, bonuses, terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBasePrice = () => selectedVariantPrice;
-  const getPriceAfterCashback = () => Math.max(0, getBasePrice() - specialBonusAmount);
+  const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
-  const getDifference = () => getTotalTerms() - getPriceAfterCashback();
+  const getDifference = () => getTotalTerms() - getPriceAfterDiscount();
 
-  const allocatePrice = (price: number, cashback: number) => {
-    const total = Math.max(0, price - cashback);
+  const allocatePrice = (price: number, discount: number) => {
+    const total = Math.max(0, price - discount);
     const n = terms.length || 1;
     const base = Math.floor(total / n);
     const remainder = total % n;
@@ -211,7 +252,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (currentStep === 2) {
       const diff = getDifference();
       if (getBasePrice() > 0 && diff !== 0) {
-        toast.error(`Total term (Rp${fmtRp(getTotalTerms())}) tidak sama dengan harga setelah cashback (Rp${fmtRp(getPriceAfterCashback())}). Selisih: Rp${fmtRp(Math.abs(diff))}`);
+        toast.error(`Total term (Rp${fmtRp(getTotalTerms())}) tidak sama dengan harga setelah discount (Rp${fmtRp(getPriceAfterDiscount())}). Selisih: Rp${fmtRp(Math.abs(diff))}`);
         return;
       }
     }
@@ -233,11 +274,27 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
-      bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty })),
+      bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
     };
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
+
+    // Upload payment evidence per term jika ada
+    const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence);
+    if (termsWithEvidence.length > 0 && result.termIds?.length) {
+      await Promise.allSettled(
+        termsWithEvidence.map((t) => {
+          const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
+          if (!termId || !t.paymentEvidence) return Promise.resolve();
+          const fd = new FormData();
+          fd.append("termId", termId);
+          fd.append("file", t.paymentEvidence);
+          return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+        })
+      );
+    }
+
     clearDraft();
     toast.success("Booking berhasil dibuat.");
     onOpenChange(false);
@@ -297,7 +354,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         ref={contactInputRef}
                         type="text"
                         inputMode="numeric"
-                        className="flex-1 min-w-[120px] border-none outline-none bg-transparent text-sm px-2"
+                        className="flex-1 min-w-30 border-none outline-none bg-transparent text-sm px-2"
                         placeholder="e.g. 081234567890"
                         onKeyDown={(e) => {
                           const val = e.currentTarget.value.trim();
@@ -384,18 +441,33 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               : "Pilih venue terlebih dahulu"}
                           </Button>
                         } />
-                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
                             captionLayout="dropdown"
                             selected={field.value ? new Date(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? date.toISOString() : "")}
-                            disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                            onSelect={(date) => { field.onChange(date ? date.toISOString() : ""); form.setValue("weddingSession", null); }}
+                            disabled={(d) => {
+                              if (d < new Date(new Date().setHours(0, 0, 0, 0))) return true;
+                              return getDateStatus(d) === "unavailable";
+                            }}
                             fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
                             defaultMonth={field.value ? new Date(field.value) : new Date()}
+                            onMonthChange={setVisibleMonth}
+                            modifiers={{
+                              available: (d) => !!selectedVenueId && getDateStatus(d) === "available",
+                              partial: (d) => !!selectedVenueId && getDateStatus(d) === "partial",
+                              unavailable: (d) => !!selectedVenueId && getDateStatus(d) === "unavailable",
+                            }}
+                            modifiersClassNames={{
+                              available: "day-available",
+                              partial: "day-partial",
+                              unavailable: "day-unavailable",
+                            }}
                           />
                         </PopoverContent>
                       </Popover>
+                      {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -407,9 +479,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
                         <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="morning">Pagi</SelectItem>
-                          <SelectItem value="evening">Malam</SelectItem>
-                          <SelectItem value="fullday">Fullday</SelectItem>
+                          {(() => {
+                            const dateStr = w.bookingDate ? format(new Date(w.bookingDate), "yyyy-MM-dd") : null;
+                            const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
+                            const labels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
+                            return sessions.map((s) => <SelectItem key={s} value={s}>{labels[s]}</SelectItem>);
+                          })()}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -446,20 +521,40 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <SearchableSelect
                       options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
                       value=""
-                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1 }]); }}
+                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); }}
                       placeholder="Pilih vendor..."
                       searchPlaceholder="Cari vendor..."
                       emptyText="Tidak ada vendor"
                     />
                     {bonuses.map((b, idx) => (
-                      <div key={b.vendorId} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-900">{b.vendorName}</span>
-                          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
+                      <div key={idx} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={allVendors.filter((v) => !bonuses.some((x, i) => i !== idx && x.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
+                              value={b.vendorId}
+                              onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name } : x)); }}
+                              placeholder="Pilih vendor..."
+                              searchPlaceholder="Cari vendor..."
+                              emptyText="Tidak ada vendor"
+                            />
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
                             <X className="h-3 w-3" />
                           </Button>
                         </div>
-                        <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-[60px]" />
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white"
+                            placeholder="Nominal"
+                            value={b.nominal ? new Intl.NumberFormat("id-ID").format(b.nominal) : ""}
+                            onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }}
+                          />
+                        </div>
+                        <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-15" />
                       </div>
                     ))}
                     {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}
@@ -472,14 +567,32 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Package price */}
                   <div>
                     <FormLabel className="text-sm font-medium text-gray-700">Total Harga Package</FormLabel>
-                    <Input disabled value={`Rp${fmtRp(getPriceAfterCashback())}`} className="mt-1" />
+                    <Input disabled value={`Rp${fmtRp(getPriceAfterDiscount())}`} className="mt-1" />
+                  </div>
+
+                  {/* Discount / Special Bonus */}
+                  <div className="flex flex-col gap-2 border-y py-4">
+                    <Input
+                      placeholder="Nama bonus (e.g. Discount)"
+                      value={specialBonusName}
+                      onChange={(e) => setSpecialBonusName(e.target.value)}
+                      className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                    />
+                    <Input
+                      placeholder="IDR. 0"
+                      value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
+                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
+                      inputMode="numeric"
+                      className="rounded-none"
+                    />
+                    <p className="text-xs text-gray-500">Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat discount diubah.</p>
                   </div>
 
                   {/* Payment Method */}
                   <FormField control={form.control} name="paymentMethodId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-gray-700">Pembayaran Melalui</FormLabel>
-                      <SearchableSelect options={venuePaymentMethods.map((pm) => ({ id: pm.id, name: `Bank ${pm.bankName} - ${pm.bankAccountNumber} a.n. ${pm.bankRecipient}` }))} value={field.value ?? ""} onChange={field.onChange} placeholder={selectedVenueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!selectedVenueId} searchPlaceholder="Cari..." emptyText="Tidak ada payment method" />
+                      <BankAccountSelect value={field.value ?? ""} onChange={field.onChange} placeholder={selectedVenueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!selectedVenueId} venueId={selectedVenueId} />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -491,12 +604,19 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       {terms.map((t, idx) => (
                         <div key={idx} className="space-y-2">
                           {/* Term name — inline editable */}
-                          <Input
-                            value={t.name}
-                            onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                            placeholder="Term name"
-                            className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                          />
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={t.name}
+                              onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                              placeholder="Term name"
+                              className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                            />
+                            {terms.length > 1 && (
+                              <button type="button" onClick={() => setTerms((prev) => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 shrink-0">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                           {/* Amount + Date row */}
                           <div className="flex gap-3 items-center">
                             <div className="flex-[2]">
@@ -528,38 +648,29 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               </Popover>
                             </div>
                           </div>
+                          {/* Upload bukti pembayaran */}
+                          <div className="relative flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs">
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span className="flex-1 truncate">{t.paymentEvidence ? t.paymentEvidence.name : "Upload bukti pembayaran"}</span>
+                            {t.paymentEvidence && (
+                              <button type="button" className="shrink-0 hover:text-destructive" onClick={() => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x))}>
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                            <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
+                          </div>
                           {/* Divider between terms */}
                           {idx < terms.length - 1 && <div className="border-b border-gray-100 pt-1" />}
                         </div>
                       ))}
                     </div>
 
-                    {/* Add / Remove buttons */}
+                    {/* Add button */}
                     <div className="flex gap-2 mt-4">
-                      <Button type="button" variant="outline" className="flex-1 border-red-500 text-red-500" onClick={() => setTerms((prev) => prev.length > 1 ? prev.slice(0, -1) : prev)} disabled={terms.length <= 1}>
-                        Hapus Payment
-                      </Button>
                       <Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => [...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }])}>
                         Tambah Payment
                       </Button>
                     </div>
-                  </div>
-
-                  {/* Cashback / Special Bonus */}
-                  <div className="flex flex-col gap-2 border-y py-4">
-                    <Input
-                      placeholder="Nama bonus (e.g. Cashback)"
-                      value={specialBonusName}
-                      onChange={(e) => setSpecialBonusName(e.target.value)}
-                      className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                    />
-                    <Input
-                      placeholder="IDR. 0"
-                      value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
-                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
-                      inputMode="numeric"
-                    />
-                    <p className="text-xs text-gray-500">Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat cashback diubah.</p>
                   </div>
 
                   {/* Summary */}
@@ -569,12 +680,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getBasePrice())}</span>
                     </div>
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-red-600">{specialBonusName || "Cashback"}:</span>
+                      <span className="text-sm font-medium text-red-600">{specialBonusName || "Discount"}:</span>
                       <span className="text-sm font-medium text-red-600">- Rp{fmtRp(specialBonusAmount)}</span>
                     </div>
                     <div className="flex justify-between items-center mb-2 border-t pt-2">
-                      <span className="text-sm font-medium text-gray-700">Harga Setelah Cashback:</span>
-                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getPriceAfterCashback())}</span>
+                      <span className="text-sm font-medium text-gray-700">Harga Setelah Discount:</span>
+                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getPriceAfterDiscount())}</span>
                     </div>
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">Total Input User:</span>

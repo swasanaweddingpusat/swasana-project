@@ -9,7 +9,9 @@ export async function compressToWebP(file: File): Promise<File> {
     fileType: "image/webp",
     initialQuality: 0.5,
   });
-  return new File([compressed], `${crypto.randomUUID()}.webp`, { type: "image/webp" });
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const randomId = Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => chars[b % chars.length]).join("");
+  return new File([compressed], `${randomId}.webp`, { type: "image/webp" });
 }
 
 export async function getCroppedBlob(imageSrc: string, cropArea: Area): Promise<Blob> {

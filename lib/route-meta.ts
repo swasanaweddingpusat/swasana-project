@@ -10,6 +10,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Overview sistem",
   },
 
+  "/dashboard/profile": {
+    title: "Profil",
+    subtitle: "Kelola informasi pribadi dan keamanan akun Anda.",
+  },
+
   // ─── Settings hub ────────────────────────────────────────────────────────
   "/dashboard/settings": {
     title: "Settings",
@@ -50,6 +55,21 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Sumber informasi customer untuk tracking lead",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/education-level": {
+    title: "Tingkat Pendidikan",
+    subtitle: "Kelola daftar tingkat pendidikan karyawan",
+    parent: "/dashboard/settings",
+  },
+  "/dashboard/settings/order-status": {
+    title: "Order Status",
+    subtitle: "Kelola status order vendor",
+    parent: "/dashboard/settings",
+  },
+  "/dashboard/settings/user-management": {
+    title: "User Management",
+    subtitle: "Kelola akses dan undangan user",
+    parent: "/dashboard/settings",
+  },
 
   // ─── Packages ──────────────────────────────────────────────────────────────
   "/dashboard/packages": {
@@ -67,6 +87,21 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/dashboard/bookings": {
     title: "Bookings",
     subtitle: "Kelola data booking",
+  },
+  "/dashboard/bookings/[id]": {
+    title: "Detail Booking",
+    parent: "/dashboard/bookings",
+  },
+
+  // ─── Finance ────────────────────────────────────────────────────────────────
+  "/dashboard/finance": {
+    title: "Finance",
+    subtitle: "Overview keuangan",
+  },
+  "/dashboard/finance/accounts-receivable": {
+    title: "Accounts Receivable",
+    subtitle: "Kelola piutang dan pembayaran masuk",
+    parent: "/dashboard/finance",
   },
 
   // ─── Notifications ─────────────────────────────────────────────────────────
