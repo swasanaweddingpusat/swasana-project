@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 import { CalendarIcon, X } from "lucide-react";
 import { Drawer } from "@/components/shared/drawer";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
@@ -48,6 +48,33 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [bookingDate, setBookingDate] = useState<Date | undefined>(() => booking ? new Date(booking.bookingDate) : undefined);
   const [calOpen, setCalOpen] = useState(false);
   const [weddingSession, setWeddingSession] = useState(() => booking?.weddingSession ?? "");
+
+  // Venue availability
+  type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
+  const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
+  const [availLoading, setAvailLoading] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(() => booking ? new Date(booking.bookingDate) : new Date());
+
+  useEffect(() => {
+    if (!venueId) { setAvailability({}); return; }
+    setAvailLoading(true);
+    const month = format(startOfMonth(visibleMonth), "yyyy-MM");
+    fetch(`/api/venues/${venueId}/availability?month=${month}`)
+      .then((r) => r.json())
+      .then((data: Record<string, DayAvail>) => setAvailability(data))
+      .catch(() => setAvailability({}))
+      .finally(() => setAvailLoading(false));
+  }, [venueId, visibleMonth]);
+
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
+    const key = format(d, "yyyy-MM-dd");
+    const a = availability[key];
+    if (!a) return "available";
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
+  }
   const [weddingType, setWeddingType] = useState(() => booking?.weddingType ?? "");
   const [signingLocation, setSigningLocation] = useState(() => booking?.signingLocation ?? "");
   const [paymentMethodId, setPaymentMethodId] = useState(() => booking?.paymentMethodId ?? "");
@@ -286,10 +313,34 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   {bookingDate ? format(bookingDate, "PPP") : <span>Select Date</span>}
                 </Button>
               } />
-              <PopoverContent className={cn('w-auto', 'p-0')} align="start">
-                <Calendar mode="single" selected={bookingDate} onSelect={(d) => { setBookingDate(d); setCalOpen(false); }} initialFocus captionLayout="dropdown" />
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={bookingDate}
+                  onSelect={(d) => { setBookingDate(d); setCalOpen(false); }}
+                  initialFocus
+                  captionLayout="dropdown"
+                  fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                  defaultMonth={bookingDate ?? new Date()}
+                  onMonthChange={setVisibleMonth}
+                  disabled={(d) => {
+                    if (d < new Date(new Date().setHours(0, 0, 0, 0))) return true;
+                    return getDateStatus(d) === "unavailable";
+                  }}
+                  modifiers={{
+                    available: (d) => !!venueId && getDateStatus(d) === "available",
+                    partial: (d) => !!venueId && getDateStatus(d) === "partial",
+                    unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable",
+                  }}
+                  modifiersClassNames={{
+                    available: "day-available",
+                    partial: "day-partial",
+                    unavailable: "day-unavailable",
+                  }}
+                />
               </PopoverContent>
             </Popover>
+            {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
           </div>
 
           {/* Event Session — native Select */}

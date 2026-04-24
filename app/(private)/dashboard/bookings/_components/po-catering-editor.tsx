@@ -408,7 +408,8 @@ function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBook
           )}
         </td>
         {/* TOTAL — calculated if price filled, manual if not */}
-        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">          {row.price ? (
+        <td className="border border-gray-300 px-2 py-1.5 text-right font-bold text-xs">
+          {row.price ? (
             row._total != null && row._total !== 0 ? fmtRp(row._total) : ""
           ) : readOnly ? (
             row.grandTotal ? fmtRp(row.grandTotal) : ""
@@ -816,7 +817,7 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
     } else if (row.type === "subgroup") {
       curSub = { row, items: [] };
       if (curGroup) curGroup.subs.push(curSub);
-    } else if (row.type === "item" || row.type === "charge" || row.type === "payment") {
+    } else if (row.type === "item" || row.type === "charge" || row.type === "payment" || row.type === "blank") {
       if (curSub) curSub.items.push(row);
       else if (curGroup) curGroup.directItems.push(row);
       else topItems.push(row);
@@ -831,6 +832,10 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
 
   const getLabel = (r: PORow) => r.type === "subtotal" || r.type === "formula"
     ? (r.label || "(formula)")
+    : r.type === "blank"
+    ? (r.label || "(blank)")
+    : r.type === "subgroup"
+    ? (r.label || "(sub-group)")
     : `${r.no ? r.no + ". " : ""}${r.description || "(item)"}`;
 
   const renderItem = (r: PORow, indent: string) => {
@@ -898,13 +903,20 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
                   {/* Group itself selectable if has value */}
                   {(g._total || g.grandTotal || g.price) && renderItem({ ...g, description: g.label }, "px-2")}
                   {subs.map(({ row: sg, items }) => {
+                    if (items.length === 0) return null;
                     const sgIds = [sg.id, ...items.map((r) => r.id)];
                     return (
                       <div key={sg.id}>
-                        <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-gray-50 rounded text-[11px] font-semibold text-gray-700 bg-gray-50">
+                        <div className="flex items-center gap-1 px-2 py-0.5 hover:bg-gray-50 rounded">
                           <Checkbox checked={allSel(sgIds)} indeterminate={!allSel(sgIds) && someSel(sgIds)} onCheckedChange={(v) => toggleIds(sgIds, !!v)} />
-                          <span className="truncate">{sg.label || "(sub-group)"}</span>
-                        </label>
+                          <span className="flex-1 text-[11px] font-semibold text-gray-700 truncate cursor-pointer" onClick={() => toggleIds(sgIds, !allSel(sgIds))}>{sg.label || "(sub-group)"}</span>
+                          {onSignChange && (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Switch checked={(signs?.[sg.id] ?? 1) === -1} onCheckedChange={(v) => onSignChange({ ...(signs ?? {}), [sg.id]: v ? -1 : 1 })} className="scale-75" />
+                              <span className={`text-[9px] font-bold w-3 ${(signs?.[sg.id] ?? 1) === -1 ? "text-red-500" : "text-green-600"}`}>{(signs?.[sg.id] ?? 1) === -1 ? "−" : "+"}</span>
+                            </div>
+                          )}
+                        </div>
                         {items.map((r) => renderItem(r, "pl-5"))}
                       </div>
                     );

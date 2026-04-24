@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { X, FileText, Copy, RefreshCw, Link2, Download } from "lucide-react";
+import { X, FileText, Copy, RefreshCw, Link2, Download, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
+import { deleteBookingDocument, deleteBookingDocuments } from "@/actions/booking-document";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
@@ -69,6 +71,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"booking" | "vendor" | "payment" | "documents" | "agreement">("booking");
+  const [deleteDocTarget, setDeleteDocTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
   const fetchBooking = (id: string) => {
     setLoading(true);
@@ -82,6 +89,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   useEffect(() => {
     if (!open || !bookingId) return;
     setActiveTab("booking");
+    setSelectedDocIds(new Set());
     fetchBooking(bookingId);
   }, [open, bookingId]);
 
@@ -390,75 +398,125 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       });
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Object.entries(grouped).map(([docName, docs]) => (
-                            <div key={docName} className="border border-gray-100 rounded-lg p-3">
-                              <p className="text-xs font-medium text-gray-700">{docName}</p>
-                              {docs[0]?.description && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">{docs[0].description}</p>
-                              )}
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {docs.map((doc) => {
-                                  const url = (doc as typeof doc & { fileUrl?: string }).fileUrl ?? "";
-                                  const isImage = doc.fileType?.startsWith("image/");
-                                  const ext = doc.fileName?.split(".").pop() ?? "FILE";
-                                  return (
-                                    <div key={doc.id} className="w-[100px] border border-gray-200 rounded-lg overflow-hidden bg-white">
-                                      <div
-                                        className="h-[80px] w-full bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
-                                        onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
-                                      >
-                                        {isImage && url ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img src={url} alt={doc.fileName} className="w-full h-full object-cover" />
-                                        ) : (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <FileText className="h-6 w-6 text-gray-300" />
-                                            <span className="text-[9px] text-gray-400 uppercase font-medium">{ext}</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="px-1.5 py-1">
-                                        <div className="flex items-center justify-between gap-0.5">
-                                          <p className="text-[10px] text-gray-600 truncate flex-1">{doc.fileName}</p>
-                                          <button
-                                            type="button"
-                                            className="shrink-0 text-gray-400 hover:text-gray-600"
-                                            onClick={async (e) => {
-                                              e.stopPropagation();
-                                              try {
-                                                const res = await fetch(url);
-                                                const blob = await res.blob();
-                                                const a = document.createElement("a");
-                                                a.href = URL.createObjectURL(blob);
-                                                a.download = doc.fileName;
-                                                a.click();
-                                                URL.revokeObjectURL(a.href);
-                                              } catch {
-                                                window.open(url, "_blank", "noopener,noreferrer");
-                                              }
-                                            }}
+                          {Object.entries(grouped).map(([docName, docs]) => {
+                            const groupIds = docs.map((d) => d.id);
+                            const allSelected = groupIds.every((id) => selectedDocIds.has(id));
+                            const someSelected = groupIds.some((id) => selectedDocIds.has(id));
+                            const toggleGroup = () => {
+                              setSelectedDocIds((prev) => {
+                                const next = new Set(prev);
+                                if (allSelected) { groupIds.forEach((id) => next.delete(id)); }
+                                else { groupIds.forEach((id) => next.add(id)); }
+                                return next;
+                              });
+                            };
+                            return (
+                              <div key={docName} className="border border-gray-100 rounded-lg p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-medium text-gray-700 truncate">{docName}</p>
+                                  <button type="button" onClick={toggleGroup} className="text-[10px] text-gray-400 hover:text-gray-600 shrink-0">
+                                    {allSelected ? "Deselect all" : "Select all"}
+                                  </button>
+                                </div>
+                                {docs[0]?.description && (
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{docs[0].description}</p>
+                                )}
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {docs.map((doc) => {
+                                    const url = (doc as typeof doc & { fileUrl?: string }).fileUrl ?? "";
+                                    const isImage = doc.fileType?.startsWith("image/");
+                                    const ext = doc.fileName?.split(".").pop() ?? "FILE";
+                                    const isSelected = selectedDocIds.has(doc.id);
+                                    return (
+                                      <div key={doc.id} className={`w-[100px] border rounded-lg overflow-hidden bg-white transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-gray-200"}`}>
+                                        <div className="relative">
+                                          <div
+                                            className="h-[80px] w-full bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                                            onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
                                           >
-                                            <Download className="h-2.5 w-2.5" />
-                                          </button>
+                                            {isImage && url ? (
+                                              // eslint-disable-next-line @next/next/no-img-element
+                                              <img src={url} alt={doc.fileName} className="w-full h-full object-cover" />
+                                            ) : (
+                                              <div className="flex flex-col items-center gap-1">
+                                                <FileText className="h-6 w-6 text-gray-300" />
+                                                <span className="text-[9px] text-gray-400 uppercase font-medium">{ext}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => setSelectedDocIds((prev) => {
+                                              const next = new Set(prev);
+                                              if (isSelected) { next.delete(doc.id); } else { next.add(doc.id); }
+                                              return next;
+                                            })}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="absolute top-1.5 left-1.5 h-3.5 w-3.5 cursor-pointer accent-black"
+                                          />
                                         </div>
-                                        <p className="text-[9px] text-gray-400">
-                                          {doc.fileSize < 1024 * 1024
-                                            ? `${(doc.fileSize / 1024).toFixed(1)} KB`
-                                            : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}
-                                        </p>
+                                        <div className="px-1.5 py-1">
+                                          <div className="flex items-center justify-between gap-0.5">
+                                            <p className="text-[10px] text-gray-600 truncate flex-1">{doc.fileName}</p>
+                                            <div className="flex items-center gap-0.5 shrink-0">
+                                              <button
+                                                type="button"
+                                                className="shrink-0 text-gray-400 hover:text-gray-600"
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  try {
+                                                    const res = await fetch(url);
+                                                    const blob = await res.blob();
+                                                    const a = document.createElement("a");
+                                                    a.href = URL.createObjectURL(blob);
+                                                    a.download = doc.fileName;
+                                                    a.click();
+                                                    URL.revokeObjectURL(a.href);
+                                                  } catch {
+                                                    window.open(url, "_blank", "noopener,noreferrer");
+                                                  }
+                                                }}
+                                              >
+                                                <Download className="h-2.5 w-2.5" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="shrink-0 text-gray-400 hover:text-destructive"
+                                                onClick={(e) => { e.stopPropagation(); setDeleteDocTarget({ id: doc.id, name: doc.fileName }); }}
+                                              >
+                                                <Trash2 className="h-2.5 w-2.5" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                          <p className="text-[9px] text-gray-400">
+                                            {doc.fileSize < 1024 * 1024
+                                              ? `${(doc.fileSize / 1024).toFixed(1)} KB`
+                                              : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}
+                                          </p>
+                                        </div>
                                       </div>
-                                    </div>
-                                  );
-                                })}
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       );
                     })()
                   )}
 
-                  {/* Client Agreement section */}
+                  {/* Bulk action bar */}
+                  {selectedDocIds.size > 0 && (
+                    <div className="sticky bottom-0 bg-white border-t pt-3 flex items-center justify-between gap-3">
+                      <span className="text-sm text-gray-600">{selectedDocIds.size} file dipilih</span>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setSelectedDocIds(new Set())} className="text-sm text-gray-500 hover:text-gray-700">Batal</button>
+                        <button type="button" onClick={() => setShowBulkConfirm(true)} className="text-sm text-destructive hover:text-destructive/80 font-medium">Hapus {selectedDocIds.size} file</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -470,6 +528,42 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={!!deleteDocTarget}
+        onOpenChange={(v) => { if (!v) setDeleteDocTarget(null); }}
+        title="Hapus Dokumen"
+        description={`Yakin mau hapus "${deleteDocTarget?.name}"? File akan dihapus permanen.`}
+        confirmLabel={deleting ? "Menghapus..." : "Hapus"}
+        destructive
+        onConfirm={async () => {
+          if (!deleteDocTarget) return;
+          setDeleting(true);
+          const result = await deleteBookingDocument(deleteDocTarget.id);
+          setDeleting(false);
+          if (!result.success) { toast.error(result.error); return; }
+          toast.success("Dokumen berhasil dihapus");
+          setDeleteDocTarget(null);
+          if (bookingId) fetchBooking(bookingId);
+        }}
+      />
+      <ConfirmDialog
+        open={showBulkConfirm}
+        onOpenChange={(v) => { if (!v) setShowBulkConfirm(false); }}
+        title="Hapus Dokumen"
+        description={`Yakin mau hapus ${selectedDocIds.size} file? Semua file akan dihapus permanen.`}
+        confirmLabel={bulkDeleting ? "Menghapus..." : `Hapus ${selectedDocIds.size} file`}
+        destructive
+        onConfirm={async () => {
+          setBulkDeleting(true);
+          const result = await deleteBookingDocuments([...selectedDocIds]);
+          setBulkDeleting(false);
+          if (!result.success) { toast.error(result.error); return; }
+          toast.success(`${result.count} file berhasil dihapus`);
+          setShowBulkConfirm(false);
+          setSelectedDocIds(new Set());
+          if (bookingId) fetchBooking(bookingId);
+        }}
+      />
     </div>
   );
 }

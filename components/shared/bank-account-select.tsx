@@ -23,9 +23,10 @@ interface Props {
   disabled?: boolean;
   className?: string;
   minDropdownWidth?: number;
+  venueId?: string;
 }
 
-export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekening...", disabled, className, minDropdownWidth = 320 }: Props) {
+export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekening...", disabled, className, minDropdownWidth = 320, venueId }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -81,7 +82,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
     setSaving(true);
     try {
       const { createPaymentMethod } = await import("@/actions/payment-method");
-      const result = await createPaymentMethod(form);
+      const result = await createPaymentMethod({ ...form, venueId: venueId ?? null });
       if (!result.success || !result.data) { toast.error(result.error ?? "Gagal menyimpan"); return; }
       toast.success("Rekening berhasil ditambahkan");
       await qc.invalidateQueries({ queryKey: ["payment-methods"] });

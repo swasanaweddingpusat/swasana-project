@@ -202,7 +202,14 @@ export async function createBooking(data: unknown) {
       entityId: bookingId,
     }, session!.user.profileId!);
 
-    return { success: true, bookingId };
+    // Fetch created term IDs for client-side evidence upload
+    const createdTerms = await db.termOfPayment.findMany({
+      where: { bookingId },
+      select: { id: true, sortOrder: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
+    return { success: true, bookingId, termIds: createdTerms };
   } catch (e) {
     // Rollback: delete newly created customer if booking failed
     if (newCustomerId) {

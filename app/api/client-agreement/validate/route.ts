@@ -51,7 +51,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
-    if (agreement.status !== "Viewed" && agreement.status !== "Signed") {
+    const currentStatus = agreement.status as string;
+
+    if (currentStatus !== "Viewed" && currentStatus !== "Signed") {
       await db.clientAgreement.update({
         where: { token },
         data: { status: "Viewed", viewedAt: new Date() },
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
 
     return new Response(JSON.stringify({
       booking: agreement.booking,
-      alreadySigned: agreement.status === "Signed",
+      alreadySigned: currentStatus === "Signed",
     }, (_key, val) => typeof val === "bigint" ? val.toString() : val), {
       status: 200,
       headers: { "Content-Type": "application/json" },

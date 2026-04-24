@@ -68,20 +68,30 @@ model Profile {
   id          String  @id @default(uuid())
   userId      String  @unique
   email       String  @unique
+  employeeId  String? @unique
   fullName    String?
   nickName    String?
+  gender      Gender?
   phoneNumber String?
   avatarUrl   String?
 
   // Personal data
+  nik              String?
+  kkNumber         String?
   placeOfBirth     String?
   dateOfBirth      DateTime?
   ktpAddress       String?
   currentAddress   String?
+  city             String?
   motherName       String?
   maritalStatus    String?
   numberOfChildren Int?
   lastEducation    String?
+
+  // Payroll
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountHolder String?
 
   // Emergency contact
   emergencyContactName  String?
@@ -117,6 +127,8 @@ model Profile {
   uploadedDocuments       BookingDocument[]
   createdSettlements      BookingPaymentSettlement[]
   notifications           Notification[]
+  bookingComments         BookingComment[]
+  bookingCommentReads     BookingCommentRead[]
 
   @@index([roleId])
   @@index([dataScope])
@@ -441,12 +453,26 @@ model SourceOfInformation {
   @@map("source_of_informations")
 }
 
+model EducationLevel {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("education_levels")
+}
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum ProfileStatus {
   active
   inactive
   suspended
+}
+
+enum Gender {
+  MALE
+  FEMALE
 }
 
 enum DataScope {
@@ -518,6 +544,8 @@ model Booking {
   bookingRefunds   BookingPaymentSettlement[] @relation("SourceSettlements")
   targetSettlements BookingPaymentSettlement[] @relation("TargetSettlements")
   clientAgreement  ClientAgreement?
+  bookingComments  BookingComment[]
+  commentReads     BookingCommentRead[]
 
   @@index([salesId])
   @@index([managerId])
@@ -700,6 +728,40 @@ model BookingDocument {
 
   @@index([bookingId])
   @@map("booking_documents")
+}
+
+model BookingComment {
+  id        String   @id @default(uuid())
+  bookingId String
+  authorId  String
+  content   String
+  mentions  String[]
+  replyToId String?
+  edited    Boolean  @default(false)
+  attachments Json   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author  Profile         @relation(fields: [authorId], references: [id])
+  replyTo BookingComment? @relation("CommentReplies", fields: [replyToId], references: [id])
+  replies BookingComment[] @relation("CommentReplies")
+
+  @@index([bookingId])
+  @@index([authorId])
+  @@map("booking_comments")
+}
+
+model BookingCommentRead {
+  profileId  String
+  bookingId  String
+  lastReadAt DateTime @default(now()) @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, bookingId])
+  @@map("booking_comment_reads")
 }
 
 model BookingPaymentSettlement {

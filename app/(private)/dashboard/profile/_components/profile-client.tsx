@@ -1,30 +1,43 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { Gender } from "@prisma/client"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Lock, User, Eye, EyeOff, Loader2, AlertTriangle, BarChart3, TrendingUp, Users, Calendar } from "lucide-react"
+import { Lock, User, Eye, EyeOff, Loader2, AlertTriangle, CreditCard, Users, Briefcase } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { updateMyProfile } from "@/actions/profile"
+import { createEducationLevel } from "@/actions/education-level"
 import { AvatarUpload } from "@/components/shared/avatar-upload"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 interface ProfileData {
   id: string
+  employeeId: string | null
   fullName: string | null
   nickName: string | null
+  gender: Gender | null
   phoneNumber: string | null
+  nik: string | null
+  kkNumber: string | null
   placeOfBirth: string | null
   dateOfBirth: string | null
   ktpAddress: string | null
   currentAddress: string | null
+  city: string | null
   motherName: string | null
   maritalStatus: string | null
   numberOfChildren: number | null
   lastEducation: string | null
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountHolder: string | null
   emergencyContactName: string | null
   emergencyContactRel: string | null
   emergencyContactPhone: string | null
@@ -41,35 +54,60 @@ interface ProfileClientProps {
     mustChangePassword: boolean
   }
   profile: ProfileData | null
+  educationLevels: { id: string; name: string }[]
 }
 
-const inputClass = "mt-1 border-[#CCCCCC] bg-[#F9F9F9]"
+function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/8 text-primary">
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+      <span className="text-sm font-semibold text-foreground">{title}</span>
+    </div>
+  )
+}
 
-export function ProfileClient({ user, profile }: ProfileClientProps) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+export function ProfileClient({ user, profile, educationLevels }: ProfileClientProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "security">(
     user.mustChangePassword ? "security" : "overview"
   )
 
-  // Profile form state
   const [form, setForm] = useState({
+    employeeId: profile?.employeeId ?? "",
     fullName: profile?.fullName ?? user.name ?? "",
     nickName: profile?.nickName ?? "",
+    gender: profile?.gender ?? null as Gender | null,
     phoneNumber: profile?.phoneNumber ?? "",
+    nik: profile?.nik ?? "",
+    kkNumber: profile?.kkNumber ?? "",
     placeOfBirth: profile?.placeOfBirth ?? "",
     dateOfBirth: profile?.dateOfBirth ?? "",
     ktpAddress: profile?.ktpAddress ?? "",
     currentAddress: profile?.currentAddress ?? "",
+    city: profile?.city ?? "",
     motherName: profile?.motherName ?? "",
     maritalStatus: profile?.maritalStatus ?? "",
     numberOfChildren: profile?.numberOfChildren?.toString() ?? "",
     lastEducation: profile?.lastEducation ?? "",
+    bankName: profile?.bankName ?? "",
+    bankAccountNumber: profile?.bankAccountNumber ?? "",
+    bankAccountHolder: profile?.bankAccountHolder ?? "",
     emergencyContactName: profile?.emergencyContactName ?? "",
     emergencyContactRel: profile?.emergencyContactRel ?? "",
     emergencyContactPhone: profile?.emergencyContactPhone ?? "",
   })
   const [savingProfile, setSavingProfile] = useState(false)
 
-  // Password form state
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -79,13 +117,29 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
   const [isPending, startTransition] = useTransition()
 
   const set = (field: string, value: string) => setForm((p) => ({ ...p, [field]: value }))
+  const [eduOptions, setEduOptions] = useState(() => educationLevels.map((e) => ({ id: e.id, name: e.name })))
+
+  const handleAddEducation = async (name: string) => {
+    const res = await createEducationLevel(name, eduOptions.length + 1)
+    if (!res.success) { toast.error(res.error); return; }
+    setEduOptions((prev) => [...prev, { id: res.item.id, name: res.item.name }])
+    set("lastEducation", res.item.id)
+  }
 
   const handleSaveProfile = async () => {
     setSavingProfile(true)
     try {
       const res = await updateMyProfile({
         ...form,
+        gender: form.gender,
         numberOfChildren: form.numberOfChildren ? parseInt(form.numberOfChildren) : null,
+        employeeId: form.employeeId || null,
+        nik: form.nik || null,
+        kkNumber: form.kkNumber || null,
+        city: form.city || null,
+        bankName: form.bankName || null,
+        bankAccountNumber: form.bankAccountNumber || null,
+        bankAccountHolder: form.bankAccountHolder || null,
       })
       if (res.success) toast.success("Profil berhasil disimpan")
       else toast.error(res.error ?? "Gagal menyimpan")
@@ -105,7 +159,7 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
         })
-        const result = await res.json()
+        const result = await res.json() as { error?: string }
         if (!res.ok) { toast.error(result.error ?? "Gagal mengubah password"); return }
         toast.success("Password berhasil diubah!")
         setCurrentPassword(""); setNewPassword(""); setConfirmPassword("")
@@ -123,7 +177,7 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
   ]
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 sm:p-6">
       {user.mustChangePassword && (
         <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
           <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
@@ -135,35 +189,44 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
       )}
 
       {/* Profile header */}
-      <Card>
-        <CardContent className="flex items-center gap-4 py-6">
-          <AvatarUpload
-            currentUrl={profile?.avatarUrl ?? user.image ?? null}
-            name={form.fullName || user.name}
-            userId={user.id}
-            onUploaded={(url) => { /* avatar updated, shown via preview in component */ }}
-          />
-          <div>
-            <h2 className="text-xl font-semibold">{form.fullName || user.name || "—"}</h2>
-            <p className="text-sm text-muted-foreground">{user.email}</p>
-            {user.role && (
-              <span className="inline-block mt-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium capitalize">
-                {user.role}
-              </span>
-            )}
+      <Card className="border-border/60">
+        <CardContent className="">
+          <div className="flex items-center gap-5">
+            <AvatarUpload
+              currentUrl={profile?.avatarUrl ?? user.image ?? null}
+              name={form.fullName || user.name}
+              userId={user.id}
+              onUploaded={() => {}}
+            />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-semibold truncate">{form.fullName || user.name || "—"}</h2>
+              <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {profile?.employeeId && (
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono">
+                    {profile.employeeId}
+                  </span>
+                )}
+                {user.role && (
+                  <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium capitalize">
+                    {user.role}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-border">
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => !user.mustChangePassword || tab.id === "security" ? setActiveTab(tab.id) : null}
+            onClick={() => { if (!user.mustChangePassword || tab.id === "security") setActiveTab(tab.id) }}
             className={cn(
               "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-              activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-gray-900",
+              activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
               user.mustChangePassword && tab.id !== "security" && "opacity-40 cursor-not-allowed"
             )}
           >
@@ -175,119 +238,134 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
 
       {/* Overview Tab */}
       {activeTab === "overview" && (
-        <div className="space-y-6">
-          {/* Analytics cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="py-4 flex items-center gap-3">
-                <div className="p-2 bg-blue-50 rounded-lg"><TrendingUp className="h-5 w-5 text-blue-600" /></div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Active Leads</p>
-                  <p className="text-base font-semibold text-gray-900">—</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="py-4 flex items-center gap-3">
-                <div className="p-2 bg-green-50 rounded-lg"><BarChart3 className="h-5 w-5 text-green-600" /></div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Bookings</p>
-                  <p className="text-base font-semibold text-gray-900">—</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="py-4 flex items-center gap-3">
-                <div className="p-2 bg-purple-50 rounded-lg"><Users className="h-5 w-5 text-purple-600" /></div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Customers</p>
-                  <p className="text-base font-semibold text-gray-900">—</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="py-4 flex items-center gap-3">
-                <div className="p-2 bg-orange-50 rounded-lg"><Calendar className="h-5 w-5 text-orange-600" /></div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Events</p>
-                  <p className="text-base font-semibold text-gray-900">—</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="space-y-4">
+          {/* Data Karyawan */}
+          <Card className="border-border/60">
+            <CardContent className="">
+              <SectionHeader icon={Briefcase} title="Data Pribadi" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <Field label="Employee ID">
+                  <Input value={form.employeeId} onChange={(e) => set("employeeId", e.target.value)} placeholder="EMP-001" />
+                </Field>
+                <Field label="Nama Lengkap *">
+                  <Input value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="Nama lengkap" />
+                </Field>
+                <Field label="Nama Panggilan">
+                  <Input value={form.nickName} onChange={(e) => set("nickName", e.target.value)} placeholder="Nama panggilan" />
+                </Field>
+                <Field label="Jenis Kelamin">
+                  <Select value={form.gender ?? ""} onValueChange={(v) => setForm((p) => ({ ...p, gender: v as Gender }))}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Pilih jenis kelamin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={Gender.MALE}>Laki-laki</SelectItem>
+                      <SelectItem value={Gender.FEMALE}>Perempuan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Tempat Lahir">
+                  <Input value={form.placeOfBirth} onChange={(e) => set("placeOfBirth", e.target.value)} placeholder="Kota kelahiran" />
+                </Field>
+                <Field label="Tanggal Lahir">
+                  <Input type="date" value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} />
+                </Field>
+                <Field label="NIK">
+                  <Input value={form.nik} onChange={(e) => set("nik", e.target.value)} placeholder="16 digit NIK" maxLength={16} />
+                </Field>
+                <Field label="No. KK">
+                  <Input value={form.kkNumber} onChange={(e) => set("kkNumber", e.target.value)} placeholder="16 digit No. KK" maxLength={16} />
+                </Field>
+                <Field label="No. Telepon">
+                  <Input value={form.phoneNumber} onChange={(e) => set("phoneNumber", e.target.value)} placeholder="08xxxxxxxxxx" />
+                </Field>
+                <Field label="Email">
+                  <Input value={user.email} readOnly className="bg-muted text-muted-foreground cursor-not-allowed" />
+                </Field>
+                <Field label="Kota">
+                  <Input value={form.city} onChange={(e) => set("city", e.target.value)} placeholder="Kota domisili" />
+                </Field>
+                <Field label="Pendidikan Terakhir">
+                  <SearchableSelect
+                    options={eduOptions}
+                    value={form.lastEducation ?? ""}
+                    onChange={(v) => set("lastEducation", v)}
+                    placeholder="Pilih pendidikan terakhir"
+                    searchPlaceholder="Cari pendidikan..."
+                    emptyText="Tidak ada data"
+                    onAdd={handleAddEducation}
+                  />
+                </Field>
+                <Field label="Alamat Lengkap (KTP)">
+                  <Textarea value={form.ktpAddress} onChange={(e) => set("ktpAddress", e.target.value)} placeholder="Alamat sesuai KTP" rows={2} />
+                </Field>
+                <Field label="Alamat Tinggal Saat Ini">
+                  <Textarea value={form.currentAddress} onChange={(e) => set("currentAddress", e.target.value)} placeholder="Alamat tinggal saat ini" rows={2} />
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Profile form */}
-          <Card>
-            <CardContent className="py-6 space-y-6">
-              <h3 className="font-semibold text-sm text-gray-700">Informasi Pribadi</h3>
+          {/* Rekening */}
+          <Card className="border-border/60">
+            <CardContent className="">
+              <SectionHeader icon={CreditCard} title="Rekening" />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
+                <Field label="Nama Bank">
+                  <Input value={form.bankName} onChange={(e) => set("bankName", e.target.value)} placeholder="BCA, BNI, Mandiri, dll" />
+                </Field>
+                <Field label="Nomor Rekening">
+                  <Input value={form.bankAccountNumber} onChange={(e) => set("bankAccountNumber", e.target.value)} placeholder="Nomor rekening" />
+                </Field>
+                <Field label="Nama Pemilik Rekening">
+                  <Input value={form.bankAccountHolder} onChange={(e) => set("bankAccountHolder", e.target.value)} placeholder="Sesuai buku tabungan" />
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm">Nama Lengkap *</Label>
-                  <Input className={inputClass} value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="Nama lengkap" />
-                </div>
-                <div>
-                  <Label className="text-sm">Nama Panggilan</Label>
-                  <Input className={inputClass} value={form.nickName} onChange={(e) => set("nickName", e.target.value)} placeholder="Nama panggilan" />
-                </div>
-                <div>
-                  <Label className="text-sm">No. Telepon</Label>
-                  <Input className={inputClass} value={form.phoneNumber} onChange={(e) => set("phoneNumber", e.target.value)} placeholder="08xxxxxxxxxx" />
-                </div>
-                <div>
-                  <Label className="text-sm">Email</Label>
-                  <Input className={inputClass} value={user.email} readOnly />
-                </div>
-                <div>
-                  <Label className="text-sm">Tempat Lahir</Label>
-                  <Input className={inputClass} value={form.placeOfBirth} onChange={(e) => set("placeOfBirth", e.target.value)} placeholder="Kota kelahiran" />
-                </div>
-                <div>
-                  <Label className="text-sm">Tanggal Lahir</Label>
-                  <Input className={inputClass} type="date" value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-sm">Status Pernikahan</Label>
-                  <Input className={inputClass} value={form.maritalStatus} onChange={(e) => set("maritalStatus", e.target.value)} placeholder="Belum menikah / Menikah" />
-                </div>
-                <div>
-                  <Label className="text-sm">Pendidikan Terakhir</Label>
-                  <Input className={inputClass} value={form.lastEducation} onChange={(e) => set("lastEducation", e.target.value)} placeholder="S1, SMA, dll" />
-                </div>
+          {/* Data Tambahan */}
+          <Card className="border-border/60">
+            <CardContent className="">
+              <SectionHeader icon={User} title="Data Tambahan" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <Field label="Nama Ibu Kandung">
+                  <Input value={form.motherName} onChange={(e) => set("motherName", e.target.value)} placeholder="Nama ibu kandung" />
+                </Field>
+                <Field label="Status Pernikahan">
+                  <Select value={form.maritalStatus} onValueChange={(v) => set("maritalStatus", v)}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Pilih status pernikahan" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Belum Menikah">Belum Menikah</SelectItem>
+                      <SelectItem value="Menikah">Menikah</SelectItem>
+                      <SelectItem value="Cerai Hidup">Cerai Hidup</SelectItem>
+                      <SelectItem value="Cerai Mati">Cerai Mati</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Jumlah Anak">
+                  <Input type="number" min={0} value={form.numberOfChildren} onChange={(e) => set("numberOfChildren", e.target.value)} placeholder="0" />
+                </Field>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm">Alamat KTP</Label>
-                  <Textarea className={inputClass} value={form.ktpAddress} onChange={(e) => set("ktpAddress", e.target.value)} placeholder="Alamat sesuai KTP" rows={2} />
-                </div>
-                <div>
-                  <Label className="text-sm">Alamat Domisili</Label>
-                  <Textarea className={inputClass} value={form.currentAddress} onChange={(e) => set("currentAddress", e.target.value)} placeholder="Alamat tinggal saat ini" rows={2} />
-                </div>
+              <Separator className="my-5" />
+
+              <SectionHeader icon={Users} title="Kontak Darurat" />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
+                <Field label="Nama">
+                  <Input value={form.emergencyContactName} onChange={(e) => set("emergencyContactName", e.target.value)} placeholder="Nama kontak darurat" />
+                </Field>
+                <Field label="Hubungan">
+                  <Input value={form.emergencyContactRel} onChange={(e) => set("emergencyContactRel", e.target.value)} placeholder="Orang tua, pasangan, dll" />
+                </Field>
+                <Field label="No. Telepon">
+                  <Input value={form.emergencyContactPhone} onChange={(e) => set("emergencyContactPhone", e.target.value)} placeholder="08xxxxxxxxxx" />
+                </Field>
               </div>
 
-              <div className="border-t pt-4">
-                <h3 className="font-semibold text-sm text-gray-700 mb-4">Kontak Darurat</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <Label className="text-sm">Nama</Label>
-                    <Input className={inputClass} value={form.emergencyContactName} onChange={(e) => set("emergencyContactName", e.target.value)} placeholder="Nama kontak darurat" />
-                  </div>
-                  <div>
-                    <Label className="text-sm">Hubungan</Label>
-                    <Input className={inputClass} value={form.emergencyContactRel} onChange={(e) => set("emergencyContactRel", e.target.value)} placeholder="Orang tua, pasangan, dll" />
-                  </div>
-                  <div>
-                    <Label className="text-sm">No. Telepon</Label>
-                    <Input className={inputClass} value={form.emergencyContactPhone} onChange={(e) => set("emergencyContactPhone", e.target.value)} placeholder="08xxxxxxxxxx" />
-                  </div>
-                </div>
+              <div className="mt-6 flex justify-end">
+                <Button onClick={handleSaveProfile} disabled={savingProfile} className="min-w-32">
+                  {savingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</> : "Simpan Profil"}
+                </Button>
               </div>
-
-              <Button onClick={handleSaveProfile} disabled={savingProfile} className="w-full sm:w-auto">
-                {savingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</> : "Simpan Profil"}
-              </Button>
             </CardContent>
           </Card>
         </div>
@@ -295,42 +373,46 @@ export function ProfileClient({ user, profile }: ProfileClientProps) {
 
       {/* Security Tab */}
       {activeTab === "security" && (
-        <Card>
-          <CardContent className="py-6">
-            <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-              <h3 className="font-semibold text-sm text-gray-700 mb-4">
+        <Card className="border-border/60">
+          <CardContent className="">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/8 text-primary">
+                <Lock className="h-3.5 w-3.5" />
+              </div>
+              <span className="text-sm font-semibold">
                 {user.mustChangePassword ? "Buat Kata Sandi Baru" : "Ubah Kata Sandi"}
-              </h3>
+              </span>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
               {!user.mustChangePassword && (
-                <div className="grid gap-2">
-                  <Label>Password Saat Ini</Label>
+                <Field label="Password Saat Ini">
                   <div className="relative">
                     <Input type={showCurrentPw ? "text" : "password"} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Password saat ini" required disabled={isPending} />
                     <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowCurrentPw(!showCurrentPw)}>
                       {showCurrentPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
-                </div>
+                </Field>
               )}
-              <div className="grid gap-2">
-                <Label>Password Baru</Label>
+              <Field label="Password Baru">
                 <div className="relative">
                   <Input type={showNewPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimal 12 karakter" required minLength={12} disabled={isPending} />
                   <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowNewPw(!showNewPw)}>
                     {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Konfirmasi Password Baru</Label>
+              </Field>
+              <Field label="Konfirmasi Password Baru">
                 <div className="relative">
                   <Input type={showConfirmPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Ulangi password baru" required minLength={12} disabled={isPending} />
                   <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowConfirmPw(!showConfirmPw)}>
                     {showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
+              </Field>
               </div>
-              <Button type="submit" className="w-full" disabled={isPending}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={isPending}>
                 {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</> : "Simpan Password Baru"}
               </Button>
             </form>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import SignatureCanvas from "react-signature-canvas";
@@ -11,11 +11,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, ListChecks, Palette } from "lucide-react";
+import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, ListChecks, Palette, MessageSquare } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useApproveBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { approveCategoryPO } from "@/actions/catering-approval";
 import { BookingDrawer } from "./booking-drawer";
@@ -28,33 +29,36 @@ import { SetVendorDrawer } from "./set-vendor-drawer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CateringSelectionDrawer } from "./catering-selection-drawer";
 import { DecorationSelectionDrawer } from "./decoration-selection-drawer";
+import { BookingCommentPanel } from "./booking-comment-panel";
+import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { Drawer } from "@/components/shared/drawer";
+import { useHeaderAction } from "@/components/providers/header-action-provider";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
 
 const ROWS_PER_PAGE = 10;
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-green-500",
-  Uploaded: "bg-orange-500",
-  Pending: "bg-blue-500",
-  Rejected: "bg-red-600",
-  Canceled: "bg-red-600",
-  Lost: "bg-orange-500",
+  Uploaded: "bg-blue-500",
+  Pending: "bg-orange-400",
+  Rejected: "bg-destructive",
+  Canceled: "bg-muted-foreground",
+  Lost: "bg-muted-foreground",
 };
 
 const STATUS_TEXT: Record<string, string> = {
-  Confirmed: "text-green-700 border-green-200",
-  Uploaded: "text-orange-700 border-orange-200",
-  Pending: "text-blue-700 border-blue-200",
-  Rejected: "text-red-700 border-red-200",
-  Canceled: "text-red-700 border-red-200",
-  Lost: "text-orange-700 border-orange-200",
+  Confirmed: "text-green-600 border-border",
+  Uploaded: "text-blue-600 border-border",
+  Pending: "text-orange-500 border-border",
+  Rejected: "text-destructive border-destructive/30",
+  Canceled: "text-muted-foreground border-border",
+  Lost: "text-muted-foreground border-border",
 };
 
 const SESSION_STYLE: Record<string, string> = {
-  morning: "bg-amber-100 text-amber-700",
-  evening: "bg-indigo-100 text-indigo-700",
-  fullday: "bg-emerald-100 text-emerald-700",
+  morning: "bg-muted text-amber-600",
+  evening: "bg-muted text-indigo-600",
+  fullday: "bg-muted text-emerald-600",
 };
 
 const SESSION_LABEL: Record<string, string> = {
@@ -80,15 +84,27 @@ function fmtRp(n: unknown) {
 
 export function BookingsTable({ initialData, salesProfiles }: { initialData: BookingsResult; salesProfiles: SalesProfile[] }) {
   const { data: bookings = initialData, refetch, isFetching } = useBookings(initialData);
+  const qc = useQueryClient();
   const deleteMut = useDeleteBooking();
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
   const approveMut = useApproveBooking();
   const { can } = usePermissions();
+  const { setAction, clearAction } = useHeaderAction();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!can("booking", "create")) return;
+    setAction(
+      <Button size="sm" onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
+        <Plus className="h-4 w-4" /> <span className="hidden sm:inline ml-1">Tambah Booking</span><span className="sm:hidden ml-1">Booking</span>
+      </Button>
+    );
+    return () => clearAction();
+  }, [setAction, clearAction]); // eslint-disable-line react-hooks/exhaustive-deps
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
   const [approveTarget, setApproveTarget] = useState<BookingListItem | null>(null);
@@ -113,6 +129,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [vendorTarget, setVendorTarget] = useState<BookingListItem | null>(null);
   const [cateringTarget, setCateringTarget] = useState<string | null>(null);
   const [decorationTarget, setDecorationTarget] = useState<string | null>(null);
+  const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
 
@@ -134,6 +151,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
   const paginated = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const { data: unreadCounts = {} } = useUnreadCommentCounts(paginated.map((b: BookingListItem) => b.id));
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -154,18 +172,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               <span className="text-gray-700 text-sm rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
                 {filtered.length} {search ? `dari ${bookings.length}` : "Bookings"}
               </span>
-              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} className="cursor-pointer flex items-center gap-1.5">
+              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} className="cursor-pointer hidden sm:flex items-center gap-1.5">
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
                 <span className="text-xs">Refresh</span>
               </Button>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 sm:flex-none">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-55" />
+                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-full sm:w-55" />
               </div>
-              <Button onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white" disabled={!can("booking", "create")}>
-                <Plus className="h-4 w-4 mr-2" /> Tambah Booking
+              <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching} className="cursor-pointer sm:hidden shrink-0">
+                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               </Button>
             </div>
           </div>
@@ -181,11 +199,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               <Table className="w-full text-sm">
                 <TableHeader className="bg-[#F9FAFB]">
                   <TableRow>
-                    <TableHead className="px-2 py-2 text-[#475467] text-center w-[3%]">No</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] text-center w-[3%] hidden sm:table-cell">No</TableHead>
                     <TableHead className="px-2 py-2 text-[#475467]">Customer</TableHead>
                     <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[15%]">Venue & PO</TableHead>
                     <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[14%]">Package</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467] w-[10%]">Event Date</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[10%]">Event Date</TableHead>
                     <TableHead className="px-2 py-2 text-[#475467] hidden lg:table-cell w-[8%]">Activity</TableHead>
                     <TableHead className="px-1 py-2 text-[#475467] text-right pr-5 w-[15%]">Action</TableHead>
                   </TableRow>
@@ -193,7 +211,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 <TableBody>
                   {paginated.map((booking: BookingListItem, idx: number) => (
                     <TableRow key={booking.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
-                      <TableCell className="px-2 py-2 text-center">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                      <TableCell className="px-2 py-2 text-center hidden sm:table-cell">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
 
                       {/* Customer cell */}
                       <TableCell className="px-2 py-2">
@@ -202,6 +220,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           <p className="text-xs text-gray-400 truncate mt-0.5">
                             {booking.snapCustomer?.mobileNumber ?? ""}
                           </p>
+                          {/* Event date — mobile only */}
+                          <p className="text-xs text-gray-500 mt-0.5 sm:hidden">{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
                           <div className="flex flex-wrap items-center gap-1 mt-1">
                             {/* Status badge */}
                             <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-white", STATUS_TEXT[booking.bookingStatus] ?? "text-gray-600 border-gray-200")}>
@@ -220,14 +240,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             )}
                             {/* Source of information badge */}
                             {booking.sourceOfInformation?.name && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
                                 {booking.sourceOfInformation.name}
                               </span>
                             )}
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-                            className="cursor-pointer mt-1 text-[10px] text-sky-500 hover:text-sky-700 underline underline-offset-2 text-left lg:hidden"
+                            className="cursor-pointer mt-1 text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 text-left lg:hidden"
                           >
                             Lihat Activity
                           </button>
@@ -264,7 +284,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       </TableCell>
 
                       {/* Event Date */}
-                      <TableCell className="px-2 py-2 whitespace-nowrap text-sm">
+                      <TableCell className="px-2 py-2 whitespace-nowrap text-sm hidden sm:table-cell">
                         {format(new Date(booking.bookingDate), "MMM dd, yyyy")}
                       </TableCell>
 
@@ -272,7 +292,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className="px-2 py-2 hidden lg:table-cell">
                         <button
                           onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-                          className="cursor-pointer text-xs text-sky-500 hover:text-sky-700 underline underline-offset-2"
+                          className="cursor-pointer text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
                         >
                           Lihat Activity
                         </button>
@@ -381,6 +401,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             </>
                           )}
 
+                          {/* Comment button */}
+                          <Button variant="ghost" size="icon" className="cursor-pointer relative" onClick={() => setCommentTarget(booking)}>
+                            <MessageSquare className="h-4 w-4" />
+                            {(unreadCounts[booking.id] ?? 0) > 0 && (
+                              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5">
+                                {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
+                              </span>
+                            )}
+                          </Button>
+
                           {/* More actions dropdown */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -441,12 +471,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
-                                <DropdownMenuItem className="cursor-pointer text-orange-600 focus:text-orange-600" onClick={() => setLostTarget(booking)}>
+                                <DropdownMenuItem className="cursor-pointer text-muted-foreground focus:text-foreground" onClick={() => setLostTarget(booking)}>
                                   <SquareX className="mr-2 h-4 w-4" /> Lost Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
-                                <DropdownMenuItem className="cursor-pointer text-blue-600 focus:text-blue-600" onClick={() => setRestoreTarget(booking)}>
+                                <DropdownMenuItem className="cursor-pointer text-muted-foreground focus:text-foreground" onClick={() => setRestoreTarget(booking)}>
                                   <RotateCcw className="mr-2 h-4 w-4" /> Restore Booking
                                 </DropdownMenuItem>
                               )}
@@ -650,7 +680,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               const r = await updateMut.mutateAsync({ id: lostTarget.id, bookingStatus: "Lost", lostReason: lostReason || null });
               if (!r.success) toast.error(r.error); else { toast.success("Booking ditandai Lost."); refetch(); }
               setLostTarget(null); setLostReason("");
-            }} className="bg-orange-600 text-white hover:bg-orange-700">Lost Booking</AlertDialogAction>
+            }} className="bg-primary text-primary-foreground hover:bg-primary/90">Lost Booking</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -666,14 +696,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   Restore booking <span className="font-semibold text-gray-800">{restoreTarget.snapCustomer?.name}</span> ke status Pending?
                 </p>
               </div>
-              <button type="button" className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0" onClick={() => setRestoreTarget(null)} aria-label="Tutup">
-                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button type="button" className="rounded-full hover:bg-muted p-1.5 shrink-0" onClick={() => setRestoreTarget(null)} aria-label="Tutup">
+                <svg className="h-5 w-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="flex gap-3">
               <button
                 type="button"
-                className="flex-1 bg-blue-600 text-white rounded-lg py-2 font-medium text-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-primary text-primary-foreground rounded-lg py-2 font-medium text-sm hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={updateMut.isPending}
                 onClick={async () => {
                   const r = await updateMut.mutateAsync({ id: restoreTarget.id, bookingStatus: "Pending" });
@@ -683,7 +713,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               >
                 {updateMut.isPending ? "Memproses..." : "Restore"}
               </button>
-              <button type="button" className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition" onClick={() => setRestoreTarget(null)}>
+              <button type="button" className="flex-1 border border-border rounded-lg py-2 font-medium text-sm hover:bg-accent transition" onClick={() => setRestoreTarget(null)}>
                 Batal
               </button>
             </div>
@@ -803,6 +833,15 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           bookingId={agreementModal.bookingId}
           customerName={agreementModal.customerName}
           onClose={() => setAgreementModal(null)}
+        />
+      )}
+
+      {commentTarget && (
+        <BookingCommentPanel
+          open={!!commentTarget}
+          onClose={() => { setCommentTarget(null); qc.invalidateQueries({ queryKey: ["unread-comments"] }); }}
+          bookingId={commentTarget.id}
+          customerName={commentTarget.snapCustomer?.name ?? ""}
         />
       )}
 

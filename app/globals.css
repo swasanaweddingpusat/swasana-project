@@ -188,3 +188,10 @@
 .dark *:not(body) {
   scrollbar-color: #4b5563 #1a1a1a;
 }
+
+/* Calendar availability indicators */
+.day-available { position: relative; }
+.day-available::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: #16a34a; }
+.day-partial { position: relative; }
+.day-partial::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: #ca8a04; }
+.day-unavailable { position: relative; opacity: 0.4; }
