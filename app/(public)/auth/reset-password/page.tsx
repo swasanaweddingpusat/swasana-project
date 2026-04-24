@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { ResetPasswordWrapper } from "./components/reset-password-form"
+import { ResetPasswordWrapper } from "./_components/reset-password-form"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {

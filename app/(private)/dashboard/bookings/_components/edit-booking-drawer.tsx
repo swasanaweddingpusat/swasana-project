@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { editBooking } from "@/actions/booking";
+import type { EditBookingInput } from "@/lib/validations/booking";
 import type { BookingListItem } from "@/lib/queries/bookings";
 
 interface Props {
@@ -27,7 +28,6 @@ interface Props {
 interface VenueOption { id: string; name: string }
 interface PackageVariant { id: string; variantName: string; pax: number; price: number }
 interface PackageOption { id: string; packageName: string; variants: PackageVariant[] }
-interface PaymentMethodOption { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -42,24 +42,19 @@ function fmtRp(n: number) {
 export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const qc = useQueryClient();
 
-  const [venueId, setVenueId] = useState("");
-  const [packageId, setPackageId] = useState("");
-  const [variantId, setVariantId] = useState("");
-  const [bookingDate, setBookingDate] = useState<Date | undefined>();
+  const [venueId, setVenueId] = useState(() => booking?.venueId ?? "");
+  const [packageId, setPackageId] = useState(() => booking?.packageId ?? "");
+  const [variantId, setVariantId] = useState(() => booking?.packageVariantId ?? "");
+  const [bookingDate, setBookingDate] = useState<Date | undefined>(() => booking ? new Date(booking.bookingDate) : undefined);
   const [calOpen, setCalOpen] = useState(false);
-  const [weddingSession, setWeddingSession] = useState("");
-  const [weddingType, setWeddingType] = useState("");
-  const [signingLocation, setSigningLocation] = useState("");
-  const [paymentMethodId, setPaymentMethodId] = useState("");
-  const [sourceOfInformationId, setSourceOfInformationId] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [contactNumbers, setContactNumbers] = useState<string[]>([]);
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactNik, setContactNik] = useState("");
-  const [contactKtpAddress, setContactKtpAddress] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [detailLoaded, setDetailLoaded] = useState(false);
-  const [bonuses, setBonuses] = useState<{ vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number }[]>([]);
+  const [weddingSession, setWeddingSession] = useState(() => booking?.weddingSession ?? "");
+  const [weddingType, setWeddingType] = useState(() => booking?.weddingType ?? "");
+  const [signingLocation, setSigningLocation] = useState(() => booking?.signingLocation ?? "");
+  const [paymentMethodId, setPaymentMethodId] = useState(() => booking?.paymentMethodId ?? "");
+  const [sourceOfInformationId, setSourceOfInformationId] = useState(() => booking?.sourceOfInformationId ?? "");
+  const [customerName, setCustomerName] = useState(() => booking?.snapCustomer?.name ?? "");
+  const [contactNumbers, setContactNumbers] = useState<string[]>(() => (booking?.snapCustomer?.mobileNumber ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  const [bonuses, setBonuses] = useState<{ vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }[]>([]);
 
   // Fetch full booking detail (only for email, nikNumber, ktpAddress)
   const { data: detail } = useQuery({
@@ -73,46 +68,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Instant pre-fill from list data (no loading state)
-  useEffect(() => {
-    if (!booking || !open || loaded) return;
-    setVenueId(booking.venueId ?? "");
-    setPackageId(booking.packageId ?? "");
-    setVariantId(booking.packageVariantId ?? "");
-    setBookingDate(new Date(booking.bookingDate));
-    setWeddingSession(booking.weddingSession ?? "");
-    setWeddingType(booking.weddingType ?? "");
-    setSigningLocation((booking as any).signingLocation ?? "");
-    setPaymentMethodId(booking.paymentMethodId ?? "");
-    setSourceOfInformationId(booking.sourceOfInformationId ?? "");
-    setCustomerName(booking.snapCustomer?.name ?? "");
-    setContactNumbers((booking.snapCustomer?.mobileNumber ?? "").split(",").map((s) => s.trim()).filter(Boolean));
-    setContactEmail("");
-    setContactNik("");
-    setContactKtpAddress("");
-    setLoaded(true);
-    setDetailLoaded(false);
-  }, [booking, open, loaded]);
+  // Derive async fields — user edits tracked via separate state
+  const [emailOverride, setEmailOverride] = useState<string | null>(null);
+  const [nikOverride, setNikOverride] = useState<string | null>(null);
+  const [ktpOverride, setKtpOverride] = useState<string | null>(null);
 
-  // Fill email/NIK/KTP/bonuses when detail arrives
-  useEffect(() => {
-    if (!detail?.snapCustomer || detailLoaded) return;
-    setContactEmail(detail.snapCustomer.email ?? "");
-    setContactNik(detail.snapCustomer.nikNumber ?? "");
-    setContactKtpAddress(detail.snapCustomer.ktpAddress ?? "");
-    // Load bonuses from snapBonuses
-    if (detail.snapBonuses?.length > 0) {
-      setBonuses(detail.snapBonuses.map((b: { vendorId: string; vendorCategoryId: string; vendorName: string; description: string | null; qty: number }) => ({
-        vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description ?? "", qty: b.qty,
-      })));
-    }
-    setDetailLoaded(true);
-  }, [detail, detailLoaded]);
-
-  // Reset flags when drawer closes
-  useEffect(() => {
-    if (!open) { setLoaded(false); setDetailLoaded(false); setBonuses([]); }
-  }, [open]);
+  const contactEmail = emailOverride ?? detail?.snapCustomer?.email ?? "";
+  const contactNik = nikOverride ?? detail?.snapCustomer?.nikNumber ?? "";
+  const contactKtpAddress = ktpOverride ?? detail?.snapCustomer?.ktpAddress ?? "";
+  const resolvedBonuses: { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }[] =
+    bonuses.length > 0 ? bonuses : (detail?.snapBonuses?.map((b: { vendorId: string; vendorCategoryId: string; vendorName: string; description: string | null; qty: number; nominal?: number | null }) => ({
+      vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description ?? "", qty: b.qty, nominal: Number(b.nominal ?? 0),
+    })) ?? []);
 
   const { data: venues = [] } = useQuery<VenueOption[]>({
     queryKey: ["venues"],
@@ -127,24 +94,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: paymentMethods = [] } = useQuery<PaymentMethodOption[]>({
-    queryKey: ["payment-methods", venueId],
-    queryFn: () => fetchJson(`/api/payment-methods?venueId=${venueId}`),
-    enabled: !!venueId,
-    staleTime: 5 * 60 * 1000,
-  });
-
   const { data: sources = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["source-of-informations"],
     queryFn: () => fetchJson("/api/source-of-informations"),
     staleTime: 10 * 60 * 1000,
   });
 
-  const { data: allVendors = [] } = useQuery<{ id: string; name: string; categoryId: string }[]>({
+  const { data: vendorCategories = [] } = useQuery<{ id: string; name: string; vendors: { id: string; name: string }[] }[]>({
     queryKey: ["vendors-for-bonus"],
     queryFn: () => fetchJson("/api/vendors"),
     staleTime: 5 * 60 * 1000,
   });
+  const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ id: v.id, name: v.name, categoryId: c.id })));
 
   const salesName = detail?.sales?.fullName ?? booking?.sales?.fullName ?? "";
 
@@ -166,14 +127,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       packageVariantId: variantId || null,
       paymentMethodId: paymentMethodId || null,
       sourceOfInformationId: sourceOfInformationId || null,
-      weddingSession: (weddingSession as any) || null,
-      weddingType: (weddingType as any) || null,
+      weddingSession: (weddingSession as EditBookingInput["weddingSession"]) || null,
+      weddingType: (weddingType as EditBookingInput["weddingType"]) || null,
       signingLocation: signingLocation || null,
       customerName,
       contactNumbers: contactNumbers.join(","),
       contactEmail,
       contactNik,
       contactKtpAddress,
+      bonuses: resolvedBonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
     });
     if (!r.success) toast.error(r.error);
     else { toast.success("Booking berhasil diupdate."); onOpenChange(false); }
@@ -192,29 +154,29 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="Edit Booking">
-      <div className="space-y-3 pb-6">
+      <div className={cn('space-y-3', 'pb-6')}>
           {/* Customer Name */}
           <div>
             <label className={LBL}>Customer Name *</label>
-            <Input className="mt-1 w-full" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Input customer name" />
+            <Input className={cn('mt-1', 'w-full')} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Input customer name" />
           </div>
 
           {/* Contact Person */}
           <div>
             <label className={LBL}>Contact Person *</label>
-            <div className="flex flex-wrap gap-2 bg-white border border-gray-300 rounded-lg px-2 py-2 mt-1">
+            <div className={cn('flex', 'flex-wrap', 'gap-2', 'bg-white', 'border', 'border-gray-300', 'rounded-lg', 'px-2', 'py-2', 'mt-1')}>
               {contactNumbers.map((num, i) => (
-                <span key={i} className="flex items-center bg-[#FAFAFA] border rounded-lg px-3 text-sm font-normal text-black gap-2">
+                <span key={i} className={cn('flex', 'items-center', 'bg-[#FAFAFA]', 'border', 'rounded-lg', 'px-3', 'text-sm', 'font-normal', 'text-black', 'gap-2')}>
                   {num}
-                  <button type="button" className="ml-1 text-red-600 hover:bg-red-100 rounded-full p-1" onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))} aria-label="Remove">
-                    <X className="w-4 h-4" />
+                  <button type="button" className={cn('ml-1', 'text-red-600', 'hover:bg-red-100', 'rounded-full', 'p-1')} onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))} aria-label="Remove">
+                    <X className={cn('w-4', 'h-4')} />
                   </button>
                 </span>
               ))}
               <input
                 type="text"
                 inputMode="numeric"
-                className="flex-1 min-w-[120px] border-none outline-none bg-transparent text-sm px-2"
+                className={cn('flex-1', 'min-w-30', 'border-none', 'outline-none', 'bg-transparent', 'text-sm', 'px-2')}
                 placeholder="Input contact person number"
                 onKeyPress={(e) => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
                 onKeyDown={addContact}
@@ -238,7 +200,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           {/* Email */}
           <div>
             <label className={LBL}>Email</label>
-            <Input className="mt-1" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Input email address" />
+            <Input className="mt-1" type="email" value={contactEmail} onChange={(e) => setEmailOverride(e.target.value)} placeholder="Input email address" />
           </div>
 
           {/* NIK */}
@@ -249,7 +211,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               inputMode="numeric"
               maxLength={16}
               value={contactNik}
-              onChange={(e) => setContactNik(e.target.value.replace(/\D/g, "").slice(0, 16))}
+              onChange={(e) => setNikOverride(e.target.value.replace(/\D/g, "").slice(0, 16))}
               onKeyPress={(e) => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
               placeholder="Input NIK number"
             />
@@ -258,13 +220,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           {/* Alamat KTP */}
           <div>
             <label className={LBL}>Alamat (sesuai KTP)</label>
-            <Textarea className="mt-1" rows={3} value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} placeholder="Input alamat sesuai KTP" />
+            <Textarea className="mt-1" rows={3} value={contactKtpAddress} onChange={(e) => setKtpOverride(e.target.value)} placeholder="Input alamat sesuai KTP" />
           </div>
 
           {/* Sales PIC — disabled */}
           <div>
             <label className={LBL}>Sales PIC *</label>
-            <Input className="mt-1 w-full" value={salesName} disabled />
+            <Input className={cn('mt-1', 'w-full')} value={salesName} disabled />
           </div>
 
           {/* Venue — SearchableSelect */}
@@ -320,11 +282,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-muted-foreground")}
                   onClick={() => setCalOpen(true)}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  <CalendarIcon className={cn('mr-2', 'h-4', 'w-4')} />
                   {bookingDate ? format(bookingDate, "PPP") : <span>Select Date</span>}
                 </Button>
               } />
-              <PopoverContent className="w-auto p-0" align="start">
+              <PopoverContent className={cn('w-auto', 'p-0')} align="start">
                 <Calendar mode="single" selected={bookingDate} onSelect={(d) => { setBookingDate(d); setCalOpen(false); }} initialFocus captionLayout="dropdown" />
               </PopoverContent>
             </Popover>
@@ -334,7 +296,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           <div>
             <label className={LBL}>Event Session *</label>
             <Select value={weddingSession} onValueChange={setWeddingSession}>
-              <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger>
+              <SelectTrigger className={cn('mt-1', 'w-full')}><SelectValue placeholder="Pilih session" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="morning">Pagi</SelectItem>
                 <SelectItem value="evening">Malam</SelectItem>
@@ -347,7 +309,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           <div>
             <label className={LBL}>Event Type *</label>
             <Select value={weddingType} onValueChange={setWeddingType}>
-              <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger>
+              <SelectTrigger className={cn('mt-1', 'w-full')}><SelectValue placeholder="Pilih type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="resepsi">Resepsi</SelectItem>
                 <SelectItem value="akad">Akad & Resepsi</SelectItem>
@@ -368,34 +330,56 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           <div className="space-y-2">
             <label className={LBL}>Complimentary (Bonus)</label>
             <SearchableSelect
-              options={allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
+              options={allVendors.filter((v) => !resolvedBonuses.some((b) => b.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
               value=""
               onChange={(vendorId) => {
                 const v = allVendors.find((x) => x.id === vendorId);
-                if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId ?? "", vendorName: v.name, description: "", qty: 1 }]);
+                if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId ?? "", vendorName: v.name, description: "", qty: 1, nominal: 0 }]);
               }}
               placeholder="Pilih vendor..."
               searchPlaceholder="Cari vendor..."
               emptyText="Tidak ada vendor"
             />
-            {bonuses.map((b, idx) => (
-              <div key={b.vendorId} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-900">{b.vendorName}</span>
-                  <button type="button" className="h-6 w-6 p-0 text-red-500 hover:text-red-700" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
-                    <X className="h-3 w-3" />
+            {resolvedBonuses.map((b, idx) => (
+              <div key={idx} className={cn('bg-gray-50', 'border', 'border-gray-200', 'rounded-md', 'px-3', 'py-2', 'space-y-1.5')}>
+                <div className={cn('flex', 'items-center', 'gap-2')}>
+                  <div className="flex-1">
+                    <SearchableSelect
+                      options={allVendors.filter((v) => !resolvedBonuses.some((x, i) => i !== idx && x.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
+                      value={b.vendorId}
+                      onChange={(vendorId) => {
+                        const v = allVendors.find((x) => x.id === vendorId);
+                        if (!v) return;
+                        const base = bonuses.length > 0 ? bonuses : resolvedBonuses;
+                        setBonuses(base.map((x, i) => i === idx ? { ...x, vendorId: v.id, vendorCategoryId: v.categoryId ?? "", vendorName: v.name } : x));
+                      }}
+                      placeholder="Pilih vendor..."
+                      searchPlaceholder="Cari vendor..."
+                      emptyText="Tidak ada vendor"
+                    />
+                  </div>
+                  <button type="button" className={cn('h-6', 'w-6', 'p-0', 'text-red-500', 'hover:text-red-700', 'shrink-0')} onClick={() => { const base = bonuses.length > 0 ? bonuses : resolvedBonuses; setBonuses(base.filter((_, i) => i !== idx)); }}>
+                    <X className={cn('h-3', 'w-3')} />
                   </button>
                 </div>
-                <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-[60px]" />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                  <input type="text" inputMode="numeric" className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white"
+                    placeholder="Nominal"
+                    value={b.nominal ? new Intl.NumberFormat("id-ID").format(b.nominal) : ""}
+                    onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); const base = bonuses.length > 0 ? bonuses : resolvedBonuses; setBonuses(base.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }}
+                  />
+                </div>
+                <SimpleEditor value={b.description} onChange={(html) => { const base = bonuses.length > 0 ? bonuses : resolvedBonuses; setBonuses(base.map((x, i) => i === idx ? { ...x, description: html } : x)); }} placeholder="Keterangan bonus..." className="min-h-15" />
               </div>
             ))}
-            {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}
+            {resolvedBonuses.length === 0 && <p className={cn('text-xs', 'text-gray-400', 'italic', 'text-center', 'py-1')}>Belum ada complimentary</p>}
           </div>
 
           {/* Submit */}
-          <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 pt-4">
+          <div className={cn('sticky', 'bottom-0', 'left-0', 'right-0', 'bg-white', 'border-t', 'border-gray-200', 'pt-4')}>
             <Button
-              className="w-full bg-black text-white hover:bg-gray-800 cursor-pointer rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className={cn('w-full', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer', 'rounded-lg', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
               disabled={!customerName || !venueId || !packageId || !bookingDate || mut.isPending}
               onClick={handleSubmit}
             >

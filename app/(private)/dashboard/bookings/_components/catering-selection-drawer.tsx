@@ -1,14 +1,16 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Save, Package, Printer } from "lucide-react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { BookingDetail } from "@/lib/queries/bookings";
 import { POCateringEditorV2 } from "./po-catering-editor";
-import type { POCateringV2 } from "@/types/po-catering";
-import { createDefaultPOV2 } from "@/types/po-catering";
+import type { POCateringV2, PORow } from "@/types/po-catering";
+import { createDefaultPOV2, createId } from "@/types/po-catering";
 
 interface Props {
   isOpen: boolean;
@@ -18,56 +20,98 @@ interface Props {
   isViewOnly?: boolean;
 }
 
+interface EligibleBooking { id: string; snapVendorItemId: string; label: string }
+
 export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, isViewOnly }: Props) {
   const [loading, setLoading] = React.useState(false);
+  const [isDataLoading, setIsDataLoading] = React.useState(false);
   const [poData, setPOData] = React.useState<POCateringV2>(createDefaultPOV2());
   const skipReloadRef = React.useRef(false);
   const isLoadedRef = React.useRef(false);
+
+  const { data: paymentMethods = [] } = useQuery<{ id: string; bankName: string; bankAccountNumber: string; bankRecipient: string }[]>({
+    queryKey: ["payment-methods"],
+    queryFn: () => fetch("/api/payment-methods").then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen,
+  });
 
   const cateringItem = React.useMemo(() => {
     return booking.snapVendorItems.find((v) => v.vendorCategoryName.toLowerCase().includes("catering") && !v.isAddons);
   }, [booking.snapVendorItems]);
 
+  const { data: eligibleBookings = [] } = useQuery<EligibleBooking[]>({
+    queryKey: ["eligible-allocation", cateringItem?.vendorId, booking.id],
+    queryFn: () => fetch(`/api/bookings/eligible-for-allocation?vendorId=${cateringItem!.vendorId}&excludeBookingId=${booking.id}`).then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen && !!cateringItem,
+  });
+
   const cateringVendorName = cateringItem?.vendorName ?? "Catering";
   const draftKey = `po-catering-draft:${booking.id}`;
 
-  // Reset loaded flag when drawer closes
   React.useEffect(() => {
     if (!isOpen) { isLoadedRef.current = false; }
   }, [isOpen]);
 
-  // Load PO data — draft first, then DB, then default
+  // Inject incoming settlements ke poData
+  const injectIncomingRows = React.useCallback((base: POCateringV2): POCateringV2 => {
+    if (!cateringItem) return base;
+    const incomingSettlements = (booking.bookingRefunds ?? []).filter(
+      (s) => s.type === "allocation" && s.targetBookingId === booking.id &&
+        (s.snapVendorItemId === cateringItem.id || eligibleBookings.some((eb) => eb.snapVendorItemId === s.snapVendorItemId))
+    );
+    if (incomingSettlements.length === 0) return base;
+
+    // Remove stale incoming rows, then re-inject fresh ones
+    const withoutIncoming = base.rows.filter((r) => !r.isIncoming);
+    const incomingRows: PORow[] = incomingSettlements.map((s) => ({
+      id: s.id,
+      type: "settlement" as const,
+      settlementType: "allocation" as const,
+      isIncoming: true,
+      grandTotal: Number(s.amount),
+      description: s.notes ?? "Alokasi masuk",
+      settlementSourceLabel: eligibleBookings.find((eb) => eb.id === s.bookingId)?.label ?? "Booking lain",
+    }));
+    return { ...base, rows: [...withoutIncoming, ...incomingRows] };
+  }, [booking.bookingRefunds, booking.id, cateringItem, eligibleBookings]);
+
   React.useEffect(() => {
-    if (!isOpen || !cateringItem) return;
+    if (!isOpen) { isLoadedRef.current = false; return; }
+    if (!cateringItem) return;
     if (skipReloadRef.current) { skipReloadRef.current = false; return; }
 
-    // 1. Try localStorage draft
+    setIsDataLoading(true);
+    let base: POCateringV2;
+
     try {
       const draft = localStorage.getItem(draftKey);
       if (draft) {
         const parsed = JSON.parse(draft);
-        if (parsed?.version === 2) { setPOData(parsed); isLoadedRef.current = true; return; }
+        if (parsed?.version === 2) { base = parsed; setPOData(injectIncomingRows(base)); isLoadedRef.current = true; setIsDataLoading(false); return; }
       }
     } catch {}
 
-    // 2. Try DB data
     const raw = cateringItem.paketData;
     if (raw && typeof raw === "object" && (raw as Record<string, unknown>).version === 2) {
-      const dbData = raw as unknown as POCateringV2;
-      setPOData(dbData);
-      try { localStorage.setItem(draftKey, JSON.stringify(dbData)); } catch {}
+      base = raw as unknown as POCateringV2;
+      const injected = injectIncomingRows(base);
+      setPOData(injected);
+      try { localStorage.setItem(draftKey, JSON.stringify(injected)); } catch {}
       isLoadedRef.current = true;
+      setIsDataLoading(false);
       return;
     }
 
-    // 3. Create default
-    const defaultData = createDefaultPOV2();
-    setPOData(defaultData);
-    try { localStorage.setItem(draftKey, JSON.stringify(defaultData)); } catch {}
+    base = createDefaultPOV2();
+    const injected = injectIncomingRows(base);
+    setPOData(injected);
+    try { localStorage.setItem(draftKey, JSON.stringify(injected)); } catch {}
     isLoadedRef.current = true;
-  }, [isOpen, cateringItem]);
+    setIsDataLoading(false);
+  }, [isOpen, cateringItem, injectIncomingRows]);
 
-  // Auto-save to localStorage — only after initial load, with small delay
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
     if (!isOpen || !isLoadedRef.current) return;
@@ -149,7 +193,21 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
     <Drawer isOpen={isOpen} onClose={onClose} title={`Catering — ${booking.snapCustomer?.name ?? "-"} • ${cateringVendorName}`} maxWidth="sm:max-w-full" headerActions={headerActions}>
       <div className="flex flex-col h-full">
         <div className="p-4">
-          <POCateringEditorV2 data={poData} onChange={setPOData} readOnly={isViewOnly} />
+          {isDataLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          ) : (
+            <POCateringEditorV2
+              data={poData}
+              onChange={setPOData}
+              readOnly={isViewOnly}
+              paymentMethods={paymentMethods}
+              eligibleBookings={eligibleBookings}
+            />
+          )}
         </div>
       </div>
     </Drawer>

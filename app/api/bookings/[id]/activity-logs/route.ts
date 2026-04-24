@@ -28,12 +28,12 @@ async function resolveIds(changes: Record<string, unknown>): Promise<Record<stri
   ]);
 
   const nameMap = new Map<string, string>();
-  for (const v of venues) nameMap.set(v.id, v.name);
+  for (const v of venues) nameMap.set(v.id, v.name ?? v.id);
   for (const p of packages) nameMap.set(p.id, p.packageName);
-  for (const p of profiles) nameMap.set(p.id, p.fullName);
+  for (const p of profiles) nameMap.set(p.id, p.fullName ?? p.id);
   for (const pm of paymentMethods) nameMap.set(pm.id, `${pm.bankName} - ${pm.bankAccountNumber}`);
-  for (const s of sources) nameMap.set(s.id, s.name);
-  for (const c of customers) nameMap.set(c.id, c.name);
+  for (const s of sources) nameMap.set(s.id, s.name ?? s.id);
+  for (const c of customers) nameMap.set(c.id, c.name ?? c.id);
 
   const resolved = { ...changes };
   for (const [key, val] of Object.entries(resolved)) {

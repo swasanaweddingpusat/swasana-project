@@ -8,6 +8,7 @@ import {
   Palette,
   CreditCard,
   Info,
+  ListOrdered,
   type LucideIcon,
 } from "lucide-react";
 
@@ -76,6 +77,12 @@ const GROUPS: SettingGroup[] = [
         description: "Sumber informasi customer untuk tracking lead.",
         icon: Info,
         href: "/dashboard/settings/source-of-information",
+      },
+      {
+        title: "Order Status",
+        description: "Kelola status order vendor (belum diorder, sudah diajukan, dll).",
+        icon: ListOrdered,
+        href: "/dashboard/settings/order-status",
       },
     ],
   },

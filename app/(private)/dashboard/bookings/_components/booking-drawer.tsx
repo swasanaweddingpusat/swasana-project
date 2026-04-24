@@ -32,7 +32,7 @@ interface CustomerOption { id: string; name: string; mobileNumber: string; email
 interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; price: number }[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
-interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number }
+interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -233,7 +233,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
-      bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty })),
+      bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
     };
     const result = await createMut.mutateAsync(payload);
@@ -297,7 +297,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         ref={contactInputRef}
                         type="text"
                         inputMode="numeric"
-                        className="flex-1 min-w-[120px] border-none outline-none bg-transparent text-sm px-2"
+                        className="flex-1 min-w-30 border-none outline-none bg-transparent text-sm px-2"
                         placeholder="e.g. 081234567890"
                         onKeyDown={(e) => {
                           const val = e.currentTarget.value.trim();
@@ -446,20 +446,40 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <SearchableSelect
                       options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
                       value=""
-                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1 }]); }}
+                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); }}
                       placeholder="Pilih vendor..."
                       searchPlaceholder="Cari vendor..."
                       emptyText="Tidak ada vendor"
                     />
                     {bonuses.map((b, idx) => (
-                      <div key={b.vendorId} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-900">{b.vendorName}</span>
-                          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
+                      <div key={idx} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={allVendors.filter((v) => !bonuses.some((x, i) => i !== idx && x.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
+                              value={b.vendorId}
+                              onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name } : x)); }}
+                              placeholder="Pilih vendor..."
+                              searchPlaceholder="Cari vendor..."
+                              emptyText="Tidak ada vendor"
+                            />
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
                             <X className="h-3 w-3" />
                           </Button>
                         </div>
-                        <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-[60px]" />
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white"
+                            placeholder="Nominal"
+                            value={b.nominal ? new Intl.NumberFormat("id-ID").format(b.nominal) : ""}
+                            onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }}
+                          />
+                        </div>
+                        <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-15" />
                       </div>
                     ))}
                     {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}

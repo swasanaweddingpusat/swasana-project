@@ -51,7 +51,7 @@ export function Drawer({
       <SheetContent
         className={cn(
           `w-full flex py-6 px-5 flex-col gap-6`,
-          maxWidth.includes("max-w-full") ? "inset-0 !max-w-none !w-full border-none" : maxWidth
+          maxWidth.includes("max-w-full") ? "inset-0 max-w-none! w-full! border-none" : maxWidth
         )}
         showCloseButton={false}
       >

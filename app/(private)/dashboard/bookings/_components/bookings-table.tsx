@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Phone, KeyRound, Printer, CircleFadingPlus, FileUp, ListChecks, Palette } from "lucide-react";
+import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, ListChecks, Palette } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useApproveBooking } from "@/hooks/use-bookings";
@@ -19,12 +19,13 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { approveCategoryPO } from "@/actions/catering-approval";
 import { BookingDrawer } from "./booking-drawer";
-import { UploadDocumentModal } from "./UploadDocumentModal";
-import { EditTopDrawer } from "./EditTopDrawer";
+import { UploadDocumentModal } from "./upload-document-modal";
+import { EditTopDrawer } from "./edit-top-drawer";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
-import { EditBookingDrawer } from "./EditBookingDrawer";
+import { EditBookingDrawer } from "./edit-booking-drawer";
 import { SetVendorDrawer } from "./set-vendor-drawer";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CateringSelectionDrawer } from "./catering-selection-drawer";
 import { DecorationSelectionDrawer } from "./decoration-selection-drawer";
 import { Drawer } from "@/components/shared/drawer";
@@ -113,6 +114,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [cateringTarget, setCateringTarget] = useState<string | null>(null);
   const [decorationTarget, setDecorationTarget] = useState<string | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
+  const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
 
   const filtered = bookings.filter((b: BookingListItem) => {
     if (!search.trim()) return true;
@@ -148,7 +150,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 pb-4 gap-3">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg sm:text-xl font-bold">Wedding Bookings</h2>
+              <h2 className="text-base font-bold text-[#1D1D1D]">Wedding Bookings</h2>
               <span className="text-gray-700 text-sm rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
                 {filtered.length} {search ? `dari ${bookings.length}` : "Bookings"}
               </span>
@@ -160,7 +162,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-[220px]" />
+                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-55" />
               </div>
               <Button onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white" disabled={!can("booking", "create")}>
                 <Plus className="h-4 w-4 mr-2" /> Tambah Booking
@@ -291,47 +293,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           </TooltipProvider>
                           )}
 
-                          {/* Agreement dropdown */}
-                          {can("client_agreement", "create") && (
+                          {/* Agreement modal trigger */}
+                          {can("client_agreement", "create") && booking.clientAgreement?.status !== "Signed" && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
-                              <TooltipTrigger render={<span />}>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                      <FileSignature className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                  <DropdownMenuItem className="cursor-pointer" onClick={async () => {
-                                    const result = await generateAgreementToken(booking.id);
-                                    if (!result.success) { toast.error(result.error); return; }
-                                    const url = `${window.location.origin}/client-agreement?token=${result.agreement.token}`;
-                                    copyText(url); toast.success("Link copied!");
-                                  }}>
-                                    <Copy className="mr-2 h-4 w-4" /> Copy Link
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="cursor-pointer" onClick={async () => {
-                                    const result = await generateAgreementToken(booking.id);
-                                    if (!result.success) { toast.error(result.error); return; }
-                                    const phone = booking.snapCustomer?.mobileNumber;
-                                    if (!phone) { toast.error("Nomor WhatsApp customer tidak tersedia"); return; }
-                                    const url = `${window.location.origin}/client-agreement?token=${result.agreement.token}`;
-                                    const msg = encodeURIComponent(`Halo ${booking.snapCustomer?.name ?? ""},\n\nBerikut link untuk menandatangani Agreement booking Anda:\n${url}\n\nKode Akses: ${result.agreement.accessCode}\n\nTerima kasih.`);
-                                    const clean = phone.replace(/\D/g, "").replace(/^0/, "62");
-                                    window.open(`https://wa.me/${clean}?text=${msg}`, "_blank");
-                                  }}>
-                                    <Phone className="mr-2 h-4 w-4" /> Kirim via WhatsApp
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="cursor-pointer" onClick={async () => {
-                                    const result = await generateAgreementToken(booking.id);
-                                    if (!result.success) { toast.error(result.error); return; }
-                                    copyText(result.agreement.accessCode); toast.success("Kode akses dicopy!");
-                                  }}>
-                                    <KeyRound className="mr-2 h-4 w-4" /> Copy Kode Akses
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                                </DropdownMenu>
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
+                                <FileSignature className="h-4 w-4" />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
                             </Tooltip>
@@ -524,7 +491,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       <BookingDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
 
-      <EditBookingDrawer booking={editTarget} open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }} />
+      <EditBookingDrawer key={editTarget?.id ?? ""} booking={editTarget} open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }} />
 
       {/* Delete */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
@@ -831,6 +798,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <DecorationDrawerWrapper bookingId={decorationTarget} onClose={() => setDecorationTarget(null)} onUpdated={() => refetch()} />
       )}
 
+      {agreementModal && (
+        <AgreementModal
+          bookingId={agreementModal.bookingId}
+          customerName={agreementModal.customerName}
+          onClose={() => setAgreementModal(null)}
+        />
+      )}
+
       {/* Upload Document Modal */}
       {uploadDocTarget && (
         <UploadDocumentModal
@@ -935,8 +910,10 @@ function CateringDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: s
 
   if (loading || !booking) {
     return (
-      <Drawer isOpen onClose={onClose} title="Catering">
-        <div className="flex items-center justify-center h-full"><p className="text-sm text-gray-400">Memuat...</p></div>
+      <Drawer isOpen onClose={onClose} title="Catering" maxWidth="sm:max-w-full">
+        <div className="p-4 space-y-2">
+          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+        </div>
       </Drawer>
     );
   }
@@ -966,4 +943,78 @@ function DecorationDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId:
   }
 
   return <DecorationSelectionDrawer isOpen onClose={onClose} booking={booking} onUpdated={onUpdated} />;
+}
+
+/* ─── AgreementModal ──────────────────────────────────────────────────────── */
+
+interface AgreementModalProps {
+  bookingId: string;
+  customerName: string;
+  onClose: () => void;
+}
+
+function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProps) {
+  const [agreement, setAgreement] = React.useState<{ token: string; accessCode: string; status?: string } | null>(null);
+  const [isPending, startTransition] = React.useTransition();
+
+  const agreementUrl = agreement ? `${window.location.origin}/client-agreement?token=${agreement.token}` : null;
+
+  const generate = React.useCallback(() => {
+    startTransition(async () => {
+      const result = await generateAgreementToken(bookingId);
+      if (!result.success) { toast.error(result.error); return; }
+      setAgreement({ token: result.agreement.token, accessCode: result.agreement.accessCode, status: result.agreement.status });
+    });
+  }, [bookingId]);
+
+  React.useEffect(() => { generate(); }, [generate]);
+
+  return (
+    <AlertDialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <AlertDialogContent className="sm:max-w-md!" style={{ width: "min(calc(100vw - 2rem), 28rem)" }} onClick={(e) => e.stopPropagation()}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Client Agreement</AlertDialogTitle>
+          <AlertDialogDescription>{customerName}</AlertDialogDescription>
+        </AlertDialogHeader>
+
+        {isPending || !agreement ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+            <RefreshCw className="h-4 w-4 animate-spin" /> Generating...
+          </div>
+        ) : (
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Link Agreement</p>
+              <div className="flex items-center gap-2 overflow-hidden">
+                <code className="min-w-0 flex-1 text-xs bg-muted rounded px-2 py-1.5 block break-all">{agreementUrl}</code>
+                <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreementUrl!); toast.success("Link disalin"); }}>
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Kode Akses</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-lg font-mono font-bold tracking-widest bg-muted rounded px-2 py-1.5">{agreement.accessCode}</code>
+                <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreement.accessCode); toast.success("Kode disalin"); }}>
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AlertDialogFooter>
+          {agreement?.status === "Signed" ? (
+            <p className="text-xs text-muted-foreground mr-auto">✓ Sudah ditandatangani</p>
+          ) : (
+            <Button variant="outline" size="default" disabled={isPending} onClick={generate}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Regenerate
+            </Button>
+          )}
+          <AlertDialogCancel onClick={onClose}>Tutup</AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }

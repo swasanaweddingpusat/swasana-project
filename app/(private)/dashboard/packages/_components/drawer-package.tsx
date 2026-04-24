@@ -337,7 +337,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
               <div>
                 <Label className="text-sm font-medium text-gray-700">Catatan (opsional)</Label>
                 <Textarea
-                  className="mt-1 min-h-[80px] border-[#CCCCCC] bg-[#F9F9F9]"
+                  className="mt-1 min-h-20 border-[#CCCCCC] bg-[#F9F9F9]"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Catatan tambahan tentang paket"

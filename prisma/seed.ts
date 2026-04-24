@@ -13,7 +13,7 @@ async function main() {
 
   // ─── Truncate (urutan penting: child tables dulu, baru parent) ────────────
   await prisma.activityLog.deleteMany();
-  await prisma.bookingRefund.deleteMany();
+  await prisma.bookingPaymentSettlement.deleteMany();
   await prisma.bookingDocument.deleteMany();
   await prisma.clientAgreement.deleteMany();
   await prisma.termOfPayment.deleteMany();
@@ -515,6 +515,22 @@ async function main() {
     await prisma.userGroup.create({ data });
   }
   console.log(`✅ ${userGroupData.length} User Groups seeded`);
+
+  // ─── Order Status ─────────────────────────────────────────────────────────
+  const orderStatuses = [
+    { name: "Belum Diorder", sortOrder: 0 },
+    { name: "Sudah Diajukan", sortOrder: 1 },
+    { name: "Sudah Diorder", sortOrder: 2 },
+    { name: "Sudah Dibayar", sortOrder: 3 },
+  ];
+  for (const s of orderStatuses) {
+    await prisma.orderStatus.upsert({
+      where: { name: s.name },
+      update: {},
+      create: s,
+    });
+  }
+  console.log(`✅ ${orderStatuses.length} Order Statuses seeded`);
 
   console.log("\n🎉 Seeding completed!");
 }

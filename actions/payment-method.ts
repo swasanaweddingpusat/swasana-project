@@ -6,9 +6,9 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const schema = z.object({
-  venueId: z.string().min(1),
+  venueId: z.string().optional().nullable(),
   bankName: z.string().min(1, "Nama bank wajib diisi"),
-  bankAccountNumber: z.string().min(1, "No. rekening wajib diisi"),
+  bankAccountNumber: z.string().min(1, "No. rekening wajib diisi").max(16, "No. rekening maksimal 16 digit").regex(/^\d+$/, "No. rekening hanya boleh angka"),
   bankRecipient: z.string().min(1, "Nama pemilik wajib diisi"),
 });
 

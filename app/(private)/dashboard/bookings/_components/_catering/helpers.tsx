@@ -79,7 +79,7 @@ export function InlineAddItemForm({ onConfirm, onCancel }: {
 
   return (
     <div className="flex items-center gap-1.5 py-1 px-1 bg-blue-50/50 rounded border border-blue-100">
-      <Input ref={ref} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nama item" className="h-6 text-xs flex-1 min-w-[100px]"
+      <Input ref={ref} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nama item" className="h-6 text-xs flex-1 min-w-25"
         onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) { onConfirm(title.trim(), Number(qty) || 0, unit, price ?? 0); } if (e.key === "Escape") onCancel(); }} />
       <Input type="number" value={qty} onChange={(e) => setQty(parseInt(e.target.value) || "")} placeholder="Qty" className="h-6 text-xs w-14 text-center" />
       <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Unit" className="h-6 text-xs w-14" />
@@ -115,7 +115,7 @@ export function AddGroupButton({ section, onAddNormal, onAddMenuPilihan }: {
         <Plus className="h-3 w-3" /> Group
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-45">
           <button type="button" onClick={() => { onAddNormal(); setOpen(false); }}
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50">+ Group Baru</button>
           {normalGroups.length > 0 && onAddMenuPilihan && (

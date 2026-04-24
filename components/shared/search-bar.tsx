@@ -48,7 +48,7 @@ export default function SearchBar({ placeholder = "Search", className = "" }: Se
   }, []);
 
   return (
-    <div className={cn("relative w-[300px]", className)}>
+    <div className={cn("relative w-75", className)}>
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#949494]" />
       <Input
         placeholder={placeholder}

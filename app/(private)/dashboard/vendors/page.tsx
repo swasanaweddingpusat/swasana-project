@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function VendorsPage() {
   await requirePagePermission("vendor");
   return (
-    <div className="flex flex-col mb-6 px-2">
+    <div className="flex flex-col mb-6 w-full">
       <VendorsTable />
     </div>
   );

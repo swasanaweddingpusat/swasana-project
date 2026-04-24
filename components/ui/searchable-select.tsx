@@ -21,6 +21,7 @@ interface SearchableSelectProps {
   addingLabel?: string;
   disabled?: boolean;
   className?: string;
+  minDropdownWidth?: number;
 }
 
 export function SearchableSelect({
@@ -34,6 +35,7 @@ export function SearchableSelect({
   addingLabel = "Menambahkan...",
   disabled = false,
   className,
+  minDropdownWidth,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -121,8 +123,8 @@ export function SearchableSelect({
       style={{
         position: "fixed",
         ...(pos.openUp
-          ? { bottom: window.innerHeight - pos.top + 4, left: pos.left, width: pos.width }
-          : { top: pos.top, left: pos.left, width: pos.width }),
+          ? { bottom: window.innerHeight - pos.top + 4, left: pos.left, width: Math.max(pos.width, minDropdownWidth ?? 0) }
+          : { top: pos.top, left: pos.left, width: Math.max(pos.width, minDropdownWidth ?? 0) }),
         zIndex: 9999,
       }}
       className={cn(
@@ -145,7 +147,7 @@ export function SearchableSelect({
           />
         </div>
       )}
-      <div className="max-h-[200px] overflow-y-auto p-1">
+      <div className="max-h-50 overflow-y-auto p-1">
         {filtered.length === 0 && !showAddButton && (
           <p className="py-4 text-center text-sm text-muted-foreground">{emptyText}</p>
         )}

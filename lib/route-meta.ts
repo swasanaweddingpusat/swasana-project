@@ -50,6 +50,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Sumber informasi customer untuk tracking lead",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/order-status": {
+    title: "Order Status",
+    subtitle: "Kelola status order vendor",
+    parent: "/dashboard/settings",
+  },
 
   // ─── Packages ──────────────────────────────────────────────────────────────
   "/dashboard/packages": {

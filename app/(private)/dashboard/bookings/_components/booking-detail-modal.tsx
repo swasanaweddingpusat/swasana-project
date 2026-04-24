@@ -4,7 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X, FileText, Copy, RefreshCw, Link2 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { X, FileText, Copy, RefreshCw, Link2, Download } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
@@ -35,6 +36,11 @@ function fmtDateTime(d: string | Date | null | undefined): string {
   return format(date, "dd MMM yyyy HH:mm");
 }
 
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return "-";
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim() || "-";
+}
+
 const STATUS_COLOR: Record<string, string> = {
   Pending: "bg-yellow-100 text-yellow-800",
   Uploaded: "bg-blue-100 text-blue-800",
@@ -62,17 +68,21 @@ interface Props {
 export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"booking" | "vendor" | "payment" | "documents">("booking");
+  const [activeTab, setActiveTab] = useState<"booking" | "vendor" | "payment" | "documents" | "agreement">("booking");
 
-  useEffect(() => {
-    if (!open || !bookingId) return;
+  const fetchBooking = (id: string) => {
     setLoading(true);
-    setActiveTab("booking");
-    fetch(`/api/bookings/${bookingId}`)
+    fetch(`/api/bookings/${id}`)
       .then((r) => r.json())
       .then((data: BookingDetail) => setBooking(data))
       .catch(() => setBooking(null))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!open || !bookingId) return;
+    setActiveTab("booking");
+    fetchBooking(bookingId);
   }, [open, bookingId]);
 
   if (!open) return null;
@@ -82,6 +92,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
     { key: "vendor" as const, label: "Vendor Details" },
     { key: "payment" as const, label: "Pembayaran" },
     { key: "documents" as const, label: "Dokumen" },
+    { key: "agreement" as const, label: "Client Agreement" },
   ];
 
   return (
@@ -95,9 +106,20 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           {loading ? (
             <Skeleton className="h-6 w-48" />
           ) : (
-            <h2 className="text-lg sm:text-xl font-semibold flex-1 pr-4">
-              {booking ? `Daftar lengkap booking ${booking.snapCustomer?.name ?? ""}` : "Detail Booking"}
-            </h2>
+            <div className="flex items-center gap-2 flex-1 pr-4">
+              <h2 className="text-lg sm:text-xl font-semibold">
+                {booking ? `Daftar lengkap booking ${booking.snapCustomer?.name ?? ""}` : "Detail Booking"}
+              </h2>
+              {bookingId && (
+                <button
+                  onClick={() => fetchBooking(bookingId)}
+                  className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Refresh"
+                >
+                  <RefreshCw size={15} />
+                </button>
+              )}
+            </div>
           )}
           <button
             onClick={onClose}
@@ -218,15 +240,18 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               {/* ═══ TAB: Vendor Details ═══ */}
               {activeTab === "vendor" && (
                 <div className="space-y-6">
-                  {/* Vendor items grouped by category — 2-col grid like source */}
+                  {/* Package vendor items */}
                   {booking.snapPackageVendorItems.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
-                      {booking.snapPackageVendorItems.map((item) => (
-                        <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
-                          <p className="text-xs text-gray-400">{item.categoryName}</p>
-                          <p className="text-sm truncate font-medium text-gray-900">{item.itemText}</p>
-                        </div>
-                      ))}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Paket Vendor Items</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
+                        {booking.snapPackageVendorItems.map((item) => (
+                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
+                            <p className="text-xs text-gray-400">{item.categoryName}</p>
+                            <p className="text-sm truncate font-medium text-gray-900">{item.itemText}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -245,54 +270,45 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     </div>
                   )}
 
-                  {/* Vendor booking items table */}
-                  {booking.snapVendorItems.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Vendor Booking Items</p>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-gray-200 bg-gray-50">
-                              <th className="text-left px-4 py-3 font-medium text-gray-500">Category</th>
-                              <th className="text-left px-4 py-3 font-medium text-gray-500">Vendor</th>
-                              <th className="text-left px-4 py-3 font-medium text-gray-500">Item</th>
-                              <th className="text-right px-4 py-3 font-medium text-gray-500">Price</th>
-                              <th className="text-center px-4 py-3 font-medium text-gray-500">Qty</th>
-                              <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {booking.snapVendorItems.map((v) => (
-                              <tr key={v.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="px-4 py-3 text-gray-500">{v.vendorCategoryName}</td>
-                                <td className="px-4 py-3 font-medium text-gray-900">{v.vendorName}</td>
-                                <td className="px-4 py-3 text-gray-900">
-                                  {v.itemName}
-                                  {v.isAddons && <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Addons</span>}
-                                </td>
-                                <td className="px-4 py-3 text-right text-gray-900">{fmtPrice(v.itemPrice)}</td>
-                                <td className="px-4 py-3 text-center text-gray-900">{v.qty}{v.unit ? ` ${v.unit}` : ""}</td>
-                                <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtPrice(v.totalPrice)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bonuses */}
-                  {booking.snapBonuses.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Bonuses / Complimentary</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
-                        {booking.snapBonuses.map((b) => (
-                          <div key={b.id} className="py-2 border-b border-gray-100 last:border-b-0">
-                            <p className="text-sm font-medium text-gray-900">{b.vendorName} (x{b.qty})</p>
-                            {b.description && <p className="text-xs text-gray-400">{b.description}</p>}
-                          </div>
-                        ))}
-                      </div>
+                  {/* Vendor + Bonus unified table */}
+                  {(booking.snapVendorItems.length > 0 || booking.snapBonuses.length > 0) && (
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50">
+                            <TableHead className="px-4 w-[160px]">Kategori</TableHead>
+                            <TableHead className="px-4">Nama Vendor</TableHead>
+                            <TableHead className="px-4 w-[150px]">Nominal</TableHead>
+                            <TableHead className="px-4">Keterangan</TableHead>
+                            <TableHead className="px-4 w-[150px]">Status Order</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
+                            <TableRow key={v.id}>
+                              <TableCell className="px-4 font-medium text-sm text-gray-700">{v.vendorCategoryName}</TableCell>
+                              <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
+                              <TableCell className="px-4 text-sm">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
+                              <TableCell className="px-4 text-sm text-gray-500">{stripHtml(v.description)}</TableCell>
+                              <TableCell className="px-4 text-sm text-gray-500">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                          {booking.snapBonuses.length > 0 && (
+                            <TableRow className="bg-gray-50">
+                              <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Complimentary / Bonus</TableCell>
+                            </TableRow>
+                          )}
+                          {booking.snapBonuses.map((b) => (
+                            <TableRow key={b.id}>
+                              <TableCell className="px-4 font-medium text-sm text-gray-700">Complimentary</TableCell>
+                              <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>
+                              <TableCell className="px-4 text-sm">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
+                              <TableCell className="px-4 text-sm text-gray-500">{stripHtml(b.description)}</TableCell>
+                              <TableCell className="px-4 text-sm text-gray-500">{b.orderStatus?.name ?? "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   )}
 
@@ -369,9 +385,8 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     (() => {
                       const grouped: Record<string, typeof booking.bookingDocuments> = {};
                       booking.bookingDocuments.forEach((doc) => {
-                        const key = doc.name;
-                        if (!grouped[key]) grouped[key] = [];
-                        grouped[key].push(doc);
+                        if (!grouped[doc.name]) grouped[doc.name] = [];
+                        grouped[doc.name].push(doc);
                       });
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -382,26 +397,59 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                 <p className="text-[10px] text-gray-400 mt-0.5">{docs[0].description}</p>
                               )}
                               <div className="flex flex-wrap gap-2 mt-2">
-                                {docs.map((doc) => (
-                                  <div key={doc.id} className="w-[100px] border border-gray-200 rounded-lg overflow-hidden bg-white">
-                                    <div className="h-[80px] w-full bg-gray-50 flex items-center justify-center">
-                                      <div className="flex flex-col items-center gap-1">
-                                        <FileText className="h-6 w-6 text-gray-300" />
-                                        <span className="text-[9px] text-gray-400 uppercase font-medium">
-                                          {doc.fileName?.split(".").pop() ?? "FILE"}
-                                        </span>
+                                {docs.map((doc) => {
+                                  const url = (doc as typeof doc & { fileUrl?: string }).fileUrl ?? "";
+                                  const isImage = doc.fileType?.startsWith("image/");
+                                  const ext = doc.fileName?.split(".").pop() ?? "FILE";
+                                  return (
+                                    <div key={doc.id} className="w-[100px] border border-gray-200 rounded-lg overflow-hidden bg-white">
+                                      <div
+                                        className="h-[80px] w-full bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                                        onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
+                                      >
+                                        {isImage && url ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={url} alt={doc.fileName} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <FileText className="h-6 w-6 text-gray-300" />
+                                            <span className="text-[9px] text-gray-400 uppercase font-medium">{ext}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="px-1.5 py-1">
+                                        <div className="flex items-center justify-between gap-0.5">
+                                          <p className="text-[10px] text-gray-600 truncate flex-1">{doc.fileName}</p>
+                                          <button
+                                            type="button"
+                                            className="shrink-0 text-gray-400 hover:text-gray-600"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              try {
+                                                const res = await fetch(url);
+                                                const blob = await res.blob();
+                                                const a = document.createElement("a");
+                                                a.href = URL.createObjectURL(blob);
+                                                a.download = doc.fileName;
+                                                a.click();
+                                                URL.revokeObjectURL(a.href);
+                                              } catch {
+                                                window.open(url, "_blank", "noopener,noreferrer");
+                                              }
+                                            }}
+                                          >
+                                            <Download className="h-2.5 w-2.5" />
+                                          </button>
+                                        </div>
+                                        <p className="text-[9px] text-gray-400">
+                                          {doc.fileSize < 1024 * 1024
+                                            ? `${(doc.fileSize / 1024).toFixed(1)} KB`
+                                            : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}
+                                        </p>
                                       </div>
                                     </div>
-                                    <div className="px-1.5 py-1">
-                                      <p className="text-[10px] text-gray-600 truncate">{doc.fileName}</p>
-                                      <p className="text-[9px] text-gray-400">
-                                        {doc.fileSize < 1024 * 1024
-                                          ? `${(doc.fileSize / 1024).toFixed(1)} KB`
-                                          : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           ))}
@@ -411,8 +459,12 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   )}
 
                   {/* Client Agreement section */}
-                  <ClientAgreementSection booking={booking} />
                 </div>
+              )}
+
+              {/* ═══ TAB: Client Agreement ═══ */}
+              {activeTab === "agreement" && (
+                <ClientAgreementSection booking={booking} onRefresh={() => fetchBooking(bookingId!)} />
               )}
             </>
           )}
@@ -424,7 +476,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
 /* ─── Client Agreement Sub-component ───────────────────────────────────────── */
 
-function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
+function ClientAgreementSection({ booking, onRefresh }: { booking: BookingDetail; onRefresh: () => void }) {
   const [agreement, setAgreement] = useState(booking.clientAgreement);
   const [isPending, startTransition] = useTransition();
 
@@ -463,7 +515,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
             <p className="text-xs text-muted-foreground font-medium">Link Agreement</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-gray-50 border rounded px-3 py-2 truncate">{agreementUrl}</code>
-              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(agreementUrl!); toast.success("Link disalin"); }}>
+              <Button variant="outline" size="sm" disabled={isPending} onClick={() => { navigator.clipboard.writeText(agreementUrl!); toast.success("Link disalin"); }}>
                 <Copy className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -472,7 +524,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
             <p className="text-xs text-muted-foreground font-medium">Kode Akses</p>
             <div className="flex items-center gap-2">
               <code className="text-lg font-mono font-bold tracking-widest bg-gray-50 border rounded px-3 py-2">{agreement.accessCode}</code>
-              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(agreement!.accessCode); toast.success("Kode disalin"); }}>
+              <Button variant="outline" size="sm" disabled={isPending} onClick={() => { navigator.clipboard.writeText(agreement!.accessCode); toast.success("Kode disalin"); }}>
                 <Copy className="h-3.5 w-3.5" />
               </Button>
             </div>

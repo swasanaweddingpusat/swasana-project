@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const file = fd.get("file") as File;
   if (!termId || !file) return NextResponse.json({ error: "Missing data" }, { status: 400 });
 
-  let buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
   let contentType = file.type;
   let ext = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];
 

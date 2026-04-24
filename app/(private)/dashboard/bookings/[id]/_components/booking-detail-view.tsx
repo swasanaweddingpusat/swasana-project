@@ -282,7 +282,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
   };
 
   const signatures = booking.signatures as Record<string, unknown> | null;
-  const clientSig = signatures?.client as Record<string, unknown> | null;
+  const clientSig = signatures?.client as { signature?: string } | null;
 
   return (
     <Card className="md:col-span-2">
@@ -340,7 +340,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground font-medium">Tanda Tangan Client</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={clientSig.signature as string} alt="Client signature" className="h-20 border rounded bg-white p-1" />
+                <img src={clientSig.signature} alt="Client signature" className="h-20 border rounded bg-white p-1" />
               </div>
             )}
 

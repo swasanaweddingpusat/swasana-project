@@ -87,7 +87,7 @@ export function SourceOfInformationManager({ initialData }: Props) {
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-base font-semibold text-gray-900">Source of Information</h1>
+          <h1 className="text-base font-bold text-[#1D1D1D]">Source of Information</h1>
           <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
             {items.length} items
           </span>
@@ -107,9 +107,9 @@ export function SourceOfInformationManager({ initialData }: Props) {
           <Table className="min-w-full text-sm">
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-[60px] px-4">No</TableHead>
+                <TableHead className="w-15 px-4">No</TableHead>
                 <TableHead className="px-4">Nama</TableHead>
-                <TableHead className="w-[100px] px-4"></TableHead>
+                <TableHead className="w-25 px-4"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -80,7 +80,7 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
           {/* Header */}
           <div className="flex justify-between items-center px-6 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-base font-semibold text-gray-900">Brand Management</span>
+              <span className="text-base font-bold text-[#1D1D1D]">Brand Management</span>
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {brands.length} brands
               </span>
@@ -98,11 +98,11 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
               <Table className="min-w-full text-sm">
                 <TableHeader>
                   <TableRow className="bg-gray-50 border-b-2 border-gray-200">
-                    <TableHead className="px-4 py-3 font-semibold text-gray-700 w-[60px]">No</TableHead>
+                    <TableHead className="px-4 py-3 font-semibold text-gray-700 w-15">No</TableHead>
                     <TableHead className="px-2 py-3 font-semibold text-gray-700">Brand Name</TableHead>
                     <TableHead className="px-2 py-3 font-semibold text-gray-700">Code</TableHead>
                     <TableHead className="px-2 py-3 font-semibold text-gray-700">Venues</TableHead>
-                    <TableHead className="px-2 py-3 w-[100px]"></TableHead>
+                    <TableHead className="px-2 py-3 w-25"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

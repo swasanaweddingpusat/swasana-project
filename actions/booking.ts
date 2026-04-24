@@ -162,7 +162,7 @@ export async function createBooking(data: unknown) {
     if (input.bonuses && input.bonuses.length > 0) {
       ops.push(
         ...input.bonuses.map((bonus) =>
-          db.snapBonus.create({ data: { bookingId, vendorId: bonus.vendorId, vendorCategoryId: bonus.vendorCategoryId, vendorName: bonus.vendorName, description: bonus.description ?? null, qty: bonus.qty } })
+          db.snapBonus.create({ data: { bookingId, vendorId: bonus.vendorId, vendorCategoryId: bonus.vendorCategoryId, vendorName: bonus.vendorName, description: bonus.description ?? null, qty: bonus.qty, nominal: bonus.nominal ?? 0 } })
         )
       );
     }
@@ -441,6 +441,14 @@ export async function editBooking(data: unknown) {
     }
 
     await Promise.all(ops);
+
+    // Update bonuses — delete existing, recreate
+    if (parsed.data.bonuses && parsed.data.bonuses.length > 0) {
+      await db.snapBonus.deleteMany({ where: { bookingId: id } });
+      await Promise.all(parsed.data.bonuses.map((bonus) =>
+        db.snapBonus.create({ data: { bookingId: id, vendorId: bonus.vendorId, vendorCategoryId: bonus.vendorCategoryId, vendorName: bonus.vendorName, description: bonus.description ?? null, qty: bonus.qty, nominal: bonus.nominal ?? 0 } })
+      ));
+    }
 
     await logAudit({
       userId: session!.user.id,

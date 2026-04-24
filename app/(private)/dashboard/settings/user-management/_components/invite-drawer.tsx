@@ -566,7 +566,7 @@ export function InviteDrawer({
                           {brand.name}
                         </span>
                         {selectedCount > 0 && (
-                          <span className="text-[10px] font-medium bg-black text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                          <span className="text-[10px] font-medium bg-black text-white rounded-full px-1.5 py-0.5 min-w-5 text-center">
                             {selectedCount}
                           </span>
                         )}

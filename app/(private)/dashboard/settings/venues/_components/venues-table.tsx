@@ -98,7 +98,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
           {/* Header */}
           <div className="flex justify-between items-center px-6 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-base font-semibold text-gray-900">List Venues</span>
+              <span className="text-base font-bold text-[#1D1D1D]">List Venues</span>
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {filtered.length} venue
               </span>
@@ -110,7 +110,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                   placeholder="Cari venue..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 w-[200px] h-9 text-sm"
+                  className="pl-9 w-50 h-9 text-sm"
                 />
               </div>
               {selected.size > 1 && (

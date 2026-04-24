@@ -154,7 +154,7 @@ export default function PaymentMethodsPage() {
                 onChange={(v) => { setVenueFilter(v); setCurrentPage(1); }}
                 placeholder="All Venues"
                 searchPlaceholder="Cari venue..."
-                className="w-[200px]"
+                className="w-50"
               />
               {(can("payment_methods", "create") || isAdmin) && (
                 <Button onClick={openAdd}>

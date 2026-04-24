@@ -82,7 +82,7 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="overflow-hidden p-0">
         <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="p-6 md:p-8 flex flex-col justify-center min-h-[420px]" action={handleSubmit}>
+          <form className="p-6 md:p-8 flex flex-col justify-center min-h-105" action={handleSubmit}>
             <div className="flex flex-col gap-6">
               <div className="flex flex-col">
                 <h1 className="text-2xl font-bold">Welcome back</h1>
@@ -147,7 +147,7 @@ export function LoginForm({
               </Button>
             </div>
           </form>
-          <div className="bg-muted relative hidden md:block overflow-hidden min-h-[420px]">
+          <div className="bg-muted relative hidden md:block overflow-hidden min-h-105">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/thumbnail.png"
