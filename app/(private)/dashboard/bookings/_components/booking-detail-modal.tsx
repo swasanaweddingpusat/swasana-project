@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
 import { deleteBookingDocument, deleteBookingDocuments } from "@/actions/booking-document";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import type { BookingDetail } from "@/lib/queries/bookings";
+import type { BookingDetail, SnapPackageInternalItem, SnapPackageVendorItem, SnapBonus, SnapVendorItem } from "@/lib/queries/bookings";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
 
@@ -253,7 +253,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Paket Vendor Items</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
-                        {booking.snapPackageVendorItems.map((item) => (
+                        {booking.snapPackageVendorItems.map((item: SnapPackageVendorItem) => (
                           <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
                             <p className="text-xs text-gray-400">{item.categoryName}</p>
                             <p className="text-sm truncate font-medium text-gray-900">{item.itemText}</p>
@@ -268,7 +268,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Internal Items</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
-                        {booking.snapPackageInternalItems.map((item) => (
+                        {booking.snapPackageInternalItems.map((item: SnapPackageInternalItem) => (
                           <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
                             <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
                             {item.itemDescription && <p className="text-xs text-gray-400">{item.itemDescription}</p>}
@@ -292,7 +292,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
+                          {booking.snapVendorItems.filter((v: SnapVendorItem) => !v.isAddons).map((v: SnapVendorItem) => (
                             <TableRow key={v.id}>
                               <TableCell className="px-4 font-medium text-sm text-gray-700">{v.vendorCategoryName}</TableCell>
                               <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
@@ -306,7 +306,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Complimentary / Bonus</TableCell>
                             </TableRow>
                           )}
-                          {booking.snapBonuses.map((b) => (
+                          {booking.snapBonuses.map((b: SnapBonus) => (
                             <TableRow key={b.id}>
                               <TableCell className="px-4 font-medium text-sm text-gray-700">Complimentary</TableCell>
                               <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>

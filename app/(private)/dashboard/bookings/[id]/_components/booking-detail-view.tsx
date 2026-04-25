@@ -1,6 +1,6 @@
 "use client";
 
-import type { BookingDetail } from "@/lib/queries/bookings";
+import type { BookingDetail, SnapPackageInternalItem, SnapPackageVendorItem, SnapBonus, SnapVendorItem, TermOfPayment, BookingDocument } from "@/lib/queries/bookings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -136,7 +136,7 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground mb-1">Internal Items</p>
                     <ul className="space-y-1">
-                      {booking.snapPackageInternalItems.map((item) => (
+                      {booking.snapPackageInternalItems.map((item: SnapPackageInternalItem) => (
                         <li key={item.id} className="text-sm">{item.itemName}{item.itemDescription ? ` — ${item.itemDescription}` : ""}</li>
                       ))}
                     </ul>
@@ -146,7 +146,7 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground mb-1">Vendor Items</p>
                     <ul className="space-y-1">
-                      {booking.snapPackageVendorItems.map((item) => (
+                      {booking.snapPackageVendorItems.map((item: SnapPackageVendorItem) => (
                         <li key={item.id} className="text-sm">{item.categoryName}: {item.itemText}</li>
                       ))}
                     </ul>
@@ -165,7 +165,7 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
               <p className="text-sm text-muted-foreground">Belum ada bonus</p>
             ) : (
               <ul className="space-y-1">
-                {booking.snapBonuses.map((b) => (
+                {booking.snapBonuses.map((b: SnapBonus) => (
                   <li key={b.id} className="text-sm">
                     {b.vendorName} {b.description ? `— ${b.description}` : ""} (x{b.qty})
                   </li>
@@ -193,7 +193,7 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {booking.termOfPayments.map((t) => (
+                    {booking.termOfPayments.map((t: TermOfPayment) => (
                       <tr key={t.id} className="border-b last:border-0">
                         <td className="py-2 pr-4">{t.name}</td>
                         <td className="py-2 pr-4">{fmtPrice(t.amount)}</td>
@@ -218,7 +218,7 @@ export function BookingDetailView({ booking }: { booking: BookingDetail }) {
               <p className="text-sm text-muted-foreground">Belum ada dokumen</p>
             ) : (
               <ul className="space-y-2">
-                {booking.bookingDocuments.map((doc) => (
+                {booking.bookingDocuments.map((doc: BookingDocument) => (
                   <li key={doc.id} className="flex items-center gap-2 text-sm">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span>{doc.name}</span>
