@@ -398,16 +398,15 @@ export async function bulkUpdateUsers(data: {
       }
     }
 
-    // Group member upsert — sequential
+    // Group member replace — delete all existing then create new
     if (groupIds?.length) {
-      for (const groupId of groupIds) {
-        for (const p of profiles) {
-          await db.userGroupMember.upsert({
-            where: { groupId_userId: { groupId, userId: p.id } },
-            create: { groupId, userId: p.id, sortOrder: 0 },
-            update: {},
-          });
-        }
+      for (const p of profiles) {
+        await db.userGroupMember.deleteMany({ where: { userId: p.id } });
+        await db.$transaction(
+          groupIds.map((groupId, i) =>
+            db.userGroupMember.create({ data: { groupId, userId: p.id, sortOrder: i } })
+          )
+        );
       }
     }
 
