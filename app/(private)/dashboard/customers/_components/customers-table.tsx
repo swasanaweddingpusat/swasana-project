@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomers, useDeleteCustomer } from "@/hooks/use-customers";
 import { CustomerDrawer } from "./customer-drawer";
@@ -137,8 +137,9 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                       <TableCell className="px-3">{customer.type}</TableCell>
                       <TableCell className="px-3">
                         {customer.bitrixId ? (
-                          <button type="button" className="hover:underline cursor-copy text-left" onClick={() => { navigator.clipboard.writeText(customer.bitrixId!); toast.success("Bitrix ID copied!"); }}>
-                            {customer.bitrixId}
+                          <button type="button" className="flex items-center gap-1 group" onClick={() => { navigator.clipboard.writeText(customer.bitrixId!); toast.success("Bitrix ID copied!"); }}>
+                            <Badge variant="secondary" className="font-mono text-xs">{customer.bitrixId}</Badge>
+                            <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
                         ) : "—"}
                       </TableCell>
