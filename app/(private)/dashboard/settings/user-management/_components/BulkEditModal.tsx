@@ -99,24 +99,6 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
         <div className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="space-y-3 px-2">
 
-            {/* Role */}
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Role</Label>
-              <Select value={roleId} onValueChange={setRoleId}>
-                <SelectTrigger className="mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]">
-                  <SelectValue placeholder="Pilih role baru (opsional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      <span className="capitalize">{r.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-gray-400 mt-1">Kosongkan jika tidak ingin mengubah role</p>
-            </div>
-
             {/* Data Access */}
             <div>
               <Label className="text-sm font-medium text-gray-700">Data Access</Label>
@@ -136,6 +118,24 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                   );
                 })}
               </div>
+            </div>
+
+            {/* Role */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700">Role</Label>
+              <Select value={roleId} onValueChange={setRoleId}>
+                <SelectTrigger className="mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]">
+                  <SelectValue placeholder="Pilih role baru (opsional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      <span className="capitalize">{r.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-gray-400 mt-1">Kosongkan jika tidak ingin mengubah role</p>
             </div>
 
             {/* Assigned Venues */}
@@ -178,21 +178,10 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                           <div className="space-y-1.5">
                             {brandVenues.map((venue) => {
                               const isSelected = venueIds.includes(venue.id);
-                              const scope = venueScopes[venue.id] ?? "individual";
                               return (
                                 <div key={venue.id} className={cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer", isSelected ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700 hover:bg-gray-100")} onClick={() => toggleVenue(venue.id, !isSelected)}>
                                   <Checkbox checked={isSelected} onCheckedChange={(c) => toggleVenue(venue.id, c as boolean)} onClick={(e) => e.stopPropagation()} className={cn("shrink-0 border-gray-300", isSelected && "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900")} />
                                   <span className="text-xs font-medium flex-1 truncate">{venue.name}</span>
-                                  {isSelected && (
-                                    <div className="flex items-center bg-white/15 rounded-md overflow-hidden shrink-0" onClick={(e) => e.stopPropagation()}>
-                                      <button type="button" onClick={() => setVenueScopes((prev) => ({ ...prev, [venue.id]: "individual" }))} className={cn("flex items-center gap-1 px-2 py-1 text-[10px] font-medium transition-all", scope === "individual" ? "bg-white text-gray-900" : "text-white/60 hover:text-white/80")}>
-                                        <User className="h-3 w-3" /> Own
-                                      </button>
-                                      <button type="button" onClick={() => setVenueScopes((prev) => ({ ...prev, [venue.id]: "general" }))} className={cn("flex items-center gap-1 px-2 py-1 text-[10px] font-medium transition-all", scope === "general" ? "bg-white text-gray-900" : "text-white/60 hover:text-white/80")}>
-                                        <Globe className="h-3 w-3" /> All
-                                      </button>
-                                    </div>
-                                  )}
                                 </div>
                               );
                             })}
