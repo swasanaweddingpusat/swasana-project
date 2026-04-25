@@ -122,19 +122,20 @@ export async function deleteBookingDocuments(ids: string[]) {
       select: { id: true, bookingId: true, filePath: true, name: true },
     });
     if (!docs.length) return { success: false, error: "Dokumen tidak ditemukan." };
+    type DocItem = typeof docs[number];
 
     await db.$transaction([db.bookingDocument.deleteMany({ where: { id: { in: ids } } })]);
-    await Promise.all(docs.map((d: { id: string; bookingId: string; filePath: string; name: string }) => deleteFromR2(d.filePath).catch((e: unknown) => console.error("[deleteBookingDocuments] R2:", e))));
+    await Promise.all(docs.map((d: DocItem) => deleteFromR2(d.filePath).catch((e: unknown) => console.error("[deleteBookingDocuments] R2:", e))));
 
     const bookingId = docs[0].bookingId;
-    const names = docs.map((d) => d.name).join(", ");
+    const names = docs.map((d: DocItem) => d.name).join(", ");
     await logAudit({
       userId: session!.user.id,
       action: "deleted",
       entityType: "booking",
       entityId: bookingId,
       description: `Deleted ${docs.length} document(s): ${names}`,
-      changes: { documentNames: docs.map((d) => d.name), count: docs.length },
+      changes: { documentNames: docs.map((d: DocItem) => d.name), count: docs.length },
     });
 
     revalidateTag("bookings", "max");
