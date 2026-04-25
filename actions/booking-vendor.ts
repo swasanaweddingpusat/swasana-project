@@ -29,7 +29,7 @@ export async function saveBookingVendors(
     const existing = await db.snapVendorItem.findMany({
       where: { bookingId, isAddons: false, paketData: { equals: undefined } },
       select: { id: true, vendorCategoryId: true },
-    }) satisfies { id: string; vendorCategoryId: string }[];
+    }) as { id: string; vendorCategoryId: string }[];
 
     const existingMap = new Map(existing.map((e) => [e.vendorCategoryId, e.id]));
     const incomingCatIds = new Set(selections.map((s) => s.vendorCategoryId));
