@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, Building2, Globe, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,9 +30,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
-  const resetForm = () => { setRoleId(""); setVenueIds([]); setVenueScopes({}); setExpandedBrands(new Set()); };
-
-  useEffect(() => { if (!open) resetForm(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleClose = () => { setRoleId(""); setVenueIds([]); setVenueScopes({}); setExpandedBrands(new Set()); onClose(); };
 
   const handleVenueChange = (venueId: string, checked: boolean) => {
     if (checked) {
@@ -85,11 +83,11 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
     if (succeeded > 0) toast.success(`${succeeded} user berhasil diupdate`);
     setSubmitting(false);
     onSuccess();
-    onClose();
+    handleClose();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="max-w-md p-0 gap-0 overflow-hidden max-h-[85vh] flex flex-col">
         <DialogTitle className="sr-only">Bulk Edit Users</DialogTitle>
         <div className="flex items-center justify-between px-6 pt-6 pb-3 border-b">
@@ -97,7 +95,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
             <h3 className="text-sm font-semibold">Bulk Edit</h3>
             <p className="text-xs text-muted-foreground mt-0.5">{selectedUserIds.length} user dipilih</p>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-md hover:bg-accent">
+          <button type="button" onClick={handleClose} className="p-1 rounded-md hover:bg-accent">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -192,7 +190,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
         </div>
 
         <div className="px-6 py-4 border-t flex gap-3">
-          <Button variant="outline" onClick={onClose} disabled={submitting} className="flex-1">Batal</Button>
+          <Button variant="outline" onClick={handleClose} disabled={submitting} className="flex-1">Batal</Button>
           <Button onClick={handleSubmit} disabled={submitting} className="flex-1">{submitting ? "Menyimpan..." : "Simpan"}</Button>
         </div>
       </DialogContent>
