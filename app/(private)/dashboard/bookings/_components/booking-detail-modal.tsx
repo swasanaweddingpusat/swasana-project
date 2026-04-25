@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
 import { deleteBookingDocument, deleteBookingDocuments } from "@/actions/booking-document";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import type { BookingDetail, SnapPackageInternalItem, SnapPackageVendorItem, SnapBonus, SnapVendorItem } from "@/lib/queries/bookings";
+import type { BookingDetail, SnapPackageInternalItem, SnapPackageVendorItem, SnapBonus, SnapVendorItem, TermOfPayment, BookingDocument } from "@/lib/queries/bookings";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
 
@@ -356,7 +356,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                           </tr>
                         </thead>
                         <tbody>
-                          {booking.termOfPayments.map((t, i) => (
+                          {booking.termOfPayments.map((t: TermOfPayment, i) => (
                             <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
                               <td className="px-4 py-3 font-medium text-gray-900">{t.name || `Termin ${i + 1}`}</td>
                               <td className="px-4 py-3 text-gray-900">{fmtPrice(t.amount)}</td>
@@ -399,7 +399,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {Object.entries(grouped).map(([docName, docs]) => {
-                            const groupIds = docs.map((d) => d.id);
+                            const groupIds = docs.map((d: BookingDocument) => d.id);
                             const allSelected = groupIds.every((id) => selectedDocIds.has(id));
                             const someSelected = groupIds.some((id) => selectedDocIds.has(id));
                             const toggleGroup = () => {
@@ -422,7 +422,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                   <p className="text-[10px] text-gray-400 mt-0.5">{docs[0].description}</p>
                                 )}
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                  {docs.map((doc) => {
+                                  {docs.map((doc: BookingDocument) => {
                                     const url = (doc as typeof doc & { fileUrl?: string }).fileUrl ?? "";
                                     const isImage = doc.fileType?.startsWith("image/");
                                     const ext = doc.fileName?.split(".").pop() ?? "FILE";
