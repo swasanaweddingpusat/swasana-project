@@ -112,7 +112,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                     <TableHead className="px-3">Nama</TableHead>
                     <TableHead className="px-3">No. HP</TableHead>
                     <TableHead className="px-3">Type</TableHead>
-                    <TableHead className="px-3">Club</TableHead>
+                    <TableHead className="px-3">Bitrix ID</TableHead>
                     <TableHead className="px-3">Status</TableHead>
                     <TableHead className="px-3">Notes</TableHead>
                     <TableHead className="px-3">Updated By</TableHead>
@@ -127,7 +127,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                       <TableCell className="px-3 max-w-45 truncate font-medium" title={customer.name}>{customer.name}</TableCell>
                       <TableCell className="px-3">{customer.mobileNumber}</TableCell>
                       <TableCell className="px-3">{customer.type}</TableCell>
-                      <TableCell className="px-3">{customer.club || "—"}</TableCell>
+                      <TableCell className="px-3">{customer.bitrixId || "—"}</TableCell>
                       <TableCell className="px-3">
                         <Badge variant="outline" className={cn("text-xs", MEMBER_STATUS_COLORS[customer.memberStatus] ?? "")}>
                           {customer.memberStatus}
