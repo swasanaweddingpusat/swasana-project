@@ -153,10 +153,10 @@ export async function updateUser(data: Record<string, unknown>) {
         where: { userId },
         select: { venueId: true, scope: true },
       });
-      const existingMap = new Map(existing.map((e) => [e.venueId, e.scope]));
+      const existingMap = new Map(existing.map((e: { venueId: string; scope: string }) => [e.venueId, e.scope]));
       const nextSet = new Set(venueIds);
 
-      const toDelete = existing.filter((e) => !nextSet.has(e.venueId));
+      const toDelete = existing.filter((e: { venueId: string; scope: string }) => !nextSet.has(e.venueId));
       const toCreate = venueIds.filter((id) => !existingMap.has(id));
       const toUpdate = venueIds.filter((id) => {
         const cur = existingMap.get(id);
