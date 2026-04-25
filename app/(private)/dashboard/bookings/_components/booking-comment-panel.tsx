@@ -125,10 +125,15 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
     if (open && bookingId) markCommentsRead(bookingId);
   }, [open, bookingId]);
 
-  // Scroll to bottom on new comments
+  // Scroll to bottom + mark as read on new comments
   useEffect(() => {
-    if (open) setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  }, [open, comments.length]);
+    if (!open) return;
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    if (bookingId) {
+      markCommentsRead(bookingId);
+      qc.invalidateQueries({ queryKey: ["unread-comments"] });
+    }
+  }, [open, comments.length, bookingId, qc]);
 
   // Reset on close
   useEffect(() => {
@@ -188,6 +193,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
       return;
     }
     qc.invalidateQueries({ queryKey: ["booking-comments", bookingId] });
+    qc.invalidateQueries({ queryKey: ["unread-comments"] });
     if (textareaRef.current) textareaRef.current.style.height = "36px";
     textareaRef.current?.focus();
   }, [input, pendingAttachments, replyTo, bookingId, qc, user]);

@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { BookingDetail } from "@/lib/queries/bookings";
 import { POCateringEditorV2 } from "./po-catering-editor";
 import type { POCateringV2, PORow } from "@/types/po-catering";
-import { createDefaultPOV2, createId } from "@/types/po-catering";
+import { createDefaultPOV2 } from "@/types/po-catering";
 
 interface Props {
   isOpen: boolean;
@@ -25,6 +25,7 @@ interface EligibleBooking { id: string; snapVendorItemId: string; label: string 
 export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, isViewOnly }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [isDataLoading, setIsDataLoading] = React.useState(false);
+  const [isPrinting, setIsPrinting] = React.useState(false);
   const [poData, setPOData] = React.useState<POCateringV2>(createDefaultPOV2());
   const skipReloadRef = React.useRef(false);
   const isLoadedRef = React.useRef(false);
@@ -85,14 +86,7 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
     setIsDataLoading(true);
     let base: POCateringV2;
 
-    try {
-      const draft = localStorage.getItem(draftKey);
-      if (draft) {
-        const parsed = JSON.parse(draft);
-        if (parsed?.version === 2) { base = parsed; setPOData(injectIncomingRows(base)); isLoadedRef.current = true; setIsDataLoading(false); return; }
-      }
-    } catch {}
-
+    // 1. DB first — source of truth
     const raw = cateringItem.paketData;
     if (raw && typeof raw === "object" && (raw as Record<string, unknown>).version === 2) {
       base = raw as unknown as POCateringV2;
@@ -104,13 +98,23 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
       return;
     }
 
+    // 2. localStorage — unsaved draft (only if DB empty)
+    try {
+      const draft = localStorage.getItem(draftKey);
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed?.version === 2) { base = parsed; setPOData(injectIncomingRows(base)); isLoadedRef.current = true; setIsDataLoading(false); return; }
+      }
+    } catch {}
+
+    // 3. Default template
     base = createDefaultPOV2();
     const injected = injectIncomingRows(base);
     setPOData(injected);
     try { localStorage.setItem(draftKey, JSON.stringify(injected)); } catch {}
     isLoadedRef.current = true;
     setIsDataLoading(false);
-  }, [isOpen, cateringItem, injectIncomingRows]);
+  }, [isOpen, cateringItem, injectIncomingRows, draftKey]);
 
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
@@ -151,8 +155,6 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
       </Drawer>
     );
   }
-
-  const [isPrinting, setIsPrinting] = React.useState(false);
 
   const handlePrintPO = async () => {
     setIsPrinting(true);

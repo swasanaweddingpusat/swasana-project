@@ -1,10 +1,9 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { headers } from "next/headers";
 
 type ApprovalRole = "finance" | "dirops" | "oprations";
 type CategoryType = "catering" | "decoration";
@@ -15,14 +14,9 @@ export async function approveCategoryPO(
   role: ApprovalRole,
   signature: string
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`approve-po:${session.user.id}:${ip}`)) {
-    return { success: false, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "booking", action: "approve" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`approve-po:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const booking = await db.booking.findUnique({
@@ -43,8 +37,8 @@ export async function approveCategoryPO(
             ...categoryApprovals,
             [role]: {
               signature,
-              userId: session.user.profileId,
-              name: session.user.name ?? "",
+              userId: session!.user.profileId,
+              name: session!.user.name ?? "",
               at: new Date().toISOString(),
             },
           },
@@ -53,7 +47,7 @@ export async function approveCategoryPO(
     });
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: `booking.${categoryType}_${role}_approved`,
       entityType: "booking",
       entityId: bookingId,

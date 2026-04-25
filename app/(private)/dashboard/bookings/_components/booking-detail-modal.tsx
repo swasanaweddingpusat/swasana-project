@@ -140,12 +140,12 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
         </div>
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
-        <div className="flex border-b border-gray-200 mb-0 px-4 sm:px-8 shrink-0">
+        <div className="flex border-b border-gray-200 mb-0 px-4 sm:px-8 shrink-0 overflow-x-auto scrollbar-none">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+              className={`px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === t.key
                   ? "border-black text-black"
                   : "border-transparent text-gray-500 hover:text-gray-700"

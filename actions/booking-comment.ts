@@ -22,7 +22,7 @@ export async function createBookingComment(data: {
   replyToId?: string;
   attachments?: CommentAttachment[];
 }) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return { success: false as const, error };
 
   const parsed = contentSchema.safeParse(data.content);
@@ -37,42 +37,13 @@ export async function createBookingComment(data: {
         content: parsed.data.trim(),
         mentions: data.mentions,
         replyToId: data.replyToId ?? null,
-        attachments: (data.attachments ?? []) as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        attachments: (data.attachments ?? []) as never,
       },
       include: {
         author: { select: { id: true, fullName: true, avatarUrl: true } },
         replyTo: { select: { id: true, content: true, author: { select: { fullName: true } } } },
       },
     });
-
-    // Notify mentioned users + booking sales/manager (exclude author)
-    const booking = await db.booking.findUnique({
-      where: { id: data.bookingId },
-      select: { salesId: true, managerId: true, snapCustomer: { select: { name: true } } },
-    });
-
-    if (booking) {
-      const notifyIds = new Set<string>([
-        ...data.mentions,
-        booking.salesId,
-        ...(booking.managerId ? [booking.managerId] : []),
-      ]);
-      notifyIds.delete(session!.user.profileId);
-
-      if (notifyIds.size > 0) {
-        await db.notification.createMany({
-          data: [...notifyIds].map((profileId) => ({
-            userId: profileId,
-            title: "Komentar baru",
-            message: `${session!.user.name} berkomentar di booking ${booking.snapCustomer?.name ?? ""}`,
-            type: "comment",
-            entityType: "booking",
-            entityId: data.bookingId,
-          })),
-          skipDuplicates: true,
-        });
-      }
-    }
 
     revalidateTag(`booking-comments-${data.bookingId}`, "max");
     return { success: true as const, comment };
@@ -83,7 +54,7 @@ export async function createBookingComment(data: {
 }
 
 export async function editBookingComment(id: string, content: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return { success: false as const, error };
 
   const parsed = contentSchema.safeParse(content);
@@ -108,7 +79,7 @@ export async function editBookingComment(id: string, content: string) {
 }
 
 export async function deleteBookingComment(id: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return { success: false as const, error };
 
   try {
@@ -136,7 +107,7 @@ export async function deleteBookingComment(id: string) {
 }
 
 export async function markCommentsRead(bookingId: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return;
 
   try {

@@ -6,7 +6,7 @@ export function useBookingComments(bookingId: string | null) {
     queryKey: ["booking-comments", bookingId],
     queryFn: () => fetchBookingComments(bookingId!),
     enabled: !!bookingId,
-    refetchInterval: 5000, // poll every 5s
+    refetchInterval: 10000, // poll every 10s
     refetchOnWindowFocus: false,
   });
 }

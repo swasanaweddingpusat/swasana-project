@@ -747,7 +747,7 @@ model BookingComment {
   replyTo BookingComment? @relation("CommentReplies", fields: [replyToId], references: [id])
   replies BookingComment[] @relation("CommentReplies")
 
-  @@index([bookingId])
+  @@index([bookingId, createdAt])
   @@index([authorId])
   @@map("booking_comments")
 }
