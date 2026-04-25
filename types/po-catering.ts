@@ -63,7 +63,7 @@ function sumIds(rows: PORow[], ids: string[]): number {
 
 export function calculateV2(data: POCateringV2): POCateringV2 {
   // Multi-pass with mutable updates so formulas referencing earlier formulas resolve
-  let rows = [...data.rows];
+  const rows = [...data.rows];
   for (let pass = 0; pass < 3; pass++) {
     // Step A: items/subgroups/groups
     for (let i = 0; i < rows.length; i++) {
@@ -148,61 +148,50 @@ export function calculateV2(data: POCateringV2): POCateringV2 {
 export function createId(): string { return crypto.randomUUID(); }
 
 export function createDefaultPOV2(): POCateringV2 {
-  const b1 = createId(), b2 = createId(), b3 = createId(), b4 = createId(), b5 = createId(), b6 = createId();
-  const g1 = createId(), g2 = createId(), g3 = createId(), g4 = createId(), g5 = createId(), g6 = createId();
-  const p1 = createId(), p2 = createId(), p3 = createId(), p4 = createId(), p5 = createId(), p6 = createId();
-
   return {
     version: 2,
     rows: [
-      // Section 1 — Paket
-      { id: createId(), type: "subgroup", label: "PEMBAYARAN PAKET TERDIRI DARI :", grandTotal: 45000000 },
-      { id: createId(), type: "subgroup", label: "Kriteria Menu Gubuk dari Paket" },
-      { id: b1, type: "item", no: 1, description: "Buffet", qty: 600, unit: "Porsi" },
-      { id: createId(), type: "subgroup", label: "Gubukan" },
-      { id: b2, type: "item", no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi" },
-      { id: b3, type: "item", no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi" },
-      { id: b4, type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi" },
-      { id: b5, type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi" },
-      { id: b6, type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor" },
+      { id: "44a95f01-1cf7-4054-ad30-5a465db4f1d3", type: "subgroup", label: "PEMBAYARAN PAKET TERDIRI DARI :", grandTotal: 45000000 },
+      { id: "f2c43fee-63fb-47da-b6bb-6355b3d6c5e4", type: "subgroup", label: "Kriteria Menu Gubuk dari Paket" },
+      { id: "a6911540-0b32-45c6-92a3-8ec8bed8d3e1", type: "item", no: 1, description: "Buffet", qty: 600, unit: "Porsi" },
+      { id: "b9f78a40-aff8-48e7-ac29-628da768f620", type: "subgroup", label: "Gubukan" },
+      { id: "d9f46904-e3bf-4a67-b10e-fc22e353b536", type: "item", no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi" },
+      { id: "0868b83b-8993-4f43-9d4a-b47b5e319441", type: "item", no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi" },
+      { id: "2fc6a50e-0e53-4dbd-bdc6-45696d370d92", type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi" },
+      { id: "34abf0bd-a952-4458-9209-12396b62f541", type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi" },
+      { id: "285bd127-79a7-430c-90dc-f30ad8d400f5", type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor" },
 
-      // Section 2 — Additional Buffet
-      { id: createId(), type: "group", label: "Additional Pagi" },
-      { id: createId(), type: "subgroup", label: "Buffet" },
-      { id: g1, type: "item", no: 1, description: "Buffet", qty: 600, unit: "Porsi", price: 85000 },
-      { id: createId(), type: "subtotal", label: "Total Penambahan Buffet", sumRowIds: [g1] },
+      { id: "d5d546ea-bf01-46cb-831a-02eb0dfe8a46", type: "group", label: "Additional Pagi" },
+      { id: "017e045e-645c-4b95-80b2-d2c0e9390cc2", type: "subgroup", label: "Buffet" },
+      { id: "2d70605e-7862-4c19-af3a-d05bb9099d1b", type: "item", no: 1, description: "Buffet", qty: 600, unit: "Porsi", price: 85000 },
+      { id: "bf40b651-2675-49c5-b17d-a3bef5e0a358", type: "subtotal", label: "Total Penambahan Buffet", sumRowIds: ["2d70605e-7862-4c19-af3a-d05bb9099d1b"] },
 
-      // Section 3 — Additional Gubukan (paket)
-      { id: createId(), type: "group", label: "Additional Gubukan" },
-      { id: createId(), type: "subgroup", label: "Kriteria Menu Gubuk dari Paket" },
-      { id: g2, type: "item", no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi", price: 37000 },
-      { id: g3, type: "item", no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi", price: 30000 },
-      { id: g4, type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 },
-      { id: g5, type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 },
-      { id: g6, type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 },
-      { id: createId(), type: "subtotal", label: "Jumlah", sumRowIds: [g2, g3, g4, g5, g6] },
+      { id: "fd9c2b1d-95c2-4966-8187-0b03b3d041e7", type: "group", label: "Additional Gubukan" },
+      { id: "568f4585-5bc5-47bf-823f-8e02c43aca93", type: "subgroup", label: "Kriteria Menu Gubuk dari Paket" },
+      { id: "42b7f40b-60ce-45f7-8714-8859871e3993", type: "item", no: 1, description: "Korean BBQ", qty: 200, unit: "Porsi", price: 37000 },
+      { id: "c6181507-aa4a-4244-b8b6-159642cc5099", type: "item", no: 2, description: "Bakwan Malang", qty: 200, unit: "Porsi", price: 30000 },
+      { id: "973c30de-bcf2-456c-98f5-4b6594639097", type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 },
+      { id: "4ce37dd4-97d7-4564-bf63-2f7f84c5ea84", type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 },
+      { id: "da078493-851d-43a1-a3bc-f83dbad0bedc", type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 },
+      { id: "ce03f51a-d848-48d1-8522-7ce3b8f532b0", type: "subtotal", label: "Jumlah", sumRowIds: ["42b7f40b-60ce-45f7-8714-8859871e3993", "c6181507-aa4a-4244-b8b6-159642cc5099", "973c30de-bcf2-456c-98f5-4b6594639097", "4ce37dd4-97d7-4564-bf63-2f7f84c5ea84", "da078493-851d-43a1-a3bc-f83dbad0bedc"] },
 
-      // Section 4 — Menu Pilihan
-      { id: createId(), type: "subgroup", label: "Kriteria Menu Gubuk yang dipilih" },
-      { id: p1, type: "item", no: 1, description: "Zuppa Soup", qty: 200, unit: "Porsi", price: 34000 },
-      { id: p2, type: "item", no: 2, description: "Bakwan Malang", qty: 220, unit: "Porsi", price: 30000 },
-      { id: p3, type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 },
-      { id: p4, type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 },
-      { id: p5, type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 },
-      { id: p6, type: "item", no: 6, description: "Ice Cream", qty: 200, unit: "Porsi", price: 15000 },
-      { id: createId(), type: "subtotal", label: "Jumlah", sumRowIds: [p1, p2, p3, p4, p5, p6] },
-      { id: createId(), type: "formula", label: "Selisih Gubukan", formulaKind: "diff", formulaAIds: [p1, p2, p3, p4, p5, p6], formulaBIds: [g2, g3, g4, g5, g6] },
-      { id: createId(), type: "formula", label: "Total Penambahan Buffet + Gubukan", formulaKind: "sum", formulaAIds: [g1, p1, p2, p3, p4, p5, p6] },
+      { id: "9b57fea8-b051-4532-8eb8-790997785228", type: "subgroup", label: "Kriteria Menu Gubuk yang dipilih" },
+      { id: "0cacccf9-2072-4aba-96f2-af54fb585655", type: "item", no: 1, description: "Zuppa Soup", qty: 200, unit: "Porsi", price: 34000 },
+      { id: "472585b8-f06f-4b99-bbd9-4fa265fa0663", type: "item", no: 2, description: "Bakwan Malang", qty: 220, unit: "Porsi", price: 30000 },
+      { id: "de264db1-2506-4a6d-a8c3-8e7d74e9fed1", type: "item", no: 3, description: "Aneka Pasta", qty: 200, unit: "Porsi", price: 32000 },
+      { id: "053e719d-6298-4462-8909-fd80ddf9f075", type: "item", no: 4, description: "Sate Ayam", qty: 200, unit: "Porsi", price: 32000 },
+      { id: "39965b20-cc4b-4450-941d-64f6da42ed0b", type: "item", no: 5, description: "Kambing Guling", qty: 2, unit: "Ekor", price: 1950000 },
+      { id: "9fc21461-5a64-444a-9f20-eb1d7ff2e817", type: "item", no: 6, description: "Ice Cream", qty: 200, unit: "Porsi", price: 15000 },
+      { id: "afa62b8e-05d3-47f5-9abe-a4e769b1516f", type: "subtotal", label: "Jumlah", sumRowIds: ["0cacccf9-2072-4aba-96f2-af54fb585655", "472585b8-f06f-4b99-bbd9-4fa265fa0663", "de264db1-2506-4a6d-a8c3-8e7d74e9fed1", "053e719d-6298-4462-8909-fd80ddf9f075", "39965b20-cc4b-4450-941d-64f6da42ed0b", "9fc21461-5a64-444a-9f20-eb1d7ff2e817"] },
+      { id: "3765e544-e1ac-4b1d-85ac-62103cd71997", type: "formula", label: "Selisih Gubukan", formulaKind: "diff", formulaAIds: ["0cacccf9-2072-4aba-96f2-af54fb585655", "472585b8-f06f-4b99-bbd9-4fa265fa0663", "de264db1-2506-4a6d-a8c3-8e7d74e9fed1", "053e719d-6298-4462-8909-fd80ddf9f075", "39965b20-cc4b-4450-941d-64f6da42ed0b", "9fc21461-5a64-444a-9f20-eb1d7ff2e817"], formulaBIds: ["42b7f40b-60ce-45f7-8714-8859871e3993", "c6181507-aa4a-4244-b8b6-159642cc5099", "973c30de-bcf2-456c-98f5-4b6594639097", "4ce37dd4-97d7-4564-bf63-2f7f84c5ea84", "da078493-851d-43a1-a3bc-f83dbad0bedc"] },
+      { id: "c90dbc71-6c60-45ac-9f7a-a6e07f854815", type: "formula", label: "Total Penambahan Buffet + Gubukan", formulaKind: "sum", formulaAIds: ["2d70605e-7862-4c19-af3a-d05bb9099d1b", "0cacccf9-2072-4aba-96f2-af54fb585655", "472585b8-f06f-4b99-bbd9-4fa265fa0663", "de264db1-2506-4a6d-a8c3-8e7d74e9fed1", "053e719d-6298-4462-8909-fd80ddf9f075", "39965b20-cc4b-4450-941d-64f6da42ed0b", "9fc21461-5a64-444a-9f20-eb1d7ff2e817"] },
 
-      // Total Makanan
-      { id: createId(), type: "subgroup", label: "TOTAL PEMBAYARAN MAKANAN", grandTotal: 96000000 },
-
-      // Charges
-      { id: createId(), type: "subgroup", label: "PEMBAYARAN SWASANA BRIN THAMRIN KE CATERING" },
-      { id: createId(), type: "item", no: 1, description: "Charge Gubukan 15%", negative: true },
-      { id: createId(), type: "item", no: 2, description: "Charge Buffet", qty: 600, unit: "Porsi", price: 30000, negative: true },
-      { id: createId(), type: "item", no: 3, description: "Sewa Meja", unit: "Pcs", negative: true },
-      { id: createId(), type: "item", no: 4, description: "Galon", qty: 7, unit: "Pcs", price: 17000, negative: true },
+      { id: "4239cc6a-1f51-46c1-98d6-96239314234f", type: "subgroup", label: "TOTAL PEMBAYARAN MAKANAN", grandTotal: 96000000 },
+      { id: "d6a54c7c-2cdf-4bdd-bad6-e284ca9e8fb4", type: "subgroup", label: "PEMBAYARAN SWASANA BRIN THAMRIN KE CATERING" },
+      { id: "80bd4ba0-ee22-44d7-a853-b61a4c0992fb", type: "item", no: 1, description: "Charge Gubukan 15%", negative: true },
+      { id: "6d035ba2-35b6-4452-9546-5a284ddbee2f", type: "item", no: 2, description: "Charge Buffet", qty: 600, unit: "Porsi", price: 30000, negative: true },
+      { id: "f1fd0ac9-5387-472f-92b0-649f9ee8dd91", type: "item", no: 3, description: "Sewa Meja", unit: "Pcs", negative: true },
+      { id: "c627c89f-0173-4d67-a936-acb93ecc3c7f", type: "item", no: 4, description: "Galon", qty: 7, unit: "Pcs", price: 17000, negative: true },
     ],
   };
 }

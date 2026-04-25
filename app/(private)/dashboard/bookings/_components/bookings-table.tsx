@@ -301,11 +301,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       {/* Action */}
                       <TableCell className="px-1 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-end">
-                          {/* Set Vendor Bawaan */}
+                          {/* Set Vendor Bawaan — hidden on mobile */}
                           {can("booking", "edit") && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
-                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer hidden sm:inline-flex" onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
                                 <Store className="h-4 w-4" />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Set Vendor Bawaan</p></TooltipContent>
@@ -313,11 +313,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           </TooltipProvider>
                           )}
 
-                          {/* Agreement modal trigger */}
+                          {/* Agreement modal trigger — hidden on mobile */}
                           {can("client_agreement", "create") && booking.clientAgreement?.status !== "Signed" && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
-                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer hidden sm:inline-flex" onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
                                 <FileSignature className="h-4 w-4" />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
@@ -325,9 +325,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           </TooltipProvider>
                           )}
 
-                          {/* Catering + Decoration — only for Confirmed bookings */}
+                          {/* Catering + Decoration — only for Confirmed bookings, hidden on mobile */}
                           {booking.bookingStatus === "Confirmed" && (
-                            <>
+                            <div className="hidden sm:contents">
                               {/* Catering */}
                               <TooltipProvider delay={200}>
                                 <Tooltip>
@@ -398,7 +398,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                   <TooltipContent side="top"><p className="text-xs">Dekorasi PO</p></TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            </>
+                            </div>
                           )}
 
                           {/* Comment button */}
@@ -499,11 +499,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center px-6 py-4 border-t">
-              <Button variant="outline" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-                <ArrowLeft className="w-4 h-4 mr-2" /> Previous
+            <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-t">
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
+                <ArrowLeft className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Previous</span>
               </Button>
-              <div className="flex items-center gap-1">
+              {/* Mobile: page X/Y */}
+              <span className="text-sm text-muted-foreground sm:hidden">{currentPage} / {totalPages}</span>
+              {/* Desktop: page numbers */}
+              <div className="hidden sm:flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <button key={page} onClick={() => setCurrentPage(page)}
                     className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === page ? "bg-gray-200 text-gray-900" : "text-gray-700 hover:bg-gray-100")}>
@@ -511,8 +514,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   </button>
                 ))}
               </div>
-              <Button variant="outline" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-                Next <ArrowRight className="w-4 h-4 ml-2" />
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
+                <span className="hidden sm:inline">Next</span> <ArrowRight className="w-4 h-4 sm:ml-2" />
               </Button>
             </div>
           )}

@@ -713,7 +713,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       <SignatureCanvas
                         ref={sigSalesRef}
                         penColor="black"
-                        canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
+                        canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }}
                         onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
                       />
                     </div>
