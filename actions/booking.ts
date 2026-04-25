@@ -5,6 +5,7 @@ import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import type { PackageInternalItem, PackageVendorItem } from "@prisma/client";
 import { bookingSchema, updateBookingSchema, editBookingSchema, approveBookingSchema } from "@/lib/validations/booking";
 
 export async function createBooking(data: unknown) {
@@ -145,14 +146,14 @@ export async function createBooking(data: unknown) {
       );
       if (variant.internalItems.length > 0) {
         ops.push(
-          ...variant.internalItems.map((item, i) =>
+          ...variant.internalItems.map((item: PackageInternalItem, i: number) =>
             db.snapPackageInternalItem.create({ data: { bookingId, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
           )
         );
       }
       if (variant.vendorItems.length > 0) {
         ops.push(
-          ...variant.vendorItems.map((item, i) =>
+          ...variant.vendorItems.map((item: PackageVendorItem, i: number) =>
             db.snapPackageVendorItem.create({ data: { bookingId, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
           )
         );
