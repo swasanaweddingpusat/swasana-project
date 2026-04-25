@@ -99,6 +99,24 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
         <div className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="space-y-3 px-2">
 
+            {/* Role */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700">Role</Label>
+              <Select value={roleId} onValueChange={setRoleId}>
+                <SelectTrigger className="mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]">
+                  <SelectValue placeholder="Pilih role baru (opsional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      <span className="capitalize">{r.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-gray-400 mt-1">Kosongkan jika tidak ingin mengubah role</p>
+            </div>
+
             {/* Data Access */}
             <div>
               <Label className="text-sm font-medium text-gray-700">Data Access</Label>
@@ -118,24 +136,6 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                   );
                 })}
               </div>
-            </div>
-
-            {/* Role */}
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Role</Label>
-              <Select value={roleId} onValueChange={setRoleId}>
-                <SelectTrigger className="mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]">
-                  <SelectValue placeholder="Pilih role baru (opsional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      <span className="capitalize">{r.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-gray-400 mt-1">Kosongkan jika tidak ingin mengubah role</p>
             </div>
 
             {/* Assigned Venues */}
