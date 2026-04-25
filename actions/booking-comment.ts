@@ -45,35 +45,6 @@ export async function createBookingComment(data: {
       },
     });
 
-    // Notify mentioned users + booking sales/manager (exclude author)
-    const booking = await db.booking.findUnique({
-      where: { id: data.bookingId },
-      select: { salesId: true, managerId: true, snapCustomer: { select: { name: true } } },
-    });
-
-    if (booking) {
-      const notifyIds = new Set<string>([
-        ...data.mentions,
-        booking.salesId,
-        ...(booking.managerId ? [booking.managerId] : []),
-      ]);
-      notifyIds.delete(session!.user.profileId);
-
-      if (notifyIds.size > 0) {
-        await db.notification.createMany({
-          data: [...notifyIds].map((profileId) => ({
-            userId: profileId,
-            title: "Komentar baru",
-            message: `${session!.user.name} berkomentar di booking ${booking.snapCustomer?.name ?? ""}`,
-            type: "comment",
-            entityType: "booking",
-            entityId: data.bookingId,
-          })),
-          skipDuplicates: true,
-        });
-      }
-    }
-
     revalidateTag(`booking-comments-${data.bookingId}`, "max");
     return { success: true as const, comment };
   } catch (e) {
