@@ -207,6 +207,11 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               )} />
 
               {/* Type — SearchableSelect from source_of_informations */}
+              <FormField control={form.control} name="bitrixId" render={({ field }) => (
+                <FormItem><FormLabel>Bitrix ID</FormLabel><FormControl>
+                  <Input {...field} placeholder="e.g. 12345" />
+                </FormControl><FormMessage /></FormItem>
+              )} />
               <FormField control={form.control} name="type" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Source of Information *</FormLabel>
@@ -259,11 +264,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem><FormLabel>Notes</FormLabel><FormControl>
                   <Input {...field} placeholder="Prefer tanggal weekend..." />
-                </FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="bitrixId" render={({ field }) => (
-                <FormItem><FormLabel>Bitrix ID</FormLabel><FormControl>
-                  <Input {...field} placeholder="e.g. 12345" />
                 </FormControl><FormMessage /></FormItem>
               )} />
             </form>
