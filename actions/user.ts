@@ -379,37 +379,37 @@ export async function bulkUpdateUsers(data: {
       })
     );
 
-    // Build venue replace ops — delete all existing then create new (per user)
-    const venueOps = venueIds?.length
-      ? userIds.flatMap((authUserId) => {
-          const profileId = profileIdMap.get(authUserId);
-          if (!profileId) return [];
-          return [
-            db.userVenueAccess.deleteMany({ where: { userId: profileId } }),
-            ...venueIds.map((venueId) =>
-              db.userVenueAccess.create({
-                data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
-              })
-            ),
-          ];
-        })
-      : [];
+    // Profile updates in transaction
+    await db.$transaction(profileOps);
 
-    // Build group member ops — upsert (skipDuplicates via createMany)
-    const groupOps = groupIds?.length
-      ? groupIds.flatMap((groupId) => {
-          const lastSortOrder = 0; // will be handled by DB default
-          return profiles.map((p) =>
-            db.userGroupMember.upsert({
-              where: { groupId_userId: { groupId, userId: p.id } },
-              create: { groupId, userId: p.id, sortOrder: lastSortOrder },
-              update: {},
+    // Venue replace ops — sequential per user (outside transaction to avoid timeout)
+    if (venueIds?.length) {
+      for (const authUserId of userIds) {
+        const profileId = profileIdMap.get(authUserId);
+        if (!profileId) continue;
+        await db.userVenueAccess.deleteMany({ where: { userId: profileId } });
+        await db.$transaction(
+          venueIds.map((venueId) =>
+            db.userVenueAccess.create({
+              data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
             })
-          );
-        })
-      : [];
+          )
+        );
+      }
+    }
 
-    await db.$transaction([...profileOps, ...venueOps, ...groupOps]);
+    // Group member upsert — sequential
+    if (groupIds?.length) {
+      for (const groupId of groupIds) {
+        for (const p of profiles) {
+          await db.userGroupMember.upsert({
+            where: { groupId_userId: { groupId, userId: p.id } },
+            create: { groupId, userId: p.id, sortOrder: 0 },
+            update: {},
+          });
+        }
+      }
+    }
 
     await logAudit({
       userId: session!.user.id,

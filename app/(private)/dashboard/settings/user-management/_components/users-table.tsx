@@ -314,7 +314,16 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                         <TableCell className="px-2 py-2.5">
                           <div className="flex items-center gap-2">
                             <ProfileAvatar name={user.profile?.fullName ?? user.email} src={user.profile?.avatarUrl ?? undefined} size="sm" />
-                            <span className="font-medium text-xs">{user.profile?.fullName ?? user.name ?? "—"}</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-xs">{user.profile?.fullName ?? user.name ?? "—"}</span>
+                              {(user.profile?.dataGroupMemberships?.length ?? 0) > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {user.profile!.dataGroupMemberships!.map((m) => (
+                                    <span key={m.group.id} className="px-1.5 py-0.5 text-[10px] bg-secondary text-secondary-foreground rounded-full border">{m.group.name}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="px-2 py-2.5 text-xs text-muted-foreground">{user.email}</TableCell>
