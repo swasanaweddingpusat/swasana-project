@@ -31,6 +31,7 @@ import { CateringSelectionDrawer } from "./catering-selection-drawer";
 import { DecorationSelectionDrawer } from "./decoration-selection-drawer";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { Drawer } from "@/components/shared/drawer";
 import { useHeaderAction } from "@/components/providers/header-action-provider";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
@@ -402,14 +403,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           )}
 
                           {/* Comment button */}
-                          <Button variant="ghost" size="icon" className="cursor-pointer relative" onClick={() => setCommentTarget(booking)}>
-                            <MessageSquare className="h-4 w-4" />
-                            {(unreadCounts[booking.id] ?? 0) > 0 && (
-                              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5">
-                                {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
-                              </span>
-                            )}
-                          </Button>
+                          <PermissionGate module="booking" action="comment">
+                            <Button variant="ghost" size="icon" className="cursor-pointer relative" onClick={() => setCommentTarget(booking)}>
+                              <MessageSquare className="h-4 w-4" />
+                              {(unreadCounts[booking.id] ?? 0) > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5">
+                                  {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
+                                </span>
+                              )}
+                            </Button>
+                          </PermissionGate>
 
                           {/* More actions dropdown */}
                           <DropdownMenu>

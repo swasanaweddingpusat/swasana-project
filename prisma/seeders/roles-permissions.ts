@@ -27,7 +27,7 @@ export async function seedRolesPermissions() {
     { module: "booking", action: "approve_manager" }, { module: "booking", action: "approve_finance" },
     { module: "booking", action: "approve_oprations" }, { module: "booking", action: "mark_lost" },
     { module: "booking", action: "restore" }, { module: "booking", action: "transfer" },
-    { module: "booking", action: "reject" },
+    { module: "booking", action: "reject" }, { module: "booking", action: "comment" },
     { module: "client_agreement", action: "view" }, { module: "client_agreement", action: "create" },
     { module: "client_agreement", action: "edit" },
     { module: "notification", action: "view" }, { module: "notification", action: "manage" },
@@ -67,8 +67,6 @@ export async function seedRolesPermissions() {
     { module: "venue_management", action: "edit" }, { module: "venue_management", action: "delete" },
     { module: "settlement", action: "view" }, { module: "settlement", action: "create" },
     { module: "settlement", action: "edit" }, { module: "settlement", action: "delete" },
-    { module: "booking.comment", action: "view" }, { module: "booking.comment", action: "create" },
-    { module: "booking.comment", action: "edit" }, { module: "booking.comment", action: "delete" },
   ];
 
   for (const data of permissionData) {
