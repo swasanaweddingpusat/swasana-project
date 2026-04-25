@@ -351,14 +351,14 @@ export async function bulkUpdateUsers(data: {
   venueIds?: string[];
   venueScopes?: Record<string, "individual" | "general">;
   dataScope?: "own" | "group" | "all";
+  groupIds?: string[];
 }): Promise<{ success: boolean; error?: string; updated?: number }> {
   const { session, error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`bulk-update-users:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const { userIds, roleId, venueIds, venueScopes, dataScope } = data;
+  const { userIds, roleId, venueIds, venueScopes, dataScope, groupIds } = data;
   if (!userIds.length) return { success: false, error: "Tidak ada user yang dipilih." };
-  if (!roleId && !venueIds?.length && !dataScope) return { success: false, error: "Tidak ada perubahan yang dipilih." };
 
   try {
     // userIds = auth user IDs → fetch profile IDs
@@ -395,14 +395,28 @@ export async function bulkUpdateUsers(data: {
         })
       : [];
 
-    await db.$transaction([...profileOps, ...venueOps]);
+    // Build group member ops — upsert (skipDuplicates via createMany)
+    const groupOps = groupIds?.length
+      ? groupIds.flatMap((groupId) => {
+          const lastSortOrder = 0; // will be handled by DB default
+          return profiles.map((p) =>
+            db.userGroupMember.upsert({
+              where: { groupId_userId: { groupId, userId: p.id } },
+              create: { groupId, userId: p.id, sortOrder: lastSortOrder },
+              update: {},
+            })
+          );
+        })
+      : [];
+
+    await db.$transaction([...profileOps, ...venueOps, ...groupOps]);
 
     await logAudit({
       userId: session!.user.id,
       action: "bulk_update_users",
       entityType: "user",
       entityId: userIds.join(","),
-      changes: { roleId, venueIds, dataScope, count: userIds.length },
+      changes: { roleId, venueIds, dataScope, groupIds, count: userIds.length },
       description: `Bulk updated ${userIds.length} users`,
     });
 

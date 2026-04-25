@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Building2, Globe, User, Users } from "lucide-react";
+import { ChevronDown, Building2, Globe, User, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { bulkUpdateUsers } from "@/actions/user";
+import { useGroups } from "@/hooks/use-groups";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { BrandsQueryResult } from "@/lib/queries/venues";
 
@@ -27,15 +29,18 @@ interface Props {
 }
 
 export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, onSuccess }: Props) {
+  const { data: groups = [] } = useGroups();
   const [roleId, setRoleId] = useState("");
   const [venueIds, setVenueIds] = useState<string[]>([]);
   const [venueScopes, setVenueScopes] = useState<Record<string, VenueScope>>({});
   const [dataScope, setDataScope] = useState<DataScope>("own");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
   const handleClose = () => {
-    setRoleId(""); setVenueIds([]); setVenueScopes({}); setDataScope("own"); setExpandedBrands(new Set());
+    setRoleId(""); setVenueIds([]); setVenueScopes({}); setDataScope("own");
+    setSelectedGroupIds([]); setExpandedBrands(new Set());
     onClose();
   };
 
@@ -77,13 +82,14 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
   };
 
   const handleSubmit = async () => {
-    if (!roleId && venueIds.length === 0) { toast.error("Pilih minimal role atau venue"); return; }
+    if (!roleId && venueIds.length === 0 && dataScope === "own") { toast.error("Pilih minimal role, venue, atau data access"); return; }
     setSubmitting(true);
     const result = await bulkUpdateUsers({
       userIds: selectedUserIds,
       ...(roleId && { roleId }),
       ...(venueIds.length > 0 && { venueIds, venueScopes }),
       dataScope,
+      ...(dataScope === "group" && selectedGroupIds.length > 0 && { groupIds: selectedGroupIds }),
     });
     setSubmitting(false);
     if (!result.success) { toast.error(result.error); return; }
@@ -135,6 +141,33 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                   );
                 })}
               </div>
+              {dataScope === "group" && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-gray-500">Assign ke group:</p>
+                  {selectedGroupIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {selectedGroupIds.map((gid) => {
+                        const g = groups.find((x) => x.id === gid);
+                        if (!g) return null;
+                        return (
+                          <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full">
+                            {g.name}
+                            <button type="button" onClick={() => setSelectedGroupIds((prev) => prev.filter((id) => id !== gid))} className="ml-0.5 hover:text-gray-300"><X className="h-3 w-3" /></button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <SearchableSelect
+                    options={groups.filter((g) => !selectedGroupIds.includes(g.id)).map((g) => ({ id: g.id, name: g.name }))}
+                    value={undefined}
+                    onChange={(gid) => { if (gid && !selectedGroupIds.includes(gid)) setSelectedGroupIds((prev) => [...prev, gid]); }}
+                    placeholder="Tambah ke group..."
+                    searchPlaceholder="Cari group..."
+                    emptyText="Tidak ada group"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Assigned Venues */}
