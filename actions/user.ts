@@ -126,7 +126,7 @@ export async function inviteUser(formData: FormData) {
 // ─── Update User ──────────────────────────────────────────────────────────────
 
 export async function updateUser(data: Record<string, unknown>) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
 
@@ -342,5 +342,63 @@ export async function resendInvitation(userId: string) {
   } catch (error) {
     console.error("[resendInvitation] Error:", error);
     return { success: false, error: "Terjadi kesalahan saat mengirim ulang undangan." };
+  }
+}
+
+export async function bulkUpdateUsers(data: {
+  userIds: string[];
+  roleId?: string;
+  venueIds?: string[];
+  venueScopes?: Record<string, "individual" | "general">;
+  dataScope?: "own" | "group" | "all";
+}): Promise<{ success: boolean; error?: string; updated?: number }> {
+  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`bulk-update-users:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const { userIds, roleId, venueIds, venueScopes, dataScope } = data;
+  if (!userIds.length) return { success: false, error: "Tidak ada user yang dipilih." };
+  if (!roleId && !venueIds?.length && !dataScope) return { success: false, error: "Tidak ada perubahan yang dipilih." };
+
+  try {
+    // Build profile update ops
+    const profileOps = userIds.map((userId) =>
+      db.profile.update({
+        where: { id: userId },
+        data: {
+          ...(roleId && { roleId }),
+          ...(dataScope && { dataScope }),
+        },
+      })
+    );
+
+    // Build venue upsert ops (append only — no delete)
+    const venueOps = venueIds?.length
+      ? userIds.flatMap((userId) =>
+          venueIds.map((venueId) =>
+            db.userVenueAccess.upsert({
+              where: { userId_venueId: { userId, venueId } },
+              create: { userId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
+              update: { scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
+            })
+          )
+        )
+      : [];
+
+    await db.$transaction([...profileOps, ...venueOps]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "bulk_update_users",
+      entityType: "user",
+      entityId: userIds.join(","),
+      changes: { roleId, venueIds, dataScope, count: userIds.length },
+      description: `Bulk updated ${userIds.length} users`,
+    });
+
+    revalidateTag("users", "max");
+    return { success: true, updated: userIds.length };
+  } catch {
+    return { success: false, error: "Gagal mengupdate users." };
   }
 }

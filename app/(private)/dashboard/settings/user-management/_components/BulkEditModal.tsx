@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { updateUser } from "@/actions/user";
+import { bulkUpdateUsers } from "@/actions/user";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { BrandsQueryResult } from "@/lib/queries/venues";
 
@@ -79,16 +79,15 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
   const handleSubmit = async () => {
     if (!roleId && venueIds.length === 0) { toast.error("Pilih minimal role atau venue"); return; }
     setSubmitting(true);
-    const results = await Promise.allSettled(
-      selectedUserIds.map((userId) =>
-        updateUser({ userId, ...(roleId && { roleId }), ...(venueIds.length > 0 && { venueIds, venueScopes }), dataScope })
-      )
-    );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    if (failed > 0) toast.error(`${failed} user gagal diupdate`);
-    if (succeeded > 0) toast.success(`${succeeded} user berhasil diupdate`);
+    const result = await bulkUpdateUsers({
+      userIds: selectedUserIds,
+      ...(roleId && { roleId }),
+      ...(venueIds.length > 0 && { venueIds, venueScopes }),
+      dataScope,
+    });
     setSubmitting(false);
+    if (!result.success) { toast.error(result.error); return; }
+    toast.success(`${result.updated} user berhasil diupdate`);
     onSuccess();
     handleClose();
   };
