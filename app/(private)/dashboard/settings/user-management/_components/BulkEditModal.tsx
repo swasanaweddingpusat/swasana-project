@@ -30,9 +30,9 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (open) { setRoleId(""); setVenueIds([]); setVenueScopes({}); setExpandedBrands(new Set()); }
-  }, [open]);
+  const resetForm = () => { setRoleId(""); setVenueIds([]); setVenueScopes({}); setExpandedBrands(new Set()); };
+
+  useEffect(() => { if (!open) resetForm(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVenueChange = (venueId: string, checked: boolean) => {
     if (checked) {
