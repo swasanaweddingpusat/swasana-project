@@ -433,7 +433,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
         selectedUserIds={Array.from(selectedUsers)}
         roles={roles}
         brands={brands}
-        onSuccess={() => { setSelectedUsers(new Set()); qc.invalidateQueries({ queryKey: ["users"] }); }}
+        onSuccess={() => { setSelectedUsers(new Set()); refetch(); }}
       />
 
       {/* Drawer */}
