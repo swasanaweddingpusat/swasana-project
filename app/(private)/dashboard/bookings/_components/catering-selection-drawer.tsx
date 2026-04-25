@@ -114,7 +114,7 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
     try { localStorage.setItem(draftKey, JSON.stringify(injected)); } catch {}
     isLoadedRef.current = true;
     setIsDataLoading(false);
-  }, [isOpen, cateringItem, injectIncomingRows]);
+  }, [isOpen, cateringItem, injectIncomingRows, draftKey]);
 
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
@@ -125,7 +125,7 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
       try { localStorage.setItem(draftKey, JSON.stringify(poData)); } catch {}
     }, 300);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  }, [poData, isOpen, draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [poData, isOpen, draftKey]);
 
   const handleSubmit = async () => {
     if (!cateringItem) { toast.error("Vendor catering tidak ditemukan"); return; }
