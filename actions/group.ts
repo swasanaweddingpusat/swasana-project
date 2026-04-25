@@ -52,7 +52,7 @@ export async function createGroup(data: unknown) {
 // ─── Update Group ─────────────────────────────────────────────────────────────
 
 export async function updateGroup(data: unknown) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
 
@@ -126,7 +126,7 @@ export async function deleteGroup(groupId: string) {
 // ─── Add Member ───────────────────────────────────────────────────────────────
 
 export async function addGroupMember(groupId: string, userId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
 
   try {
@@ -153,7 +153,7 @@ export async function addGroupMember(groupId: string, userId: string) {
 // ─── Remove Member ────────────────────────────────────────────────────────────
 
 export async function removeGroupMember(groupId: string, userId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
 
   try {
@@ -168,7 +168,7 @@ export async function removeGroupMember(groupId: string, userId: string) {
 // ─── Reorder Groups ───────────────────────────────────────────────────────────
 
 export async function reorderGroups(orderedIds: string[]) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
 
   try {
@@ -185,7 +185,7 @@ export async function reorderGroups(orderedIds: string[]) {
 // ─── Reorder Members ──────────────────────────────────────────────────────────
 
 export async function reorderGroupMembers(groupId: string, orderedUserIds: string[]) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
 
   try {

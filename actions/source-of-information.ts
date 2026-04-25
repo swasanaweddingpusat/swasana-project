@@ -24,7 +24,7 @@ export async function createSourceOfInformation(name: string) {
 }
 
 export async function updateSourceOfInformation(id: string, name: string) {
-  const { error } = await requirePermission({ module: "settings", action: "update" });
+  const { error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false, error };
 
   const parsed = nameSchema.safeParse(name);

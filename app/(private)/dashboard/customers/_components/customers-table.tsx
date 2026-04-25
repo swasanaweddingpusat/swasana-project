@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search, Copy } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search, Copy, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomers, useDeleteCustomer } from "@/hooks/use-customers";
 import { CustomerDrawer } from "./customer-drawer";
@@ -33,6 +34,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
   const qc = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editCustomer, setEditCustomer] = useState<CustomerItem | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   function handleDrawerClose(open: boolean) {
     setDrawerOpen(open);
@@ -101,6 +103,20 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
               <Button onClick={handleAdd} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
                 <Plus className="h-4 w-4 mr-2" /> Tambah Customer
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isRefreshing}
+                className="h-8 px-2 border-gray-200 bg-[#F0F2F5] hover:bg-gray-200"
+                title="Refresh data"
+                onClick={async () => {
+                  setIsRefreshing(true);
+                  await qc.invalidateQueries({ queryKey: ["customers"] });
+                  setIsRefreshing(false);
+                }}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", isRefreshing && "animate-spin")} />
+              </Button>
             </div>
           </div>
 
@@ -117,7 +133,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                   <TableRow className="bg-gray-50">
                     <TableHead className="px-3 w-12.5">No</TableHead>
                     <TableHead className="px-3">Nama</TableHead>
-                    <TableHead className="px-3">No. HP</TableHead>
+                    <TableHead className="px-3 max-w-32">No. HP</TableHead>
                     <TableHead className="px-3">Type</TableHead>
                     <TableHead className="px-3">Bitrix ID</TableHead>
                     <TableHead className="px-3">Status</TableHead>
@@ -132,7 +148,14 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                     <TableRow key={customer.id} className="hover:bg-gray-50">
                       <TableCell className="px-3">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
                       <TableCell className="px-3 max-w-45 truncate font-medium" title={customer.name}>{customer.name}</TableCell>
-                      <TableCell className="px-3">{customer.mobileNumber}</TableCell>
+                      <TableCell className="px-3 max-w-32 overflow-hidden">
+                        <Tooltip>
+                          <TooltipTrigger className="block truncate w-full text-left">
+                            {customer.mobileNumber}
+                          </TooltipTrigger>
+                          <TooltipContent>{customer.mobileNumber}</TooltipContent>
+                        </Tooltip>
+                      </TableCell>
                       <TableCell className="px-3">{customer.type}</TableCell>
                       <TableCell className="px-3">
                         {customer.bitrixId ? (

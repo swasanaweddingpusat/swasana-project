@@ -42,6 +42,7 @@ export interface SubMenuItem {
   icon?: LucideIcon;
   permission?: Permission;
   submenu?: SubMenuItem[];
+  hidden?: boolean;
 }
 
 export interface NavItem {
@@ -50,6 +51,7 @@ export interface NavItem {
   icon: LucideIcon;
   permission?: Permission;
   submenu?: SubMenuItem[];
+  hidden?: boolean;
 }
 
 export const navItems: NavItem[] = [
@@ -127,6 +129,7 @@ export const navItems: NavItem[] = [
     href: "/dashboard/pengadaan-barang",
     icon: ShoppingCart,
     permission: { module: "procurement", action: "view" },
+    hidden: true,
   },
   {
     name: "HR & Payroll",
@@ -154,6 +157,7 @@ export const navItems: NavItem[] = [
     href: "/dashboard/vendor-specialist/pemeliharaan-venue",
     icon: Wrench,
     permission: { module: "vendor_specialist", action: "view" },
+    hidden: true,
     submenu: [
       { name: "Pemeliharaan Venue", href: "/dashboard/vendor-specialist/pemeliharaan-venue", icon: Wrench, permission: { module: "vendor_specialist", action: "view" } },
       { name: "Evaluasi Vendor", href: "/dashboard/vendor-specialist/evaluasi-vendor", icon: CheckCircle, permission: { module: "vendor_specialist", action: "view" } },
