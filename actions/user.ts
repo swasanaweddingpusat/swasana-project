@@ -366,7 +366,7 @@ export async function bulkUpdateUsers(data: {
       where: { userId: { in: userIds } },
       select: { id: true, userId: true },
     });
-    const profileIdMap = new Map(profiles.map((p) => [p.userId, p.id]));
+    const profileIdMap = new Map(profiles.map((p: { userId: string; id: string }) => [p.userId, p.id]));
 
     // Build profile update ops (where: { userId } = auth user ID)
     const profileOps = userIds.map((userId) =>
