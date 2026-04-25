@@ -22,7 +22,7 @@ export async function createBookingComment(data: {
   replyToId?: string;
   attachments?: CommentAttachment[];
 }) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking.comment", action: "create" });
   if (error) return { success: false as const, error };
 
   const parsed = contentSchema.safeParse(data.content);
@@ -54,7 +54,7 @@ export async function createBookingComment(data: {
 }
 
 export async function editBookingComment(id: string, content: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking.comment", action: "edit" });
   if (error) return { success: false as const, error };
 
   const parsed = contentSchema.safeParse(content);
@@ -79,7 +79,7 @@ export async function editBookingComment(id: string, content: string) {
 }
 
 export async function deleteBookingComment(id: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking.comment", action: "delete" });
   if (error) return { success: false as const, error };
 
   try {
@@ -107,7 +107,7 @@ export async function deleteBookingComment(id: string) {
 }
 
 export async function markCommentsRead(bookingId: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "view" });
+  const { session, error } = await requirePermission({ module: "booking.comment", action: "view" });
   if (error) return;
 
   try {
