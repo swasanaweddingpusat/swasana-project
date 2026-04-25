@@ -1,11 +1,10 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
-import { headers } from "next/headers";
 
 interface VendorSelection {
   vendorCategoryId: string;
@@ -21,14 +20,9 @@ export async function saveBookingVendors(
   bookingId: string,
   selections: VendorSelection[]
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`save-vendors:${session.user.id}:${ip}`)) {
-    return { success: false, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`save-vendors:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     // Only work with non-addons rows that have NO paketData (set by set-vendor-drawer)
@@ -82,7 +76,7 @@ export async function saveBookingVendors(
     }
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "booking.vendor_updated",
       entityType: "booking",
       entityId: bookingId,
@@ -98,14 +92,9 @@ export async function saveBookingVendors(
 }
 
 export async function updateSnapBonus(id: string, data: { vendorId?: string; vendorName?: string; nominal?: number; description?: string; orderStatusId?: string | null }) {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`update-bonus:${session.user.id}:${ip}`)) {
-    return { success: false as const, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`update-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
     await db.snapBonus.update({
@@ -126,14 +115,9 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
 }
 
 export async function addSnapBonus(bookingId: string, data: { vendorId: string; vendorCategoryId: string; vendorName: string; nominal?: number; description?: string; orderStatusId?: string | null }) {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`add-bonus:${session.user.id}:${ip}`)) {
-    return { success: false as const, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`add-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
     const item = await db.snapBonus.create({
@@ -157,8 +141,8 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
 }
 
 export async function deleteSnapBonus(id: string) {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan." };
+  const { error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false as const, error };
 
   try {
     await db.snapBonus.delete({ where: { id } });
