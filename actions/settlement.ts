@@ -1,10 +1,9 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { headers } from "next/headers";
 import type { SettlementType, SettlementStatus } from "@prisma/client";
 
 export async function createSettlement(input: {
@@ -15,14 +14,9 @@ export async function createSettlement(input: {
   targetBookingId?: string;
   notes?: string;
 }): Promise<{ success: boolean; error?: string; data?: { id: string } }> {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`settlement-create:${session.user.id}:${ip}`)) {
-    return { success: false, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "settlement", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`settlement-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   if (input.type === "refund" && !input.paymentMethodId) {
     return { success: false, error: "Payment method wajib diisi untuk refund." };
@@ -48,14 +42,14 @@ export async function createSettlement(input: {
           paymentMethodId: input.paymentMethodId ?? null,
           targetBookingId: input.targetBookingId ?? null,
           notes: input.notes ?? null,
-          createdBy: session.user.id,
+          createdBy: session!.user.id,
         },
         select: { id: true },
       }),
     ]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: `booking.settlement_${input.type}_created`,
       entityType: "booking",
       entityId: item.bookingId,
@@ -73,14 +67,9 @@ export async function updateSettlementStatus(
   status: SettlementStatus,
   settledAt?: Date
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`settlement-update:${session.user.id}:${ip}`)) {
-    return { success: false, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "settlement", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`settlement-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const existing = await db.bookingPaymentSettlement.findUnique({
@@ -100,7 +89,7 @@ export async function updateSettlementStatus(
     ]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "booking.settlement_status_updated",
       entityType: "booking",
       entityId: existing.bookingId,
@@ -116,14 +105,9 @@ export async function updateSettlementStatus(
 export async function deleteSettlement(
   settlementId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`settlement-delete:${session.user.id}:${ip}`)) {
-    return { success: false, ...rateLimitError() };
-  }
+  const { session, error } = await requirePermission({ module: "settlement", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`settlement-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const existing = await db.bookingPaymentSettlement.findUnique({
@@ -140,7 +124,7 @@ export async function deleteSettlement(
     ]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "booking.settlement_deleted",
       entityType: "booking",
       entityId: existing.bookingId,

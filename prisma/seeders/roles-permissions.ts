@@ -65,6 +65,8 @@ export async function seedRolesPermissions() {
     { module: "vendor", action: "edit" }, { module: "vendor", action: "delete" },
     { module: "venue_management", action: "view" }, { module: "venue_management", action: "create" },
     { module: "venue_management", action: "edit" }, { module: "venue_management", action: "delete" },
+    { module: "settlement", action: "view" }, { module: "settlement", action: "create" },
+    { module: "settlement", action: "edit" }, { module: "settlement", action: "delete" },
   ];
 
   for (const data of permissionData) {
