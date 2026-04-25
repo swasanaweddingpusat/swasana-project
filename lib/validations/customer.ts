@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const customerSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
-  mobileNumber: z.string().min(1, "Nomor HP wajib diisi").regex(/^\d+$/, "Hanya angka"),
+  mobileNumber: z.string().min(1, "Nomor HP wajib diisi"),
   email: z.string().min(1, "Email wajib diisi").email("Email tidak valid"),
   nikNumber: z.string().length(16, "NIK harus 16 digit").regex(/^\d+$/, "Hanya angka").optional().or(z.literal("")),
   ktpAddress: z.string().optional(),

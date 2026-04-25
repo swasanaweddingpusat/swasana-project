@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { Drawer } from "@/components/shared/drawer";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,8 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   // Store selected names (SearchableSelect uses id, but we store name in Customer)
   const [typeValue, setTypeValue] = useState("");
   const [memberStatusValue, setMemberStatusValue] = useState("");
+  const [mobileNumbers, setMobileNumbers] = useState<string[]>([]);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CustomerInput>({
     defaultValues: { name: "", mobileNumber: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "" },
@@ -62,6 +65,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
       const mv = editCustomer?.memberStatus ?? "Non-Member";
       setTypeValue(tv);
       setMemberStatusValue(mv);
+      setMobileNumbers(editCustomer?.mobileNumber ? editCustomer.mobileNumber.split(",").map((n) => n.trim()).filter(Boolean) : []);
       form.reset({
         name: editCustomer?.name ?? "",
         mobileNumber: editCustomer?.mobileNumber ?? "",
@@ -105,7 +109,9 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   }
 
   async function onSubmit(values: CustomerInput) {
-    const parsed = customerSchema.safeParse(values);
+    if (mobileNumbers.length === 0) { toast.error("Nomor HP wajib diisi"); return; }
+    const payload = { ...values, mobileNumber: mobileNumbers.join(",") };
+    const parsed = customerSchema.safeParse(payload);
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
 
     const result = isEdit
@@ -130,12 +136,34 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <Input {...field} placeholder="e.g. John Doe & Jane Doe" />
                 </FormControl><FormMessage /></FormItem>
               )} />
-              <FormField control={form.control} name="mobileNumber" render={({ field }) => (
-                <FormItem><FormLabel>No. HP *</FormLabel><FormControl>
-                  <Input {...field} placeholder="08123456789" inputMode="numeric"
-                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ""))} />
-                </FormControl><FormMessage /></FormItem>
-              )} />
+              <FormItem>
+                <FormLabel>No. HP *</FormLabel>
+                <div className="flex flex-wrap gap-2 bg-white border border-gray-300 rounded-lg px-2 py-2">
+                  {mobileNumbers.map((num, idx) => (
+                    <span key={idx} className="flex items-center bg-[#FAFAFA] border rounded-lg px-3 text-sm font-normal text-black gap-2">
+                      {num}
+                      <button type="button" className="ml-1 text-red-600 hover:bg-red-100 rounded-full p-1" onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    ref={mobileInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    className="flex-1 min-w-30 border-none outline-none bg-transparent text-sm px-2"
+                    placeholder="e.g. 081234567890"
+                    onKeyDown={(e) => {
+                      const val = e.currentTarget.value.trim().replace(/\D/g, "");
+                      if ((e.key === "Enter" || e.key === ",") && val) {
+                        e.preventDefault();
+                        if (!mobileNumbers.includes(val)) setMobileNumbers((prev) => [...prev, val]);
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                  />
+                </div>
+              </FormItem>
               <FormField control={form.control} name="email" render={({ field }) => (
                 <FormItem><FormLabel>Email *</FormLabel><FormControl>
                   <Input {...field} placeholder="nama@email.com" />
