@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
-import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getBaseUrl } from "@/lib/url";
 import { inviteUserSchema, updateUserSchema } from "@/lib/validations/user";
@@ -148,7 +147,7 @@ export async function updateUser(data: Record<string, unknown>) {
     if (!profile) return { success: false, error: "Pengguna tidak ditemukan." };
 
     // Diff venues (reads outside the transaction)
-    const venueOps: Prisma.PrismaPromise<unknown>[] = [];
+    const venueOps: Promise<unknown>[] = [];
     if (venueIds !== undefined) {
       const existing = await db.userVenueAccess.findMany({
         where: { userId },

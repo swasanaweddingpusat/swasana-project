@@ -37,7 +37,7 @@ export async function createBookingComment(data: {
         content: parsed.data.trim(),
         mentions: data.mentions,
         replyToId: data.replyToId ?? null,
-        attachments: (data.attachments ?? []) as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        attachments: (data.attachments ?? []) as unknown,
       },
       include: {
         author: { select: { id: true, fullName: true, avatarUrl: true } },
