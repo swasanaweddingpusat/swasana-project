@@ -1,6 +1,6 @@
 "use client";
 
-import type { BookingDetail, SnapPackageInternalItem, SnapPackageVendorItem, SnapBonus, SnapVendorItem, TermOfPayment, BookingDocument } from "@/lib/queries/bookings";
+import type { BookingDetail, SnapPackageInternalItem, SnapPackageVendorItem, SnapBonus, SnapVendorItem, TermOfPayment, BookingDocument, BookingClientAgreement } from "@/lib/queries/bookings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -245,7 +245,7 @@ const agreementStatusColor: Record<string, string> = {
 };
 
 function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
-  const [agreement, setAgreement] = useState<BookingDetail["clientAgreement"]>(booking.clientAgreement);
+  const [agreement, setAgreement] = useState<BookingClientAgreement>(booking.clientAgreement);
   const [isPending, startTransition] = useTransition();
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -276,7 +276,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
     startTransition(async () => {
       const result = await markAgreementSent(booking.id);
       if (!result.success) { toast.error(result.error); return; }
-      setAgreement((prev) => prev ? { ...prev, status: "Sent", sentAt: new Date() } : prev);
+      setAgreement((prev: BookingClientAgreement) => prev ? { ...prev, status: "Sent", sentAt: new Date() } : prev);
       toast.success("Status diupdate ke Sent");
     });
   };

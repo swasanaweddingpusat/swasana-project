@@ -93,6 +93,7 @@ export type SnapBonus = BookingDetail["snapBonuses"][number];
 export type SnapVendorItem = BookingDetail["snapVendorItems"][number];
 export type TermOfPayment = BookingDetail["termOfPayments"][number];
 export type BookingDocument = BookingDetail["bookingDocuments"][number];
+export type BookingClientAgreement = BookingDetail["clientAgreement"];
 
 export async function getSalesProfiles() {
   "use cache";
