@@ -68,7 +68,7 @@ model Profile {
   id          String  @id @default(uuid())
   userId      String  @unique
   email       String  @unique
-  employeeId  String? @unique
+  employeeNumber Int @default(autoincrement()) @unique
   fullName    String?
   nickName    String?
   gender      Gender?

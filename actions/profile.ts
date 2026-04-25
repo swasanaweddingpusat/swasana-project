@@ -7,7 +7,6 @@ import { Gender } from "@prisma/client";
 import { z } from "zod";
 
 const updateProfileSchema = z.object({
-  employeeId: z.string().nullable().optional(),
   fullName: z.string().min(1, "Nama lengkap wajib diisi"),
   nickName: z.string().nullable().optional(),
   gender: z.nativeEnum(Gender).nullable().optional(),

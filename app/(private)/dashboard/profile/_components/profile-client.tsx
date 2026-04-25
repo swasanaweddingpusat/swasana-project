@@ -20,7 +20,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 
 interface ProfileData {
   id: string
-  employeeId: string | null
+  employeeNumber: number
   fullName: string | null
   nickName: string | null
   gender: Gender | null
@@ -84,7 +84,6 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
   )
 
   const [form, setForm] = useState({
-    employeeId: profile?.employeeId ?? "",
     fullName: profile?.fullName ?? user.name ?? "",
     nickName: profile?.nickName ?? "",
     gender: profile?.gender ?? null as Gender | null,
@@ -134,7 +133,6 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
         ...form,
         gender: form.gender,
         numberOfChildren: form.numberOfChildren ? parseInt(form.numberOfChildren) : null,
-        employeeId: form.employeeId || null,
         nik: form.nik || null,
         kkNumber: form.kkNumber || null,
         city: form.city || null,
@@ -203,9 +201,9 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
               <h2 className="text-lg font-semibold truncate">{form.fullName || user.name || "—"}</h2>
               <p className="text-sm text-muted-foreground truncate">{user.email}</p>
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                {profile?.employeeId && (
+                {profile && (
                   <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono">
-                    {profile.employeeId}
+                    {`EMP-${String(profile.employeeNumber).padStart(4, "0")}`}
                   </span>
                 )}
                 {user.role && (
@@ -245,9 +243,6 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
             <CardContent className="">
               <SectionHeader icon={Briefcase} title="Data Pribadi" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                <Field label="Employee ID">
-                  <Input value={form.employeeId} onChange={(e) => set("employeeId", e.target.value)} placeholder="EMP-001" />
-                </Field>
                 <Field label="Nama Lengkap *">
                   <Input value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="Nama lengkap" />
                 </Field>
