@@ -25,6 +25,12 @@ interface CustomerDrawerProps {
 
 type OptionItem = { id: string; name: string };
 
+const DRAFT_KEY = "customer_drawer_draft";
+interface CustomerDraft { name: string; mobileNumbers: string[]; email: string; nikNumber: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
+function saveDraft(d: CustomerDraft) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ } }
+function loadDraft(): CustomerDraft | null { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
+function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
+
 async function fetchOptions(url: string): Promise<OptionItem[]> {
   const res = await fetch(url);
   if (!res.ok) return [];
@@ -65,6 +71,16 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
       const mv = editCustomer?.memberStatus ?? "Non-Member";
       setTypeValue(tv);
       setMemberStatusValue(mv);
+      if (!editCustomer) {
+        const draft = loadDraft();
+        if (draft) {
+          setMobileNumbers(draft.mobileNumbers ?? []);
+          setTypeValue(draft.type ?? "");
+          setMemberStatusValue(draft.memberStatus ?? "Non-Member");
+          form.reset({ name: draft.name, mobileNumber: draft.mobileNumbers.join(","), email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes });
+          return;
+        }
+      }
       setMobileNumbers(editCustomer?.mobileNumber ? editCustomer.mobileNumber.split(",").map((n) => n.trim()).filter(Boolean) : []);
       form.reset({
         name: editCustomer?.name ?? "",
@@ -79,6 +95,13 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
       });
     }
   }, [open, editCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save draft on every change (create mode only)
+  useEffect(() => {
+    if (!open || editCustomer) return;
+    const values = form.getValues();
+    saveDraft({ name: values.name, mobileNumbers, email: values.email, nikNumber: values.nikNumber ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
+  }); // intentionally no deps — runs on every render
 
   async function handleAddSourceOfInfo(name: string) {
     const result = await createSourceOfInformation(name);
@@ -119,6 +142,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
       : await createMut.mutateAsync(parsed.data);
 
     if (!result.success) { toast.error(result.error); return; }
+    clearDraft();
     toast.success(isEdit ? "Customer diperbarui." : "Customer ditambahkan.");
     onOpenChange(false);
   }

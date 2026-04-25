@@ -525,3 +525,56 @@ CLEANUP_SECRET=                  # dedicated secret for /api/admin/cleanup-logs 
 > Rate limiting uses in-memory store — no Redis or external service needed.
 
 Secrets never land in git. `.env` is gitignored; `.env.example` ships placeholder values only.
+
+---
+
+## 10. Design System — Monochrome (STRICT)
+
+swasana-project = strict monochrome. Semua warna grayscale (oklch chroma 0).
+
+### shadcn Config
+- Style: base-nova (base-ui primitives, BUKAN radix)
+- Base color: neutral
+- Tailwind v4 (`@import` syntax)
+- Icon: Lucide
+- Font: Open Sans (sans), Geist Mono (mono)
+
+### Color Tokens — HANYA pake ini:
+| Token | Kapan Pake |
+|---|---|
+| `primary` | CTA utama, button default, text emphasis |
+| `secondary` | Button secondary, background subtle |
+| `muted` / `muted-foreground` | Disabled state, placeholder, helper text |
+| `accent` | Hover state, active background |
+| `destructive` | Error, delete, danger — SATU-SATUNYA warna non-gray |
+| `border` | Borders, dividers |
+| `foreground` | Body text |
+| `background` | Page background |
+| `card` / `card-foreground` | Card surfaces |
+
+### DILARANG:
+- ❌ Hardcode warna (bg-blue-500, text-green-600, dll) — pake CSS variable tokens
+- ❌ Warna selain grayscale + destructive red
+- ❌ Edit file di `components/ui/` — itu shadcn generated
+- ❌ Bikin component baru kalau shadcn udah provide
+
+---
+
+## 11. Tailwind v4 Syntax (STRICT)
+
+- `data-[attr]:class` → `data-attr:class`
+  - `data-[disabled]:opacity-50` → `data-disabled:opacity-50`
+  - `data-[inset]:pl-8` → `data-inset:pl-8`
+  - `data-[variant=destructive]:class` → tetap pakai bracket kalau ada value
+- Important modifier: `!text-x` → `text-x!` (suffix, bukan prefix)
+- Berlaku di semua file **kecuali** `components/ui/` (shadcn generated — JANGAN edit manual)
+- WAJIB pake canonical Tailwind classes — JANGAN pake arbitrary `[Npx]` kalau ada padanannya
+  - `w-[20px]` → `w-5` | `min-w-[240px]` → `min-w-60` | `max-w-[300px]` → `max-w-75`
+
+---
+
+## 12. ESLint Rules (STRICT)
+
+- ❌ DILARANG ternary sebagai statement: `condition ? a() : b()` → ESLint error
+- ✅ Side-effect → WAJIB pake `if/else`: `if (condition) { a() } else { b() }`
+- ✅ Ternary boleh HANYA sebagai value/assignment: `const x = condition ? a : b`
