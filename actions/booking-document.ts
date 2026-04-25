@@ -124,7 +124,7 @@ export async function deleteBookingDocuments(ids: string[]) {
     if (!docs.length) return { success: false, error: "Dokumen tidak ditemukan." };
 
     await db.$transaction([db.bookingDocument.deleteMany({ where: { id: { in: ids } } })]);
-    await Promise.all(docs.map((d) => deleteFromR2(d.filePath).catch((e) => console.error("[deleteBookingDocuments] R2:", e))));
+    await Promise.all(docs.map((d: { id: string; bookingId: string; filePath: string; name: string }) => deleteFromR2(d.filePath).catch((e: unknown) => console.error("[deleteBookingDocuments] R2:", e))));
 
     const bookingId = docs[0].bookingId;
     const names = docs.map((d) => d.name).join(", ");
