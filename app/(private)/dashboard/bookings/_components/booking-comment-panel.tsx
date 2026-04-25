@@ -188,6 +188,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
       return;
     }
     qc.invalidateQueries({ queryKey: ["booking-comments", bookingId] });
+    qc.invalidateQueries({ queryKey: ["unread-comments"] });
     if (textareaRef.current) textareaRef.current.style.height = "36px";
     textareaRef.current?.focus();
   }, [input, pendingAttachments, replyTo, bookingId, qc, user]);
