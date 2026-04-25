@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Gender } from "@prisma/client"
+const Gender = { MALE: "MALE", FEMALE: "FEMALE" } as const;
+type Gender = (typeof Gender)[keyof typeof Gender];
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
