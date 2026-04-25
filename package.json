@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:clean": "node -e \"const fs=require('fs');const p='.next/cache/tsbuildinfo';try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}\" && next build",
     "typecheck": "tsc --noEmit --incremental false",
     "start": "next start",
     "lint": "eslint",

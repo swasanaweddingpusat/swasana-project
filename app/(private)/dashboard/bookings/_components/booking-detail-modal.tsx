@@ -356,7 +356,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                           </tr>
                         </thead>
                         <tbody>
-                          {booking.termOfPayments.map((t: TermOfPayment, i) => (
+                          {booking.termOfPayments.map((t: TermOfPayment, i: number) => (
                             <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
                               <td className="px-4 py-3 font-medium text-gray-900">{t.name || `Termin ${i + 1}`}</td>
                               <td className="px-4 py-3 text-gray-900">{fmtPrice(t.amount)}</td>
