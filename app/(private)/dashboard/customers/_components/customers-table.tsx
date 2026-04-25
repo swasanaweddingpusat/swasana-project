@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,8 +31,14 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
+  const qc = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editCustomer, setEditCustomer] = useState<CustomerItem | null>(null);
+
+  function handleDrawerClose(open: boolean) {
+    setDrawerOpen(open);
+    if (!open) qc.invalidateQueries({ queryKey: ["customers"] });
+  }
   const [deleteTarget, setDeleteTarget] = useState<CustomerItem | null>(null);
 
   const filtered = customers.filter((c) => {
@@ -181,7 +189,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
         </CardContent>
       </Card>
 
-      <CustomerDrawer open={drawerOpen} onOpenChange={setDrawerOpen} editCustomer={editCustomer} />
+      <CustomerDrawer open={drawerOpen} onOpenChange={handleDrawerClose} editCustomer={editCustomer} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
