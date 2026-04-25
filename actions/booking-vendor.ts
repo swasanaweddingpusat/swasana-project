@@ -30,12 +30,13 @@ export async function saveBookingVendors(
       where: { bookingId, isAddons: false, paketData: { equals: undefined } },
       select: { id: true, vendorCategoryId: true },
     });
+    type ExistingItem = { id: string; vendorCategoryId: string };
 
-    const existingMap = new Map(existing.map((e) => [e.vendorCategoryId, e.id]));
+    const existingMap = new Map((existing as ExistingItem[]).map((e) => [e.vendorCategoryId, e.id]));
     const incomingCatIds = new Set(selections.map((s) => s.vendorCategoryId));
 
     // Delete rows for categories that user cleared (no longer in selections)
-    const toDelete = existing.filter((e) => !incomingCatIds.has(e.vendorCategoryId)).map((e) => e.id);
+    const toDelete = (existing as ExistingItem[]).filter((e) => !incomingCatIds.has(e.vendorCategoryId)).map((e) => e.id);
     if (toDelete.length > 0) {
       await db.snapVendorItem.deleteMany({ where: { id: { in: toDelete } } });
     }
