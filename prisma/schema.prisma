@@ -422,6 +422,7 @@ model Customer {
   club         String?
   memberStatus String    @default("Non-Member")
   notes        String?
+  bitrixId     String?
   updatedBy    String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

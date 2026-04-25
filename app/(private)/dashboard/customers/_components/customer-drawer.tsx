@@ -62,7 +62,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   const mobileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CustomerInput>({
-    defaultValues: { name: "", mobileNumber: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "" },
+    defaultValues: { name: "", mobileNumber: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
           setMobileNumbers(draft.mobileNumbers ?? []);
           setTypeValue(draft.type ?? "");
           setMemberStatusValue(draft.memberStatus ?? "Non-Member");
-          form.reset({ name: draft.name, mobileNumber: draft.mobileNumbers.join(","), email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes });
+          form.reset({ name: draft.name, mobileNumber: draft.mobileNumbers.join(","), email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
           return;
         }
       }
@@ -92,6 +92,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         club: editCustomer?.club ?? "",
         memberStatus: mv,
         notes: editCustomer?.notes ?? "",
+        bitrixId: editCustomer?.bitrixId ?? "",
       });
     }
   }, [open, editCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -258,6 +259,11 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem><FormLabel>Notes</FormLabel><FormControl>
                   <Input {...field} placeholder="Prefer tanggal weekend..." />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="bitrixId" render={({ field }) => (
+                <FormItem><FormLabel>Bitrix ID</FormLabel><FormControl>
+                  <Input {...field} placeholder="e.g. 12345" />
                 </FormControl><FormMessage /></FormItem>
               )} />
             </form>

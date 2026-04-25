@@ -10,6 +10,7 @@ export const customerSchema = z.object({
   club: z.string().optional(),
   memberStatus: z.string().min(1, "Member status wajib diisi").default("Non-Member"),
   notes: z.string().optional(),
+  bitrixId: z.string().optional(),
 });
 
 export const updateCustomerSchema = customerSchema.partial().extend({
