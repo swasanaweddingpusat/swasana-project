@@ -97,6 +97,23 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     }
   }, [open, editCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync type/memberStatus value setelah options ke-load (fix race condition)
+  useEffect(() => {
+    if (!open || !editCustomer) return;
+    if (sourceOptions.length > 0 && editCustomer.type) {
+      setTypeValue(editCustomer.type);
+      form.setValue("type", editCustomer.type);
+    }
+  }, [sourceOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open || !editCustomer) return;
+    if (memberStatusOptions.length > 0 && editCustomer.memberStatus) {
+      setMemberStatusValue(editCustomer.memberStatus);
+      form.setValue("memberStatus", editCustomer.memberStatus);
+    }
+  }, [memberStatusOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Save draft on every change (create mode only)
   useEffect(() => {
     if (!open || editCustomer) return;
