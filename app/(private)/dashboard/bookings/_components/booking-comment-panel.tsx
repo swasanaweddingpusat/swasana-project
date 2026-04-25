@@ -129,11 +129,8 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
   useEffect(() => {
     if (!open) return;
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    if (bookingId) {
-      markCommentsRead(bookingId);
-      qc.invalidateQueries({ queryKey: ["unread-comments"] });
-    }
-  }, [open, comments.length, bookingId, qc]);
+    qc.invalidateQueries({ queryKey: ["unread-comments"] });
+  }, [open, comments.length, qc]);
 
   // Reset on close
   useEffect(() => {

@@ -361,10 +361,17 @@ export async function bulkUpdateUsers(data: {
   if (!roleId && !venueIds?.length && !dataScope) return { success: false, error: "Tidak ada perubahan yang dipilih." };
 
   try {
-    // Build profile update ops
+    // userIds = auth user IDs → fetch profile IDs
+    const profiles = await db.profile.findMany({
+      where: { userId: { in: userIds } },
+      select: { id: true, userId: true },
+    });
+    const profileIdMap = new Map(profiles.map((p) => [p.userId, p.id]));
+
+    // Build profile update ops (where: { userId } = auth user ID)
     const profileOps = userIds.map((userId) =>
       db.profile.update({
-        where: { id: userId },
+        where: { userId },
         data: {
           ...(roleId && { roleId }),
           ...(dataScope && { dataScope }),
@@ -372,17 +379,19 @@ export async function bulkUpdateUsers(data: {
       })
     );
 
-    // Build venue upsert ops (append only — no delete)
+    // Build venue upsert ops — use profile.id as userId in UserVenueAccess
     const venueOps = venueIds?.length
-      ? userIds.flatMap((userId) =>
-          venueIds.map((venueId) =>
+      ? userIds.flatMap((authUserId) => {
+          const profileId = profileIdMap.get(authUserId);
+          if (!profileId) return [];
+          return venueIds.map((venueId) =>
             db.userVenueAccess.upsert({
-              where: { userId_venueId: { userId, venueId } },
-              create: { userId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
+              where: { userId_venueId: { userId: profileId, venueId } },
+              create: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
               update: { scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
             })
-          )
-        )
+          );
+        })
       : [];
 
     await db.$transaction([...profileOps, ...venueOps]);
