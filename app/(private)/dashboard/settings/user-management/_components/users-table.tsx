@@ -19,7 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { InviteDrawer } from "./invite-drawer";
+import { BulkEditModal } from "./BulkEditModal";
 import { useUsers, useDeleteUser } from "@/hooks/use-users";
+import { useQueryClient } from "@tanstack/react-query";
 import { resendInvitation } from "@/actions/user";
 import type { UsersQueryResult, UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
@@ -61,6 +63,7 @@ interface UsersTableProps {
 
 export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
   const { data, refetch, isRefetching } = useUsers(initialData);
+  const qc = useQueryClient();
   const users: UserQueryItem[] = useMemo(() => data?.users ?? [], [data]);
   const deleteUserMutation = useDeleteUser();
 
@@ -73,6 +76,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
 
@@ -198,9 +202,14 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
               </div>
               <div className="flex items-center gap-2">
                 {selectedUsers.size > 1 && (
-                  <Button variant="outline" size="sm" className="flex items-center gap-1.5 border-red-500 text-red-500 hover:bg-red-50 h-8 text-xs" onClick={() => setBulkDeleteOpen(true)}>
-                    <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedUsers.size})
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-8 text-xs" onClick={() => setBulkEditOpen(true)}>
+                      <PenLine className="w-3.5 h-3.5" /> Edit ({selectedUsers.size})
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex items-center gap-1.5 border-red-500 text-red-500 hover:bg-red-50 h-8 text-xs" onClick={() => setBulkDeleteOpen(true)}>
+                      <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedUsers.size})
+                    </Button>
+                  </>
                 )}
                 <Button size="sm" onClick={handleAddNew} className="flex items-center gap-1.5 bg-[#1D1D1D] text-white hover:bg-[#333] text-xs h-8">
                   <UserPlus className="w-3.5 h-3.5" /> Invite User
@@ -407,6 +416,16 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
 
       {/* Bulk Delete Dialog */}
       <DeleteDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen} isDeleting={isBulkDeleting} onConfirm={handleConfirmBulkDelete} title={`Delete ${selectedUsers.size} users?`} description={`Are you sure you want to delete ${selectedUsers.size} selected users? This action cannot be undone.`} confirmLabel={`Delete ${selectedUsers.size} Users`} />
+
+      {/* Bulk Edit Modal */}
+      <BulkEditModal
+        open={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        selectedUserIds={Array.from(selectedUsers)}
+        roles={roles}
+        brands={brands}
+        onSuccess={() => { setSelectedUsers(new Set()); qc.invalidateQueries({ queryKey: ["users"] }); }}
+      />
 
       {/* Drawer */}
       <InviteDrawer open={drawerOpen} onOpenChange={setDrawerOpen} roles={roles} brands={brands} editUser={editUser} />
