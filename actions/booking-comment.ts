@@ -37,7 +37,7 @@ export async function createBookingComment(data: {
         content: parsed.data.trim(),
         mentions: data.mentions,
         replyToId: data.replyToId ?? null,
-        attachments: (data.attachments ?? []) as unknown,
+        attachments: (data.attachments ?? []) as never,
       },
       include: {
         author: { select: { id: true, fullName: true, avatarUrl: true } },
