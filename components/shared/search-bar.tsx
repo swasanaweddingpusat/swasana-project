@@ -32,8 +32,11 @@ export default function SearchBar({ placeholder = "Search", className = "" }: Se
     if (!isInitialLoadRef.current) {
       searchTimeoutRef.current = setTimeout(() => {
         const params = new URLSearchParams(searchParams.toString());
-        if (searchValue.trim()) {
-          params.set("search", searchValue.trim());
+        const current = params.get("search") ?? "";
+        const next = searchValue.trim();
+        if (current === next) return;
+        if (next) {
+          params.set("search", next);
         } else {
           params.delete("search");
         }
@@ -41,7 +44,8 @@ export default function SearchBar({ placeholder = "Search", className = "" }: Se
       }, 500);
     }
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
-  }, [searchValue, pathname, router, searchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchValue, pathname, router]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchValue(e.target.value);

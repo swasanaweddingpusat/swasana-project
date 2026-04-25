@@ -1,20 +1,19 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, X } from "lucide-react";
+import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { usePackages, useDeletePackage, useDeleteBulkPackages } from "@/hooks/use-packages";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { toast } from "sonner";
-import SearchBar from "@/components/shared/search-bar";
+import { Input } from "@/components/ui/input";
 import { DrawerPackage } from "./drawer-package";
 import { DetailModal } from "./detail-modal";
 
@@ -40,15 +39,12 @@ function SkeletonTable() {
 }
 
 export function PackagesTable() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-
   const { data: packages = [], isLoading } = usePackages();
   const deleteMutation = useDeletePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
   const { canCreate, canEdit, canDelete, can } = usePermissions();
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingPkg, setEditingPkg] = useState<PackageQueryItem | null>(null);
@@ -59,7 +55,6 @@ export function PackagesTable() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailPkg, setDetailPkg] = useState<PackageQueryItem | null>(null);
 
-  const searchQuery = searchParams.get("search") || "";
   const rowsPerPage = 10;
 
   // Filter
@@ -157,7 +152,16 @@ export function PackagesTable() {
               <span className="text-sm text-muted-foreground">({filtered.length})</span>
             </div>
             <div className="flex items-center gap-2">
-              <SearchBar placeholder="Search packages..." />
+              <div className="relative w-60">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search packages..."
+                  className="pl-10"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                  autoComplete="off"
+                />
+              </div>
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
                   <Trash2 className="h-4 w-4 mr-1" /> Delete ({selectedIds.size})
