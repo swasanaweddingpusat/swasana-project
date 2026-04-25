@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, X, Search } from "lucide-react";
+import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { usePackages, useDeletePackage, useDeleteBulkPackages } from "@/hooks/use-packages";
@@ -22,16 +22,16 @@ const formatCurrency = (amount: number) =>
 
 function SkeletonTable() {
   return (
-    <div className="space-y-4 p-6">
+    <div className={cn('space-y-4', 'p-6')}>
       {[...Array(5)].map((_, i) => (
-        <div key={i} className="flex items-center space-x-4 py-3">
-          <Skeleton className="h-4 w-4" />
-          <Skeleton className="h-4 w-8" />
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-16" />
-          <div className="flex gap-2"><Skeleton className="h-6 w-6" /><Skeleton className="h-6 w-6" /></div>
+        <div key={i} className={cn('flex', 'items-center', 'space-x-4', 'py-3')}>
+          <Skeleton className={cn('h-4', 'w-4')} />
+          <Skeleton className={cn('h-4', 'w-8')} />
+          <Skeleton className={cn('h-4', 'w-32')} />
+          <Skeleton className={cn('h-4', 'w-20')} />
+          <Skeleton className={cn('h-4', 'w-24')} />
+          <Skeleton className={cn('h-4', 'w-16')} />
+          <div className={cn('flex', 'gap-2')}><Skeleton className={cn('h-6', 'w-6')} /><Skeleton className={cn('h-6', 'w-6')} /></div>
         </div>
       ))}
     </div>
@@ -42,7 +42,7 @@ export function PackagesTable() {
   const { data: packages = [], isLoading } = usePackages();
   const deleteMutation = useDeletePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
-  const { canCreate, canEdit, canDelete, can } = usePermissions();
+  const { canCreate, can } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -82,7 +82,6 @@ export function PackagesTable() {
   };
 
   const allSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
-  const someSelected = paginated.some((p) => selectedIds.has(p.id));
 
   const toggleAll = useCallback(() => {
     setSelectedIds((prev) => {
@@ -99,7 +98,7 @@ export function PackagesTable() {
   const toggleOne = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }, []);
@@ -146,14 +145,14 @@ export function PackagesTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 pb-4 border-b">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#1D1D1D]">Packages</h2>
-              <span className="text-sm text-muted-foreground">({filtered.length})</span>
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'pb-4', 'border-b')}>
+            <div className={cn('flex', 'items-center', 'gap-2')}>
+              <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Packages</h2>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative w-60">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className={cn('flex', 'items-center', 'gap-2')}>
+              <div className={cn('relative', 'w-60')}>
+                <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-muted-foreground')} />
                 <Input
                   placeholder="Search packages..."
                   className="pl-10"
@@ -164,12 +163,12 @@ export function PackagesTable() {
               </div>
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                  <Trash2 className="h-4 w-4 mr-1" /> Delete ({selectedIds.size})
+                  <Trash2 className={cn('h-4', 'w-4', 'mr-1')} /> Delete ({selectedIds.size})
                 </Button>
               )}
               {canCreate("package") && (
-                <Button onClick={openAdd} className="cursor-pointer flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white rounded-md px-4 py-2 text-sm font-medium">
-                  <Plus className="h-4 w-4" /> Add New Package
+                <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'rounded-md', 'px-4', 'py-2', 'text-sm', 'font-medium')}>
+                  <Plus className={cn('h-4', 'w-4')} /> Add New Package
                 </Button>
               )}
             </div>
@@ -194,7 +193,7 @@ export function PackagesTable() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
                     {searchQuery ? "No packages found" : "No packages yet"}
                   </TableCell>
                 </TableRow>
@@ -224,30 +223,30 @@ export function PackagesTable() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
+                      <div className={cn('flex', 'items-center', 'gap-1')}>
                         <button
-                          className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                          className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                           onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
                           aria-label="View"
                         >
-                          <Eye className="h-4 w-4 text-muted-foreground" />
+                          <Eye className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                         </button>
                         {can("package", "edit") && (
                           <button
-                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                            className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                             onClick={() => openEdit(pkg)}
                             aria-label="Edit"
                           >
-                            <PenLine className="h-4 w-4 text-muted-foreground" />
+                            <PenLine className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                           </button>
                         )}
                         {can("package", "delete") && (
                           <button
-                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                            className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                             onClick={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                             aria-label="Delete"
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <Trash2 className={cn('h-4', 'w-4', 'text-red-500')} />
                           </button>
                         )}
                       </div>
@@ -260,16 +259,16 @@ export function PackagesTable() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-3 border-t">
-              <span className="text-sm text-muted-foreground">
+            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
+              <span className={cn('text-sm', 'text-muted-foreground')}>
                 Page {currentPage} of {totalPages}
               </span>
-              <div className="flex gap-1">
+              <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className={cn('h-4', 'w-4')} />
                 </Button>
                 <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className={cn('h-4', 'w-4')} />
                 </Button>
               </div>
             </div>
@@ -300,8 +299,8 @@ export function PackagesTable() {
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Delete Package</DialogTitle>
-          <p className="text-sm text-muted-foreground">Are you sure? This action cannot be undone.</p>
-          <div className="flex justify-end gap-2 mt-4">
+          <p className={cn('text-sm', 'text-muted-foreground')}>Are you sure? This action cannot be undone.</p>
+          <div className={cn('flex', 'justify-end', 'gap-2', 'mt-4')}>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
@@ -314,8 +313,8 @@ export function PackagesTable() {
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Delete {selectedIds.size} Packages</DialogTitle>
-          <p className="text-sm text-muted-foreground">Are you sure? This action cannot be undone.</p>
-          <div className="flex justify-end gap-2 mt-4">
+          <p className={cn('text-sm', 'text-muted-foreground')}>Are you sure? This action cannot be undone.</p>
+          <div className={cn('flex', 'justify-end', 'gap-2', 'mt-4')}>
             <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
               {bulkDeleteMutation.isPending ? "Deleting..." : "Delete All"}
