@@ -127,7 +127,13 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                       <TableCell className="px-3 max-w-45 truncate font-medium" title={customer.name}>{customer.name}</TableCell>
                       <TableCell className="px-3">{customer.mobileNumber}</TableCell>
                       <TableCell className="px-3">{customer.type}</TableCell>
-                      <TableCell className="px-3">{customer.bitrixId || "—"}</TableCell>
+                      <TableCell className="px-3">
+                        {customer.bitrixId ? (
+                          <button type="button" className="hover:underline cursor-copy text-left" onClick={() => { navigator.clipboard.writeText(customer.bitrixId!); toast.success("Bitrix ID copied!"); }}>
+                            {customer.bitrixId}
+                          </button>
+                        ) : "—"}
+                      </TableCell>
                       <TableCell className="px-3">
                         <Badge variant="outline" className={cn("text-xs", MEMBER_STATUS_COLORS[customer.memberStatus] ?? "")}>
                           {customer.memberStatus}
