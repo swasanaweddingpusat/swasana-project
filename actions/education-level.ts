@@ -24,7 +24,7 @@ export async function createEducationLevel(name: string, order: number) {
 }
 
 export async function updateEducationLevel(id: string, name: string, order: number) {
-  const { error } = await requirePermission({ module: "settings", action: "update" });
+  const { error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false as const, error };
 
   const parsed = nameSchema.safeParse(name);

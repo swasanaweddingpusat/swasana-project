@@ -28,7 +28,7 @@ export async function createCustomer(data: unknown) {
 }
 
 export async function updateCustomer(data: unknown) {
-  const { session, error } = await requirePermission({ module: "customers", action: "update" });
+  const { session, error } = await requirePermission({ module: "customers", action: "edit" });
   if (error) return { success: false, error };
 
   const parsed = updateCustomerSchema.safeParse(data);

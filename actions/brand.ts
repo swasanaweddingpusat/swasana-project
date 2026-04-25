@@ -27,7 +27,7 @@ export async function createBrand(data: unknown) {
 }
 
 export async function updateBrand(data: unknown) {
-  const { error } = await requirePermission({ module: "settings", action: "update" });
+  const { error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false, error };
 
   const parsed = brandSchema.extend({ id: z.string().min(1) }).safeParse(data);

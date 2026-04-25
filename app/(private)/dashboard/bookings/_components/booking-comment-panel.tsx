@@ -120,18 +120,22 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
     setTimeout(() => el.classList.remove("bg-muted/60"), 1200);
   };
 
+  const lastMarkReadRef = useRef<number>(0);
+
   // Mark as read when panel opens
   useEffect(() => {
-    if (open && bookingId) markCommentsRead(bookingId);
+    if (open && bookingId) { markCommentsRead(bookingId); lastMarkReadRef.current = Date.now(); }
   }, [open, bookingId]);
 
-  // Scroll to bottom + mark as read on new comments
+  // Scroll to bottom + throttled mark as read on new comments
   useEffect(() => {
     if (!open) return;
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    if (bookingId) {
+    qc.invalidateQueries({ queryKey: ["unread-comments"] });
+    // Throttle markCommentsRead — max 1x per 15s
+    if (bookingId && Date.now() - lastMarkReadRef.current > 15000) {
       markCommentsRead(bookingId);
-      qc.invalidateQueries({ queryKey: ["unread-comments"] });
+      lastMarkReadRef.current = Date.now();
     }
   }, [open, comments.length, bookingId, qc]);
 

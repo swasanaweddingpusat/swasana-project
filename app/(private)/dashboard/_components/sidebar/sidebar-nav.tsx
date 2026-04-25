@@ -14,6 +14,7 @@ type CanFn = (module: string, action: string) => boolean;
 
 function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
   return items.flatMap((item) => {
+    if (item.hidden) return [];
     if (item.permission && !can(item.permission.module, item.permission.action)) return [];
     if (item.submenu) {
       const filtered = filterSubMenus(item.submenu, can);
@@ -26,6 +27,7 @@ function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
 
 function filterNavItems(items: NavItem[], can: CanFn): NavItem[] {
   return items.flatMap((item) => {
+    if (item.hidden) return [];
     if (item.permission && !can(item.permission.module, item.permission.action)) return [];
     if (item.submenu) {
       const filtered = filterSubMenus(item.submenu, can);
@@ -40,7 +42,7 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
   const { can, isLoading } = usePermissions();
   // While permissions are loading, show all items (no filtering)
   // Once loaded, filter based on actual permissions
-  const visibleItems = isLoading ? navItems : filterNavItems(navItems, can);
+  const visibleItems = isLoading ? [] : filterNavItems(navItems, can);
 
   return (
     <>

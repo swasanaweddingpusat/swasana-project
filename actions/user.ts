@@ -126,7 +126,7 @@ export async function inviteUser(formData: FormData) {
 // ─── Update User ──────────────────────────────────────────────────────────────
 
 export async function updateUser(data: Record<string, unknown>) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
 
@@ -342,5 +342,86 @@ export async function resendInvitation(userId: string) {
   } catch (error) {
     console.error("[resendInvitation] Error:", error);
     return { success: false, error: "Terjadi kesalahan saat mengirim ulang undangan." };
+  }
+}
+
+export async function bulkUpdateUsers(data: {
+  userIds: string[];
+  roleId?: string;
+  venueIds?: string[];
+  venueScopes?: Record<string, "individual" | "general">;
+  dataScope?: "own" | "group" | "all";
+  groupIds?: string[];
+}): Promise<{ success: boolean; error?: string; updated?: number }> {
+  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`bulk-update-users:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const { userIds, roleId, venueIds, venueScopes, dataScope, groupIds } = data;
+  if (!userIds.length) return { success: false, error: "Tidak ada user yang dipilih." };
+
+  try {
+    // userIds = auth user IDs → fetch profile IDs
+    const profiles = await db.profile.findMany({
+      where: { userId: { in: userIds } },
+      select: { id: true, userId: true },
+    });
+    const profileIdMap = new Map(profiles.map((p) => [p.userId, p.id]));
+
+    // Build profile update ops (where: { userId } = auth user ID)
+    const profileOps = userIds.map((userId) =>
+      db.profile.update({
+        where: { userId },
+        data: {
+          ...(roleId && { roleId }),
+          ...(dataScope && { dataScope }),
+        },
+      })
+    );
+
+    // Profile updates in transaction
+    await db.$transaction(profileOps);
+
+    // Venue replace ops — sequential per user (outside transaction to avoid timeout)
+    if (venueIds?.length) {
+      for (const authUserId of userIds) {
+        const profileId = profileIdMap.get(authUserId);
+        if (!profileId) continue;
+        await db.userVenueAccess.deleteMany({ where: { userId: profileId } });
+        await db.$transaction(
+          venueIds.map((venueId) =>
+            db.userVenueAccess.create({
+              data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
+            })
+          )
+        );
+      }
+    }
+
+    // Group member replace — delete all existing then create new
+    if (groupIds?.length) {
+      for (const p of profiles) {
+        await db.userGroupMember.deleteMany({ where: { userId: p.id } });
+        await db.$transaction(
+          groupIds.map((groupId, i) =>
+            db.userGroupMember.create({ data: { groupId, userId: p.id, sortOrder: i } })
+          )
+        );
+      }
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "bulk_update_users",
+      entityType: "user",
+      entityId: userIds.join(","),
+      changes: { roleId, venueIds, dataScope, groupIds, count: userIds.length },
+      description: `Bulk updated ${userIds.length} users`,
+    });
+
+    revalidateTag("users", "max");
+    return { success: true, updated: userIds.length };
+  } catch {
+    return { success: false, error: "Gagal mengupdate users." };
   }
 }

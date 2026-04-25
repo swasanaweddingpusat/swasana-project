@@ -24,7 +24,7 @@ export async function createOrderStatus(name: string) {
 }
 
 export async function updateOrderStatus(id: string, name: string) {
-  const { error } = await requirePermission({ module: "settings", action: "update" });
+  const { error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false as const, error };
 
   const parsed = nameSchema.safeParse(name);

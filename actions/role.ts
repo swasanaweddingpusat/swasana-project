@@ -43,7 +43,7 @@ export async function createRole(formData: FormData) {
 }
 
 export async function updateRole(formData: FormData) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { error: permResult.error };
   const raw = {
     id: formData.get("id") as string,
@@ -113,7 +113,7 @@ export async function deleteRole(roleId: string) {
 }
 
 export async function reorderRoles(orderedIds: string[]) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { error: permResult.error };
 
   try {
@@ -228,7 +228,7 @@ export async function updateRolePermissions(
   roleId: string,
   permissionIds: string[]
 ) {
-  const permResult = await requirePermission({ module: "settings", action: "update" });
+  const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { error: permResult.error };
 
   try {

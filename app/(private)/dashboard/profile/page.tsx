@@ -27,7 +27,7 @@ export default async function ProfilePage() {
       }}
       profile={profile ? {
         id: profile.id,
-        employeeId: profile.employeeId,
+        employeeNumber: profile.employeeNumber,
         fullName: profile.fullName,
         nickName: profile.nickName,
         gender: profile.gender,

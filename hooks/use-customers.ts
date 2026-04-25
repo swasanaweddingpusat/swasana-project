@@ -16,7 +16,9 @@ export function useCustomers(initialData?: CustomersResult) {
     queryKey: ["customers"],
     queryFn: fetchCustomers,
     initialData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 }
 

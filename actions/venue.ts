@@ -34,7 +34,7 @@ export async function createVenue(data: unknown) {
 }
 
 export async function updateVenue(data: unknown) {
-  const { error } = await requirePermission({ module: "settings", action: "update" });
+  const { error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false, error };
 
   const parsed = updateVenueSchema.safeParse(data);
