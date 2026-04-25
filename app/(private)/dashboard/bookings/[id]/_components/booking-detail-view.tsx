@@ -245,7 +245,7 @@ const agreementStatusColor: Record<string, string> = {
 };
 
 function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
-  const [agreement, setAgreement] = useState(booking.clientAgreement);
+  const [agreement, setAgreement] = useState<BookingDetail["clientAgreement"]>(booking.clientAgreement);
   const [isPending, startTransition] = useTransition();
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
