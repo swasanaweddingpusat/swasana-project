@@ -379,18 +379,19 @@ export async function bulkUpdateUsers(data: {
       })
     );
 
-    // Build venue upsert ops — use profile.id as userId in UserVenueAccess
+    // Build venue replace ops — delete all existing then create new (per user)
     const venueOps = venueIds?.length
       ? userIds.flatMap((authUserId) => {
           const profileId = profileIdMap.get(authUserId);
           if (!profileId) return [];
-          return venueIds.map((venueId) =>
-            db.userVenueAccess.upsert({
-              where: { userId_venueId: { userId: profileId, venueId } },
-              create: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
-              update: { scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
-            })
-          );
+          return [
+            db.userVenueAccess.deleteMany({ where: { userId: profileId } }),
+            ...venueIds.map((venueId) =>
+              db.userVenueAccess.create({
+                data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
+              })
+            ),
+          ];
         })
       : [];
 
