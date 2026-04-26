@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import type { SettlementType, SettlementStatus } from "@prisma/client";
+import type { SettlementType, SettlementStatus } from "@/types/settlement";
 
 export async function createSettlement(input: {
   snapVendorItemId: string;

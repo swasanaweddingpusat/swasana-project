@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import type { CateringPaketData } from "@/types/catering";
 import type { POCateringV2, PORow } from "@/types/po-catering";
-import type { SettlementType } from "@prisma/client";
+import type { SettlementType } from "@/types/settlement";
 
 async function syncSettlementRows(
   snapVendorItemId: string,

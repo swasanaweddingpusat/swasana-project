@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { SimpleEditor } from "@/components/ui/simple-editor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Package, Users, Settings, Plus, Trash2, ChevronDown } from "lucide-react";
 import { Stepper } from "@/components/ui/stepper";
 import { cn } from "@/lib/utils";
@@ -176,7 +175,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   function toggleVariant(idx: number) {
     setOpenVariants((prev) => {
       const n = new Set(prev);
-      n.has(idx) ? n.delete(idx) : n.add(idx);
+      if (n.has(idx)) { n.delete(idx); } else { n.add(idx); }
       return n;
     });
   }
@@ -306,38 +305,38 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
 
   return (
     <Drawer isOpen={isOpen} onClose={handleClose} title={isEdit ? "Edit Package" : "Create Package"} maxWidth="sm:max-w-[630px]">
-      <div className="flex flex-col h-full">
+      <div className={cn('flex', 'flex-col', 'h-full')}>
         {/* Stepper */}
         <Stepper currentStep={currentStep} steps={stepperSteps} />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-1">
+        <div className={cn('flex-1', 'overflow-y-auto', 'px-1')}>
           {/* ─── Step 1: Details + Variants ─── */}
           {currentStep === 1 && (
             <div className="space-y-4">
               <div>
-                <Label className="text-sm font-medium text-gray-700">Nama Paket *</Label>
+                <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Nama Paket *</Label>
                 <Input
                   className={cn("mt-1 border-[#CCCCCC] bg-[#F9F9F9]", errors.packageName && "border-red-500")}
                   value={packageName}
                   onChange={(e) => { setPackageName(e.target.value); setErrors((p) => { const n = { ...p }; delete n.packageName; return n; }); }}
                   placeholder="Masukkan nama paket"
                 />
-                {errors.packageName && <p className="mt-1 text-xs text-red-500">{errors.packageName}</p>}
+                {errors.packageName && <p className={cn('mt-1', 'text-xs', 'text-red-500')}>{errors.packageName}</p>}
               </div>
 
               <div>
-                <Label className="text-sm font-medium text-gray-700">Ketersediaan</Label>
-                <div className="flex items-center space-x-3 mt-2">
+                <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Ketersediaan</Label>
+                <div className={cn('flex', 'items-center', 'space-x-3', 'mt-2')}>
                   <Switch checked={available} onCheckedChange={setAvailable} />
-                  <span className="text-sm text-gray-600">{available ? "Tersedia" : "Tidak Tersedia"}</span>
+                  <span className={cn('text-sm', 'text-gray-600')}>{available ? "Tersedia" : "Tidak Tersedia"}</span>
                 </div>
               </div>
 
               <div>
-                <Label className="text-sm font-medium text-gray-700">Catatan (opsional)</Label>
+                <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Catatan (opsional)</Label>
                 <Textarea
-                  className="mt-1 min-h-20 border-[#CCCCCC] bg-[#F9F9F9]"
+                  className={cn('mt-1', 'min-h-20', 'border-[#CCCCCC]', 'bg-[#F9F9F9]')}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Catatan tambahan tentang paket"
@@ -346,50 +345,50 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
 
               {/* Variants section */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-sm font-medium text-gray-700">Varian Paket *</Label>
-                  <Button type="button" size="sm" onClick={addVariant} className="h-8 px-3 text-xs bg-black text-white hover:bg-gray-800">
-                    <Plus className="h-3 w-3 mr-1" />Tambah Varian
+                <div className={cn('flex', 'items-center', 'justify-between', 'mb-2')}>
+                  <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Varian Paket *</Label>
+                  <Button type="button" size="sm" onClick={addVariant} className={cn('h-8', 'px-3', 'text-xs', 'bg-black', 'text-white', 'hover:bg-gray-800')}>
+                    <Plus className={cn('h-3', 'w-3', 'mr-1')} />Tambah Varian
                   </Button>
                 </div>
 
                 {variants.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                    <Package className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                  <div className={cn('text-center', 'py-8', 'text-gray-500', 'border-2', 'border-dashed', 'border-gray-300', 'rounded-lg')}>
+                    <Package className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
                     <p className="text-sm">Belum ada varian</p>
-                    <p className="text-xs text-gray-400">Klik &quot;Tambah Varian&quot; untuk mulai</p>
+                    <p className={cn('text-xs', 'text-gray-400')}>Klik &quot;Tambah Varian&quot; untuk mulai</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {variants.map((variant, idx) => (
-                      <div key={idx} className="border border-gray-200 rounded-lg bg-gray-50">
+                      <div key={idx} className={cn('border', 'border-gray-200', 'rounded-lg', 'bg-gray-50')}>
                         <button
                           type="button"
-                          className="w-full px-4 py-3 hover:bg-gray-100 rounded-lg flex items-center justify-between cursor-pointer"
+                          className={cn('w-full', 'px-4', 'py-3', 'hover:bg-gray-100', 'rounded-lg', 'flex', 'items-center', 'justify-between', 'cursor-pointer')}
                           onClick={() => toggleVariant(idx)}
                         >
                           <div className="text-left">
-                            <h4 className="font-medium text-gray-900 text-sm">{variant.variantName || `Varian ${idx + 1}`}</h4>
-                            <p className="text-xs text-gray-500">{variant.pax || 0} PAX {variant.price ? `• Rp. ${formatCurrency(variant.price)}` : ""}</p>
+                            <h4 className={cn('font-medium', 'text-gray-900', 'text-sm')}>{variant.variantName || `Varian ${idx + 1}`}</h4>
+                            <p className={cn('text-xs', 'text-gray-500')}>{variant.pax || 0} PAX {variant.price ? `• Rp. ${formatCurrency(variant.price)}` : ""}</p>
                           </div>
                           <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(idx) && "rotate-180")} />
                         </button>
 
                         {openVariants.has(idx) && (
-                          <div className="px-4 pb-4">
-                            <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div className={cn('px-4', 'pb-4')}>
+                            <div className={cn('grid', 'grid-cols-2', 'gap-3', 'mb-3')}>
                               <div>
-                                <Label className="text-xs font-medium text-gray-600">Nama Varian *</Label>
+                                <Label className={cn('text-xs', 'font-medium', 'text-gray-600')}>Nama Varian *</Label>
                                 <Input
                                   placeholder="e.g., Paket 100 Pax"
                                   value={variant.variantName}
                                   onChange={(e) => updateVariantField(idx, "variantName", e.target.value)}
                                   className={cn("mt-1 text-sm", errors[`variant_${idx}_variantName`] && "border-red-500")}
                                 />
-                                {errors[`variant_${idx}_variantName`] && <p className="mt-1 text-xs text-red-500">{errors[`variant_${idx}_variantName`]}</p>}
+                                {errors[`variant_${idx}_variantName`] && <p className={cn('mt-1', 'text-xs', 'text-red-500')}>{errors[`variant_${idx}_variantName`]}</p>}
                               </div>
                               <div>
-                                <Label className="text-xs font-medium text-gray-600">PAX *</Label>
+                                <Label className={cn('text-xs', 'font-medium', 'text-gray-600')}>PAX *</Label>
                                 <Input
                                   type="number"
                                   placeholder="100"
@@ -398,14 +397,14 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                   className={cn("mt-1 text-sm", errors[`variant_${idx}_pax`] && "border-red-500")}
                                   min={1}
                                 />
-                                {errors[`variant_${idx}_pax`] && <p className="mt-1 text-xs text-red-500">{errors[`variant_${idx}_pax`]}</p>}
+                                {errors[`variant_${idx}_pax`] && <p className={cn('mt-1', 'text-xs', 'text-red-500')}>{errors[`variant_${idx}_pax`]}</p>}
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className={cn('grid', 'grid-cols-2', 'gap-3')}>
                               <div>
-                                <Label className="text-xs font-medium text-gray-600">Harga (Rp) *</Label>
-                                <div className="relative mt-1">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">Rp.</span>
+                                <Label className={cn('text-xs', 'font-medium', 'text-gray-600')}>Harga (Rp) *</Label>
+                                <div className={cn('relative', 'mt-1')}>
+                                  <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-sm', 'text-gray-500')}>Rp.</span>
                                   <Input
                                     type="text"
                                     inputMode="numeric"
@@ -414,15 +413,15 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                     className={cn("pl-10 text-sm", errors[`variant_${idx}_price`] && "border-red-500")}
                                   />
                                 </div>
-                                {errors[`variant_${idx}_price`] && <p className="mt-1 text-xs text-red-500">{errors[`variant_${idx}_price`]}</p>}
+                                {errors[`variant_${idx}_price`] && <p className={cn('mt-1', 'text-xs', 'text-red-500')}>{errors[`variant_${idx}_price`]}</p>}
                               </div>
-                              <div className="flex items-end pb-1 justify-between">
-                                <div className="flex items-center space-x-2">
+                              <div className={cn('flex', 'items-end', 'pb-1', 'justify-between')}>
+                                <div className={cn('flex', 'items-center', 'space-x-2')}>
                                   <Switch checked={variant.available} onCheckedChange={(checked) => updateVariantField(idx, "available", checked)} />
-                                  <Label className="text-xs text-gray-600">Tersedia</Label>
+                                  <Label className={cn('text-xs', 'text-gray-600')}>Tersedia</Label>
                                 </div>
-                                <Button type="button" variant="outline" size="sm" onClick={() => removeVariant(idx)} className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
-                                  <Trash2 className="h-3 w-3 mr-1" />Hapus
+                                <Button type="button" variant="outline" size="sm" onClick={() => removeVariant(idx)} className={cn('h-7', 'px-2', 'text-xs', 'text-red-600', 'hover:text-red-700', 'hover:bg-red-50')}>
+                                  <Trash2 className={cn('h-3', 'w-3', 'mr-1')} />Hapus
                                 </Button>
                               </div>
                             </div>
@@ -432,7 +431,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                     ))}
                   </div>
                 )}
-                {errors.variants && <p className="mt-2 text-sm text-red-500">{errors.variants}</p>}
+                {errors.variants && <p className={cn('mt-2', 'text-sm', 'text-red-500')}>{errors.variants}</p>}
               </div>
             </div>
           )}
@@ -441,36 +440,36 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
           {currentStep === 2 && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-medium">Item Vendor</h3>
-                <p className="text-sm text-gray-600">Tambahkan item vendor per kategori untuk setiap varian.</p>
+                <h3 className={cn('text-lg', 'font-medium')}>Item Vendor</h3>
+                <p className={cn('text-sm', 'text-gray-600')}>Tambahkan item vendor per kategori untuk setiap varian.</p>
               </div>
 
               {variants.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                  <Package className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                <div className={cn('text-center', 'py-8', 'text-gray-500', 'border-2', 'border-dashed', 'border-gray-300', 'rounded-lg')}>
+                  <Package className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
                   <p className="text-sm">Belum ada varian. Tambahkan di Step 1.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {variants.map((variant, variantIdx) => (
-                    <div key={variantIdx} className="border border-gray-200 rounded-lg">
+                    <div key={variantIdx} className={cn('border', 'border-gray-200', 'rounded-lg')}>
                       <button
                         type="button"
-                        className="w-full px-4 py-3 hover:bg-gray-50 flex items-center justify-between cursor-pointer"
+                        className={cn('w-full', 'px-4', 'py-3', 'hover:bg-gray-50', 'flex', 'items-center', 'justify-between', 'cursor-pointer')}
                         onClick={() => toggleVariant(variantIdx)}
                       >
                         <div className="text-left">
-                          <h4 className="font-medium text-gray-900 text-sm">{variant.variantName}</h4>
-                          <p className="text-xs text-gray-500">{variant.pax} PAX • Rp. {formatCurrency(variant.price)}</p>
+                          <h4 className={cn('font-medium', 'text-gray-900', 'text-sm')}>{variant.variantName}</h4>
+                          <p className={cn('text-xs', 'text-gray-500')}>{variant.pax} PAX • Rp. {formatCurrency(variant.price)}</p>
                         </div>
                         <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
                       </button>
 
                       {openVariants.has(variantIdx) && (
-                        <div className="px-4 pb-4 space-y-4">
+                        <div className={cn('px-4', 'pb-4', 'space-y-4')}>
                           {vendorCats.map((cat) => (
                             <div key={cat.id} className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-700">{cat.name}</Label>
+                              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>{cat.name}</Label>
                               <SimpleEditor
                                 value={vendorItems[variantIdx]?.[cat.name] || ""}
                                 onChange={(html) => setVendorItems((prev) => ({
@@ -494,47 +493,47 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
           {currentStep === 3 && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-medium">Item Internal</h3>
-                <p className="text-sm text-gray-600">Tambahkan item internal untuk setiap varian.</p>
+                <h3 className={cn('text-lg', 'font-medium')}>Item Internal</h3>
+                <p className={cn('text-sm', 'text-gray-600')}>Tambahkan item internal untuk setiap varian.</p>
               </div>
 
               {variants.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                  <Package className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                <div className={cn('text-center', 'py-8', 'text-gray-500', 'border-2', 'border-dashed', 'border-gray-300', 'rounded-lg')}>
+                  <Package className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
                   <p className="text-sm">Belum ada varian.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {variants.map((variant, variantIdx) => (
-                    <div key={variantIdx} className="border border-gray-200 rounded-lg">
+                    <div key={variantIdx} className={cn('border', 'border-gray-200', 'rounded-lg')}>
                       <button
                         type="button"
-                        className="w-full px-4 py-3 hover:bg-gray-50 flex items-center justify-between cursor-pointer"
+                        className={cn('w-full', 'px-4', 'py-3', 'hover:bg-gray-50', 'flex', 'items-center', 'justify-between', 'cursor-pointer')}
                         onClick={() => toggleVariant(variantIdx)}
                       >
                         <div className="text-left">
-                          <h4 className="font-medium text-gray-900 text-sm">{variant.variantName}</h4>
-                          <p className="text-xs text-gray-500">{variant.pax} PAX • Rp. {formatCurrency(variant.price)}</p>
+                          <h4 className={cn('font-medium', 'text-gray-900', 'text-sm')}>{variant.variantName}</h4>
+                          <p className={cn('text-xs', 'text-gray-500')}>{variant.pax} PAX • Rp. {formatCurrency(variant.price)}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{(internalItems[variantIdx] ?? []).length} items</span>
+                        <div className={cn('flex', 'items-center', 'gap-2')}>
+                          <span className={cn('text-xs', 'text-gray-500')}>{(internalItems[variantIdx] ?? []).length} items</span>
                           <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
                         </div>
                       </button>
 
                       {openVariants.has(variantIdx) && (
-                        <div className="px-4 pb-4 space-y-3">
+                        <div className={cn('px-4', 'pb-4', 'space-y-3')}>
                           {(internalItems[variantIdx] ?? []).map((item) => (
-                            <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
-                              <div className="flex items-center justify-between gap-2">
+                            <div key={item.id} className={cn('border', 'border-gray-200', 'rounded-lg', 'p-3', 'bg-gray-50', 'space-y-2')}>
+                              <div className={cn('flex', 'items-center', 'justify-between', 'gap-2')}>
                                 <Input
                                   value={item.itemName}
                                   onChange={(e) => updateInternalItem(variantIdx, item.id, "itemName", e.target.value)}
                                   placeholder="Nama item"
-                                  className="text-sm font-medium border-gray-300"
+                                  className={cn('text-sm', 'font-medium', 'border-gray-300')}
                                 />
-                                <Button variant="outline" size="sm" onClick={() => removeInternalItem(variantIdx, item.id)} className="h-8 w-8 p-0 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50">
-                                  <Trash2 className="h-4 w-4" />
+                                <Button variant="outline" size="sm" onClick={() => removeInternalItem(variantIdx, item.id)} className={cn('h-8', 'w-8', 'p-0', 'shrink-0', 'text-red-600', 'hover:text-red-700', 'hover:bg-red-50')}>
+                                  <Trash2 className={cn('h-4', 'w-4')} />
                                 </Button>
                               </div>
                               <SimpleEditor
@@ -547,9 +546,9 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                           <Button
                             variant="outline"
                             onClick={() => addInternalItem(variantIdx)}
-                            className="w-full border-dashed border-gray-300 text-gray-600 hover:bg-gray-50"
+                            className={cn('w-full', 'border-dashed', 'border-gray-300', 'text-gray-600', 'hover:bg-gray-50')}
                           >
-                            <Plus className="h-4 w-4 mr-2" />Tambah Item
+                            <Plus className={cn('h-4', 'w-4', 'mr-2')} />Tambah Item
                           </Button>
                         </div>
                       )}
@@ -562,8 +561,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t pt-4 mt-4">
-          <div className="flex gap-2">
+        <div className={cn('sticky', 'bottom-0', 'bg-white', 'border-t', 'pt-4', 'mt-4')}>
+          <div className={cn('flex', 'gap-2')}>
             <Button
               variant="outline"
               onClick={currentStep === 1 ? handleClose : handlePrevious}
@@ -574,7 +573,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
             </Button>
             <Button
               onClick={currentStep === 3 ? handleSubmit : handleNext}
-              className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer"
+              className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}
               disabled={submitting}
             >
               {submitting ? "Menyimpan..." : currentStep < 3 ? "Selanjutnya" : (isEdit ? "Simpan Perubahan" : "Buat Paket")}

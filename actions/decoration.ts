@@ -5,7 +5,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import type { POCateringV2 } from "@/types/po-catering";
-import type { SettlementType } from "@prisma/client";
+import type { SettlementType } from "@/types/settlement";
 import type { PORow } from "@/types/po-catering";
 
 async function syncSettlementRows(

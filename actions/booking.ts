@@ -145,14 +145,14 @@ export async function createBooking(data: unknown) {
       );
       if (variant.internalItems.length > 0) {
         ops.push(
-          ...variant.internalItems.map((item, i) =>
+          ...variant.internalItems.map((item: { itemName: string; itemDescription: string }, i: number) =>
             db.snapPackageInternalItem.create({ data: { bookingId, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
           )
         );
       }
       if (variant.vendorItems.length > 0) {
         ops.push(
-          ...variant.vendorItems.map((item, i) =>
+          ...variant.vendorItems.map((item: { categoryName: string; itemText: string }, i: number) =>
             db.snapPackageVendorItem.create({ data: { bookingId, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
           )
         );
@@ -434,10 +434,10 @@ export async function editBooking(data: unknown) {
         ops.push(
           db.snapPackageInternalItem.deleteMany({ where: { bookingId: id } }),
           db.snapPackageVendorItem.deleteMany({ where: { bookingId: id } }),
-          ...variant.internalItems.map((item, i) =>
+          ...variant.internalItems.map((item: { itemName: string; itemDescription: string }, i: number) =>
             db.snapPackageInternalItem.create({ data: { bookingId: id, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
           ),
-          ...variant.vendorItems.map((item, i) =>
+          ...variant.vendorItems.map((item: { categoryName: string; itemText: string }, i: number) =>
             db.snapPackageVendorItem.create({ data: { bookingId: id, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
           )
         );
