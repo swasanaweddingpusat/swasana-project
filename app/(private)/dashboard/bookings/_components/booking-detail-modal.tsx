@@ -392,9 +392,9 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   ) : (
                     (() => {
                       const grouped: Record<string, typeof booking.bookingDocuments> = {};
-                      booking.bookingDocuments.forEach((doc) => {
-                        if (!grouped[doc.name]) grouped[doc.name] = [];
-                        grouped[doc.name].push(doc);
+                      booking.bookingDocuments.forEach((any) => {
+                        if (!grouped[any.name]) grouped[any.name] = [];
+                        grouped[any.name].push(any);
                       });
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
