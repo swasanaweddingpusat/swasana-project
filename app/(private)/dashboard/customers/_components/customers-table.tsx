@@ -13,16 +13,28 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search, Copy, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { useCustomers, useDeleteCustomer } from "@/hooks/use-customers";
+import { parseMobileNumbers, type MobileNumberEntry } from "@/lib/validations/customer";
 import { CustomerDrawer } from "./customer-drawer";
 import type { CustomerItem, CustomersResult } from "@/lib/queries/customers";
+
+function formatMobileNumbers(raw: unknown): string {
+  const entries = parseMobileNumbers(raw);
+  return entries.map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", ");
+}
+
+function mobileNumbersSearchable(raw: unknown): string {
+  const entries = parseMobileNumbers(raw);
+  return entries.map((e) => `${e.name} ${e.number}`).join(" ").toLowerCase();
+}
 
 const ROWS_PER_PAGE = 10;
 
 const MEMBER_STATUS_COLORS: Record<string, string> = {
-  "VIP": "bg-amber-100 text-amber-800 border-amber-200",
-  "Member": "bg-blue-100 text-blue-800 border-blue-200",
-  "Non-Member": "bg-gray-100 text-gray-700 border-gray-200",
+  "VIP": "bg-primary text-primary-foreground",
+  "Member": "bg-secondary text-secondary-foreground",
+  "Non-Member": "bg-muted text-muted-foreground",
 };
 
 export function CustomersTable({ initialData }: { initialData: CustomersResult }) {
@@ -47,7 +59,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
     const q = search.toLowerCase();
     return (
       c.name.toLowerCase().includes(q) ||
-      c.mobileNumber.toLowerCase().includes(q) ||
+      mobileNumbersSearchable(c.mobileNumber).includes(q) ||
       c.email.toLowerCase().includes(q) ||
       (c.type ?? "").toLowerCase().includes(q) ||
       (c.club ?? "").toLowerCase().includes(q) ||
@@ -85,10 +97,24 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
           {/* Header */}
           <div className="flex items-center justify-between px-6 pb-4 border-b">
             <div className="flex items-center gap-3">
-              <h2 className="text-base font-bold text-[#1D1D1D]">List Customers</h2>
+              <h2 className="text-base font-bold text-foreground">List Customers</h2>
               <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
                 {filtered.length} {search ? `dari ${customers.length}` : "member"}
               </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isRefreshing}
+                className="h-8 px-2 border-gray-200 bg-secondary hover:bg-gray-200"
+                title="Refresh data"
+                onClick={async () => {
+                  setIsRefreshing(true);
+                  await qc.invalidateQueries({ queryKey: ["customers"] });
+                  setIsRefreshing(false);
+                }}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", isRefreshing && "animate-spin")} />
+              </Button>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -100,23 +126,11 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                   className="pl-9 w-55"
                 />
               </div>
-              <Button onClick={handleAdd} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
-                <Plus className="h-4 w-4 mr-2" /> Tambah Customer
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isRefreshing}
-                className="h-8 px-2 border-gray-200 bg-[#F0F2F5] hover:bg-gray-200"
-                title="Refresh data"
-                onClick={async () => {
-                  setIsRefreshing(true);
-                  await qc.invalidateQueries({ queryKey: ["customers"] });
-                  setIsRefreshing(false);
-                }}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", isRefreshing && "animate-spin")} />
-              </Button>
+              <PermissionGate module="customers" action="create">
+                <Button onClick={handleAdd} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
+                  <Plus className="h-4 w-4 mr-2" /> Tambah Customer
+                </Button>
+              </PermissionGate>
             </div>
           </div>
 
@@ -151,9 +165,13 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                       <TableCell className="px-3 max-w-32 overflow-hidden">
                         <Tooltip>
                           <TooltipTrigger className="block truncate w-full text-left">
-                            {customer.mobileNumber}
+                            {formatMobileNumbers(customer.mobileNumber)}
                           </TooltipTrigger>
-                          <TooltipContent>{customer.mobileNumber}</TooltipContent>
+                          <TooltipContent className="max-w-64">
+                            {parseMobileNumbers(customer.mobileNumber).map((e, i) => (
+                              <div key={i}>{e.name ? `${e.name}: ${e.number}` : e.number}</div>
+                            ))}
+                          </TooltipContent>
                         </Tooltip>
                       </TableCell>
                       <TableCell className="px-3">{customer.type}</TableCell>
@@ -175,12 +193,16 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                       <TableCell className="px-3 text-gray-500 whitespace-nowrap">{format(new Date(customer.updatedAt), "dd MMM yyyy")}</TableCell>
                       <TableCell className="px-3">
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
-                            <PencilIcon className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteTarget(customer)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <PermissionGate module="customers" action="edit">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
+                              <PencilIcon className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate module="customers" action="delete">
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(customer)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
                         </div>
                       </TableCell>
                     </TableRow>

@@ -59,6 +59,53 @@ export async function POST(req: Request) {
       }),
     ]);
 
+    // Auto-approve client step in ApprovalRecord
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: agreement.bookingId } },
+      include: { steps: { orderBy: { stepOrder: "asc" } } },
+    });
+
+    if (approvalRecord) {
+      const clientStep = approvalRecord.steps.find(
+        (s) => s.approverType === "client" && s.status === "pending"
+      );
+
+      if (clientStep) {
+        // Check all previous steps are approved
+        const prevSteps = approvalRecord.steps.filter((s) => s.stepOrder < clientStep.stepOrder);
+        const allPrevApproved = prevSteps.every((s) => s.status === "approved");
+
+        if (allPrevApproved) {
+          const isLastStep = !approvalRecord.steps.some(
+            (s) => s.stepOrder > clientStep.stepOrder && s.status === "pending"
+          );
+
+          await db.$transaction([
+            db.approvalRecordStep.update({
+              where: { id: clientStep.id },
+              data: {
+                status: "approved",
+                signature: signatureData,
+                decidedAt: new Date(),
+              },
+            }),
+            ...(isLastStep
+              ? [
+                  db.approvalRecord.update({
+                    where: { id: approvalRecord.id },
+                    data: { status: "approved" },
+                  }),
+                  db.booking.update({
+                    where: { id: agreement.bookingId },
+                    data: { bookingStatus: "Confirmed" },
+                  }),
+                ]
+              : []),
+          ]);
+        }
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });

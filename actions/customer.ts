@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { customerSchema, updateCustomerSchema } from "@/lib/validations/customer";
+import { logAudit } from "@/lib/audit";
 
 export async function createCustomer(data: unknown) {
   const { session, error } = await requirePermission({ module: "customers", action: "create" });
@@ -15,13 +17,23 @@ export async function createCustomer(data: unknown) {
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
+    const { mobileNumber, ...rest } = parsed.data;
     const [customer] = await db.$transaction([db.customer.create({
       data: {
-        ...parsed.data,
-        nikNumber: parsed.data.nikNumber || null,
+        ...rest,
+        mobileNumber: mobileNumber as unknown as Prisma.InputJsonValue,
+        nikNumber: rest.nikNumber || null,
         updatedBy: session!.user.name ?? session!.user.email,
       },
     })]);
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "customer.created",
+      entityType: "customer",
+      entityId: customer.id,
+      description: `Customer ${parsed.data.name} ditambahkan`,
+      changes: { after: parsed.data },
+    });
     revalidateTag("customers", "max");
     return { success: true, customer };
   } catch (e) {
@@ -38,17 +50,26 @@ export async function updateCustomer(data: unknown) {
   const parsed = updateCustomerSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { id, ...rest } = parsed.data;
+  const { id, mobileNumber: mn, ...rest } = parsed.data;
 
   try {
     const [customer] = await db.$transaction([db.customer.update({
       where: { id },
       data: {
         ...rest,
+        ...(mn !== undefined && { mobileNumber: mn as unknown as Prisma.InputJsonValue }),
         nikNumber: rest.nikNumber || null,
         updatedBy: session!.user.name ?? session!.user.email,
       },
     })]);
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "customer.updated",
+      entityType: "customer",
+      entityId: customer.id,
+      description: `Customer ${customer.id} diperbarui`,
+      changes: { before: { id }, after: rest },
+    });
     revalidateTag("customers", "max");
     return { success: true, customer };
   } catch (e) {
@@ -64,6 +85,13 @@ export async function deleteCustomer(id: string) {
 
   try {
     await db.$transaction([db.customer.delete({ where: { id } })]);
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "customer.deleted",
+      entityType: "customer",
+      entityId: id,
+      description: `Customer ${id} dihapus`,
+    });
     revalidateTag("customers", "max");
     return { success: true };
   } catch (e) {

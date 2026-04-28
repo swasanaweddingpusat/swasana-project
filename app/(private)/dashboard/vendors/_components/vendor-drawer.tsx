@@ -101,7 +101,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
       isOpen={isOpen}
       onClose={onClose}
       title={`${isEdit ? "Edit" : "Tambah"} Vendor${selectedCatName ? ` - ${selectedCatName}` : ""}`}
-      maxWidth="max-w-full"
+      maxWidth="sm:max-w-lg"
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto space-y-4">

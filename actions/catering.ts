@@ -36,7 +36,7 @@ async function syncSettlementRows(
         bookingId,
         snapVendorItemId,
         type: (row.settlementType ?? "refund") as SettlementType,
-        amount: BigInt(row.grandTotal!),
+        amount: row.grandTotal!,
         paymentMethodId: row.settlementPaymentMethodId ?? null,
         targetBookingId: row.targetBookingId ?? null,
         notes: row.settlementNotes ?? row.description ?? null,
@@ -44,7 +44,7 @@ async function syncSettlementRows(
       },
       update: {
         type: (row.settlementType ?? "refund") as SettlementType,
-        amount: BigInt(row.grandTotal!),
+        amount: row.grandTotal!,
         paymentMethodId: row.settlementPaymentMethodId ?? null,
         targetBookingId: row.targetBookingId ?? null,
         notes: row.settlementNotes ?? row.description ?? null,

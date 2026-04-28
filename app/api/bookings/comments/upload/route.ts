@@ -8,7 +8,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE = 10 * 1024 * 1024;
 
 export async function POST(req: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "booking", action: "comment" });
   if (response) return response;
   if (!mutationLimiter.check(`comment-upload:${session.user.id}`)) return rateLimitResponse();
 

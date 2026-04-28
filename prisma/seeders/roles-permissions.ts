@@ -46,7 +46,7 @@ const moduleActions: Record<string, string[]> = {
 // "ALL" as value means all actions for that module.
 const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur sales": {
-    booking: ["view", "create", "edit", "approve", "comment", "print"],
+    booking: ["view", "create", "edit", "approve", "approve_manager", "comment", "print"],
     customers: ["view", "create", "edit"],
     package: ["view"],
     vendor: ["view"],
@@ -182,10 +182,17 @@ export async function seedRolesPermissions(): Promise<void> {
     where: { module_action: { module: "booking", action: "approve_oprations" } },
   });
   if (typo) {
-    await prisma.permission.update({
-      where: { id: typo.id },
-      data: { action: "approve_operations" },
+    const correctExists = await prisma.permission.findUnique({
+      where: { module_action: { module: "booking", action: "approve_operations" } },
     });
+    if (correctExists) {
+      await prisma.permission.delete({ where: { id: typo.id } });
+    } else {
+      await prisma.permission.update({
+        where: { id: typo.id },
+        data: { action: "approve_operations" },
+      });
+    }
   }
   const hrTypo = await prisma.permission.findUnique({
     where: { module_action: { module: "hr", action: "approve_oprations" } },

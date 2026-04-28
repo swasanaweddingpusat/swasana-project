@@ -405,7 +405,7 @@ model PackageVariantCategoryPrice {
   id               String         @id @default(uuid())
   packageVariantId String
   categoryName     String
-  basePrice        BigInt         @default(0)
+  basePrice        Int            @default(0)
   sortOrder        Int            @default(0)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -446,7 +446,7 @@ model PackageInternalItem {
 model Customer {
   id           String    @id @default(uuid())
   name         String
-  mobileNumber String
+  mobileNumber Json      @default("[]")
   email        String
   nikNumber    String?
   ktpAddress   String?
@@ -455,13 +455,14 @@ model Customer {
   memberStatus String    @default("Non-Member")
   notes        String?
   bitrixId     String?
-  updatedBy    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  bookings     Booking[]
+  sourceOfInformationId String?
+  updatedBy             String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  bookings              Booking[]
+  sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
 
   @@index([name])
-  @@index([mobileNumber])
   @@map("customers")
 }
 
@@ -478,10 +479,11 @@ model CustomerMemberStatus {
 // ─── Source of Information ────────────────────────────────────────────────────
 
 model SourceOfInformation {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  createdAt DateTime  @default(now())
+  id        String     @id @default(uuid())
+  name      String     @unique
+  createdAt DateTime   @default(now())
   bookings  Booking[]
+  customers Customer[]
 
   @@map("source_of_informations")
 }
@@ -637,7 +639,7 @@ model SnapPackageVariant {
   variantId   String
   variantName String
   pax         Int
-  price       BigInt
+  price       Int
   createdAt   DateTime @default(now())
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -680,7 +682,7 @@ model SnapBonus {
   vendorName       String
   description      String?
   qty              Int          @default(1)
-  nominal          BigInt       @default(0)
+  nominal          Int          @default(0)
   orderStatusId    String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -700,10 +702,10 @@ model SnapVendorItem {
   vendorId           String
   vendorName         String
   itemName           String
-  itemPrice          BigInt                     @default(0)
+  itemPrice          Int                        @default(0)
   qty                Int                        @default(1)
   unit               String?
-  totalPrice         BigInt                     @default(0)
+  totalPrice         Int                        @default(0)
   isAddons           Boolean                    @default(false)
   paketData          Json?
   description        String?
@@ -725,7 +727,7 @@ model TermOfPayment {
   id              String              @id @default(uuid())
   bookingId       String
   name            String
-  amount          BigInt
+  amount          Int
   dueDate         DateTime
   paymentStatus   TermOfPaymentStatus @default(unpaid)
   paymentEvidence String?
@@ -736,6 +738,7 @@ model TermOfPayment {
   updatedAt       DateTime            @updatedAt
   booking         Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
+  @@unique([invoiceNumber])
   @@index([bookingId])
   @@map("term_of_payments")
 }
@@ -800,7 +803,7 @@ model BookingPaymentSettlement {
   bookingId        String
   snapVendorItemId String
   type             SettlementType
-  amount           BigInt
+  amount           Int
   paymentMethodId  String?
   targetBookingId  String?
   status           SettlementStatus @default(pending)
@@ -1001,4 +1004,11 @@ model Notification {
   @@index([userId, isRead, createdAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+model Counter {
+  id    String @id // e.g. "invoice-2026"
+  value Int    @default(0)
+
+  @@map("counters")
 }

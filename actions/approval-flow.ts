@@ -8,7 +8,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 
 const stepSchema = z.object({
   sortOrder: z.number().int(),
-  approverType: z.enum(["role", "user"]),
+  approverType: z.enum(["role", "user", "client"]),
   approverRoleId: z.string().nullable().optional(),
   approverUserId: z.string().nullable().optional(),
 });

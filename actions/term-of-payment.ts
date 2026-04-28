@@ -25,7 +25,7 @@ export async function updateTermOfPayments(bookingId: string, terms: TermUpdate[
         db.termOfPayment.update({
           where: { id: t.id },
           data: {
-            amount: BigInt(t.amount),
+            amount: t.amount,
             dueDate: new Date(t.dueDate),
             paymentStatus: t.paymentStatus,
             notes: t.notes ?? null,
@@ -61,7 +61,7 @@ export async function addTermOfPayment(bookingId: string, data: { name: string; 
       data: {
         bookingId,
         name: data.name,
-        amount: BigInt(data.amount),
+        amount: data.amount,
         dueDate: new Date(data.dueDate),
         sortOrder: (maxSort?.sortOrder ?? -1) + 1,
       },

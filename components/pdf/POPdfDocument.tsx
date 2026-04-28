@@ -14,12 +14,12 @@ export interface POPdfBooking {
   snapCustomer: { name: string; mobileNumber: string; nikNumber?: string | null; ktpAddress?: string | null } | null;
   snapVenue: { venueName: string; address?: string | null; description?: string | null; brandName?: string | null; brandCode?: string | null } | null;
   snapPackage: { packageName: string; notes?: string | null } | null;
-  snapPackageVariant: { variantName: string; pax: number; price: bigint } | null;
+  snapPackageVariant: { variantName: string; pax: number; price: number } | null;
   snapPackageInternalItems: { id: string; itemName: string; itemDescription: string; sortOrder: number }[];
   snapPackageVendorItems: { id: string; categoryName: string; itemText: string; sortOrder: number }[];
-  snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: bigint; qty: number; unit?: string | null; totalPrice: bigint; isAddons: boolean }[];
+  snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: number; qty: number; unit?: string | null; totalPrice: number; isAddons: boolean }[];
   snapBonuses: { id: string; vendorName: string; description?: string | null; qty: number }[];
-  termOfPayments: { id: string; name: string; amount: bigint; dueDate: Date | null; paymentStatus: string }[];
+  termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
   signatures: Record<string, unknown> | null;
