@@ -7,7 +7,6 @@ interface FinanceTabsProps {
   activeTab: FinanceTabType;
   onTabChange: (tab: FinanceTabType) => void;
 }
-
 const tabs: { key: FinanceTabType; label: string }[] = [
   { key: "receivable", label: "Accounts Receivable" },
   { key: "payable", label: "Accounts Payable" },
