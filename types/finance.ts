@@ -32,7 +32,7 @@ export type FinanceTabType = "receivable" | "payable";
 
 // ─── AR Types ────────────────────────────────────────────────────────────────
 
-export type ARInvoiceStatus = "paid" | "partial" | "unpaid" | "unissued";
+export type ARInvoiceStatus = "paid" | "partial" | "unpaid" | "unissued" | "generated";
 export type ARTerminStatus = "paid" | "partial" | "unpaid" | "pending" | "overdue" | "not_due_yet";
 
 export interface ARFilters {

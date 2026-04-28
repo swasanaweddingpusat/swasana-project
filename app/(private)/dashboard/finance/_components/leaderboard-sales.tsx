@@ -14,7 +14,7 @@ function formatCurrency(amount: number): string {
 
 export function LeaderboardSales({ leaders, loading }: LeaderboardSalesProps) {
   return (
-    <div className="border border-border rounded-xl px-4 py-6">
+    <div className="bg-card border border-border rounded-xl px-4 py-6">
       <h3 className="text-base font-bold text-[#1D1D1D] mb-4">Leaderboard Sales</h3>
       {loading ? (
         <div className="flex flex-col gap-4">

@@ -17,7 +17,7 @@ const iconMap: Record<ActivityItem["icon"], LucideIcon> = {
 
 export function WeeklyActivity({ activities, loading }: WeeklyActivityProps) {
   return (
-    <div className="border border-border rounded-xl px-4 py-6">
+    <div className="bg-card border border-border rounded-xl px-4 py-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-bold text-[#1D1D1D]">Weekly Activity</h3>
         <span className="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">
