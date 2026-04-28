@@ -389,7 +389,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             }
                           }}
                         />
-                        <Button type="button" variant="outline" size="sm" className="shrink-0 bg-white" onClick={() => {
+                        <Button type="button" variant="outline" className="shrink-0 bg-white" onClick={() => {
                           const num = contactInput.number.trim();
                           if (!num) return;
                           if (contactNumbers.some((c) => c.number === num)) return;

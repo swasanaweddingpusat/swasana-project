@@ -228,7 +228,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                     }
                   }}
                 />
-                <Button type="button" variant="outline" size="sm" className="shrink-0 bg-white" onClick={() => {
+                <Button type="button" variant="outline" className="shrink-0 bg-white" onClick={() => {
                   const num = contactInput.number.trim();
                   if (!num || contactNumbers.some((c) => c.number === num)) return;
                   setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]);

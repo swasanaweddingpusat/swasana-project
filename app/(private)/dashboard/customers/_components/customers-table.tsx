@@ -167,10 +167,14 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                           <TooltipTrigger className="block truncate w-full text-left">
                             {formatMobileNumbers(customer.mobileNumber)}
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-64">
-                            {parseMobileNumbers(customer.mobileNumber).map((e, i) => (
-                              <div key={i}>{e.name ? `${e.name}: ${e.number}` : e.number}</div>
-                            ))}
+                          <TooltipContent side="bottom" align="start" className="max-w-72">
+                            <ul className="space-y-1">
+                              {parseMobileNumbers(customer.mobileNumber).map((e, i) => (
+                                <li key={i} className="text-sm">
+                                  {e.name ? <><span className="text-muted-foreground">{e.name}:</span> {e.number}</> : e.number}
+                                </li>
+                              ))}
+                            </ul>
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>
