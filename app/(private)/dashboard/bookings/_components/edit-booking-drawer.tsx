@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { editBooking } from "@/actions/booking";
 import type { EditBookingInput } from "@/lib/validations/booking";
 import type { BookingListItem } from "@/lib/queries/bookings";
+import type { MobileNumberEntry } from "@/lib/validations/customer";
 
 interface Props {
   booking: BookingListItem | null;
@@ -82,7 +83,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [paymentMethodId, setPaymentMethodId] = useState(() => booking?.paymentMethodId ?? "");
   const [sourceOfInformationId, setSourceOfInformationId] = useState(() => booking?.sourceOfInformationId ?? "");
   const [customerName, setCustomerName] = useState(() => booking?.snapCustomer?.name ?? "");
-  const [contactNumbers, setContactNumbers] = useState<string[]>(() => (booking?.snapCustomer?.mobileNumber ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  const [contactNumbers, setContactNumbers] = useState<MobileNumberEntry[]>(() => {
+    const raw = booking?.snapCustomer?.mobileNumber ?? "";
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as MobileNumberEntry[];
+    } catch { /* fallback */ }
+    return raw.split(",").map((s) => s.trim()).filter(Boolean).map((n) => ({ name: "", number: n }));
+  });
+  const [contactInput, setContactInput] = useState({ name: "", number: "" });
   const [bonuses, setBonuses] = useState<{ vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }[]>([]);
 
   // Fetch full booking detail (only for email, nikNumber, ktpAddress)
@@ -160,7 +169,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       weddingType: (weddingType as EditBookingInput["weddingType"]) || null,
       signingLocation: signingLocation || null,
       customerName,
-      contactNumbers: contactNumbers.join(","),
+      contactNumbers: JSON.stringify(contactNumbers),
       contactEmail,
       contactNik,
       contactKtpAddress,
@@ -168,15 +177,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     });
     if (!r.success) toast.error(r.error);
     else { toast.success("Booking berhasil diupdate."); onOpenChange(false); }
-  }
-
-  function addContact(e: React.KeyboardEvent<HTMLInputElement>) {
-    const val = e.currentTarget.value.trim();
-    if ((e.key === "Enter" || e.key === ",") && val) {
-      e.preventDefault();
-      if (!contactNumbers.includes(val)) setContactNumbers((p) => [...p, val]);
-      e.currentTarget.value = "";
-    }
   }
 
   const LBL = "text-sm font-medium text-gray-700";
@@ -193,23 +193,48 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           {/* Contact Person */}
           <div>
             <label className={LBL}>Contact Person *</label>
-            <div className={cn('flex', 'flex-wrap', 'gap-2', 'bg-white', 'border', 'border-gray-300', 'rounded-lg', 'px-2', 'py-2', 'mt-1')}>
-              {contactNumbers.map((num, i) => (
-                <span key={i} className={cn('flex', 'items-center', 'bg-[#FAFAFA]', 'border', 'rounded-lg', 'px-3', 'text-sm', 'font-normal', 'text-black', 'gap-2')}>
-                  {num}
-                  <button type="button" className={cn('ml-1', 'text-red-600', 'hover:bg-red-100', 'rounded-full', 'p-1')} onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))} aria-label="Remove">
-                    <X className={cn('w-4', 'h-4')} />
+            <div className="mt-1 rounded-lg bg-muted p-3 space-y-2">
+              {contactNumbers.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    {entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}
+                    <p className="text-sm font-medium">{entry.number}</p>
+                  </div>
+                  <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))}>
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                </span>
+                </div>
               ))}
-              <input
-                type="text"
-                inputMode="numeric"
-                className={cn('flex-1', 'min-w-30', 'border-none', 'outline-none', 'bg-transparent', 'text-sm', 'px-2')}
-                placeholder="Input contact person number"
-                onKeyPress={(e) => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
-                onKeyDown={addContact}
-              />
+              <div className="flex gap-2">
+                <Input
+                  value={contactInput.name}
+                  onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Label (opsional)"
+                  className="flex-1 bg-white"
+                />
+                <Input
+                  value={contactInput.number}
+                  onChange={(e) => setContactInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))}
+                  placeholder="081234567890"
+                  inputMode="numeric"
+                  className="flex-1 bg-white"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const num = contactInput.number.trim();
+                      if (!num || contactNumbers.some((c) => c.number === num)) return;
+                      setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]);
+                      setContactInput({ name: "", number: "" });
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" size="sm" className="shrink-0 bg-white" onClick={() => {
+                  const num = contactInput.number.trim();
+                  if (!num || contactNumbers.some((c) => c.number === num)) return;
+                  setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]);
+                  setContactInput({ name: "", number: "" });
+                }}>Tambah</Button>
+              </div>
             </div>
           </div>
 
