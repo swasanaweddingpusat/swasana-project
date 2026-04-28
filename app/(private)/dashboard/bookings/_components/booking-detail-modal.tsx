@@ -400,13 +400,13 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {Object.entries(grouped).map(([docName, docs]) => {
                             const groupIds = docs.map((d: BookingDocument) => d.id);
-                            const allSelected = groupIds.every((id) => selectedDocIds.has(id));
-                            const someSelected = groupIds.some((id) => selectedDocIds.has(id));
+                            const allSelected = groupIds.every((id: string) => selectedDocIds.has(id));
+                            const someSelected = groupIds.some((id: string) => selectedDocIds.has(id));
                             const toggleGroup = () => {
                               setSelectedDocIds((prev) => {
                                 const next = new Set(prev);
-                                if (allSelected) { groupIds.forEach((id) => next.delete(id)); }
-                                else { groupIds.forEach((id) => next.add(id)); }
+                                if (allSelected) { groupIds.forEach((id: string) => next.delete(id)); }
+                                else { groupIds.forEach((id: string) => next.add(id)); }
                                 return next;
                               });
                             };
