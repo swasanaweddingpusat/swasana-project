@@ -64,7 +64,7 @@ export function DecorationSelectionDrawer({ isOpen, onClose, booking, onUpdated,
     );
     if (incomingSettlements.length === 0) return base;
     const withoutIncoming = base.rows.filter((r) => !r.isIncoming);
-    const incomingRows: PORow[] = incomingSettlements.map((s) => ({
+    const incomingRows: PORow[] = incomingSettlements.map((s: (typeof booking.bookingRefunds)[number]) => ({
       id: s.id,
       type: "settlement" as const,
       settlementType: "allocation" as const,
