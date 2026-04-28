@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { getUsers } from "@/lib/queries/users";
 import { getGroups } from "@/lib/queries/groups";
 import { GroupManagement } from "./_components/group-management";
@@ -13,15 +14,7 @@ export default function GroupsSettingsPage() {
 }
 
 async function GroupsContent() {
-  try {
-    const [users, groups] = await Promise.all([getUsers(), getGroups()]);
-    return <GroupManagement initialGroups={groups} users={users} />;
-  } catch (e) {
-    console.error("[GroupsContent] Failed to load data:", e);
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <p className="text-sm">Gagal memuat data. Silakan refresh halaman.</p>
-      </div>
-    );
-  }
+  await connection();
+  const [users, groups] = await Promise.all([getUsers(), getGroups()]);
+  return <GroupManagement initialGroups={groups} users={users} />;
 }
