@@ -868,7 +868,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           onClose={() => { setTopTarget(null); refetch(); }}
           bookingId={topTarget.id}
           customerName={topTarget.snapCustomer?.name ?? ""}
-          initialTerms={(topTarget.termOfPayments ?? []).map((t) => ({
+          initialTerms={(topTarget.termOfPayments ?? []).map((t: typeof topTarget.termOfPayments[number]) => ({
             id: t.id, name: t.name, amount: Number(t.amount),
             dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder,
             paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
