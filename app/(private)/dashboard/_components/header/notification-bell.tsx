@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, CheckCheck, CalendarPlus, CalendarCheck, CalendarX, AlertTriangle, ArrowLeftRight, FileSignature, Eye, UserPlus, Store, UtensilsCrossed } from "lucide-react";
+import { Bell, CheckCheck, CalendarPlus, CalendarCheck, CalendarX, AlertTriangle, ArrowLeftRight, FileSignature, Eye, UserPlus, Store, UtensilsCrossed, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
 import { formatDistanceToNow } from "date-fns";
@@ -25,7 +25,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const { data } = useNotifications();
+  const { data, refetch, isFetching } = useNotifications();
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllRead();
 
@@ -61,11 +61,16 @@ export function NotificationBell() {
         <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <p className="text-sm font-semibold text-gray-900">Notifikasi</p>
-            {unreadCount > 0 && (
-              <button type="button" onClick={() => markAll.mutate()} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer">
-                <CheckCheck className="h-3.5 w-3.5" /> Tandai semua dibaca
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => refetch()} className="p-1 rounded-md hover:bg-gray-100 cursor-pointer transition-colors" title="Refresh">
+                <RefreshCw className={`h-3.5 w-3.5 text-gray-500 ${isFetching ? "animate-spin" : ""}`} />
               </button>
-            )}
+              {unreadCount > 0 && (
+                <button type="button" onClick={() => markAll.mutate()} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer">
+                  <CheckCheck className="h-3.5 w-3.5" /> Tandai semua dibaca
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="max-h-80 overflow-y-auto">

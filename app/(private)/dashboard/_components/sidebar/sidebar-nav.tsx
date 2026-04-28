@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Skeleton } from "@/components/ui/skeleton";
 import { navItems, type NavItem, type SubMenuItem } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -73,9 +74,16 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto overflow-x-hidden" onClick={onNavigate}>
-        {visibleItems.map((item) => (
-          <NavItemRow key={item.href} item={item} collapsed={collapsed} />
-        ))}
+        {isLoading
+          ? Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className={collapsed ? "flex justify-center py-3" : "flex items-center gap-3 px-3 py-2"}>
+                <Skeleton className="h-5 w-5 shrink-0 rounded" />
+                {!collapsed && <Skeleton className="h-4 rounded" style={{ width: `${60 + (i % 3) * 15}%` }} />}
+              </div>
+            ))
+          : visibleItems.map((item) => (
+              <NavItemRow key={item.href} item={item} collapsed={collapsed} />
+            ))}
       </nav>
     </>
   );

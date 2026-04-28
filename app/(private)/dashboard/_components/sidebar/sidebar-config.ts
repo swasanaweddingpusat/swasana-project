@@ -4,6 +4,7 @@ import {
   Ticket,
   CalendarRange,
   NotebookPen,
+  PieChart,
   BanknoteArrowDown,
   BanknoteArrowUp,
   Building2,
@@ -84,6 +85,12 @@ export const navItems: NavItem[] = [
     icon: NotebookPen,
     permission: { module: "finance", action: "view" },
     submenu: [
+      {
+        name: "Overview",
+        href: "/dashboard/finance",
+        icon: PieChart,
+        permission: { module: "finance", action: "view" },
+      },
       {
         name: "Accounts Receivable",
         href: "/dashboard/finance/accounts-receivable",
