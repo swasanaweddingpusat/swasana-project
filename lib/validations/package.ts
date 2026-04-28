@@ -5,6 +5,7 @@ export const createPackageSchema = z.object({
   available: z.boolean().default(true),
   venueId: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  signature: z.string().nullable().optional(),
 });
 
 export const updatePackageSchema = createPackageSchema.partial();
@@ -13,7 +14,6 @@ export const createVariantSchema = z.object({
   packageId: z.string().min(1),
   variantName: z.string().min(1, "Nama variant wajib diisi"),
   pax: z.number().int().positive("PAX harus lebih dari 0"),
-  price: z.number().int().nonnegative("Harga tidak boleh negatif"),
   available: z.boolean().default(true),
 });
 

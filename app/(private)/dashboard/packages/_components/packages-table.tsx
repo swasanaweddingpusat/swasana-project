@@ -1,22 +1,29 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, X } from "lucide-react";
+import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Settings2, ClipboardCheck, RefreshCw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
-import { usePackages, useDeletePackage, useDeleteBulkPackages } from "@/hooks/use-packages";
+import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals } from "@/hooks/use-packages";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { toast } from "sonner";
 import SearchBar from "@/components/shared/search-bar";
 import { DrawerPackage } from "./drawer-package";
 import { DetailModal } from "./detail-modal";
+import { DrawerFinance } from "./drawer-finance";
+import { ApprovalDialog } from "./approval-dialog";
+import { ApproveModal } from "./approve-modal";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
@@ -41,13 +48,19 @@ function SkeletonTable() {
 
 export function PackagesTable() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-
   const { data: packages = [], isLoading } = usePackages();
   const deleteMutation = useDeletePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
-  const { canCreate, canEdit, canDelete, can } = usePermissions();
+  const { canCreate, can, isAdmin } = usePermissions();
+  const qc = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await qc.invalidateQueries({ queryKey: ["packages"] });
+    await qc.invalidateQueries({ queryKey: ["package-approvals"] });
+    setRefreshing(false);
+  }
 
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -58,6 +71,19 @@ export function PackagesTable() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailPkg, setDetailPkg] = useState<PackageQueryItem | null>(null);
+  const [financeOpen, setFinanceOpen] = useState(false);
+  const [financePkg, setFinancePkg] = useState<PackageQueryItem | null>(null);
+  const [approvalPkg, setApprovalPkg] = useState<PackageQueryItem | null>(null);
+  const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; packageName: string } | null>(null);
+  const { user } = useCurrentUser();
+  const { data: approvals = [] } = usePackageApprovals();
+
+  // Map approvals by entityId for quick lookup
+  const approvalMap = useMemo(() => {
+    const map = new Map<string, typeof approvals[number]>();
+    for (const r of approvals) map.set(r.entityId, r);
+    return map;
+  }, [approvals]);
 
   const searchQuery = searchParams.get("search") || "";
   const rowsPerPage = 10;
@@ -80,14 +106,19 @@ export function PackagesTable() {
   // Helpers
   const priceRange = (pkg: PackageQueryItem) => {
     if (!pkg.variants?.length) return "-";
-    const prices = pkg.variants.map((v) => v.price);
+    const prices = pkg.variants
+      .map((v) => {
+        const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+        return base + Math.round(base * ((v.margin ?? 0) / 100));
+      })
+      .filter((p) => p > 0);
+    if (!prices.length) return formatCurrency(0);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     return min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`;
   };
 
   const allSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
-  const someSelected = paginated.some((p) => selectedIds.has(p.id));
 
   const toggleAll = useCallback(() => {
     setSelectedIds((prev) => {
@@ -104,7 +135,7 @@ export function PackagesTable() {
   const toggleOne = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }, []);
@@ -155,6 +186,9 @@ export function PackagesTable() {
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-[#1D1D1D]">Packages</h2>
               <span className="text-sm text-muted-foreground">({filtered.length})</span>
+              <button onClick={handleRefresh} disabled={refreshing} className="p-1 rounded-md hover:bg-muted cursor-pointer text-muted-foreground">
+                <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <SearchBar placeholder="Search packages..." />
@@ -184,13 +218,14 @@ export function PackagesTable() {
                 <TableHead>Variants</TableHead>
                 <TableHead>Price Range</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Approval</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     {searchQuery ? "No packages found" : "No packages yet"}
                   </TableCell>
                 </TableRow>
@@ -220,31 +255,108 @@ export function PackagesTable() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <button
-                          className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
-                          onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
-                          aria-label="View"
-                        >
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        </button>
+                      <button
+                        type="button"
+                        onClick={() => setApprovalPkg(pkg)}
+                        className={cn(
+                          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                          pkg.approvalStatus === "approved" && "bg-primary text-primary-foreground",
+                          pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
+                          pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
+                          pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
+                        )}
+                      >
+                        {pkg.approvalStatus === "approved" ? "Approved" : pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 justify-end">
+                        {can("package", "view") && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
+                            >
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>Lihat Detail</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {can("package", "set_harga") && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              onClick={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
+                            >
+                              <Settings2 className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>Set Harga</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {approvalMap.has(pkg.id) && (() => {
+                          const record = approvalMap.get(pkg.id)!;
+                          const steps = record.steps;
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="p-1.5 rounded-md hover:bg-muted cursor-pointer" title="Approval">
+                                  <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {steps.map((step) => {
+                                  const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+                                  const isApproved = step.status === "approved";
+                                  const isRejected = step.status === "rejected";
+                                  const isPending = step.status === "pending";
+                                  const canAct = isPending && (
+                                    isAdmin ||
+                                    (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
+                                    (step.approverType === "user" && step.approverUserId === user?.profileId)
+                                  );
+                                  const prevDone = steps.filter((s) => s.stepOrder < step.stepOrder).every((s) => s.status === "approved");
+                                  return (
+                                    <DropdownMenuItem
+                                      key={step.id}
+                                      className="cursor-pointer"
+                                      disabled={isApproved || isRejected || (isPending && (!canAct || !prevDone))}
+                                      onClick={() => {
+                                        if (canAct && prevDone) {
+                                          setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
+                                        } else {
+                                          setApprovalPkg(pkg);
+                                        }
+                                      }}
+                                    >
+                                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })()}
                         {can("package", "edit") && (
-                          <button
-                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
-                            onClick={() => openEdit(pkg)}
-                            aria-label="Edit"
-                          >
-                            <PenLine className="h-4 w-4 text-muted-foreground" />
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger
+                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              onClick={() => openEdit(pkg)}
+                            >
+                              <PenLine className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
                         )}
                         {can("package", "delete") && (
-                          <button
-                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
-                            onClick={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
-                            aria-label="Delete"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger
+                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              onClick={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </TooltipTrigger>
+                            <TooltipContent>Hapus</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     </TableCell>
@@ -291,6 +403,34 @@ export function PackagesTable() {
           if (p) openEdit(p);
         }}
       />
+
+      {/* Finance Drawer */}
+      <DrawerFinance
+        isOpen={financeOpen}
+        onClose={() => { setFinanceOpen(false); setFinancePkg(null); }}
+        pkg={financePkg}
+      />
+
+      {approvalPkg && user && (
+        <ApprovalDialog
+          open={!!approvalPkg}
+          onClose={() => setApprovalPkg(null)}
+          packageId={approvalPkg.id}
+          packageName={approvalPkg.packageName}
+          userProfileId={user.profileId}
+          userRoleId={user.roleId}
+        />
+      )}
+
+      {approveModal && (
+        <ApproveModal
+          open={!!approveModal}
+          onClose={() => setApproveModal(null)}
+          stepId={approveModal.stepId}
+          stepLabel={approveModal.stepLabel}
+          packageName={approveModal.packageName}
+        />
+      )}
 
       {/* Delete Confirm */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
