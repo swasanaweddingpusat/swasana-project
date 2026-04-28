@@ -15,11 +15,10 @@ import { getCroppedBlob, compressToWebP } from "@/lib/image-utils";
 interface AvatarUploadProps {
   currentUrl: string | null;
   name: string;
-  userId: string;
   onUploaded: (url: string) => void;
 }
 
-export function AvatarUpload({ currentUrl, name, userId, onUploaded }: AvatarUploadProps) {
+export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,7 +68,7 @@ export function AvatarUpload({ currentUrl, name, userId, onUploaded }: AvatarUpl
         body: JSON.stringify({ contentType: "image/webp" }),
       });
       if (!res.ok) throw new Error("Failed to get upload URL");
-      const { uploadUrl, publicUrl, key } = await res.json() as { uploadUrl: string; publicUrl: string; key: string };
+      const { uploadUrl, publicUrl } = await res.json() as { uploadUrl: string; publicUrl: string; key: string };
 
       // 4. Upload to R2
       const uploadRes = await fetch(uploadUrl, {
@@ -92,7 +91,7 @@ export function AvatarUpload({ currentUrl, name, userId, onUploaded }: AvatarUpl
       onUploaded(publicUrl);
       setCropOpen(false);
       toast.success("Foto profil berhasil diupdate");
-    } catch (err) {
+    } catch {
       toast.error("Gagal upload foto");
     } finally {
       setUploading(false);

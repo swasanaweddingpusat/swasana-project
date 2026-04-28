@@ -194,7 +194,6 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
             <AvatarUpload
               currentUrl={profile?.avatarUrl ?? user.image ?? null}
               name={form.fullName || user.name}
-              userId={user.id}
               onUploaded={() => {}}
             />
             <div className={cn('flex-1', 'min-w-0')}>

@@ -32,14 +32,14 @@ export const ProfileAvatar = React.memo(function ProfileAvatar({
 
   if (!src || imageError) {
     return (
-      <div className={`${sizeClasses[size]} ${bgColor} rounded-full flex items-center justify-center text-white font-medium flex-shrink-0 ${className}`}>
+      <div className={`${sizeClasses[size]} ${bgColor} rounded-full flex items-center justify-center text-white font-medium shrink-0 ${className}`}>
         {initials}
       </div>
     );
   }
 
   return (
-    <div className={`${sizeClasses[size]} rounded-full overflow-hidden flex-shrink-0 ${className}`}>
+    <div className={`${sizeClasses[size]} rounded-full overflow-hidden shrink-0 ${className}`}>
       <Image
         src={src}
         alt={`${name}'s profile`}

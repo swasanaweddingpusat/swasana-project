@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "../../../lib/utils";
 
 export default function DashboardError({
-  error,
+  error: _error,
   reset,
 }: {
   error: Error & { digest?: string };
