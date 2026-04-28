@@ -78,7 +78,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
   const cats = useMemo(() => {
     return categories
       .filter((c: typeof categories[number]) => ALLOWED.some((a) => c.name.toLowerCase().includes(a)))
-      .sort((a, b) => {
+      .sort((a: typeof categories[number], b: typeof categories[number]) => {
         const ai = ALLOWED.findIndex((k) => a.name.toLowerCase().includes(k));
         const bi = ALLOWED.findIndex((k) => b.name.toLowerCase().includes(k));
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
