@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { connection } from "next/server";
 import { Sidebar } from "./_components/sidebar/sidebar";
 import { MobileSidebar } from "./_components/sidebar/mobile-sidebar";
 import { SidebarProvider } from "./_components/sidebar/sidebar-context";
@@ -8,12 +7,11 @@ import { AuthGate } from "../_components/auth-gate";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await connection();
   return (
     <SidebarProvider>
       <HeaderActionProvider>
