@@ -13,6 +13,15 @@ export default function GroupsSettingsPage() {
 }
 
 async function GroupsContent() {
-  const [users, groups] = await Promise.all([getUsers(), getGroups()]);
-  return <GroupManagement initialGroups={groups} users={users} />;
+  try {
+    const [users, groups] = await Promise.all([getUsers(), getGroups()]);
+    return <GroupManagement initialGroups={groups} users={users} />;
+  } catch (e) {
+    console.error("[GroupsContent] Failed to load data:", e);
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+        <p className="text-sm">Gagal memuat data. Silakan refresh halaman.</p>
+      </div>
+    );
+  }
 }

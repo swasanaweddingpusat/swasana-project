@@ -181,41 +181,36 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               )} />
               <FormItem>
                 <FormLabel>No. HP *</FormLabel>
-                <div className="space-y-2">
-                  {/* Existing chips */}
-                  {mobileNumbers.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {mobileNumbers.map((entry, idx) => (
-                        <span key={idx} className="flex items-center bg-secondary border rounded-lg px-3 py-1 text-sm gap-2">
-                          {entry.name ? <span className="font-medium">{entry.name}</span> : null}
-                          {entry.name ? <span className="text-muted-foreground">—</span> : null}
-                          <span>{entry.number}</span>
-                          <button type="button" className="ml-1 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </span>
-                      ))}
+                <div className="rounded-lg bg-muted p-3 space-y-2">
+                  {mobileNumbers.map((entry, idx) => (
+                    <div key={idx} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
+                      <div className="flex-1 min-w-0">
+                        {entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}
+                        <p className="text-sm font-medium">{entry.number}</p>
+                      </div>
+                      <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                  )}
-                  {/* Input row */}
+                  ))}
                   <div className="flex gap-2">
                     <Input
                       value={mobileInput.name}
                       onChange={(e) => setMobileInput((p) => ({ ...p, name: e.target.value }))}
                       placeholder="Label (opsional)"
-                      className="flex-1"
+                      className="flex-1 bg-white"
                     />
                     <Input
                       value={mobileInput.number}
                       onChange={(e) => setMobileInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))}
                       placeholder="081234567890"
                       inputMode="numeric"
-                      className="flex-1"
+                      className="flex-1 bg-white"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") { e.preventDefault(); addMobileNumber(); }
                       }}
                     />
-                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={addMobileNumber}>
+                    <Button type="button" variant="outline" className="shrink-0 bg-white" onClick={addMobileNumber}>
                       Tambah
                     </Button>
                   </div>

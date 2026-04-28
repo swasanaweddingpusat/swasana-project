@@ -29,7 +29,7 @@ export async function createBooking(data: unknown) {
       const c = await db.customer.create({
         data: {
           name: input.customerName,
-          mobileNumber: input.contactNumbers || "-",
+          mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
           email: input.contactEmail || "-@placeholder.com",
           nikNumber: input.contactNik || null,
           ktpAddress: input.contactKtpAddress || null,
@@ -45,7 +45,7 @@ export async function createBooking(data: unknown) {
       if (!existing) return { success: false, error: "Customer tidak ditemukan." };
 
       const updates: Record<string, unknown> = {};
-      if (input.contactNumbers) updates.mobileNumber = input.contactNumbers.split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
+      if (input.contactNumbers) updates.mobileNumber = JSON.parse(input.contactNumbers);
       if (input.contactEmail) updates.email = input.contactEmail;
       if (input.contactNik) updates.nikNumber = input.contactNik;
       if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
@@ -439,7 +439,7 @@ export async function editBooking(data: unknown) {
         where: { bookingId: id },
         data: {
           name: customerName,
-          mobileNumber: contactNumbers || "-",
+          mobileNumber: contactNumbers ? (() => { try { const arr = JSON.parse(contactNumbers) as Array<{name?: string; number: string}>; return arr.map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { return contactNumbers; } })() : "-",
           email: contactEmail || "-@placeholder.com",
           nikNumber: contactNik || null,
           ktpAddress: contactKtpAddress || null,
@@ -450,7 +450,7 @@ export async function editBooking(data: unknown) {
         where: { id: booking.customerId },
         data: {
           name: customerName,
-          mobileNumber: contactNumbers || "-",
+          mobileNumber: contactNumbers ? (() => { try { return JSON.parse(contactNumbers); } catch { return contactNumbers; } })() : "-",
           email: contactEmail || "-@placeholder.com",
           nikNumber: contactNik || null,
           ktpAddress: contactKtpAddress || null,

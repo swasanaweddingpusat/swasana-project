@@ -22,6 +22,7 @@ import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { cn } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
 import type { BookingInput } from "@/lib/validations/booking";
+import type { MobileNumberEntry } from "@/lib/validations/customer";
 
 interface BookingDrawerProps {
   open: boolean;
@@ -78,7 +79,7 @@ const DRAFT_KEY = "booking_draft";
 interface BookingDraft {
   currentStep: number;
   customerName: string;
-  contactNumbers: string[];
+  contactNumbers: MobileNumberEntry[];
   contactEmail: string;
   contactNik: string;
   contactKtpAddress: string;
@@ -114,13 +115,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [signingLocation, setSigningLocation] = useState("");
   const [specialBonusName, setSpecialBonusName] = useState("Discount");
   const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
-  const [contactNumbers, setContactNumbers] = useState<string[]>([]);
+  const [contactNumbers, setContactNumbers] = useState<MobileNumberEntry[]>([]);
+  const [contactInput, setContactInput] = useState({ name: "", number: "" });
   const [contactEmail, setContactEmail] = useState("");
   const [contactNik, setContactNik] = useState("");
   const [contactKtpAddress, setContactKtpAddress] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const contactInputRef = useRef<HTMLInputElement>(null);
 
   const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => fetchJson<CustomerOption[]>("/api/customers"), staleTime: 5 * 60_000 });
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
@@ -271,7 +272,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       ...values,
       customerId: values.customerId || "",
       customerName: customerName || "",
-      contactNumbers: contactNumbers.join(","),
+      contactNumbers: JSON.stringify(contactNumbers),
       contactEmail,
       contactNik,
       contactKtpAddress,
@@ -333,10 +334,10 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         const c = customers.find((x) => x.id === opt.id);
                         if (c) {
                           if (c.mobileNumber) {
-                            const nums = Array.isArray(c.mobileNumber)
-                              ? (c.mobileNumber as Array<{ name?: string; number: string }>).map((e) => e.number)
-                              : String(c.mobileNumber).split(",").map((n) => n.trim()).filter(Boolean);
-                            setContactNumbers(nums);
+                            const entries = Array.isArray(c.mobileNumber)
+                              ? (c.mobileNumber as MobileNumberEntry[])
+                              : String(c.mobileNumber).split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
+                            setContactNumbers(entries);
                           }
                           if (c.email) setContactEmail(c.email);
                           if (c.nikNumber) setContactNik(c.nikNumber);
@@ -349,33 +350,53 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     />
                   </div>
 
-                  {/* Contact Person — chip input */}
+                  {/* Contact Person */}
                   <div>
                     <FormLabel className="text-sm font-medium text-gray-700">Contact Person *</FormLabel>
-                    <div className="flex flex-wrap gap-2 bg-white border border-gray-300 rounded-lg px-2 py-2 mt-1">
-                      {contactNumbers.map((num, idx) => (
-                        <span key={idx} className="flex items-center bg-[#FAFAFA] border rounded-lg px-3 text-sm font-normal text-black gap-2">
-                          {num}
-                          <button type="button" className="ml-1 text-red-600 hover:bg-red-100 rounded-full p-1" onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))} aria-label="Remove">
-                            <X className="w-4 h-4" />
+                    <div className="mt-1 rounded-lg bg-muted p-3 space-y-2">
+                      {contactNumbers.map((entry, idx) => (
+                        <div key={idx} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            {entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}
+                            <p className="text-sm font-medium">{entry.number}</p>
+                          </div>
+                          <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                            <X className="w-3.5 h-3.5" />
                           </button>
-                        </span>
+                        </div>
                       ))}
-                      <input
-                        ref={contactInputRef}
-                        type="text"
-                        inputMode="numeric"
-                        className="flex-1 min-w-30 border-none outline-none bg-transparent text-sm px-2"
-                        placeholder="e.g. 081234567890"
-                        onKeyDown={(e) => {
-                          const val = e.currentTarget.value.trim();
-                          if ((e.key === "Enter" || e.key === ",") && val) {
-                            e.preventDefault();
-                            if (!contactNumbers.includes(val)) setContactNumbers((prev) => [...prev, val]);
-                            e.currentTarget.value = "";
-                          }
-                        }}
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          value={contactInput.name}
+                          onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))}
+                          placeholder="Label (opsional)"
+                          className="flex-1 bg-white"
+                        />
+                        <Input
+                          value={contactInput.number}
+                          onChange={(e) => setContactInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))}
+                          placeholder="081234567890"
+                          inputMode="numeric"
+                          className="flex-1 bg-white"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const num = contactInput.number.trim();
+                              if (!num) return;
+                              if (contactNumbers.some((c) => c.number === num)) return;
+                              setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]);
+                              setContactInput({ name: "", number: "" });
+                            }
+                          }}
+                        />
+                        <Button type="button" variant="outline" size="sm" className="shrink-0 bg-white" onClick={() => {
+                          const num = contactInput.number.trim();
+                          if (!num) return;
+                          if (contactNumbers.some((c) => c.number === num)) return;
+                          setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]);
+                          setContactInput({ name: "", number: "" });
+                        }}>Tambah</Button>
+                      </div>
                     </div>
                   </div>
 
