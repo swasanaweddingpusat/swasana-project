@@ -304,7 +304,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (termsWithEvidence.length > 0 && result.termIds?.length) {
       await Promise.allSettled(
         termsWithEvidence.map((t) => {
-          const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
+          const termId = result.termIds!.find((r: { id: string; sortOrder: number }) => r.sortOrder === t.sortOrder)?.id;
           if (!termId || !t.paymentEvidence) return Promise.resolve();
           const fd = new FormData();
           fd.append("termId", termId);
