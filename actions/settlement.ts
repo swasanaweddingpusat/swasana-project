@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import type { SettlementType, SettlementStatus } from "@/types/settlement";
+import { revalidateTag } from "next/cache";
+import type { SettlementType, SettlementStatus } from "@prisma/client";
 
 export async function createSettlement(input: {
   snapVendorItemId: string;
@@ -56,8 +57,10 @@ export async function createSettlement(input: {
       description: `Created ${input.type} settlement of Rp${input.amount.toLocaleString("id-ID")}`,
     });
 
+    revalidateTag("settlements", "max");
     return { success: true, data: { id: settlement[0].id } };
-  } catch {
+  } catch (e) {
+    console.error("[createSettlement]", e);
     return { success: false, error: "Gagal membuat settlement." };
   }
 }
@@ -96,8 +99,10 @@ export async function updateSettlementStatus(
       description: `Settlement status updated to ${status}`,
     });
 
+    revalidateTag("settlements", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[updateSettlementStatus]", e);
     return { success: false, error: "Gagal mengupdate status settlement." };
   }
 }
@@ -131,8 +136,10 @@ export async function deleteSettlement(
       description: "Settlement deleted",
     });
 
+    revalidateTag("settlements", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[deleteSettlement]", e);
     return { success: false, error: "Gagal menghapus settlement." };
   }
 }

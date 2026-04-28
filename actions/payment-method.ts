@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
@@ -21,8 +22,14 @@ export async function createPaymentMethod(data: unknown) {
   const parsed = schema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const pm = await db.paymentMethod.create({ data: parsed.data });
-  return { success: true, data: pm };
+  try {
+    const [pm] = await db.$transaction([db.paymentMethod.create({ data: parsed.data })]);
+    revalidateTag("payment-methods", "max");
+    return { success: true, data: pm };
+  } catch (e) {
+    console.error("[createPaymentMethod]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
 }
 
 export async function updatePaymentMethod(id: string, data: unknown) {
@@ -34,8 +41,14 @@ export async function updatePaymentMethod(id: string, data: unknown) {
   const parsed = schema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const pm = await db.paymentMethod.update({ where: { id }, data: parsed.data });
-  return { success: true, data: pm };
+  try {
+    const [pm] = await db.$transaction([db.paymentMethod.update({ where: { id }, data: parsed.data })]);
+    revalidateTag("payment-methods", "max");
+    return { success: true, data: pm };
+  } catch (e) {
+    console.error("[updatePaymentMethod]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
 }
 
 export async function deletePaymentMethod(id: string) {
@@ -44,6 +57,12 @@ export async function deletePaymentMethod(id: string) {
   const session = permResult.session!;
   if (!mutationLimiter.check(`pm-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
-  await db.paymentMethod.delete({ where: { id } });
-  return { success: true };
+  try {
+    await db.$transaction([db.paymentMethod.delete({ where: { id } })]);
+    revalidateTag("payment-methods", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[deletePaymentMethod]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
 }

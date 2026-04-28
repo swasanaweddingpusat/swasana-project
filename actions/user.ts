@@ -33,6 +33,7 @@ export async function inviteUser(formData: FormData) {
     roleId: formData.get("roleId") as string,
     venueIds: JSON.parse(formData.get("venueIds") as string),
     venueScopes: JSON.parse((formData.get("venueScopes") as string) || "{}"),
+    venueManagers: JSON.parse((formData.get("venueManagers") as string) || "{}"),
     dataScope: (formData.get("dataScope") as string) || "own",
   };
 
@@ -41,7 +42,7 @@ export async function inviteUser(formData: FormData) {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const { email, fullName, roleId, venueIds, venueScopes, dataScope } = parsed.data;
+  const { email, fullName, roleId, venueIds, venueScopes, venueManagers, dataScope } = parsed.data;
 
   try {
     // Check if user already exists
@@ -57,39 +58,41 @@ export async function inviteUser(formData: FormData) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
 
-    // Sequential writes — Neon HTTP adapter does NOT support nested creates (implicit transactions)
-    const user = await db.user.create({
-      data: { email, name: fullName, password: hashedPassword },
-    });
+    const { profile } = await db.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email, name: fullName, password: hashedPassword },
+      });
 
-    const profile = await db.profile.create({
-      data: {
-        userId: user.id,
-        email,
-        fullName,
-        roleId,
-        dataScope,
-        isEmailVerified: false,
-        mustChangePassword: true,
-        invitedAt: new Date(),
-      },
-    });
+      const p = await tx.profile.create({
+        data: {
+          userId: user.id,
+          email,
+          fullName,
+          roleId,
+          dataScope,
+          isEmailVerified: false,
+          mustChangePassword: true,
+          invitedAt: new Date(),
+        },
+      });
 
-    await db.emailVerificationToken.create({
-      data: { profileId: profile.id, token, expiresAt },
-    });
+      await tx.emailVerificationToken.create({
+        data: { profileId: p.id, token, expiresAt },
+      });
 
-    if (venueIds.length > 0) {
       for (const venueId of venueIds) {
-        await db.userVenueAccess.create({
+        await tx.userVenueAccess.create({
           data: {
-            userId: profile.id,
+            userId: p.id,
             venueId,
             scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+            managerId: venueManagers?.[venueId] ?? null,
           },
         });
       }
-    }
+
+      return { profile: p };
+    });
 
     // Send invitation email — OUTSIDE the DB write so a mail failure doesn't roll back user creation
     const baseUrl = await getBaseUrl();
@@ -129,6 +132,7 @@ export async function updateUser(data: Record<string, unknown>) {
   const permResult = await requirePermission({ module: "settings", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
+  if (!mutationLimiter.check(`user-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updateUserSchema.safeParse(data);
   if (!parsed.success) {
@@ -136,7 +140,7 @@ export async function updateUser(data: Record<string, unknown>) {
   }
 
   const {
-    userId, fullName, nickName, phoneNumber, roleId, venueIds, venueScopes, status, dataScope,
+    userId, fullName, nickName, phoneNumber, roleId, venueIds, venueScopes, venueManagers, status, dataScope,
     placeOfBirth, dateOfBirth, ktpAddress, currentAddress, motherName,
     maritalStatus, numberOfChildren, lastEducation,
     emergencyContactName, emergencyContactRel, emergencyContactPhone,
@@ -147,7 +151,7 @@ export async function updateUser(data: Record<string, unknown>) {
     if (!profile) return { success: false, error: "Pengguna tidak ditemukan." };
 
     // Diff venues (reads outside the transaction)
-    const venueOps: Promise<unknown>[] = [];
+    const venueOps: ReturnType<typeof db.userVenueAccess.delete>[] = [];
     if (venueIds !== undefined) {
       const existing = await db.userVenueAccess.findMany({
         where: { userId },
@@ -178,8 +182,9 @@ export async function updateUser(data: Record<string, unknown>) {
               userId,
               venueId,
               scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+              managerId: venueManagers?.[venueId] ?? null,
             },
-          })
+          }) as ReturnType<typeof db.userVenueAccess.delete>
         );
       }
       for (const venueId of toUpdate) {
@@ -188,46 +193,41 @@ export async function updateUser(data: Record<string, unknown>) {
             where: { userId_venueId: { userId, venueId } },
             data: {
               scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
+              managerId: venueManagers?.[venueId] ?? null,
             },
-          })
+          }) as ReturnType<typeof db.userVenueAccess.delete>
         );
       }
     }
 
-    // Sequential writes — Neon HTTP adapter doesn't support $transaction
-    await db.profile.update({
-      where: { id: userId },
-      data: {
-        ...(fullName !== undefined && { fullName }),
-        ...(nickName !== undefined && { nickName }),
-        ...(phoneNumber !== undefined && { phoneNumber }),
-        ...(roleId !== undefined && { roleId }),
-        ...(status !== undefined && { status }),
-        ...(dataScope !== undefined && { dataScope }),
-        ...(placeOfBirth !== undefined && { placeOfBirth }),
-        ...(dateOfBirth !== undefined && { dateOfBirth: new Date(dateOfBirth) }),
-        ...(ktpAddress !== undefined && { ktpAddress }),
-        ...(currentAddress !== undefined && { currentAddress }),
-        ...(motherName !== undefined && { motherName }),
-        ...(maritalStatus !== undefined && { maritalStatus }),
-        ...(numberOfChildren !== undefined && { numberOfChildren }),
-        ...(lastEducation !== undefined && { lastEducation }),
-        ...(emergencyContactName !== undefined && { emergencyContactName }),
-        ...(emergencyContactRel !== undefined && { emergencyContactRel }),
-        ...(emergencyContactPhone !== undefined && { emergencyContactPhone }),
-      },
-    });
-
-    if (fullName !== undefined) {
-      await db.user.update({
-        where: { id: profile.userId },
-        data: { name: fullName },
-      });
-    }
-
-    for (const op of venueOps) {
-      await op;
-    }
+    await db.$transaction([
+      db.profile.update({
+        where: { id: userId },
+        data: {
+          ...(fullName !== undefined && { fullName }),
+          ...(nickName !== undefined && { nickName }),
+          ...(phoneNumber !== undefined && { phoneNumber }),
+          ...(roleId !== undefined && { roleId }),
+          ...(status !== undefined && { status }),
+          ...(dataScope !== undefined && { dataScope }),
+          ...(placeOfBirth !== undefined && { placeOfBirth }),
+          ...(dateOfBirth !== undefined && { dateOfBirth: new Date(dateOfBirth) }),
+          ...(ktpAddress !== undefined && { ktpAddress }),
+          ...(currentAddress !== undefined && { currentAddress }),
+          ...(motherName !== undefined && { motherName }),
+          ...(maritalStatus !== undefined && { maritalStatus }),
+          ...(numberOfChildren !== undefined && { numberOfChildren }),
+          ...(lastEducation !== undefined && { lastEducation }),
+          ...(emergencyContactName !== undefined && { emergencyContactName }),
+          ...(emergencyContactRel !== undefined && { emergencyContactRel }),
+          ...(emergencyContactPhone !== undefined && { emergencyContactPhone }),
+        },
+      }),
+      ...(fullName !== undefined
+        ? [db.user.update({ where: { id: profile.userId }, data: { name: fullName } })]
+        : []),
+      ...venueOps,
+    ]);
 
     revalidateTag("users", "max");
 
@@ -255,6 +255,8 @@ export async function updateUser(data: Record<string, unknown>) {
 export async function deleteUser(userId: string) {
   const permResult = await requirePermission({ module: "settings", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
+  if (!mutationLimiter.check(`user-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const profile = await db.profile.findUnique({ where: { id: userId } });
@@ -262,13 +264,15 @@ export async function deleteUser(userId: string) {
       return { success: false, error: "Pengguna tidak ditemukan." };
     }
 
-    // Sequential deletes in FK order — HTTP adapter doesn't support $transaction
-    await db.userVenueAccess.deleteMany({ where: { userId } });
-    await db.emailVerificationToken.deleteMany({ where: { profileId: userId } });
-    await db.passwordResetToken.deleteMany({ where: { userId } });
-    await db.activityLog.deleteMany({ where: { userId } });
-    await db.profile.delete({ where: { id: userId } });
-    await db.user.delete({ where: { id: profile.userId } });
+    // All deletes in FK order within a single transaction
+    await db.$transaction([
+      db.userVenueAccess.deleteMany({ where: { userId } }),
+      db.emailVerificationToken.deleteMany({ where: { profileId: userId } }),
+      db.passwordResetToken.deleteMany({ where: { userId } }),
+      db.activityLog.deleteMany({ where: { userId } }),
+      db.profile.delete({ where: { id: userId } }),
+      db.user.delete({ where: { id: profile.userId } }),
+    ]);
 
     revalidateTag("users", "max");
 
@@ -293,6 +297,10 @@ export async function deleteUser(userId: string) {
 // ─── Resend Invitation ────────────────────────────────────────────────────────
 
 export async function resendInvitation(userId: string) {
+  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`resend-invite:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
   try {
     const profile = await db.profile.findUnique({ where: { id: userId } });
     if (!profile) {
@@ -350,6 +358,7 @@ export async function bulkUpdateUsers(data: {
   roleId?: string;
   venueIds?: string[];
   venueScopes?: Record<string, "individual" | "general">;
+  venueManagers?: Record<string, string>;
   dataScope?: "own" | "group" | "all";
   groupIds?: string[];
 }): Promise<{ success: boolean; error?: string; updated?: number }> {
@@ -357,7 +366,7 @@ export async function bulkUpdateUsers(data: {
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`bulk-update-users:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const { userIds, roleId, venueIds, venueScopes, dataScope, groupIds } = data;
+  const { userIds, roleId, venueIds, venueScopes, venueManagers, dataScope, groupIds } = data;
   if (!userIds.length) return { success: false, error: "Tidak ada user yang dipilih." };
 
   try {
@@ -391,7 +400,7 @@ export async function bulkUpdateUsers(data: {
         await db.$transaction(
           venueIds.map((venueId) =>
             db.userVenueAccess.create({
-              data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general" },
+              data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general", managerId: venueManagers?.[venueId] ?? null },
             })
           )
         );

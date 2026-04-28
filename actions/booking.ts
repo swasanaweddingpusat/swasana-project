@@ -5,11 +5,13 @@ import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { bookingSchema, updateBookingSchema, editBookingSchema, approveBookingSchema } from "@/lib/validations/booking";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = bookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -61,7 +63,7 @@ export async function createBooking(data: unknown) {
       input.packageVariantId
         ? db.packageVariant.findUniqueOrThrow({
             where: { id: input.packageVariantId },
-            include: { vendorItems: true, internalItems: true },
+            include: { vendorItems: true, internalItems: true, categoryPrices: true },
           })
         : null,
     ]);
@@ -83,13 +85,20 @@ export async function createBooking(data: unknown) {
       return `${(termIndex).toString().padStart(2, "0")}${(bookingCount + 1).toString().padStart(2, "0")}${bookingYear}/INV/${venue.code}/${monthRoman}/${now.getFullYear()}`;
     };
 
-    // Build array-form transaction (Neon HTTP compatible)
-    const ops: Promise<unknown>[] = [
+    // Build array-form transaction
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ops: any[] = [
       db.booking.create({
         data: {
           id: bookingId,
           bookingDate: new Date(input.bookingDate),
           salesId: session!.user.profileId!,
+          managerId: await db.userVenueAccess
+            .findUnique({
+              where: { userId_venueId: { userId: session!.user.profileId!, venueId: input.venueId } },
+              select: { managerId: true },
+            })
+            .then((r) => r?.managerId ?? null),
           customerId,
           venueId: input.venueId,
           packageId: input.packageId,
@@ -138,9 +147,10 @@ export async function createBooking(data: unknown) {
     ];
 
     if (variant) {
+      const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, BigInt(0));
       ops.push(
         db.snapPackageVariant.create({
-          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
+          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
         })
       );
       if (variant.internalItems.length > 0) {
@@ -177,9 +187,8 @@ export async function createBooking(data: unknown) {
 
     // Neon HTTP adapter does not support $transaction — run sequentially
     // Create booking first (other tables have FK to it)
-    await ops[0];
-    // Then create all snapshots in parallel
-    if (ops.length > 1) await Promise.all(ops.slice(1));
+    // Neon WebSocket adapter supports $transaction array form
+    await db.$transaction(ops);
 
     await logAudit({
       userId: session!.user.id,
@@ -241,7 +250,7 @@ export async function updateBooking(data: unknown) {
     if (rest.paymentMethodId !== undefined) updateData.paymentMethodId = rest.paymentMethodId;
     if (rest.sourceOfInformationId !== undefined) updateData.sourceOfInformationId = rest.sourceOfInformationId;
 
-    await db.booking.update({ where: { id }, data: updateData });
+    await db.$transaction([db.booking.update({ where: { id }, data: updateData })]);
 
     await logAudit({
       userId: session!.user.id,
@@ -265,7 +274,7 @@ export async function deleteBooking(id: string) {
   if (error) return { success: false, error };
 
   try {
-    await db.booking.delete({ where: { id } });
+    await db.$transaction([db.booking.delete({ where: { id } })]);
 
     await logAudit({
       userId: session!.user.id,
@@ -285,6 +294,7 @@ export async function deleteBooking(id: string) {
 export async function transferBooking(bookingId: string, targetSalesId: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-transfer:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   if (!bookingId || !targetSalesId) return { success: false, error: "Parameter tidak valid." };
 
@@ -301,7 +311,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
     });
     if (!targetSales) return { success: false, error: "Sales tujuan tidak ditemukan." };
 
-    await db.booking.update({ where: { id: bookingId }, data: { salesId: targetSalesId } });
+    await db.$transaction([db.booking.update({ where: { id: bookingId }, data: { salesId: targetSalesId } })]);
 
     await logAudit({
       userId: session!.user.id,
@@ -343,7 +353,7 @@ export async function editBooking(data: unknown) {
     const packageChanged = rest.packageId !== booking.packageId;
     const variantChanged = rest.packageVariantId !== booking.packageVariantId;
 
-    const ops: Promise<unknown>[] = [
+    const ops: any[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
       // Update booking
       db.booking.update({
         where: { id },
@@ -418,15 +428,16 @@ export async function editBooking(data: unknown) {
       if (rest.packageVariantId) {
         const variant = await db.packageVariant.findUniqueOrThrow({
           where: { id: rest.packageVariantId },
-          include: { vendorItems: true, internalItems: true },
+          include: { vendorItems: true, internalItems: true, categoryPrices: true },
         });
+        const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, BigInt(0));
 
         // Upsert variant snapshot
         ops.push(
           db.snapPackageVariant.upsert({
             where: { bookingId: id },
-            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
-            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
+            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
+            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
           })
         );
 
@@ -447,7 +458,7 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    await Promise.all(ops);
+    await db.$transaction(ops);
 
     // Update bonuses — delete existing, recreate
     if (parsed.data.bonuses && parsed.data.bonuses.length > 0) {
@@ -492,7 +503,7 @@ export async function approveBooking(data: unknown) {
 
     const existingSignatures = (booking.signatures as Record<string, unknown>) ?? {};
 
-    await db.booking.update({
+    await db.$transaction([db.booking.update({
       where: { id },
       data: {
         bookingStatus: "Confirmed",
@@ -507,7 +518,7 @@ export async function approveBooking(data: unknown) {
           },
         },
       },
-    });
+    })]);
 
     await logAudit({
       userId: session!.user.id,

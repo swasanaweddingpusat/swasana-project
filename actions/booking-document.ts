@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { uploadToR2, deleteFromR2 } from "@/lib/r2";
+import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import sharp from "sharp";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -22,6 +23,7 @@ async function processFile(buffer: Buffer, contentType: string, fileName: string
 export async function uploadBookingDocument(formData: FormData) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`doc-upload:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const bookingId = formData.get("bookingId") as string;
   const docName = formData.get("name") as string;
@@ -76,13 +78,14 @@ export async function uploadBookingDocument(formData: FormData) {
     return { success: true, count: results.length };
   } catch (e) {
     console.error("[uploadBookingDocument]", e);
-    return { success: false, error: "Gagal mengupload dokumen." };
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 
 export async function deleteBookingDocument(docId: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`doc-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const doc = await db.bookingDocument.findUnique({
@@ -107,13 +110,14 @@ export async function deleteBookingDocument(docId: string) {
     return { success: true };
   } catch (e) {
     console.error("[deleteBookingDocument]", e);
-    return { success: false, error: "Gagal menghapus dokumen." };
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 
 export async function deleteBookingDocuments(ids: string[]) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`docs-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
   if (!ids.length) return { success: false, error: "Tidak ada dokumen yang dipilih." };
 
   try {
@@ -142,6 +146,6 @@ export async function deleteBookingDocuments(ids: string[]) {
     return { success: true, count: docs.length };
   } catch (e) {
     console.error("[deleteBookingDocuments]", e);
-    return { success: false, error: "Gagal menghapus dokumen." };
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }

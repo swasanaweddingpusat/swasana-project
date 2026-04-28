@@ -4,6 +4,7 @@ import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 
 interface TermUpdate {
   id: string;
@@ -16,19 +17,22 @@ interface TermUpdate {
 export async function updateTermOfPayments(bookingId: string, terms: TermUpdate[]) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`top-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    for (const t of terms) {
-      await db.termOfPayment.update({
-        where: { id: t.id },
-        data: {
-          amount: BigInt(t.amount),
-          dueDate: new Date(t.dueDate),
-          paymentStatus: t.paymentStatus,
-          notes: t.notes ?? null,
-        },
-      });
-    }
+    await db.$transaction(
+      terms.map((t) =>
+        db.termOfPayment.update({
+          where: { id: t.id },
+          data: {
+            amount: BigInt(t.amount),
+            dueDate: new Date(t.dueDate),
+            paymentStatus: t.paymentStatus,
+            notes: t.notes ?? null,
+          },
+        })
+      )
+    );
 
     await logAudit({
       userId: session!.user.id,
@@ -42,13 +46,14 @@ export async function updateTermOfPayments(bookingId: string, terms: TermUpdate[
     return { success: true };
   } catch (e) {
     console.error("[updateTermOfPayments]", e);
-    return { success: false, error: "Gagal memperbarui TOP." };
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 
 export async function addTermOfPayment(bookingId: string, data: { name: string; amount: number; dueDate: string }) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`top-add:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const maxSort = await db.termOfPayment.findFirst({ where: { bookingId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
@@ -74,6 +79,6 @@ export async function addTermOfPayment(bookingId: string, data: { name: string; 
     return { success: true };
   } catch (e) {
     console.error("[addTermOfPayment]", e);
-    return { success: false, error: "Gagal menambah skema." };
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
