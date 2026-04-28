@@ -86,7 +86,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [paymentMethodId, setPaymentMethodId] = useState(() => booking?.paymentMethodId ?? "");
   const [sourceOfInformationId, setSourceOfInformationId] = useState(() => booking?.sourceOfInformationId ?? "");
   const [customerName, setCustomerName] = useState(() => booking?.snapCustomer?.name ?? "");
-  const [contactNumbers, setContactNumbers] = useState<string[]>(() => (booking?.snapCustomer?.mobileNumber ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  const [contactNumbers, setContactNumbers] = useState<string[]>(() => (booking?.snapCustomer?.mobileNumber ?? "").split(",").map((s: string) => s.trim()).filter(Boolean));
   const [bonuses, setBonuses] = useState<{ vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }[]>([]);
 
   // Fetch full booking detail (only for email, nikNumber, ktpAddress)
