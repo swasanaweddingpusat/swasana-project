@@ -169,7 +169,7 @@ export async function createBooking(data: unknown) {
 
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
-        ...input.termOfPayments.map((t, i) =>
+        ...input.termOfPayments.map((t: typeof input.termOfPayments[number], i: number) =>
           db.termOfPayment.create({ data: { bookingId, name: t.name, amount: BigInt(t.amount), dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: generateInvoiceNumber(i + 1) } })
         )
       );
@@ -426,7 +426,7 @@ export async function editBooking(data: unknown) {
           where: { bookingId: id },
           select: { amount: true },
         });
-        const termSum = existingTerms.reduce((sum: number, t) => sum + Number(t.amount || 0), 0);
+        const termSum = existingTerms.reduce((sum: number, t: typeof existingTerms[number]) => sum + Number(t.amount || 0), 0);
         ops.push(
           db.snapPackageVariant.upsert({
             where: { bookingId: id },

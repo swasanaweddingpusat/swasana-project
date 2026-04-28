@@ -1,0 +1,65 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+  functions = ".netlify/functions"
+
+[build.environment]
+  # Force Node 20+
+  NODE_VERSION = "20"
+  # Turbopack for faster builds
+  TURBO_TELEMETRY_DISABLED = "1"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  condition = "!{path:/^\\..*|404\\.html|index\\.html|auth/.*|api/.*$}"
+
+# API health check
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Auth routes should not cache
+[[headers]]
+  for = "/api/auth/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+
+# Static assets: cache long-term
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# HTML pages: cache short-term
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=300"
+
+# JSON API: no cache
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Content-Type = "application/json"
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Rate limit warning (in-memory, resets on cold start)
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    X-Rate-Limit = "Built-in rate limiter - resets on cold start"
