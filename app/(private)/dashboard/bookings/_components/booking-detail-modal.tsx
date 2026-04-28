@@ -391,14 +391,14 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     </div>
                   ) : (
                     (() => {
-                      const grouped: Record<string, typeof booking.bookingDocuments> = {};
+                      const grouped: Record<string, BookingDocument[]> = {};
                       booking.bookingDocuments.forEach((doc: BookingDocument) => {
                         if (!grouped[doc.name]) grouped[doc.name] = [];
                         grouped[doc.name].push(doc);
                       });
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Object.entries(grouped).map(([docName, docs]) => {
+                          {Object.entries(grouped).map(([docName, docs]: [string, BookingDocument[]]) => {
                             const groupIds = docs.map((d: BookingDocument) => d.id);
                             const allSelected = groupIds.every((id: string) => selectedDocIds.has(id));
                             const someSelected = groupIds.some((id: string) => selectedDocIds.has(id));
