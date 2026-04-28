@@ -61,7 +61,7 @@ export async function createBooking(data: unknown) {
       input.packageVariantId
         ? db.packageVariant.findUniqueOrThrow({
             where: { id: input.packageVariantId },
-            include: { vendorItems: true, internalItems: true },
+            select: { id: true, variantName: true, pax: true, vendorItems: true, internalItems: true },
           })
         : null,
     ]);
@@ -140,7 +140,7 @@ export async function createBooking(data: unknown) {
     if (variant) {
       ops.push(
         db.snapPackageVariant.create({
-          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
+          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: BigInt(input.packageVariantPrice || 0) },
         })
       );
       if (variant.internalItems.length > 0) {
@@ -418,15 +418,20 @@ export async function editBooking(data: unknown) {
       if (rest.packageVariantId) {
         const variant = await db.packageVariant.findUniqueOrThrow({
           where: { id: rest.packageVariantId },
-          include: { vendorItems: true, internalItems: true },
+          select: { id: true, variantName: true, pax: true, vendorItems: true, internalItems: true },
         });
 
-        // Upsert variant snapshot
+        // Upsert variant snapshot - get price from existing terms
+        const existingTerms = await db.termOfPayment.findMany({
+          where: { bookingId: id },
+          select: { amount: true },
+        });
+        const termSum = existingTerms.reduce((sum: number, t) => sum + Number(t.amount || 0), 0);
         ops.push(
           db.snapPackageVariant.upsert({
             where: { bookingId: id },
-            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
-            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variant.price },
+            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: BigInt(termSum) },
+            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: BigInt(termSum) },
           })
         );
 

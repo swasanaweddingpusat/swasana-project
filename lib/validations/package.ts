@@ -17,6 +17,10 @@ export const createVariantSchema = z.object({
   available: z.boolean().default(true),
 });
 
+// For database: remove price since it's stored separately
+export const dbCreateVariantSchema = createVariantSchema.omit({ price: true });
+export const dbUpdateVariantSchema = dbCreateVariantSchema.partial();
+
 export const updateVariantSchema = createVariantSchema.omit({ packageId: true }).partial();
 
 export const createVendorItemSchema = z.object({

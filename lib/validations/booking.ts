@@ -31,6 +31,7 @@ export const bookingSchema = z.object({
     dueDate: z.string().min(1),
     sortOrder: z.coerce.number().int().default(0),
   })).optional().default([]),
+  packageVariantPrice: z.coerce.number().min(0).default(0),
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
 });

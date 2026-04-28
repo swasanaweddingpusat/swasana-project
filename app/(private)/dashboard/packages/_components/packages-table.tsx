@@ -74,8 +74,15 @@ export function PackagesTable() {
 
   // Helpers
   const priceRange = (pkg: PackageQueryItem) => {
-    if (!pkg.variants?.length) return "-";
-    const prices = pkg.variants.map((v) => v.price);
+    // Extract prices from all variants' category prices
+    const prices: number[] = [];
+    (pkg.variants ?? []).forEach((variant) => {
+      const categoryPrices = (variant as any).package_variant_category_prices ?? [];
+      categoryPrices.forEach((cp: { basePrice: number }) => {
+        if (cp.basePrice > 0) prices.push(cp.basePrice);
+      });
+    });
+    if (prices.length === 0) return "-";
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     return min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`;

@@ -36,7 +36,19 @@ export async function seedPackages() {
 
     const created = await prisma.package.create({ data: { packageName: pkg.packageName, available: true, venueId, notes: "" } });
     for (const v of pkg.variants) {
-      await prisma.packageVariant.create({ data: { packageId: created.id, variantName: v.variantName, pax: v.pax, price: v.price, available: true } });
+      const variant = await prisma.packageVariant.create({ data: { packageId: created.id, variantName: v.variantName, pax: v.pax, available: true } });
+      // Store price in separate package_variant_category_prices table
+      if (v.price && v.price > 0) {
+        await prisma.package_variant_category_prices.create({
+          data: {
+            id: `pvcp-${variant.id}-${Date.now()}`,
+            packageVariantId: variant.id,
+            categoryName: "Base Price",
+            basePrice: v.price,
+            updatedAt: new Date(),
+          },
+        });
+      }
     }
   }
 

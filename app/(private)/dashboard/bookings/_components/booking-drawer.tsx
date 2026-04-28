@@ -30,7 +30,8 @@ interface BookingDrawerProps {
 
 type Option = { id: string; name: string };
 interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null }
-interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; price: number }[] }
+interface PackageVariantData { id: string; variantName: string; pax: number; package_variant_category_prices?: { id: string; basePrice: number; categoryName: string }[] }
+interface PackageData { id: string; packageName: string; variants: PackageVariantData[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
@@ -44,6 +45,12 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
+}
+
+// Extract price from package_variant_category_prices
+function getVariantPrice(variant: PackageVariantData): number {
+  const prices = variant.package_variant_category_prices ?? [];
+  return prices.length > 0 ? prices[0].basePrice : 0;
 }
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -248,7 +255,18 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const isStep3Complete = !!signatureSales && !!signingLocation.trim();
 
   const handleNext = () => {
-    if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi terlebih dahulu."); return; }
+    if (currentStep === 1 && !isStep1Complete) {
+      const missing: string[] = [];
+      if (!customerName.trim()) missing.push("Customer Name");
+      if (contactNumbers.length === 0) missing.push("Contact Person");
+      if (!w.venueId) missing.push("Venue");
+      if (!w.packageId) missing.push("Package");
+      if (!w.bookingDate) missing.push("Event Date");
+      if (!w.weddingSession) missing.push("Event Session");
+      if (!w.weddingType) missing.push("Event Type");
+      toast.error(`Field yang belum diisi: ${missing.join(", ")}`);
+      return;
+    }
     if (currentStep === 2) {
       const diff = getDifference();
       if (getBasePrice() > 0 && diff !== 0) {
@@ -274,6 +292,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
+      packageVariantPrice: selectedVariantPrice,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
     };
@@ -311,7 +330,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
               {/* ─── Step 1: Data Booking ─── */}
               {currentStep === 1 && (
                 <div className="space-y-3">
-                  {/* Customer */}
                   {/* Customer */}
                   <div>
                     <FormLabel className="text-sm font-medium text-gray-700">Customer Name *</FormLabel>
@@ -418,7 +436,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <FormField control={form.control} name="packageVariantId" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium text-gray-700">Pilih Tipe Paket *</FormLabel>
-                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(v.price)}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { setSelectedVariantPrice(v.price); allocatePrice(v.price, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
+                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { const price = getVariantPrice(v); setSelectedVariantPrice(price); allocatePrice(price, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
                         <FormMessage />
                       </FormItem>
                     )} />

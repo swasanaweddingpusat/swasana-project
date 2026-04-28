@@ -26,7 +26,7 @@ interface Props {
 }
 
 interface VenueOption { id: string; name: string }
-interface PackageVariant { id: string; variantName: string; pax: number; price: number }
+interface PackageVariant { id: string; variantName: string; pax: number; package_variant_category_prices?: { id: string; basePrice: number; categoryName: string }[] }
 interface PackageOption { id: string; packageName: string; variants: PackageVariant[] }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -37,6 +37,12 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
+}
+
+// Extract price from package_variant_category_prices
+function getVariantPrice(variant: PackageVariant): number {
+  const prices = variant.package_variant_category_prices ?? [];
+  return prices.length > 0 ? prices[0].basePrice : 0;
 }
 
 export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
@@ -288,7 +294,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <div>
               <label className={LBL}>Pilih Tipe Paket *</label>
               <SearchableSelect
-                options={variants.map((v) => ({ id: v.id, name: `${v.variantName ? v.variantName + " · " : ""}${v.pax} PAX · Rp ${fmtRp(v.price)}` }))}
+                options={variants.map((v) => ({ id: v.id, name: `${v.variantName ? v.variantName + " · " : ""}${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))}
                 value={variantId}
                 onChange={setVariantId}
                 placeholder="Pilih tipe paket..."

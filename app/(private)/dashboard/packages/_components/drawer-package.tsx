@@ -100,13 +100,18 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
       setVenueId(editingPackage.venueId ?? "");
       setNotes(editingPackage.notes ?? "");
       setVariants(
-        (editingPackage.variants ?? []).map((v) => ({
-          id: v.id,
-          variantName: v.variantName,
-          pax: v.pax,
-          price: v.price,
-          available: v.available,
-        }))
+        (editingPackage.variants ?? []).map((v) => {
+          // Extract price from category prices (take first entry or sum them)
+          const categoryPrices = (v as any).package_variant_category_prices ?? [];
+          const price = categoryPrices.length > 0 ? categoryPrices[0].basePrice : 0;
+          return {
+            id: v.id,
+            variantName: v.variantName,
+            pax: v.pax,
+            price,
+            available: v.available,
+          };
+        })
       );
       // Load vendor items (group by category)
       const vi: VendorItemsByVariant = {};

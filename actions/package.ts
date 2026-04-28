@@ -8,6 +8,8 @@ import {
   createPackageSchema,
   updatePackageSchema,
   createVariantSchema,
+  dbCreateVariantSchema,
+  dbUpdateVariantSchema,
   updateVariantSchema,
   createVendorItemSchema,
   createInternalItemSchema,
@@ -51,7 +53,7 @@ export async function updatePackage(id: string, data: unknown) {
     where: { id },
     include: {
       venue: { select: { id: true, name: true, address: true, brandId: true } },
-      variants: { include: { vendorItems: true, internalItems: true } },
+      variants: { include: { vendorItems: true, internalItems: true, package_variant_category_prices: true } },
     },
   });
 
@@ -114,10 +116,31 @@ export async function createVariant(data: unknown) {
   const session = permResult.session!;
   if (!mutationLimiter.check(`variant-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const parsed = createVariantSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  // First parse with full schema to get price validation
+  const fullParsed = createVariantSchema.safeParse(data);
+  if (!fullParsed.success) return { success: false, error: fullParsed.error.issues[0].message };
 
-  const variant = await db.packageVariant.create({ data: parsed.data });
+  // Then parse for DB (without price)
+  const dbParsed = dbCreateVariantSchema.safeParse(data);
+  if (!dbParsed.success) return { success: false, error: dbParsed.error.issues[0].message };
+
+  const price = fullParsed.data.price;
+  const variantData = dbParsed.data;
+
+  const variant = await db.packageVariant.create({ data: variantData });
+
+  // Save price to package_variant_category_prices
+  if (price && price > 0) {
+    await db.package_variant_category_prices.create({
+      data: {
+        id: `pvcp-${variant.id}-${Date.now()}`,
+        packageVariantId: variant.id,
+        categoryName: "Base Price",
+        basePrice: price,
+        updatedAt: new Date(),
+      },
+    });
+  }
 
   return { success: true, data: variant };
 }
@@ -128,10 +151,43 @@ export async function updateVariant(id: string, data: unknown) {
   const session = permResult.session!;
   if (!mutationLimiter.check(`variant-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const parsed = updateVariantSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  // Parse with full schema first to validate price
+  const fullParsed = updateVariantSchema.safeParse(data);
+  if (!fullParsed.success) return { success: false, error: fullParsed.error.issues[0].message };
 
-  const variant = await db.packageVariant.update({ where: { id }, data: parsed.data });
+  // Parse for DB update (without price)
+  const dbParsed = dbUpdateVariantSchema.safeParse(data);
+  if (!dbParsed.success) return { success: false, error: dbParsed.error.issues[0].message };
+
+  const price = (fullParsed.data as any).price;
+  const variantData = dbParsed.data;
+
+  // Update variant fields (excluding price)
+  const variant = await db.packageVariant.update({ where: { id }, data: variantData });
+
+  // Update or create price in package_variant_category_prices
+  if (price !== undefined && price !== null) {
+    const existing = await db.package_variant_category_prices.findFirst({
+      where: { packageVariantId: id, categoryName: "Base Price" },
+    });
+
+    if (existing) {
+      await db.package_variant_category_prices.update({
+        where: { id: existing.id },
+        data: { basePrice: price, updatedAt: new Date() },
+      });
+    } else {
+      await db.package_variant_category_prices.create({
+        data: {
+          id: `pvcp-${id}-${Date.now()}`,
+          packageVariantId: id,
+          categoryName: "Base Price",
+          basePrice: price,
+          updatedAt: new Date(),
+        },
+      });
+    }
+  }
 
   return { success: true, data: variant };
 }

@@ -40,8 +40,15 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
   ];
 
   const priceRange = () => {
-    if (!pkg.variants?.length) return "-";
-    const prices = pkg.variants.map((v: PackageVariant) => v.price);
+    // Extract prices from all variants' category prices
+    const prices: number[] = [];
+    (pkg?.variants ?? []).forEach((variant) => {
+      const categoryPrices = (variant as any).package_variant_category_prices ?? [];
+      categoryPrices.forEach((cp: { basePrice: number }) => {
+        if (cp.basePrice > 0) prices.push(cp.basePrice);
+      });
+    });
+    if (prices.length === 0) return "-";
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     return min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`;
@@ -123,7 +130,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
                       <div key={v.id} className="flex items-center justify-between bg-muted/50 rounded-lg p-4 border">
                         <div>
                           <h4 className="font-medium">{v.variantName}</h4>
-                          <p className="text-sm text-muted-foreground">{v.pax} PAX • {formatCurrency(v.price)}</p>
+                          <p className="text-sm text-muted-foreground">{v.pax} PAX</p>
                         </div>
                         <span className={cn(
                           "px-2 py-0.5 rounded-full text-xs font-medium",
@@ -170,7 +177,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
                     <div key={v.id} className="border rounded-lg p-4">
                       <div className="mb-3">
                         <h4 className="font-medium">{v.variantName}</h4>
-                        <p className="text-sm text-muted-foreground">{v.pax} PAX • {formatCurrency(v.price)}</p>
+                        <p className="text-sm text-muted-foreground">{v.pax} PAX</p>
                       </div>
                       {Object.keys(grouped).length === 0 ? (
                         <div className="text-center py-6 text-muted-foreground border-2 border-dashed rounded-lg">
@@ -213,7 +220,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
                     <div key={v.id} className="border rounded-lg p-4">
                       <div className="mb-3">
                         <h4 className="font-medium">{v.variantName}</h4>
-                        <p className="text-sm text-muted-foreground">{v.pax} PAX • {formatCurrency(v.price)}</p>
+                        <p className="text-sm text-muted-foreground">{v.pax} PAX</p>
                       </div>
                       {items.length === 0 ? (
                         <div className="text-center py-6 text-muted-foreground border-2 border-dashed rounded-lg">

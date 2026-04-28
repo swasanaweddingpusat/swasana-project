@@ -392,7 +392,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   ) : (
                     (() => {
                       const grouped: Record<string, typeof booking.bookingDocuments> = {};
-                      booking.bookingDocuments.forEach((doc) => {
+                      booking.bookingDocuments.forEach((doc: BookingDocument) => {
                         if (!grouped[doc.name]) grouped[doc.name] = [];
                         grouped[doc.name].push(doc);
                       });

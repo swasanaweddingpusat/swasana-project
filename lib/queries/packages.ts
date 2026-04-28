@@ -7,6 +7,7 @@ const packageInclude = {
     include: {
       vendorItems: true,
       internalItems: true,
+      package_variant_category_prices: true,
     },
   },
 } as const;
