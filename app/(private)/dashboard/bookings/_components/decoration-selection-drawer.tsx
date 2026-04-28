@@ -38,7 +38,7 @@ export function DecorationSelectionDrawer({ isOpen, onClose, booking, onUpdated,
   });
 
   const decorationItem = React.useMemo(() => {
-    return booking.snapVendorItems.find((v) =>
+    return booking.snapVendorItems.find((v: typeof booking.snapVendorItems[number]) =>
       DECORATION_KEYWORDS.some((k) => v.vendorCategoryName.toLowerCase().includes(k)) && !v.isAddons
     );
   }, [booking.snapVendorItems]);
