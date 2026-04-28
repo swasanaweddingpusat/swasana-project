@@ -31,7 +31,7 @@ export function StatCards({ stats, loading }: StatCardsProps) {
       {statConfig.map((item) => (
         <div
           key={item.key}
-          className="min-w-40 flex-1 bg-secondary rounded-xl p-6 flex flex-col gap-4"
+          className="min-w-40 flex-1 bg-card rounded-xl p-6 flex flex-col gap-4 border"
         >
           <span className="text-5xl font-semibold leading-none text-foreground pt-4">
             {stats[item.key]}

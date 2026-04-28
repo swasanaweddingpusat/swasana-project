@@ -28,7 +28,7 @@ function BookingStatusBadge({ status }: { status: FinanceBooking["bookingStatus"
 
 export function RecentBookingsTable({ bookings, loading }: RecentBookingsTableProps) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 bg-card rounded-xl border p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold text-[#1D1D1D]">Recently Bookings</h3>
         <Link href="/dashboard/bookings" className="text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -38,7 +38,7 @@ export function RecentBookingsTable({ bookings, loading }: RecentBookingsTablePr
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-secondary hover:bg-secondary">
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
               {columns.map((col) => (
                 <TableHead key={col} className="text-xs font-medium px-3 py-3">{col}</TableHead>
               ))}

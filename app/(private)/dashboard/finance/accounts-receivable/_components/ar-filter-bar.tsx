@@ -21,6 +21,7 @@ const STATUS_OPTIONS: { value: ARInvoiceStatus; label: string }[] = [
   { value: "partial", label: "Partial" },
   { value: "unpaid", label: "Unpaid" },
   { value: "unissued", label: "Unissued" },
+  { value: "generated", label: "Generated" },
 ];
 
 export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics = [] }: ARFilterBarProps) {
