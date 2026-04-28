@@ -40,6 +40,7 @@ model Account {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -50,6 +51,7 @@ model Session {
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -65,15 +67,15 @@ model VerificationToken {
 // ─── Profile & RBAC ──────────────────────────────────────────────────────────
 
 model Profile {
-  id          String  @id @default(uuid())
-  userId      String  @unique
-  email       String  @unique
-  employeeNumber Int @default(autoincrement()) @unique
-  fullName    String?
-  nickName    String?
-  gender      Gender?
-  phoneNumber String?
-  avatarUrl   String?
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  email          String  @unique
+  employeeNumber Int     @unique @default(autoincrement())
+  fullName       String?
+  nickName       String?
+  gender         Gender?
+  phoneNumber    String?
+  avatarUrl      String?
 
   // Personal data
   nik              String?
@@ -109,7 +111,6 @@ model Profile {
   isEmailVerified    Boolean   @default(false)
   mustChangePassword Boolean   @default(false)
   lastLoginAt        DateTime?
-  timezone           String    @default("Asia/Jakarta")
   language           String    @default("id")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -117,18 +118,23 @@ model Profile {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
   activityLogs            ActivityLog[]
-  role                    Role?                    @relation(fields: [roleId], references: [id])
-  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                    Role?                      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  user                    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   userVenueAccess         UserVenueAccess[]
+  managedVenueAccess      UserVenueAccess[]          @relation("VenueAccessManager")
   dataGroupMemberships    UserGroupMember[]
-  ledGroups               UserGroup[]              @relation("GroupLeader")
-  bookingsAsSales         Booking[]                @relation("BookingSales")
-  bookingsAsManager       Booking[]                @relation("BookingManager")
+  ledGroups               UserGroup[]                @relation("GroupLeader")
+  bookingsAsSales         Booking[]                  @relation("BookingSales")
+  bookingsAsManager       Booking[]                  @relation("BookingManager")
   uploadedDocuments       BookingDocument[]
   createdSettlements      BookingPaymentSettlement[]
   notifications           Notification[]
   bookingComments         BookingComment[]
   bookingCommentReads     BookingCommentRead[]
+  approvalSteps           ApprovalFlowStep[]
+  approvalRecordsCreated  ApprovalRecord[]           @relation("ApprovalRecordCreator")
+  approvalStepApprovals   ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
+  approvalStepDecisions   ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
 
   @@index([roleId])
   @@index([dataScope])
@@ -136,13 +142,15 @@ model Profile {
 }
 
 model Role {
-  id              String           @id @default(uuid())
-  name            String           @unique
-  description     String?
-  sortOrder       Int              @default(0)
-  createdAt       DateTime         @default(now())
-  profiles        Profile[]
-  rolePermissions RolePermission[]
+  id                  String               @id @default(uuid())
+  name                String               @unique
+  description         String?
+  sortOrder           Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  profiles            Profile[]
+  rolePermissions     RolePermission[]
+  approvalSteps       ApprovalFlowStep[]
+  approvalRecordSteps ApprovalRecordStep[] @relation("ApprovalRecordStepRole")
 
   @@map("roles")
 }
@@ -183,6 +191,7 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
   profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("password_reset_tokens")
 }
 
@@ -195,6 +204,7 @@ model EmailVerificationToken {
   createdAt DateTime  @default(now())
   profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  @@index([profileId])
   @@map("email_verification_tokens")
 }
 
@@ -212,6 +222,7 @@ model UserGroup {
   leader      Profile?          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   members     UserGroupMember[]
 
+  @@index([leaderId])
   @@map("user_groups")
 }
 
@@ -252,12 +263,13 @@ model Venue {
   isActive        Boolean           @default(true)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
-  brand           Brand?            @relation(fields: [brandId], references: [id])
+  brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
   userVenueAccess UserVenueAccess[]
   packages        Package[]
   paymentMethods  PaymentMethod[]
   bookings        Booking[]
 
+  @@index([brandId])
   @@map("venues")
 }
 
@@ -265,14 +277,17 @@ model UserVenueAccess {
   id        String           @id @default(uuid())
   userId    String
   venueId   String
+  managerId String?
   scope     VenueAccessScope @default(individual)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   profile   Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
   venue     Venue            @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  manager   Profile?         @relation("VenueAccessManager", fields: [managerId], references: [id], onDelete: SetNull)
 
   @@unique([userId, venueId])
   @@index([userId])
+  @@index([managerId])
   @@map("user_venue_access")
 }
 
@@ -290,7 +305,7 @@ model ActivityLog {
   ipAddress   String?
   userAgent   String?
   createdAt   DateTime @default(now())
-  profile     Profile? @relation(fields: [userId], references: [id])
+  profile     Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@index([userId])
@@ -323,7 +338,7 @@ model Vendor {
   address        String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  category       VendorCategory  @relation(fields: [categoryId], references: [id])
+  category       VendorCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   paymentMethods PaymentMethod[]
 
   @@index([categoryId])
@@ -331,15 +346,15 @@ model Vendor {
 }
 
 model PaymentMethod {
-  id                String          @id @default(uuid())
+  id                String                     @id @default(uuid())
   vendorId          String?
   venueId           String?
   bankName          String
   bankAccountNumber String
   bankRecipient     String
-  createdAt         DateTime        @default(now())
-  vendor            Vendor?         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  venue             Venue?          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  createdAt         DateTime                   @default(now())
+  vendor            Vendor?                    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  venue             Venue?                     @relation(fields: [venueId], references: [id], onDelete: Cascade)
   bookings          Booking[]
   settlements       BookingPaymentSettlement[]
 
@@ -351,36 +366,53 @@ model PaymentMethod {
 // ─── Packages ────────────────────────────────────────────────────────────────
 
 model Package {
-  id          String           @id @default(uuid())
-  packageName String
-  available   Boolean          @default(true)
-  venueId     String?
-  notes       String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  venue       Venue?           @relation(fields: [venueId], references: [id])
-  variants    PackageVariant[]
-  bookings    Booking[]
+  id             String           @id @default(uuid())
+  packageName    String
+  available      Boolean          @default(true)
+  approvalStatus String           @default("draft")
+  venueId        String?
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  venue          Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  variants       PackageVariant[]
+  bookings       Booking[]
 
   @@index([venueId])
   @@map("packages")
 }
 
 model PackageVariant {
-  id            String                @id @default(uuid())
-  packageId     String
-  variantName   String
-  pax           Int
-  price         Int
-  available     Boolean               @default(true)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  package       Package               @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  vendorItems   PackageVendorItem[]
-  internalItems PackageInternalItem[]
+  id             String                        @id @default(uuid())
+  packageId      String
+  variantName    String
+  pax            Int
+  margin         Float                         @default(0)
+  available      Boolean                       @default(true)
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+  package        Package                       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  vendorItems    PackageVendorItem[]
+  internalItems  PackageInternalItem[]
+  categoryPrices PackageVariantCategoryPrice[]
+  bookings       Booking[]
 
   @@index([packageId])
   @@map("package_variants")
+}
+
+model PackageVariantCategoryPrice {
+  id               String         @id @default(uuid())
+  packageVariantId String
+  categoryName     String
+  basePrice        BigInt         @default(0)
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
+
+  @@index([packageVariantId])
+  @@map("package_variant_category_prices")
 }
 
 model PackageVendorItem {
@@ -487,12 +519,6 @@ enum VenueAccessScope {
   individual
 }
 
-enum EventSession {
-  pagi
-  malam
-  fullday
-}
-
 // ─── Bookings ────────────────────────────────────────────────────────────────
 
 model Booking {
@@ -507,7 +533,6 @@ model Booking {
   lostReason            String?
   signingLocation       String?
   signatures            Json?
-  vendorComments        Json?           @default("{}")
   salesId               String
   managerId             String?
   customerId            String
@@ -519,13 +544,14 @@ model Booking {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  sales               Profile              @relation("BookingSales", fields: [salesId], references: [id])
+  sales               Profile              @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
-  customer            Customer             @relation(fields: [customerId], references: [id])
-  venue               Venue                @relation(fields: [venueId], references: [id])
-  package             Package              @relation(fields: [packageId], references: [id])
-  paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
-  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id])
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  venue               Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  package             Package              @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  packageVariant      PackageVariant?      @relation(fields: [packageVariantId], references: [id], onDelete: SetNull)
+  paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -540,19 +566,22 @@ model Booking {
   snapVendorItems          SnapVendorItem[]
 
   // Live relations
-  termOfPayments   TermOfPayment[]
-  bookingDocuments BookingDocument[]
-  bookingRefunds   BookingPaymentSettlement[] @relation("SourceSettlements")
+  termOfPayments    TermOfPayment[]
+  bookingDocuments  BookingDocument[]
+  bookingRefunds    BookingPaymentSettlement[] @relation("SourceSettlements")
   targetSettlements BookingPaymentSettlement[] @relation("TargetSettlements")
-  clientAgreement  ClientAgreement?
-  bookingComments  BookingComment[]
-  commentReads     BookingCommentRead[]
+  clientAgreement   ClientAgreement?
+  bookingComments   BookingComment[]
+  commentReads      BookingCommentRead[]
 
   @@index([salesId])
   @@index([managerId])
   @@index([customerId])
   @@index([venueId])
   @@index([packageId])
+  @@index([packageVariantId])
+  @@index([paymentMethodId])
+  @@index([sourceOfInformationId])
   @@index([bookingStatus])
   @@index([bookingDate])
   @@map("bookings")
@@ -576,17 +605,16 @@ model SnapCustomer {
 }
 
 model SnapVenue {
-  id              String   @id @default(uuid())
-  bookingId       String   @unique
-  venueId         String
-  venueName       String
-  address         String?
-  description     String?
-  extraHoursPrice BigInt?
-  brandName       String?
-  brandCode       String?
-  createdAt       DateTime @default(now())
-  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  venueId     String
+  venueName   String
+  address     String?
+  description String?
+  brandName   String?
+  brandCode   String?
+  createdAt   DateTime @default(now())
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("snap_venues")
 }
@@ -665,25 +693,25 @@ model SnapBonus {
 }
 
 model SnapVendorItem {
-  id                 String        @id @default(uuid())
+  id                 String                     @id @default(uuid())
   bookingId          String
   vendorCategoryId   String
   vendorCategoryName String
   vendorId           String
   vendorName         String
   itemName           String
-  itemPrice          BigInt        @default(0)
-  qty                Int           @default(1)
+  itemPrice          BigInt                     @default(0)
+  qty                Int                        @default(1)
   unit               String?
-  totalPrice         BigInt        @default(0)
-  isAddons           Boolean       @default(false)
+  totalPrice         BigInt                     @default(0)
+  isAddons           Boolean                    @default(false)
   paketData          Json?
   description        String?
   orderStatusId      String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  booking            Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  orderStatus        OrderStatus?  @relation(fields: [orderStatusId], references: [id], onDelete: SetNull)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  booking            Booking                    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  orderStatus        OrderStatus?               @relation(fields: [orderStatusId], references: [id], onDelete: SetNull)
   settlements        BookingPaymentSettlement[]
 
   @@index([bookingId])
@@ -725,31 +753,33 @@ model BookingDocument {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  uploader    Profile? @relation(fields: [uploadedBy], references: [id])
+  uploader    Profile? @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
+  @@index([uploadedBy])
   @@map("booking_documents")
 }
 
 model BookingComment {
-  id        String   @id @default(uuid())
-  bookingId String
-  authorId  String
-  content   String
-  mentions  String[]
-  replyToId String?
-  edited    Boolean  @default(false)
-  attachments Json   @default("[]")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  bookingId   String
+  authorId    String
+  content     String
+  mentions    String[]
+  replyToId   String?
+  edited      Boolean  @default(false)
+  attachments Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  booking Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  author  Profile         @relation(fields: [authorId], references: [id])
-  replyTo BookingComment? @relation("CommentReplies", fields: [replyToId], references: [id])
+  booking Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author  Profile          @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  replyTo BookingComment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies BookingComment[] @relation("CommentReplies")
 
   @@index([bookingId, createdAt])
   @@index([authorId])
+  @@index([replyToId])
   @@map("booking_comments")
 }
 
@@ -780,14 +810,17 @@ model BookingPaymentSettlement {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  booking          Booking          @relation("SourceSettlements", fields: [bookingId], references: [id], onDelete: Cascade)
-  targetBooking    Booking?         @relation("TargetSettlements", fields: [targetBookingId], references: [id])
-  snapVendorItem   SnapVendorItem   @relation(fields: [snapVendorItemId], references: [id], onDelete: Cascade)
-  paymentMethod    PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
-  creator          Profile?         @relation(fields: [createdBy], references: [id])
+  booking        Booking        @relation("SourceSettlements", fields: [bookingId], references: [id], onDelete: Cascade)
+  targetBooking  Booking?       @relation("TargetSettlements", fields: [targetBookingId], references: [id], onDelete: SetNull)
+  snapVendorItem SnapVendorItem @relation(fields: [snapVendorItemId], references: [id], onDelete: Cascade)
+  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  creator        Profile?       @relation(fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
   @@index([snapVendorItemId])
+  @@index([paymentMethodId])
+  @@index([targetBookingId])
+  @@index([createdBy])
   @@index([status])
   @@map("booking_payment_settlements")
 }
@@ -874,6 +907,81 @@ model ClientAgreement {
 
   @@index([token])
   @@map("client_agreements")
+}
+
+// ─── Approval Flow ────────────────────────────────────────────────────────────
+
+model ApprovalFlow {
+  id        String             @id @default(uuid())
+  module    String             @unique
+  name      String
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  steps     ApprovalFlowStep[]
+
+  @@map("approval_flows")
+}
+
+model ApprovalFlowStep {
+  id             String       @id @default(uuid())
+  flowId         String
+  sortOrder      Int
+  approverType   String // "role" | "user"
+  approverRoleId String?
+  approverUserId String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  flow           ApprovalFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  approverRole   Role?        @relation(fields: [approverRoleId], references: [id], onDelete: SetNull)
+  approverUser   Profile?     @relation(fields: [approverUserId], references: [id], onDelete: SetNull)
+
+  @@index([flowId])
+  @@index([approverRoleId])
+  @@index([approverUserId])
+  @@map("approval_flow_steps")
+}
+
+model ApprovalRecord {
+  id          String               @id @default(uuid())
+  module      String
+  entityId    String
+  status      String               @default("pending")
+  signature   String?
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  createdBy   Profile              @relation("ApprovalRecordCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  steps       ApprovalRecordStep[]
+
+  @@unique([module, entityId])
+  @@index([createdById])
+  @@map("approval_records")
+}
+
+model ApprovalRecordStep {
+  id             String         @id @default(uuid())
+  recordId       String
+  stepOrder      Int
+  approverType   String
+  approverRoleId String?
+  approverUserId String?
+  status         String         @default("pending")
+  signature      String?
+  decidedById    String?
+  decidedAt      DateTime?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  record         ApprovalRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  approverRole   Role?          @relation("ApprovalRecordStepRole", fields: [approverRoleId], references: [id], onDelete: SetNull)
+  approverUser   Profile?       @relation("ApprovalRecordStepApprover", fields: [approverUserId], references: [id], onDelete: SetNull)
+  decidedBy      Profile?       @relation("ApprovalRecordStepDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([recordId])
+  @@index([approverRoleId])
+  @@index([approverUserId])
+  @@index([decidedById])
+  @@map("approval_record_steps")
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
