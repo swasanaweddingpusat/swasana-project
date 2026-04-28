@@ -12,8 +12,10 @@ import {
   deleteVariant,
   saveVendorItems,
   saveInternalItems,
+  saveVariantPrices,
 } from "@/actions/package";
 import type { PackagesQueryResult } from "@/lib/queries/packages";
+import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
 
 export function usePackages(venueId?: string) {
   return useQuery<PackagesQueryResult>({
@@ -95,6 +97,27 @@ export function useSaveInternalItems() {
   return useMutation({
     mutationFn: ({ variantId, items }: { variantId: string; items: { itemName: string; itemDescription: string }[] }) =>
       saveInternalItems(variantId, items),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function usePackageApprovals() {
+  return useQuery<ApprovalRecordWithSteps[]>({
+    queryKey: ["package-approvals"],
+    queryFn: async () => {
+      const res = await fetch("/api/approval-records?module=package");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useSaveVariantPrices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ variantId, categories, margin }: { variantId: string; categories: { categoryName: string; basePrice: number; sortOrder: number }[]; margin: number }) =>
+      saveVariantPrices(variantId, categories, margin),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }
