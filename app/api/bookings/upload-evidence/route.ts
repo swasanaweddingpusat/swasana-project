@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
+import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { uploadToR2 } from "@/lib/r2";
 import sharp from "sharp";
@@ -9,6 +10,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "edit" });
   if (response) return response;
+  if (!mutationLimiter.check(`upload-evidence:${session.user.id}`)) return rateLimitResponse();
 
   const fd = await req.formData();
   const termId = fd.get("termId") as string;

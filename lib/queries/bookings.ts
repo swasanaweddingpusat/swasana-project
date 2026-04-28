@@ -61,20 +61,15 @@ async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
   if (!profileId || !dataScope || dataScope === "all") return {};
   if (dataScope === "own") return { salesId: profileId };
 
-  // group: find all groups this user belongs to, get all member profileIds
-  const memberships = await db.userGroupMember.findMany({
-    where: { userId: profileId },
-    select: { groupId: true },
-  });
-  if (memberships.length === 0) return { salesId: profileId }; // fallback to own
-
-  const groupIds = memberships.map((m) => m.groupId);
-  const allMembers = await db.userGroupMember.findMany({
-    where: { groupId: { in: groupIds } },
+  // group: find all sales whose UserVenueAccess.managerId = this profileId
+  const subordinateAccess = await db.userVenueAccess.findMany({
+    where: { managerId: profileId },
     select: { userId: true },
   });
-  const memberIds = [...new Set(allMembers.map((m) => m.userId))];
-  return { salesId: { in: memberIds } };
+  const subordinateIds = [...new Set(subordinateAccess.map((a) => a.userId))];
+  if (subordinateIds.length === 0) return { salesId: profileId }; // fallback to own
+
+  return { salesId: { in: [...subordinateIds, profileId] } };
 }
 
 export async function getBookingById(id: string) {

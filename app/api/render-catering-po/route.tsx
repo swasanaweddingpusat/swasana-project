@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { renderToStream } from "@react-pdf/renderer";
 import { db } from "@/lib/db";
 import { requirePermissionForRoute } from "@/lib/permissions";
+import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { CateringPOPdf } from "@/components/pdf/CateringPOPdf";
 import type { POCateringV2 } from "@/types/po-catering";
 import { format } from "date-fns";
@@ -18,6 +19,7 @@ async function loadLogo(): Promise<string | null> {
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
   if (response) return response;
+  if (!apiLimiter.check(`render-catering-po:${session.user.id}`)) return rateLimitResponse();
 
   try {
     const { bookingId } = await req.json();

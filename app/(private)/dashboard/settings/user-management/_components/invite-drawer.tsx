@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
 import type { UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { BrandsQueryResult } from "@/lib/queries/venues";
+import type { ManagerProfile } from "@/lib/queries/users";
 
 interface InviteDrawerProps {
   open: boolean;
@@ -52,6 +54,7 @@ const initialFormData = {
   roleId: "",
   venueIds: [] as string[],
   venueScopes: {} as Record<string, VenueScope>,
+  venueManagers: {} as Record<string, string>,
   dataScope: "own" as DataScope,
 };
 
@@ -67,6 +70,15 @@ export function InviteDrawer({
   const inviteUser = useInviteUser();
   const updateUser = useUpdateUser();
   const { data: groups = [] } = useGroups();
+  const { data: managers = [] } = useQuery<ManagerProfile[]>({
+    queryKey: ["managers"],
+    queryFn: async () => {
+      const res = await fetch("/api/managers");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
   const createGroup = useCreateGroup();
   const addMember = useAddGroupMember();
   const removeMember = useRemoveGroupMember();
@@ -86,8 +98,10 @@ export function InviteDrawer({
       const p = editUser.profile;
       const venueIds = p.userVenueAccess?.map((v) => v.venue.id) ?? [];
       const venueScopes: Record<string, VenueScope> = {};
+      const venueManagers: Record<string, string> = {};
       p.userVenueAccess?.forEach((v) => {
         venueScopes[v.venue.id] = (v.scope as VenueScope) ?? "individual";
+        if (v.managerId) venueManagers[v.venue.id] = v.managerId;
       });
 
       setFormData({
@@ -111,6 +125,7 @@ export function InviteDrawer({
         roleId: p.role?.id ?? "",
         venueIds,
         venueScopes,
+        venueManagers,
         dataScope: (p.dataScope as DataScope) ?? "own",
       });
 
@@ -180,9 +195,10 @@ export function InviteDrawer({
         ? [...prev.venueIds, venueId]
         : prev.venueIds.filter((id) => id !== venueId);
       const newScopes = { ...prev.venueScopes };
+      const newManagers = { ...prev.venueManagers };
       if (checked) newScopes[venueId] = newScopes[venueId] ?? "individual";
-      else delete newScopes[venueId];
-      return { ...prev, venueIds: newVenues, venueScopes: newScopes };
+      else { delete newScopes[venueId]; delete newManagers[venueId]; }
+      return { ...prev, venueIds: newVenues, venueScopes: newScopes, venueManagers: newManagers };
     });
     clearError("venueIds");
   };
@@ -197,14 +213,13 @@ export function InviteDrawer({
       if (allSelected) {
         const newVenues = prev.venueIds.filter((id) => !venueIds.includes(id));
         const newScopes = { ...prev.venueScopes };
-        venueIds.forEach((id) => delete newScopes[id]);
-        return { ...prev, venueIds: newVenues, venueScopes: newScopes };
+        const newManagers = { ...prev.venueManagers };
+        venueIds.forEach((id) => { delete newScopes[id]; delete newManagers[id]; });
+        return { ...prev, venueIds: newVenues, venueScopes: newScopes, venueManagers: newManagers };
       } else {
         const newVenues = [...new Set([...prev.venueIds, ...venueIds])];
         const newScopes = { ...prev.venueScopes };
-        venueIds.forEach((id) => {
-          if (!newScopes[id]) newScopes[id] = "individual";
-        });
+        venueIds.forEach((id) => { if (!newScopes[id]) newScopes[id] = "individual"; });
         return { ...prev, venueIds: newVenues, venueScopes: newScopes };
       }
     });
@@ -217,13 +232,11 @@ export function InviteDrawer({
       setSelectedBrands(allBrandIds);
       setFormData((prev) => {
         const newScopes = { ...prev.venueScopes };
-        allVenueIds.forEach((id) => {
-          if (!newScopes[id]) newScopes[id] = "individual";
-        });
+        allVenueIds.forEach((id) => { if (!newScopes[id]) newScopes[id] = "individual"; });
         return { ...prev, venueIds: [...allVenueIds], venueScopes: newScopes };
       });
     } else {
-      setFormData((prev) => ({ ...prev, venueIds: [], venueScopes: {} }));
+      setFormData((prev) => ({ ...prev, venueIds: [], venueScopes: {}, venueManagers: {} }));
     }
     clearError("venueIds");
   };
@@ -242,6 +255,7 @@ export function InviteDrawer({
         roleId: formData.roleId,
         venueIds: formData.venueIds,
         venueScopes: formData.venueScopes,
+        venueManagers: formData.venueManagers,
         dataScope: formData.dataScope,
         placeOfBirth: formData.placeOfBirth || undefined,
         dateOfBirth: formData.dateOfBirth || undefined,
@@ -289,6 +303,7 @@ export function InviteDrawer({
       fd.set("roleId", formData.roleId);
       fd.set("venueIds", JSON.stringify(formData.venueIds));
       fd.set("venueScopes", JSON.stringify(formData.venueScopes));
+      fd.set("venueManagers", JSON.stringify(formData.venueManagers));
       fd.set("dataScope", formData.dataScope);
 
       const result = await inviteUser.mutateAsync(fd);
@@ -609,34 +624,54 @@ export function InviteDrawer({
                                   venue.id
                                 );
                                 return (
-                                  <div
-                                    key={venue.id}
-                                    className={cn(
-                                      "flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer",
-                                      isSelected
-                                        ? "bg-gray-900 text-white"
-                                        : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-                                    )}
-                                    onClick={() =>
-                                      toggleVenue(venue.id, !isSelected)
-                                    }
-                                  >
-                                    <Checkbox
-                                      id={venue.id}
-                                      checked={isSelected}
-                                      onCheckedChange={(checked) =>
-                                        toggleVenue(venue.id, checked as boolean)
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
+                                  <div key={venue.id} className="space-y-1.5">
+                                    <div
                                       className={cn(
-                                        "shrink-0 border-gray-300",
-                                        isSelected &&
-                                          "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900"
+                                        "flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer",
+                                        isSelected
+                                          ? "bg-gray-900 text-white"
+                                          : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                                       )}
-                                    />
-                                    <span className="text-xs font-medium flex-1 truncate">
-                                      {venue.name}
-                                    </span>
+                                      onClick={() =>
+                                        toggleVenue(venue.id, !isSelected)
+                                      }
+                                    >
+                                      <Checkbox
+                                        id={venue.id}
+                                        checked={isSelected}
+                                        onCheckedChange={(checked) =>
+                                          toggleVenue(venue.id, checked as boolean)
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={cn(
+                                          "shrink-0 border-gray-300",
+                                          isSelected &&
+                                            "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900"
+                                        )}
+                                      />
+                                      <span className="text-xs font-medium flex-1 truncate">
+                                        {venue.name}
+                                      </span>
+                                    </div>
+                                    {isSelected && managers.length > 0 && (
+                                      <div className="pl-7 pr-1">
+                                        <SearchableSelect
+                                          options={[{ id: "", name: "Tanpa manager" }, ...managers.map((m) => ({ id: m.id, name: m.fullName ?? "" }))]}
+                                          value={formData.venueManagers[venue.id] ?? ""}
+                                          onChange={(v) =>
+                                            setFormData((prev) => ({
+                                              ...prev,
+                                              venueManagers: v
+                                                ? { ...prev.venueManagers, [venue.id]: v }
+                                                : (() => { const n = { ...prev.venueManagers }; delete n[venue.id]; return n; })(),
+                                            }))
+                                          }
+                                          placeholder="Pilih manager (opsional)"
+                                          searchPlaceholder="Cari manager..."
+                                          emptyText="Tidak ada manager"
+                                        />
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}

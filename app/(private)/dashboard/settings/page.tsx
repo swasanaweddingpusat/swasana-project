@@ -10,6 +10,7 @@ import {
   Info,
   ListOrdered,
   GraduationCap,
+  GitPullRequestArrow,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +49,12 @@ const GROUPS: SettingGroup[] = [
         description: "Kelola role dan permission.",
         icon: ShieldCheck,
         href: "/dashboard/settings/roles",
+      },
+      {
+        title: "Approval Flow",
+        description: "Atur alur persetujuan untuk setiap modul.",
+        icon: GitPullRequestArrow,
+        href: "/dashboard/settings/approval-flow",
       },
     ],
   },

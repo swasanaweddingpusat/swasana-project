@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Building2, Globe, User, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
@@ -15,6 +16,7 @@ import { bulkUpdateUsers } from "@/actions/user";
 import { useGroups } from "@/hooks/use-groups";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { BrandsQueryResult } from "@/lib/queries/venues";
+import type { ManagerProfile } from "@/lib/queries/users";
 
 type VenueScope = "general" | "individual";
 type DataScope = "own" | "group" | "all";
@@ -30,16 +32,26 @@ interface Props {
 
 export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, onSuccess }: Props) {
   const { data: groups = [] } = useGroups();
+  const { data: managers = [] } = useQuery<ManagerProfile[]>({
+    queryKey: ["managers"],
+    queryFn: async () => {
+      const res = await fetch("/api/managers");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
   const [roleId, setRoleId] = useState("");
   const [venueIds, setVenueIds] = useState<string[]>([]);
   const [venueScopes, setVenueScopes] = useState<Record<string, VenueScope>>({});
+  const [venueManagers, setVenueManagers] = useState<Record<string, string>>({});
   const [dataScope, setDataScope] = useState<DataScope>("own");
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
   const handleClose = () => {
-    setRoleId(""); setVenueIds([]); setVenueScopes({}); setDataScope("own");
+    setRoleId(""); setVenueIds([]); setVenueScopes({}); setVenueManagers({}); setDataScope("own");
     setSelectedGroupIds([]); setExpandedBrands(new Set());
     onClose();
   };
@@ -51,6 +63,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
     } else {
       setVenueIds((prev) => prev.filter((id) => id !== venueId));
       setVenueScopes((prev) => { const n = { ...prev }; delete n[venueId]; return n; });
+      setVenueManagers((prev) => { const n = { ...prev }; delete n[venueId]; return n; });
     }
   };
 
@@ -62,6 +75,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
     if (allSelected) {
       setVenueIds((prev) => prev.filter((id) => !ids.includes(id)));
       setVenueScopes((prev) => { const n = { ...prev }; ids.forEach((id) => delete n[id]); return n; });
+      setVenueManagers((prev) => { const n = { ...prev }; ids.forEach((id) => delete n[id]); return n; });
     } else {
       setVenueIds((prev) => [...new Set([...prev, ...ids])]);
       setVenueScopes((prev) => { const n = { ...prev }; ids.forEach((id) => { if (!n[id]) n[id] = "individual"; }); return n; });
@@ -77,7 +91,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
       setVenueScopes(Object.fromEntries(allVenueIds.map((id) => [id, "individual" as VenueScope])));
       setExpandedBrands(new Set(brands.map((b) => b.id)));
     } else {
-      setVenueIds([]); setVenueScopes({}); setExpandedBrands(new Set());
+      setVenueIds([]); setVenueScopes({}); setVenueManagers({}); setExpandedBrands(new Set());
     }
   };
 
@@ -87,7 +101,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
     const result = await bulkUpdateUsers({
       userIds: selectedUserIds,
       ...(roleId && { roleId }),
-      ...(venueIds.length > 0 && { venueIds, venueScopes }),
+      ...(venueIds.length > 0 && { venueIds, venueScopes, venueManagers }),
       dataScope,
       ...(dataScope === "group" && selectedGroupIds.length > 0 && { groupIds: selectedGroupIds }),
     });
@@ -211,9 +225,27 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                             {brandVenues.map((venue) => {
                               const isSelected = venueIds.includes(venue.id);
                               return (
-                                <div key={venue.id} className={cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer", isSelected ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700 hover:bg-gray-100")} onClick={() => toggleVenue(venue.id, !isSelected)}>
-                                  <Checkbox checked={isSelected} onCheckedChange={(c) => toggleVenue(venue.id, c as boolean)} onClick={(e) => e.stopPropagation()} className={cn("shrink-0 border-gray-300", isSelected && "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900")} />
-                                  <span className="text-xs font-medium flex-1 truncate">{venue.name}</span>
+                                <div key={venue.id} className="space-y-1.5">
+                                  <div className={cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer", isSelected ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700 hover:bg-gray-100")} onClick={() => toggleVenue(venue.id, !isSelected)}>
+                                    <Checkbox checked={isSelected} onCheckedChange={(c) => toggleVenue(venue.id, c as boolean)} onClick={(e) => e.stopPropagation()} className={cn("shrink-0 border-gray-300", isSelected && "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900")} />
+                                    <span className="text-xs font-medium flex-1 truncate">{venue.name}</span>
+                                  </div>
+                                  {isSelected && managers.length > 0 && (
+                                    <div className="pl-7 pr-1">
+                                      <SearchableSelect
+                                        options={[{ id: "", name: "Tanpa manager" }, ...managers.map((m) => ({ id: m.id, name: m.fullName ?? "" }))]}
+                                        value={venueManagers[venue.id] ?? ""}
+                                        onChange={(v) =>
+                                          setVenueManagers((prev) =>
+                                            v ? { ...prev, [venue.id]: v } : (() => { const n = { ...prev }; delete n[venue.id]; return n; })()
+                                          )
+                                        }
+                                        placeholder="Pilih manager (opsional)"
+                                        searchPlaceholder="Cari manager..."
+                                        emptyText="Tidak ada manager"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}

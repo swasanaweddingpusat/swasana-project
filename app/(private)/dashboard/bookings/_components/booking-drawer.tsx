@@ -30,7 +30,7 @@ interface BookingDrawerProps {
 
 type Option = { id: string; name: string };
 interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null }
-interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; price: number }[] }
+interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; margin: number; categoryPrices: { basePrice: number }[] }[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
@@ -44,6 +44,11 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
+}
+
+function getVariantPrice(v: PackageData["variants"][number]) {
+  const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+  return base + Math.round(base * ((v.margin ?? 0) / 100));
 }
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -123,7 +128,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
 
   const [selectedVenueId, setSelectedVenueId] = useState("");
-  const { data: packages = [] } = useQuery({ queryKey: ["packages", selectedVenueId], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
+  const { data: packages = [] } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
   const { data: paymentMethods = [] } = useQuery({ queryKey: ["payment-methods"], queryFn: () => fetchJson<PaymentMethodData[]>("/api/payment-methods"), staleTime: 5 * 60_000 });
   const venuePaymentMethods = paymentMethods.filter((pm) => pm.venueId === selectedVenueId);
 
@@ -418,7 +423,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <FormField control={form.control} name="packageVariantId" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium text-gray-700">Pilih Tipe Paket *</FormLabel>
-                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(v.price)}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { setSelectedVariantPrice(v.price); allocatePrice(v.price, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
+                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
                         <FormMessage />
                       </FormItem>
                     )} />
