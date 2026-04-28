@@ -17,7 +17,8 @@ export async function GET(request: Request) {
     const forBooking = searchParams.get("forBooking") === "true";
     const result = forBooking ? await getPackagesForBooking(venueId) : await getPackages(venueId);
     return Response.json(result);
-  } catch {
+  } catch (error) {
+    console.error("[GET /api/packages]", error);
     return Response.json({ error: "Failed to fetch packages" }, { status: 500 });
   }
 }

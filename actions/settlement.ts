@@ -39,7 +39,7 @@ export async function createSettlement(input: {
           bookingId: item.bookingId,
           snapVendorItemId: input.snapVendorItemId,
           type: input.type,
-          amount: BigInt(input.amount),
+          amount: input.amount,
           paymentMethodId: input.paymentMethodId ?? null,
           targetBookingId: input.targetBookingId ?? null,
           notes: input.notes ?? null,

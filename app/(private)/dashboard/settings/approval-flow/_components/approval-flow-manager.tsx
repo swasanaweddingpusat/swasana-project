@@ -25,7 +25,7 @@ import type { UsersQueryResult } from "@/lib/queries/users";
 
 interface LocalStep {
   tempId: string;
-  approverType: "role" | "user";
+  approverType: "role" | "user" | "client";
   approverRoleId: string | null;
   approverUserId: string | null;
 }
@@ -109,7 +109,7 @@ export function ApprovalFlowManager() {
     setFormActive(flow.active);
     setFormSteps(flow.steps.map((s, i) => ({
       tempId: `step-${i}-${Date.now()}`,
-      approverType: s.approverType as "role" | "user",
+      approverType: s.approverType as "role" | "user" | "client",
       approverRoleId: s.approverRoleId,
       approverUserId: s.approverUserId,
     })));
@@ -127,7 +127,7 @@ export function ApprovalFlowManager() {
   function updateStep(tempId: string, field: keyof LocalStep, value: string | null) {
     setFormSteps((prev) => prev.map((s) => {
       if (s.tempId !== tempId) return s;
-      if (field === "approverType") return { ...s, approverType: value as "role" | "user", approverRoleId: null, approverUserId: null };
+      if (field === "approverType") return { ...s, approverType: value as "role" | "user" | "client", approverRoleId: null, approverUserId: null };
       return { ...s, [field]: value };
     }));
   }
@@ -169,6 +169,7 @@ export function ApprovalFlowManager() {
 
   function getStepsSummary(flow: ApprovalFlowItem) {
     return flow.steps.map((s) => {
+      if (s.approverType === "client") return "Client";
       if (s.approverType === "role") return s.approverRole?.name ?? "—";
       return s.approverUser?.fullName ?? "—";
     }).join(" → ");
@@ -287,9 +288,12 @@ export function ApprovalFlowManager() {
                             >
                               <option value="role">Role</option>
                               <option value="user">User</option>
+                              <option value="client">Client</option>
                             </select>
                             <div className="flex-1">
-                              {step.approverType === "role" ? (
+                              {step.approverType === "client" ? (
+                                <span className="text-sm text-muted-foreground px-2">Client (via Agreement Link)</span>
+                              ) : step.approverType === "role" ? (
                                 <SearchableSelect
                                   options={rolesData.map((r) => ({ id: r.id, name: r.name }))}
                                   value={step.approverRoleId ?? ""}

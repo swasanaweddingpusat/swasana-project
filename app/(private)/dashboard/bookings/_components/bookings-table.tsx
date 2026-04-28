@@ -2,8 +2,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import SignatureCanvas from "react-signature-canvas";
+import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, CheckSquare, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, ListChecks, Palette, MessageSquare } from "lucide-react";
+import { Plus, CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, ListChecks, Palette, MessageSquare } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
-import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useApproveBooking } from "@/hooks/use-bookings";
+import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { approveCategoryPO } from "@/actions/catering-approval";
 import { BookingDrawer } from "./booking-drawer";
@@ -90,8 +91,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const deleteMut = useDeleteBooking();
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
-  const approveMut = useApproveBooking();
   const { can } = usePermissions();
+  const { user } = useCurrentUser();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -99,9 +100,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
-  const [approveTarget, setApproveTarget] = useState<BookingListItem | null>(null);
-  const [hasSigned, setHasSigned] = useState(false);
-  const sigRef = useRef<SignatureCanvas>(null);
+  const [approvalTarget, setApprovalTarget] = useState<BookingListItem | null>(null);
+  const [approveModalData, setApproveModalData] = useState<{ stepId: string; stepLabel: string; bookingName: string } | null>(null);
   const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
   const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
@@ -124,6 +124,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
+
+  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
+    queryKey: ["booking-approvals"],
+    queryFn: async () => {
+      const res = await fetch("/api/approval-records?module=booking");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const approvalMap = new Map(bookingApprovals.map((r) => [r.entityId, r]));
 
   const filtered = bookings.filter((b: BookingListItem) => {
     if (!search.trim()) return true;
@@ -197,6 +208,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[14%]">Package</TableHead>
                     <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[10%]">Event Date</TableHead>
                     <TableHead className="px-2 py-2 text-[#475467] hidden lg:table-cell w-[8%]">Activity</TableHead>
+                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[8%]">Approval</TableHead>
                     <TableHead className="px-1 py-2 text-[#475467] text-right pr-5 w-[15%]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -291,6 +303,28 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         </button>
                       </TableCell>
 
+                      {/* Approval */}
+                      <TableCell className="px-2 py-2 hidden sm:table-cell" onClick={(e) => e.stopPropagation()}>
+                        {(() => {
+                          const record = approvalMap.get(booking.id);
+                          if (!record) return <span className="text-xs text-muted-foreground">—</span>;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setApprovalTarget(booking)}
+                              className={cn(
+                                "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                                record.status === "approved" && "bg-primary text-primary-foreground",
+                                record.status === "pending" && "bg-muted text-muted-foreground",
+                                record.status === "rejected" && "bg-destructive/10 text-destructive",
+                              )}
+                            >
+                              {record.status === "approved" ? "Approved" : record.status === "pending" ? "Pending" : "Rejected"}
+                            </button>
+                          );
+                        })()}
+                      </TableCell>
+
                       {/* Action */}
                       <TableCell className="px-1 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-end">
@@ -350,13 +384,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                           {approvalCache[`${booking.id}_catering`]?.dirops ? "Direktur Ops Approved ✓" : "Approve Direktur Ops"}
                                         </DropdownMenuItem>
                                         )}
-                                      {can("booking", "approve_oprations") && (
+                                      {can("booking", "approve_operations") && (
                                       <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.oprations}
                                         onClick={() => !approvalCache[`${booking.id}_catering`]?.oprations && setVendorApproveModal({ open: true, bookingId: booking.id, role: "oprations", roleLabel: "Oprations", categoryType: "catering" })}>
                                         {approvalCache[`${booking.id}_catering`]?.oprations ? "Oprations Approved ✓" : "Approve Oprations"}
                                       </DropdownMenuItem>
                                       )}
-                                      {(can("booking", "approve_finance") || can("booking", "approve_manager") || can("booking", "approve_oprations")) && <DropdownMenuSeparator />}
+                                      {(can("booking", "approve_finance") || can("booking", "approve_manager") || can("booking", "approve_operations")) && <DropdownMenuSeparator />}
                                       {can("booking", "print") && (
                                       <DropdownMenuItem className="cursor-pointer" onClick={async () => {
                                         const t = toast.loading("Membuat PDF Catering...");
@@ -417,6 +451,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
                                 <Eye className="mr-2 h-4 w-4" /> Lihat Detail
                               </DropdownMenuItem>
+                              {(() => {
+                                const record = approvalMap.get(booking.id);
+                                if (!record) return null;
+                                return record.steps.map((step) => {
+                                  const label = step.approverType === "client" ? "Client" : step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+                                  const isApproved = step.status === "approved";
+                                  const isRejected = step.status === "rejected";
+                                  return (
+                                    <DropdownMenuItem key={step.id} disabled className="cursor-default text-xs">
+                                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `⏳ ${label}`}
+                                    </DropdownMenuItem>
+                                  );
+                                });
+                              })()}
+                              <DropdownMenuSeparator />
                               {can("booking", "edit") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
                                 <Pencil className="mr-2 h-4 w-4" /> Edit Booking
@@ -454,12 +503,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                   <Printer className="mr-2 h-4 w-4" /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
                                 </DropdownMenuItem>
                               )}
-                              {((can("booking", "approve") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
-                              {can("booking", "approve") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
-                                <DropdownMenuItem className="cursor-pointer" onClick={() => setApproveTarget(booking)}>
-                                  <CheckSquare className="mr-2 h-4 w-4" /> Approve Booking
-                                </DropdownMenuItem>
-                              )}
+                              {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
                               {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
                                   <SquareX className="mr-2 h-4 w-4 text-red-500" /> Reject Booking
@@ -532,82 +576,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Approve — signature canvas modal */}
-      {approveTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-[#19202C]">Approve Booking</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Tanda tangan manager diperlukan untuk menyetujui booking{" "}
-                  <span className="font-semibold text-gray-800">{approveTarget.snapCustomer?.name}</span>
-                </p>
-              </div>
-              <button
-                type="button"
-                className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
-                onClick={() => { setApproveTarget(null); setHasSigned(false); sigRef.current?.clear(); }}
-                aria-label="Tutup"
-              >
-                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Tanda Tangan Manager</label>
-              <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50">
-                <SignatureCanvas
-                  ref={sigRef}
-                  penColor="black"
-                  canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
-                  onEnd={() => setHasSigned(true)}
-                />
-              </div>
-              <button
-                type="button"
-                className="mt-1.5 text-xs text-red-500 hover:text-red-700 underline"
-                onClick={() => { sigRef.current?.clear(); setHasSigned(false); }}
-              >
-                Hapus tanda tangan
-              </button>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                className={cn(
-                  "flex-1 bg-black text-white rounded-lg py-2 font-medium text-sm hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                )}
-                disabled={!hasSigned || approveMut.isPending}
-                onClick={async () => {
-                  if (!hasSigned || sigRef.current?.isEmpty()) {
-                    toast.error("Tanda tangan manager harus diisi");
-                    return;
-                  }
-                  const signatureData = sigRef.current!.toDataURL("image/png");
-                  const r = await approveMut.mutateAsync({ id: approveTarget.id, signatureManager: signatureData });
-                  if (!r.success) toast.error(r.error);
-                  else { toast.success("Booking berhasil di-approve."); refetch(); }
-                  setApproveTarget(null);
-                  setHasSigned(false);
-                  sigRef.current?.clear();
-                }}
-              >
-                {approveMut.isPending ? "Menyetujui..." : "Setujui"}
-              </button>
-              <button
-                type="button"
-                className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition"
-                onClick={() => { setApproveTarget(null); setHasSigned(false); sigRef.current?.clear(); }}
-              >
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Reject */}
       {rejectTarget && (

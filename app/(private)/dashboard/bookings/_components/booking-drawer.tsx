@@ -29,7 +29,7 @@ interface BookingDrawerProps {
 }
 
 type Option = { id: string; name: string };
-interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null }
+interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null }
 interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; margin: number; categoryPrices: { basePrice: number }[] }[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
@@ -332,10 +332,16 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         form.setValue("customerId", opt.id);
                         const c = customers.find((x) => x.id === opt.id);
                         if (c) {
-                          if (c.mobileNumber) setContactNumbers(c.mobileNumber.split(",").map((n) => n.trim()).filter(Boolean));
+                          if (c.mobileNumber) {
+                            const nums = Array.isArray(c.mobileNumber)
+                              ? (c.mobileNumber as Array<{ name?: string; number: string }>).map((e) => e.number)
+                              : String(c.mobileNumber).split(",").map((n) => n.trim()).filter(Boolean);
+                            setContactNumbers(nums);
+                          }
                           if (c.email) setContactEmail(c.email);
                           if (c.nikNumber) setContactNik(c.nikNumber);
                           if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
+                          if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
                         }
                       }}
                       placeholder="e.g. John Doe & Jane Doe"

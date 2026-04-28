@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { customerSchema, type CustomerInput } from "@/lib/validations/customer";
+import { type CustomerInput, type MobileNumberEntry, parseMobileNumbers } from "@/lib/validations/customer";
 import { useCreateCustomer, useUpdateCustomer } from "@/hooks/use-customers";
 import { createSourceOfInformation } from "@/actions/source-of-information";
 import { createMemberStatus } from "@/actions/member-status";
@@ -26,7 +26,7 @@ interface CustomerDrawerProps {
 type OptionItem = { id: string; name: string };
 
 const DRAFT_KEY = "customer_drawer_draft";
-interface CustomerDraft { name: string; mobileNumbers: string[]; email: string; nikNumber: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
+interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; email: string; nikNumber: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
 function saveDraft(d: CustomerDraft) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ } }
 function loadDraft(): CustomerDraft | null { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
@@ -55,14 +55,13 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     staleTime: 5 * 60 * 1000,
   });
 
-  // Store selected names (SearchableSelect uses id, but we store name in Customer)
   const [typeValue, setTypeValue] = useState("");
   const [memberStatusValue, setMemberStatusValue] = useState("");
-  const [mobileNumbers, setMobileNumbers] = useState<string[]>([]);
-  const mobileInputRef = useRef<HTMLInputElement>(null);
+  const [mobileNumbers, setMobileNumbers] = useState<MobileNumberEntry[]>([]);
+  const [mobileInput, setMobileInput] = useState({ name: "", number: "" });
 
-  const form = useForm<CustomerInput>({
-    defaultValues: { name: "", mobileNumber: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
+  const form = useForm<Omit<CustomerInput, "mobileNumber">>({
+    defaultValues: { name: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
 
   useEffect(() => {
@@ -71,20 +70,20 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
       const mv = editCustomer?.memberStatus ?? "Non-Member";
       setTypeValue(tv);
       setMemberStatusValue(mv);
+      setMobileInput({ name: "", number: "" });
       if (!editCustomer) {
         const draft = loadDraft();
         if (draft) {
           setMobileNumbers(draft.mobileNumbers ?? []);
           setTypeValue(draft.type ?? "");
           setMemberStatusValue(draft.memberStatus ?? "Non-Member");
-          form.reset({ name: draft.name, mobileNumber: draft.mobileNumbers.join(","), email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
+          form.reset({ name: draft.name, email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
           return;
         }
       }
-      setMobileNumbers(editCustomer?.mobileNumber ? editCustomer.mobileNumber.split(",").map((n) => n.trim()).filter(Boolean) : []);
+      setMobileNumbers(parseMobileNumbers(editCustomer?.mobileNumber));
       form.reset({
         name: editCustomer?.name ?? "",
-        mobileNumber: editCustomer?.mobileNumber ?? "",
         email: editCustomer?.email ?? "",
         nikNumber: editCustomer?.nikNumber ?? "",
         ktpAddress: editCustomer?.ktpAddress ?? "",
@@ -97,7 +96,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     }
   }, [open, editCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync type/memberStatus value setelah options ke-load (fix race condition)
   useEffect(() => {
     if (!open || !editCustomer) return;
     if (sourceOptions.length > 0 && editCustomer.type) {
@@ -114,18 +112,16 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     }
   }, [memberStatusOptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save draft on every change (create mode only)
   useEffect(() => {
     if (!open || editCustomer) return;
     const values = form.getValues();
     saveDraft({ name: values.name, mobileNumbers, email: values.email, nikNumber: values.nikNumber ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
-  }); // intentionally no deps — runs on every render
+  }); // intentionally no deps
 
   async function handleAddSourceOfInfo(name: string) {
     const result = await createSourceOfInformation(name);
     if (!result.success) { toast.error(result.error); return; }
     qc.invalidateQueries({ queryKey: ["source-of-informations"] });
-    // Select the newly added item
     setTypeValue(name);
     form.setValue("type", name);
     toast.success(`"${name}" ditambahkan.`);
@@ -140,7 +136,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     toast.success(`"${name}" ditambahkan.`);
   }
 
-  // Convert name-based value to option id for SearchableSelect
   function nameToId(options: OptionItem[], name: string) {
     return options.find((o) => o.name === name)?.id ?? name;
   }
@@ -149,15 +144,21 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     return options.find((o) => o.id === id)?.name ?? id;
   }
 
-  async function onSubmit(values: CustomerInput) {
+  function addMobileNumber() {
+    const num = mobileInput.number.trim().replace(/\D/g, "");
+    if (!num) return;
+    if (mobileNumbers.some((e) => e.number === num)) { toast.error("Nomor sudah ada"); return; }
+    setMobileNumbers((prev) => [...prev, { name: mobileInput.name.trim(), number: num }]);
+    setMobileInput({ name: "", number: "" });
+  }
+
+  async function onSubmit(values: Omit<CustomerInput, "mobileNumber">) {
     if (mobileNumbers.length === 0) { toast.error("Nomor HP wajib diisi"); return; }
-    const payload = { ...values, mobileNumber: mobileNumbers.join(",") };
-    const parsed = customerSchema.safeParse(payload);
-    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
+    const payload = { ...values, mobileNumber: mobileNumbers };
 
     const result = isEdit
-      ? await updateMut.mutateAsync({ id: editCustomer!.id, ...parsed.data })
-      : await createMut.mutateAsync(parsed.data);
+      ? await updateMut.mutateAsync({ id: editCustomer!.id, ...payload })
+      : await createMut.mutateAsync(payload);
 
     if (!result.success) { toast.error(result.error); return; }
     clearDraft();
@@ -180,30 +181,44 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               )} />
               <FormItem>
                 <FormLabel>No. HP *</FormLabel>
-                <div className="flex flex-wrap gap-2 bg-white border border-gray-300 rounded-lg px-2 py-2">
-                  {mobileNumbers.map((num, idx) => (
-                    <span key={idx} className="flex items-center bg-[#FAFAFA] border rounded-lg px-3 text-sm font-normal text-black gap-2">
-                      {num}
-                      <button type="button" className="ml-1 text-red-600 hover:bg-red-100 rounded-full p-1" onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
-                        <X className="w-4 h-4" />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    ref={mobileInputRef}
-                    type="text"
-                    inputMode="numeric"
-                    className="flex-1 min-w-30 border-none outline-none bg-transparent text-sm px-2"
-                    placeholder="e.g. 081234567890"
-                    onKeyDown={(e) => {
-                      const val = e.currentTarget.value.trim().replace(/\D/g, "");
-                      if ((e.key === "Enter" || e.key === ",") && val) {
-                        e.preventDefault();
-                        if (!mobileNumbers.includes(val)) setMobileNumbers((prev) => [...prev, val]);
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                  />
+                <div className="space-y-2">
+                  {/* Existing chips */}
+                  {mobileNumbers.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {mobileNumbers.map((entry, idx) => (
+                        <span key={idx} className="flex items-center bg-secondary border rounded-lg px-3 py-1 text-sm gap-2">
+                          {entry.name ? <span className="font-medium">{entry.name}</span> : null}
+                          {entry.name ? <span className="text-muted-foreground">—</span> : null}
+                          <span>{entry.number}</span>
+                          <button type="button" className="ml-1 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Input row */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={mobileInput.name}
+                      onChange={(e) => setMobileInput((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Label (opsional)"
+                      className="flex-1"
+                    />
+                    <Input
+                      value={mobileInput.number}
+                      onChange={(e) => setMobileInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))}
+                      placeholder="081234567890"
+                      inputMode="numeric"
+                      className="flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); addMobileNumber(); }
+                      }}
+                    />
+                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={addMobileNumber}>
+                      Tambah
+                    </Button>
+                  </div>
                 </div>
               </FormItem>
               <FormField control={form.control} name="email" render={({ field }) => (
@@ -222,8 +237,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <Textarea {...field} placeholder="Jl. Melati No. 10, Jakarta Selatan" rows={2} />
                 </FormControl><FormMessage /></FormItem>
               )} />
-
-              {/* Type — SearchableSelect from source_of_informations */}
               <FormField control={form.control} name="bitrixId" render={({ field }) => (
                 <FormItem><FormLabel>Bitrix ID</FormLabel><FormControl>
                   <Input {...field} placeholder="e.g. 12345" />
@@ -249,14 +262,11 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <FormMessage />
                 </FormItem>
               )} />
-
               <FormField control={form.control} name="club" render={({ field }) => (
                 <FormItem><FormLabel>Club (opsional)</FormLabel><FormControl>
                   <Input {...field} />
                 </FormControl><FormMessage /></FormItem>
               )} />
-
-              {/* Member Status — SearchableSelect from customer_member_statuses */}
               <FormField control={form.control} name="memberStatus" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Member Status</FormLabel>
@@ -277,7 +287,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <FormMessage />
                 </FormItem>
               )} />
-
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem><FormLabel>Notes</FormLabel><FormControl>
                   <Input {...field} placeholder="Prefer tanggal weekend..." />
@@ -288,7 +297,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         </div>
         <div className="sticky bottom-0 bg-white pt-4">
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1 cursor-pointer text-red-600 border-red-600 hover:bg-red-50" disabled={isPending}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1 cursor-pointer" disabled={isPending}>
               Batal
             </Button>
             <Button onClick={form.handleSubmit(onSubmit)} className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer" disabled={isPending}>

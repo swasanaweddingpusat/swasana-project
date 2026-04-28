@@ -8,13 +8,20 @@ import { logAudit } from "@/lib/audit";
 type ApprovalRole = "finance" | "dirops" | "oprations";
 type CategoryType = "catering" | "decoration";
 
+const rolePermissionMap: Record<ApprovalRole, string> = {
+  finance: "approve_finance",
+  dirops: "approve_manager",
+  oprations: "approve_operations",
+};
+
 export async function approveCategoryPO(
   bookingId: string,
   categoryType: CategoryType,
   role: ApprovalRole,
   signature: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { session, error } = await requirePermission({ module: "booking", action: "approve" });
+  const requiredAction = rolePermissionMap[role] ?? "approve";
+  const { session, error } = await requirePermission({ module: "booking", action: requiredAction });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`approve-po:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

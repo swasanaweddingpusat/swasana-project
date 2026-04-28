@@ -6,7 +6,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { revalidateTag } from "next/cache";
 
 export async function approveStep(stepId: string, signature: string) {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
+  const permResult = await requirePermission({ module: "approval", action: "edit" });
   if (permResult.error) return { success: false as const, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };
@@ -47,6 +47,9 @@ export async function approveStep(stepId: string, signature: string) {
         if (step.record.module === "package") {
           await tx.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } });
         }
+        if (step.record.module === "booking") {
+          await tx.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } });
+        }
       }
     });
 
@@ -58,6 +61,7 @@ export async function approveStep(stepId: string, signature: string) {
 
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
+    revalidateTag("bookings", "max");
 
     return { success: true as const };
   } catch (e) {
@@ -67,7 +71,7 @@ export async function approveStep(stepId: string, signature: string) {
 }
 
 export async function rejectStep(stepId: string, notes: string) {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
+  const permResult = await requirePermission({ module: "approval", action: "edit" });
   if (permResult.error) return { success: false as const, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };
@@ -96,12 +100,16 @@ export async function rejectStep(stepId: string, notes: string) {
       if (step.record.module === "package") {
         await tx.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "rejected" } });
       }
+      if (step.record.module === "booking") {
+        await tx.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } });
+      }
     });
 
     await notifyCreator(step.record, `Ditolak: ${notes.trim()}`);
 
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
+    revalidateTag("bookings", "max");
 
     return { success: true as const };
   } catch (e) {
@@ -121,6 +129,7 @@ async function checkApprover(
   const superAdminRole = await db.role.findUnique({ where: { name: "Super Admin" }, select: { id: true } });
   if (superAdminRole && roleId === superAdminRole.id) return true;
 
+  if (step.approverType === "client") return false;
   if (step.approverType === "user") return step.approverUserId === profileId;
   if (step.approverType === "role") return step.approverRoleId === roleId;
   return false;

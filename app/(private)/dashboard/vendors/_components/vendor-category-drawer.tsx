@@ -22,7 +22,6 @@ export function VendorCategoryDrawer({ isOpen, onClose, category }: VendorCatego
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [sortOrder, setSortOrder] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const isEdit = !!category;
@@ -31,11 +30,9 @@ export function VendorCategoryDrawer({ isOpen, onClose, category }: VendorCatego
     if (isOpen && category) {
       setName(category.name);
       setDescription(category.description ?? "");
-      setSortOrder(category.sortOrder);
     } else if (isOpen) {
       setName("");
       setDescription("");
-      setSortOrder(0);
     }
   }, [isOpen, category]);
 
@@ -46,7 +43,7 @@ export function VendorCategoryDrawer({ isOpen, onClose, category }: VendorCatego
     }
     setSaving(true);
     try {
-      const data = { name: name.trim(), description: description.trim() || null, sortOrder };
+      const data = { name: name.trim(), description: description.trim() || null };
       const res = isEdit
         ? await updateMut.mutateAsync({ id: category!.id, data })
         : await createMut.mutateAsync(data);
@@ -76,12 +73,6 @@ export function VendorCategoryDrawer({ isOpen, onClose, category }: VendorCatego
           <div className="space-y-1">
             <Label className="text-sm font-medium">Description (Optional)</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi kategori" className="border-[#CCCCCC] bg-[#F9F9F9]" />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-sm font-medium">Urutan</Label>
-            <Input type="number" value={sortOrder} onChange={(e) => setSortOrder(parseInt(e.target.value) || 0)} min={0} className="border-[#CCCCCC] bg-[#F9F9F9]" />
-            <p className="text-xs text-muted-foreground">Angka lebih kecil tampil lebih atas</p>
           </div>
         </div>
 

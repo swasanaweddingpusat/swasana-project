@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { bookingSchema, updateBookingSchema, editBookingSchema, approveBookingSchema } from "@/lib/validations/booking";
+import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/validations/booking";
+import { getNextSequence } from "@/lib/counter";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -44,7 +45,7 @@ export async function createBooking(data: unknown) {
       if (!existing) return { success: false, error: "Customer tidak ditemukan." };
 
       const updates: Record<string, unknown> = {};
-      if (input.contactNumbers) updates.mobileNumber = input.contactNumbers;
+      if (input.contactNumbers) updates.mobileNumber = input.contactNumbers.split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
       if (input.contactEmail) updates.email = input.contactEmail;
       if (input.contactNik) updates.nikNumber = input.contactNik;
       if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
@@ -79,11 +80,19 @@ export async function createBooking(data: unknown) {
     const poNumber = `${(bookingCount + 1).toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/W/${dd}-${mm}-${yy}`;
 
     const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
-    const generateInvoiceNumber = (termIndex: number) => {
-      const bookingYear = new Date(input.bookingDate).getFullYear().toString().slice(-2);
+
+    // Generate invoice numbers atomically before transaction
+    let invoiceNumbers: string[] = [];
+    if (input.termOfPayments && input.termOfPayments.length > 0) {
+      const year = now.getFullYear();
       const monthRoman = ROMAN[now.getMonth()];
-      return `${(termIndex).toString().padStart(2, "0")}${(bookingCount + 1).toString().padStart(2, "0")}${bookingYear}/INV/${venue.code}/${monthRoman}/${now.getFullYear()}`;
-    };
+      invoiceNumbers = await Promise.all(
+        input.termOfPayments.map(async () => {
+          const seq = await getNextSequence(`invoice-${year}`);
+          return `${seq}/INV/${venue.code}/${monthRoman}/${year}`;
+        })
+      );
+    }
 
     // Build array-form transaction
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,7 +129,9 @@ export async function createBooking(data: unknown) {
           customerId: customer.id,
           name: customer.name,
           email: customer.email,
-          mobileNumber: customer.mobileNumber,
+          mobileNumber: Array.isArray(customer.mobileNumber)
+            ? (customer.mobileNumber as Array<{ name?: string; number: string }>).map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", ")
+            : String(customer.mobileNumber ?? ""),
           nikNumber: customer.nikNumber,
           ktpAddress: customer.ktpAddress,
         },
@@ -147,7 +158,7 @@ export async function createBooking(data: unknown) {
     ];
 
     if (variant) {
-      const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, BigInt(0));
+      const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
       ops.push(
         db.snapPackageVariant.create({
           data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
@@ -180,7 +191,7 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: BigInt(t.amount), dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: generateInvoiceNumber(i + 1) } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i] } })
         )
       );
     }
@@ -189,6 +200,52 @@ export async function createBooking(data: unknown) {
     // Create booking first (other tables have FK to it)
     // Neon WebSocket adapter supports $transaction array form
     await db.$transaction(ops);
+
+    // Auto-create ApprovalRecord from ApprovalFlow
+    const flow = await db.approvalFlow.findUnique({
+      where: { module: "booking" },
+      include: { steps: { orderBy: { sortOrder: "asc" } } },
+    });
+
+    if (flow && flow.active) {
+      const record = await db.approvalRecord.create({
+        data: {
+          module: "booking",
+          entityId: bookingId,
+          status: "pending",
+          createdById: session!.user.profileId!,
+        },
+      });
+
+      // Determine creator's role
+      const creatorRole = await db.role.findUnique({
+        where: { id: session!.user.roleId ?? "" },
+        select: { name: true, id: true },
+      });
+      const isManager = creatorRole?.name.toLowerCase() === "manager" || creatorRole?.name.toLowerCase() === "super admin";
+
+      for (const step of flow.steps) {
+        const isAutoApproved =
+          // Step 1 (sales) — auto-approve if creator is sales or higher
+          (step.sortOrder === 1 && step.approverType === "role") ||
+          // Step 2 (manager) — auto-approve if creator is manager
+          (step.sortOrder === 2 && step.approverType === "role" && isManager);
+
+        await db.approvalRecordStep.create({
+          data: {
+            recordId: record.id,
+            stepOrder: step.sortOrder,
+            approverType: step.approverType,
+            approverRoleId: step.approverRoleId,
+            approverUserId: step.approverUserId,
+            status: isAutoApproved ? "approved" : "pending",
+            decidedById: isAutoApproved ? session!.user.profileId! : null,
+            decidedAt: isAutoApproved ? new Date() : null,
+            signature: isAutoApproved && step.sortOrder === 1 ? (input.signatureSales ?? null) : null,
+          },
+        });
+      }
+    }
 
     await logAudit({
       userId: session!.user.id,
@@ -230,13 +287,21 @@ export async function createBooking(data: unknown) {
 }
 
 export async function updateBooking(data: unknown) {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
-  if (error) return { success: false, error };
-
   const parsed = updateBookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   const { id, ...rest } = parsed.data;
+
+  // Determine required permission based on status change
+  const statusActionMap: Record<string, string> = {
+    Rejected: "reject",
+    Lost: "mark_lost",
+    Pending: "restore",
+  };
+  const requiredAction = rest.bookingStatus ? (statusActionMap[rest.bookingStatus] ?? "edit") : "edit";
+
+  const { session, error } = await requirePermission({ module: "booking", action: requiredAction });
+  if (error) return { success: false, error };
 
   try {
     const updateData: Record<string, unknown> = {};
@@ -292,7 +357,7 @@ export async function deleteBooking(id: string) {
 }
 
 export async function transferBooking(bookingId: string, targetSalesId: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  const { session, error } = await requirePermission({ module: "booking", action: "transfer" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`booking-transfer:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -430,7 +495,7 @@ export async function editBooking(data: unknown) {
           where: { id: rest.packageVariantId },
           include: { vendorItems: true, internalItems: true, categoryPrices: true },
         });
-        const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, BigInt(0));
+        const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
 
         // Upsert variant snapshot
         ops.push(
@@ -485,54 +550,3 @@ export async function editBooking(data: unknown) {
   }
 }
 
-export async function approveBooking(data: unknown) {
-  const { session, error } = await requirePermission({ module: "booking", action: "approve" });
-  if (error) return { success: false, error };
-
-  const parsed = approveBookingSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-
-  const { id, signatureManager } = parsed.data;
-
-  try {
-    const booking = await db.booking.findUnique({
-      where: { id },
-      select: { id: true, salesId: true, signatures: true, snapCustomer: { select: { name: true } } },
-    });
-    if (!booking) return { success: false, error: "Booking tidak ditemukan." };
-
-    const existingSignatures = (booking.signatures as Record<string, unknown>) ?? {};
-
-    await db.$transaction([db.booking.update({
-      where: { id },
-      data: {
-        bookingStatus: "Confirmed",
-        managerId: session!.user.profileId!,
-        signatures: {
-          ...existingSignatures,
-          manager: {
-            name: session!.user.name ?? "",
-            role: "manager",
-            signature: signatureManager,
-            signedAt: new Date().toISOString(),
-          },
-        },
-      },
-    })]);
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "updated",
-      entityType: "booking",
-      entityId: id,
-      changes: { bookingStatus: "Confirmed", managerId: session!.user.profileId },
-      description: `Approved booking for ${booking.snapCustomer?.name ?? id}`,
-    });
-
-    revalidateTag("bookings", "max");
-
-    return { success: true };
-  } catch {
-    return { success: false, error: "Gagal menyetujui booking." };
-  }
-}

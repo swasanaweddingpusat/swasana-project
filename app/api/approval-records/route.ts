@@ -3,15 +3,16 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getApprovalRecord, getApprovalRecordsByModule } from "@/lib/queries/packages";
 
 export async function GET(request: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "package", action: "view" });
+  const { searchParams } = new URL(request.url);
+  const module = searchParams.get("module");
+  if (!module) return Response.json({ error: "Missing module param" }, { status: 400 });
+
+  const permModule = module === "booking" ? "booking" : "package";
+  const { session, response } = await requirePermissionForRoute({ module: permModule, action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`approval-records:${session.user.id}`)) return rateLimitResponse();
 
-  const { searchParams } = new URL(request.url);
-  const module = searchParams.get("module");
   const entityId = searchParams.get("entityId");
-
-  if (!module) return Response.json({ error: "Missing module param" }, { status: 400 });
 
   try {
     if (entityId) {

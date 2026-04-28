@@ -16,6 +16,7 @@ const FLOWS = [
     steps: [
       { sortOrder: 1, roleName: "sales" },
       { sortOrder: 2, roleName: "manager" },
+      { sortOrder: 3, approverType: "client" as const },
     ],
   },
 ];
@@ -41,11 +42,17 @@ export async function seedApprovalFlows(reset = false) {
 
     // Create steps one by one
     for (const step of flow.steps) {
-      const role = await prisma.role.findUnique({ where: { name: step.roleName } });
-      if (!role) { console.error(`❌ Role "${step.roleName}" not found`); return; }
-      await prisma.approvalFlowStep.create({
-        data: { flowId: created.id, sortOrder: step.sortOrder, approverType: "role", approverRoleId: role.id },
-      });
+      if ("approverType" in step && step.approverType === "client") {
+        await prisma.approvalFlowStep.create({
+          data: { flowId: created.id, sortOrder: step.sortOrder, approverType: "client", approverRoleId: null, approverUserId: null },
+        });
+      } else if ("roleName" in step) {
+        const role = await prisma.role.findUnique({ where: { name: step.roleName } });
+        if (!role) { console.error(`❌ Role "${step.roleName}" not found`); return; }
+        await prisma.approvalFlowStep.create({
+          data: { flowId: created.id, sortOrder: step.sortOrder, approverType: "role", approverRoleId: role.id },
+        });
+      }
     }
 
     console.log(`✅ Flow "${flow.name}" seeded with ${flow.steps.length} steps`);

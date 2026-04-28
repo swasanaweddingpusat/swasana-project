@@ -120,6 +120,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Customers",
     subtitle: "Kelola data customer",
   },
+
+  // ─── Calendar Events ──────────────────────────────────────────────────────
+  "/dashboard/events/calendar-events": {
+    title: "Calendar Event",
+    subtitle: "Lihat jadwal event di kalender",
+  },
 };
 
 export interface Breadcrumb {

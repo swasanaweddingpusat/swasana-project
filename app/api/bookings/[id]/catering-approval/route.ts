@@ -1,10 +1,10 @@
-import { auth } from "@/lib/auth";
+import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getCategoryApprovals } from "@/actions/catering-approval";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
+  if (response) return response;
   if (!apiLimiter.check(`catering-approval:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
