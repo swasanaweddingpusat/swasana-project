@@ -33,7 +33,6 @@ type Option = { id: string; name: string };
 interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null }
 interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; margin: number; categoryPrices: { basePrice: number }[] }[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
-interface PaymentMethodData { id: string; bankName: string; bankAccountNumber: string; bankRecipient: string; venueId: string | null }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number; paymentEvidence?: File | null }
 
@@ -130,7 +129,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const { data: packages = [] } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
-  const { data: paymentMethods = [] } = useQuery({ queryKey: ["payment-methods"], queryFn: () => fetchJson<PaymentMethodData[]>("/api/payment-methods"), staleTime: 5 * 60_000 });
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const selectedPackage = packages.find((p) => p.id === selectedPackageId);
@@ -247,8 +245,8 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
   };
 
-  const w = form.watch();
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && w.venueId && w.packageId && w.bookingDate && w.weddingSession && w.weddingType);
+  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType"]);
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType);
   const isStep2Complete = getBasePrice() === 0 || getDifference() === 0;
   const isStep3Complete = !!signatureSales && !!signingLocation.trim();
 
@@ -309,8 +307,8 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
-      <div className="flex flex-col justify-between h-full">
-        <div className="flex-1 overflow-y-auto px-2">
+      <div className={cn('flex', 'flex-col', 'justify-between', 'h-full')}>
+        <div className={cn('flex-1', 'overflow-y-auto', 'px-2')}>
           <Form {...form}>
             <form className="space-y-4">
               {/* ─── Step 1: Data Booking ─── */}
@@ -319,7 +317,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Customer */}
                   {/* Customer */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">Customer Name *</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Customer Name *</FormLabel>
                     <AutocompleteInput
                       options={customers.map((c) => ({ id: c.id, name: c.name }))}
                       value={customerName}
@@ -351,32 +349,32 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
                   {/* Contact Person */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">Contact Person *</FormLabel>
-                    <div className="mt-1 rounded-lg bg-muted p-3 space-y-2">
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Contact Person *</FormLabel>
+                    <div className={cn('mt-1', 'rounded-lg', 'bg-muted', 'p-3', 'space-y-2')}>
                       {contactNumbers.map((entry, idx) => (
-                        <div key={idx} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
-                          <div className="flex-1 min-w-0">
-                            {entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}
-                            <p className="text-sm font-medium">{entry.number}</p>
+                        <div key={idx} className={cn('flex', 'items-center', 'gap-2', 'rounded-md', 'bg-white', 'border', 'px-3', 'py-2')}>
+                          <div className={cn('flex-1', 'min-w-0')}>
+                            {entry.name && <p className={cn('text-xs', 'text-muted-foreground')}>{entry.name}</p>}
+                            <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
                           </div>
-                          <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))}>
-                            <X className="w-3.5 h-3.5" />
+                          <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                            <X className={cn('w-3.5', 'h-3.5')} />
                           </button>
                         </div>
                       ))}
-                      <div className="flex gap-2">
+                      <div className={cn('flex', 'gap-2')}>
                         <Input
                           value={contactInput.name}
                           onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))}
                           placeholder="Label (opsional)"
-                          className="flex-1 bg-white"
+                          className={cn('flex-1', 'bg-white')}
                         />
                         <Input
                           value={contactInput.number}
                           onChange={(e) => setContactInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))}
                           placeholder="081234567890"
                           inputMode="numeric"
-                          className="flex-1 bg-white"
+                          className={cn('flex-1', 'bg-white')}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault();
@@ -388,7 +386,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             }
                           }}
                         />
-                        <Button type="button" variant="outline" className="shrink-0 bg-white" onClick={() => {
+                        <Button type="button" variant="outline" className={cn('shrink-0', 'bg-white')} onClick={() => {
                           const num = contactInput.number.trim();
                           if (!num) return;
                           if (contactNumbers.some((c) => c.number === num)) return;
@@ -402,7 +400,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Sumber Informasi */}
                   <FormField control={form.control} name="sourceOfInformationId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Sumber Informasi</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Sumber Informasi</FormLabel>
                       <SearchableSelect options={sourceOptions} value={field.value ?? ""} onChange={field.onChange} placeholder="Pilih sumber informasi" searchPlaceholder="Cari sumber..." emptyText="Tidak ada data" />
                       <FormMessage />
                     </FormItem>
@@ -410,26 +408,26 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
                   {/* Email */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">Email</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Email</FormLabel>
                     <Input placeholder="e.g. nama@email.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className="mt-1" />
                   </div>
 
                   {/* NIK */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">NIK Number</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>NIK Number</FormLabel>
                     <Input placeholder="e.g. 3275010101010001" value={contactNik} onChange={(e) => setContactNik(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
                   </div>
 
                   {/* Alamat KTP */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">Alamat (sesuai KTP)</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Alamat (sesuai KTP)</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} rows={3} className="mt-1" />
                   </div>
 
                   {/* Venue */}
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Venue *</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Venue *</FormLabel>
                       <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantPrice(0); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
                     </FormItem>
@@ -438,7 +436,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Pilih Paket */}
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Pilih Paket *</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Paket *</FormLabel>
                       <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={selectedVenueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!selectedVenueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       <FormMessage />
                     </FormItem>
@@ -448,7 +446,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {variants.length > 0 && (
                     <FormField control={form.control} name="packageVariantId" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm font-medium text-gray-700">Pilih Tipe Paket *</FormLabel>
+                        <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Tipe Paket *</FormLabel>
                         <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
                         <FormMessage />
                       </FormItem>
@@ -458,7 +456,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Event Date */}
                   <FormField control={form.control} name="bookingDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Event Date *</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Event Date *</FormLabel>
                       <Popover>
                         <PopoverTrigger render={
                           <Button
@@ -466,13 +464,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             disabled={!selectedVenueId}
                             className={cn("w-full justify-start text-left font-normal", !field.value && "text-gray-400")}
                           >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            <CalendarIcon className={cn('mr-2', 'h-4', 'w-4')} />
                             {selectedVenueId
                               ? (field.value ? format(new Date(field.value), "PPP") : "Pilih tanggal event")
                               : "Pilih venue terlebih dahulu"}
                           </Button>
                         } />
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className={cn('w-auto', 'p-0')} align="start">
                           <Calendar
                             mode="single"
                             captionLayout="dropdown"
@@ -498,7 +496,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                           />
                         </PopoverContent>
                       </Popover>
-                      {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+                      {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Mengecek ketersediaan...</p>}
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -506,12 +504,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Event Session */}
                   <FormField control={form.control} name="weddingSession" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Event Session *</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Event Session *</FormLabel>
                       <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
                         <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger></FormControl>
                         <SelectContent>
                           {(() => {
-                            const dateStr = w.bookingDate ? format(new Date(w.bookingDate), "yyyy-MM-dd") : null;
+                            const dateStr = wBookingDate ? format(new Date(wBookingDate), "yyyy-MM-dd") : null;
                             const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
                             const labels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
                             return sessions.map((s) => <SelectItem key={s} value={s}>{labels[s]}</SelectItem>);
@@ -525,7 +523,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Event Type */}
                   <FormField control={form.control} name="weddingType" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Event Type *</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Event Type *</FormLabel>
                       <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
                         <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
                         <SelectContent>
@@ -542,13 +540,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
                   {/* Note Date Event */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">Note Date Event</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Note Date Event</FormLabel>
                     <Textarea placeholder="Add note for date event" value={noteDateEvent} onChange={(e) => setNoteDateEvent(e.target.value)} rows={3} className="mt-1" />
                   </div>
 
                   {/* Complimentary (Bonus) */}
                   <div className="space-y-2">
-                    <FormLabel className="text-sm font-medium text-gray-700">Complimentary (Bonus)</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Complimentary (Bonus)</FormLabel>
                     <SearchableSelect
                       options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
                       value=""
@@ -558,8 +556,8 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       emptyText="Tidak ada vendor"
                     />
                     {bonuses.map((b, idx) => (
-                      <div key={idx} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
+                      <div key={idx} className={cn('bg-gray-50', 'border', 'border-gray-200', 'rounded-md', 'px-3', 'py-2', 'space-y-1.5')}>
+                        <div className={cn('flex', 'items-center', 'justify-between', 'gap-2')}>
                           <div className="flex-1">
                             <SearchableSelect
                               options={allVendors.filter((v) => !bonuses.some((x, i) => i !== idx && x.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))}
@@ -570,16 +568,16 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               emptyText="Tidak ada vendor"
                             />
                           </div>
-                          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
-                            <X className="h-3 w-3" />
+                          <Button type="button" variant="ghost" size="sm" className={cn('h-6', 'w-6', 'p-0', 'text-red-500', 'hover:text-red-700', 'shrink-0')} onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
+                            <X className={cn('h-3', 'w-3')} />
                           </Button>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                          <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-gray-400')}>Rp</span>
                           <input
                             type="text"
                             inputMode="numeric"
-                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white"
+                            className={cn('w-full', 'pl-8', 'pr-3', 'py-1.5', 'text-sm', 'border', 'border-gray-200', 'rounded-md', 'bg-white')}
                             placeholder="Nominal"
                             value={b.nominal ? new Intl.NumberFormat("id-ID").format(b.nominal) : ""}
                             onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }}
@@ -588,7 +586,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-15" />
                       </div>
                     ))}
-                    {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}
+                    {bonuses.length === 0 && <p className={cn('text-xs', 'text-gray-400', 'italic', 'text-center', 'py-1')}>Belum ada complimentary</p>}
                   </div>
                 </div>
               )}
@@ -597,17 +595,17 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                 <div className="space-y-4">
                   {/* Package price */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700">Total Harga Package</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Total Harga Package</FormLabel>
                     <Input disabled value={`Rp${fmtRp(getPriceAfterDiscount())}`} className="mt-1" />
                   </div>
 
                   {/* Discount / Special Bonus */}
-                  <div className="flex flex-col gap-2 border-y py-4">
+                  <div className={cn('flex', 'flex-col', 'gap-2', 'border-y', 'py-4')}>
                     <Input
                       placeholder="Nama bonus (e.g. Discount)"
                       value={specialBonusName}
                       onChange={(e) => setSpecialBonusName(e.target.value)}
-                      className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                      className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-gray-700', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
                     />
                     <Input
                       placeholder="IDR. 0"
@@ -616,13 +614,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       inputMode="numeric"
                       className="rounded-none"
                     />
-                    <p className="text-xs text-gray-500">Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat discount diubah.</p>
+                    <p className={cn('text-xs', 'text-gray-500')}>Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat discount diubah.</p>
                   </div>
 
                   {/* Payment Method */}
                   <FormField control={form.control} name="paymentMethodId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700">Pembayaran Melalui</FormLabel>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pembayaran Melalui</FormLabel>
                       <BankAccountSelect value={field.value ?? ""} onChange={field.onChange} placeholder={selectedVenueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!selectedVenueId} venueId={selectedVenueId} />
                       <FormMessage />
                     </FormItem>
@@ -630,26 +628,26 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
                   {/* Term of Payments */}
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700 mb-2 block">Term of Payments</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Term of Payments</FormLabel>
                     <div className="space-y-4">
                       {terms.map((t, idx) => (
                         <div key={idx} className="space-y-2">
                           {/* Term name — inline editable */}
-                          <div className="flex items-center gap-2">
+                          <div className={cn('flex', 'items-center', 'gap-2')}>
                             <Input
                               value={t.name}
                               onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
                               placeholder="Term name"
-                              className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                              className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-gray-700', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
                             />
                             {terms.length > 1 && (
-                              <button type="button" onClick={() => setTerms((prev) => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 shrink-0">
-                                <Trash2 className="h-3.5 w-3.5" />
+                              <button type="button" onClick={() => setTerms((prev) => prev.filter((_, i) => i !== idx))} className={cn('text-red-400', 'hover:text-red-600', 'shrink-0')}>
+                                <Trash2 className={cn('h-3.5', 'w-3.5')} />
                               </button>
                             )}
                           </div>
                           {/* Amount + Date row */}
-                          <div className="flex gap-3 items-center">
+                          <div className={cn('flex', 'gap-3', 'items-center')}>
                             <div className="flex-2">
                               <Input
                                 value={t.amount ? fmtRp(t.amount) : ""}
@@ -662,11 +660,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               <Popover>
                                 <PopoverTrigger render={
                                   <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    <CalendarIcon className={cn('mr-2', 'h-4', 'w-4')} />
                                     {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
                                   </Button>
                                 } />
-                                <PopoverContent className="w-auto p-0" align="start">
+                                <PopoverContent className={cn('w-auto', 'p-0')} align="start">
                                   <Calendar
                               mode="single"
                               captionLayout="dropdown"
@@ -680,24 +678,24 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             </div>
                           </div>
                           {/* Upload bukti pembayaran */}
-                          <div className="relative flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs">
-                            <FileText className="h-3.5 w-3.5 shrink-0" />
-                            <span className="flex-1 truncate">{t.paymentEvidence ? t.paymentEvidence.name : "Upload bukti pembayaran"}</span>
+                          <div className={cn('relative', 'flex', 'items-center', 'gap-2', 'px-3', 'py-2', 'border', 'rounded-md', 'bg-muted/30', 'text-muted-foreground', 'cursor-pointer', 'hover:bg-muted/50', 'text-xs')}>
+                            <FileText className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
+                            <span className={cn('flex-1', 'truncate')}>{t.paymentEvidence ? t.paymentEvidence.name : "Upload bukti pembayaran"}</span>
                             {t.paymentEvidence && (
-                              <button type="button" className="shrink-0 hover:text-destructive" onClick={() => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x))}>
-                                <X className="h-3 w-3" />
+                              <button type="button" className={cn('shrink-0', 'hover:text-destructive')} onClick={() => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x))}>
+                                <X className={cn('h-3', 'w-3')} />
                               </button>
                             )}
-                            <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
+                            <input type="file" accept="image/*,application/pdf" className={cn('absolute', 'inset-0', 'opacity-0', 'cursor-pointer')} onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
                           </div>
                           {/* Divider between terms */}
-                          {idx < terms.length - 1 && <div className="border-b border-gray-100 pt-1" />}
+                          {idx < terms.length - 1 && <div className={cn('border-b', 'border-gray-100', 'pt-1')} />}
                         </div>
                       ))}
                     </div>
 
                     {/* Add button */}
-                    <div className="flex gap-2 mt-4">
+                    <div className={cn('flex', 'gap-2', 'mt-4')}>
                       <Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => [...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }])}>
                         Tambah Payment
                       </Button>
@@ -705,25 +703,25 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   </div>
 
                   {/* Summary */}
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-700">Harga Paket:</span>
-                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getBasePrice())}</span>
+                  <div className={cn('p-3', 'bg-gray-50', 'rounded-lg')}>
+                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2')}>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Harga Paket:</span>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Rp{fmtRp(getBasePrice())}</span>
                     </div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-red-600">{specialBonusName || "Discount"}:</span>
-                      <span className="text-sm font-medium text-red-600">- Rp{fmtRp(specialBonusAmount)}</span>
+                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2')}>
+                      <span className={cn('text-sm', 'font-medium', 'text-red-600')}>{specialBonusName || "Discount"}:</span>
+                      <span className={cn('text-sm', 'font-medium', 'text-red-600')}>- Rp{fmtRp(specialBonusAmount)}</span>
                     </div>
-                    <div className="flex justify-between items-center mb-2 border-t pt-2">
-                      <span className="text-sm font-medium text-gray-700">Harga Setelah Discount:</span>
-                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getPriceAfterDiscount())}</span>
+                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2', 'border-t', 'pt-2')}>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Harga Setelah Discount:</span>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Rp{fmtRp(getPriceAfterDiscount())}</span>
                     </div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-700">Total Input User:</span>
-                      <span className="text-sm font-medium text-gray-700">Rp{fmtRp(getTotalTerms())}</span>
+                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2')}>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Total Input User:</span>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Rp{fmtRp(getTotalTerms())}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Selisih:</span>
+                    <div className={cn('flex', 'justify-between', 'items-center')}>
+                      <span className={cn('text-sm', 'font-medium', 'text-gray-700')}>Selisih:</span>
                       <span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-red-600" : "text-gray-700")}>
                         Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}
                       </span>
@@ -735,11 +733,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
               {currentStep === 3 && (
                 <div className="space-y-6">
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700 mb-2 block">Lokasi Tanda Tangan *</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Lokasi Tanda Tangan *</FormLabel>
                     <Input placeholder="Contoh: Jakarta, Bandung, Surabaya..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} />
                   </div>
                   <div>
-                    <FormLabel className="text-sm font-medium text-gray-700 mb-2 block">Tanda Tangan Sales *</FormLabel>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Tanda Tangan Sales *</FormLabel>
                     <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-gray-50", !signatureSales ? "border-red-300" : "border-gray-300")}>
                       <SignatureCanvas
                         ref={sigSalesRef}
@@ -748,9 +746,9 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                         onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
                       />
                     </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      {!signatureSales && <p className="text-xs text-red-500">Tanda tangan sales wajib diisi</p>}
-                      <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-red-500 hover:text-red-700 underline ml-auto">Hapus tanda tangan</button>
+                    <div className={cn('flex', 'items-center', 'justify-between', 'mt-1.5')}>
+                      {!signatureSales && <p className={cn('text-xs', 'text-red-500')}>Tanda tangan sales wajib diisi</p>}
+                      <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className={cn('text-xs', 'text-red-500', 'hover:text-red-700', 'underline', 'ml-auto')}>Hapus tanda tangan</button>
                     </div>
                   </div>
                 </div>
@@ -759,8 +757,8 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
           </Form>
         </div>
         {/* Footer */}
-        <div className="bg-white sticky bottom-0 z-10">
-          <div className="flex py-4 gap-2">
+        <div className={cn('bg-white', 'sticky', 'bottom-0', 'z-10')}>
+          <div className={cn('flex', 'py-4', 'gap-2')}>
             <Button
               variant="outline"
               onClick={currentStep === 1 ? () => onOpenChange(false) : handlePrevious}

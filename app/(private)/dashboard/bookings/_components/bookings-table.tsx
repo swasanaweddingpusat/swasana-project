@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { toast } from "sonner";
 import SignatureCanvas from "react-signature-canvas";
 import { format } from "date-fns";
@@ -16,12 +16,9 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { approveCategoryPO } from "@/actions/catering-approval";
-import { BookingDrawer } from "./booking-drawer";
-import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { EditTopDrawer } from "./edit-top-drawer";
 import { ActivityLogModal } from "./activity-log-modal";
@@ -35,7 +32,6 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { Drawer } from "@/components/shared/drawer";
-import { useHeaderAction } from "@/components/providers/header-action-provider";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
 
 const ROWS_PER_PAGE = 10;
@@ -92,16 +88,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
   const { can } = usePermissions();
-  const { user } = useCurrentUser();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
-  const { openBookingDrawer } = useBookingDrawer();
 
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
-  const [approvalTarget, setApprovalTarget] = useState<BookingListItem | null>(null);
-  const [approveModalData, setApproveModalData] = useState<{ stepId: string; stepLabel: string; bookingName: string } | null>(null);
   const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
   const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
@@ -169,23 +161,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 pb-4 gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-base font-bold text-[#1D1D1D]">Wedding Bookings</h2>
-              <span className="text-gray-700 text-sm rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'justify-between', 'px-4', 'sm:px-6', 'pb-4', 'gap-3')}>
+            <div className={cn('flex', 'items-center', 'gap-3')}>
+              <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Wedding Bookings</h2>
+              <span className={cn('text-gray-700', 'text-sm', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'px-3', 'py-1')}>
                 {filtered.length} {search ? `dari ${bookings.length}` : "Bookings"}
               </span>
-              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} className="cursor-pointer hidden sm:flex items-center gap-1.5">
+              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
                 <span className="text-xs">Refresh</span>
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 sm:flex-none">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9 w-full sm:w-55" />
+            <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2')}>
+              <div className={cn('relative', 'flex-1', 'sm:flex-none')}>
+                <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
+                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className={cn('pl-9', 'w-full', 'sm:w-55')} />
               </div>
-              <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching} className="cursor-pointer sm:hidden shrink-0">
+              <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               </Button>
             </div>
@@ -193,35 +185,35 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
           {/* Table */}
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-              <CalendarDays className="h-10 w-10 mb-3 opacity-40" />
+            <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-gray-400')}>
+              <CalendarDays className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
             </div>
           ) : (
-            <div className="w-full overflow-x-auto">
-              <Table className="w-full text-sm">
+            <div className={cn('w-full', 'overflow-x-auto')}>
+              <Table className={cn('w-full', 'text-sm')}>
                 <TableHeader className="bg-[#F9FAFB]">
                   <TableRow>
-                    <TableHead className="px-2 py-2 text-[#475467] text-center w-[3%] hidden sm:table-cell">No</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467]">Customer</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[15%]">Venue & PO</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[14%]">Package</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[10%]">Event Date</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467] hidden lg:table-cell w-[8%]">Activity</TableHead>
-                    <TableHead className="px-2 py-2 text-[#475467] hidden sm:table-cell w-[8%]">Approval</TableHead>
-                    <TableHead className="px-1 py-2 text-[#475467] text-right pr-5 w-[15%]">Action</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'text-center', 'w-[3%]', 'hidden', 'sm:table-cell')}>No</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]')}>Customer</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[14%]')}>Package</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[8%]')}>Approval</TableHead>
+                    <TableHead className={cn('px-1', 'py-2', 'text-[#475467]', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginated.map((booking: BookingListItem, idx: number) => (
-                    <TableRow key={booking.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
-                      <TableCell className="px-2 py-2 text-center hidden sm:table-cell">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                    <TableRow key={booking.id} className={cn('hover:bg-gray-50', 'cursor-pointer')} onClick={() => setDetailTarget(booking.id)}>
+                      <TableCell className={cn('px-2', 'py-2', 'text-center', 'hidden', 'sm:table-cell')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
 
                       {/* Customer cell */}
-                      <TableCell className="px-2 py-2">
+                      <TableCell className={cn('px-2', 'py-2')}>
                         <div className="overflow-hidden">
-                          <p className="text-sm font-medium text-gray-900 truncate">{booking.snapCustomer?.name ?? "—"}</p>
-                          <p className="text-xs text-gray-400 truncate mt-0.5">
+                          <p className={cn('text-sm', 'font-medium', 'text-gray-900', 'truncate')}>{booking.snapCustomer?.name ?? "—"}</p>
+                          <p className={cn('text-xs', 'text-gray-400', 'truncate', 'mt-0.5')}>
                             {(() => {
                               const raw = booking.snapCustomer?.mobileNumber ?? "";
                               try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
@@ -229,15 +221,15 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             })()}
                           </p>
                           {/* Event date — mobile only */}
-                          <p className="text-xs text-gray-500 mt-0.5 sm:hidden">{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
-                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <p className={cn('text-xs', 'text-gray-500', 'mt-0.5', 'sm:hidden')}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
+                          <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-1', 'mt-1')}>
                             {/* Status badge */}
                             <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-white", STATUS_TEXT[booking.bookingStatus] ?? "text-gray-600 border-gray-200")}>
                               <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-gray-400")} />
                               {booking.bookingStatus}
                             </span>
                             {/* Payment method badge */}
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600 text-[10px] font-medium">
+                            <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'text-gray-600', 'text-[10px]', 'font-medium')}>
                               {booking.paymentMethod?.bankName ?? "N/A"}
                             </span>
                             {/* Session badge */}
@@ -248,14 +240,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             )}
                             {/* Source of information badge */}
                             {booking.sourceOfInformation?.name && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                              <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium', 'bg-muted', 'text-muted-foreground')}>
                                 {booking.sourceOfInformation.name}
                               </span>
                             )}
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-                            className="cursor-pointer mt-1 text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 text-left lg:hidden"
+                            className={cn('cursor-pointer', 'mt-1', 'text-[10px]', 'text-muted-foreground', 'hover:text-foreground', 'underline', 'underline-offset-2', 'text-left', 'lg:hidden')}
                           >
                             Lihat Activity
                           </button>
@@ -263,59 +255,59 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       </TableCell>
 
                       {/* Venue cell */}
-                      <TableCell className="px-2 py-2 hidden sm:table-cell">
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
                         <div className="leading-tight">
-                          <span className="block truncate text-sm font-medium">{booking.snapVenue?.venueName ?? "—"}</span>
+                          <span className={cn('block', 'truncate', 'text-sm', 'font-medium')}>{booking.snapVenue?.venueName ?? "—"}</span>
                           {booking.poNumber ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
-                              className="inline-flex items-center max-w-full px-1.5 py-0.5 rounded bg-gray-100 text-[10px] font-mono text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer truncate mt-0.5"
+                              className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-gray-100', 'text-[10px]', 'font-mono', 'text-gray-500', 'hover:bg-gray-200', 'transition-colors', 'cursor-pointer', 'truncate', 'mt-0.5')}
                             >
                               <span className="truncate">{booking.poNumber}</span>
                             </button>
                           ) : (
-                            <span className="text-gray-300 text-[10px] block mt-0.5">No PO</span>
+                            <span className={cn('text-gray-300', 'text-[10px]', 'block', 'mt-0.5')}>No PO</span>
                           )}
                         </div>
                       </TableCell>
 
                       {/* Package cell */}
-                      <TableCell className="px-2 py-2 hidden sm:table-cell">
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
                         <div className="leading-tight">
-                          <span className="truncate block">{booking.snapPackage?.packageName ?? "—"}</span>
+                          <span className={cn('truncate', 'block')}>{booking.snapPackage?.packageName ?? "—"}</span>
                           {booking.snapPackageVariant && (
                             <>
-                              <span className="text-xs text-gray-400 block">{booking.snapPackageVariant.variantName}</span>
-                              <span className="text-xs text-gray-400 block">{booking.snapPackageVariant.pax} PAX · {fmtRp(booking.snapPackageVariant.price)}</span>
+                              <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.variantName}</span>
+                              <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.pax} PAX · {fmtRp(booking.snapPackageVariant.price)}</span>
                             </>
                           )}
                         </div>
                       </TableCell>
 
                       {/* Event Date */}
-                      <TableCell className="px-2 py-2 whitespace-nowrap text-sm hidden sm:table-cell">
+                      <TableCell className={cn('px-2', 'py-2', 'whitespace-nowrap', 'text-sm', 'hidden', 'sm:table-cell')}>
                         {format(new Date(booking.bookingDate), "MMM dd, yyyy")}
                       </TableCell>
 
                       {/* Activity */}
-                      <TableCell className="px-2 py-2 hidden lg:table-cell">
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
                         <button
                           onClick={(e) => { e.stopPropagation(); setActivityLogTarget(booking); }}
-                          className="cursor-pointer text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                          className={cn('cursor-pointer', 'text-xs', 'text-muted-foreground', 'hover:text-foreground', 'underline', 'underline-offset-2')}
                         >
                           Lihat Activity
                         </button>
                       </TableCell>
 
                       {/* Approval */}
-                      <TableCell className="px-2 py-2 hidden sm:table-cell" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')} onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const record = approvalMap.get(booking.id);
-                          if (!record) return <span className="text-xs text-muted-foreground">—</span>;
+                          if (!record) return <span className={cn('text-xs', 'text-muted-foreground')}>—</span>;
                           return (
                             <button
                               type="button"
-                              onClick={() => setApprovalTarget(booking)}
+                              
                               className={cn(
                                 "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
                                 record.status === "approved" && "bg-primary text-primary-foreground",
@@ -330,14 +322,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       </TableCell>
 
                       {/* Action */}
-                      <TableCell className="px-1 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1 justify-end">
+                      <TableCell className={cn('px-1', 'py-2', 'whitespace-nowrap')} onClick={(e) => e.stopPropagation()}>
+                        <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
                           {/* Set Vendor Bawaan — hidden on mobile */}
                           {can("booking", "edit") && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
-                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer hidden sm:inline-flex" onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
-                                <Store className="h-4 w-4" />
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
+                                <Store className={cn('h-4', 'w-4')} />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Set Vendor Bawaan</p></TooltipContent>
                             </Tooltip>
@@ -348,8 +340,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           {can("client_agreement", "create") && booking.clientAgreement?.status !== "Signed" && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
-                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer hidden sm:inline-flex" onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
-                                <FileSignature className="h-4 w-4" />
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
+                                <FileSignature className={cn('h-4', 'w-4')} />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
                             </Tooltip>
@@ -358,7 +350,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
                           {/* Catering + Decoration — only for Confirmed bookings, hidden on mobile */}
                           {booking.bookingStatus === "Confirmed" && (
-                            <div className="hidden sm:contents">
+                            <div className={cn('hidden', 'sm:contents')}>
                               {/* Catering */}
                               <TooltipProvider delay={200}>
                                 <Tooltip>
@@ -368,12 +360,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                     }}>
                                       <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                          <CircleFadingPlus className="h-4 w-4" />
+                                          <CircleFadingPlus className={cn('h-4', 'w-4')} />
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                         <DropdownMenuItem className="cursor-pointer" onClick={() => setCateringTarget(booking.id)}>
-                                          <Pencil className="mr-2 h-4 w-4" /> Edit Catering
+                                          <Pencil className={cn('mr-2', 'h-4', 'w-4')} /> Edit Catering
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                         {can("booking", "approve_finance") && (
@@ -408,7 +400,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                           setTimeout(() => URL.revokeObjectURL(url), 10000);
                                         } catch (e) { toast.error(e instanceof Error ? e.message : "Gagal membuat PDF", { id: t }); }
                                       }}>
-                                        <Printer className="mr-2 h-4 w-4" /> Cetak PO Catering
+                                        <Printer className={cn('mr-2', 'h-4', 'w-4')} /> Cetak PO Catering
                                       </DropdownMenuItem>
                                       )}
                                     </DropdownMenuContent>
@@ -423,7 +415,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 <Tooltip>
                                   <TooltipTrigger render={<span />}>
                                     <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setDecorationTarget(booking.id); }}>
-                                      <Palette className="h-4 w-4" />
+                                      <Palette className={cn('h-4', 'w-4')} />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent side="top"><p className="text-xs">Dekorasi PO</p></TooltipContent>
@@ -434,10 +426,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
                           {/* Comment button */}
                           <PermissionGate module="booking" action="comment">
-                            <Button variant="ghost" size="icon" className="cursor-pointer relative" onClick={() => setCommentTarget(booking)}>
-                              <MessageSquare className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)}>
+                              <MessageSquare className={cn('h-4', 'w-4')} />
                               {(unreadCounts[booking.id] ?? 0) > 0 && (
-                                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5">
+                                <span className={cn('absolute', '-top-0.5', '-right-0.5', 'min-w-4', 'h-4', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[9px]', 'font-bold', 'flex', 'items-center', 'justify-center', 'px-0.5')}>
                                   {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
                                 </span>
                               )}
@@ -448,12 +440,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="cursor-pointer">
-                                <EllipsisVertical className="h-4 w-4" />
+                                <EllipsisVertical className={cn('h-4', 'w-4')} />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
-                                <Eye className="mr-2 h-4 w-4" /> Lihat Detail
+                                <Eye className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
                               </DropdownMenuItem>
                               {(() => {
                                 const record = approvalMap.get(booking.id);
@@ -463,7 +455,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                   const isApproved = step.status === "approved";
                                   const isRejected = step.status === "rejected";
                                   return (
-                                    <DropdownMenuItem key={step.id} disabled className="cursor-default text-xs">
+                                    <DropdownMenuItem key={step.id} disabled className={cn('cursor-default', 'text-xs')}>
                                       {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `⏳ ${label}`}
                                     </DropdownMenuItem>
                                   );
@@ -472,19 +464,19 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <DropdownMenuSeparator />
                               {can("booking", "edit") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
-                                <Pencil className="mr-2 h-4 w-4" /> Edit Booking
+                                <Pencil className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
                               </DropdownMenuItem>
                               )}
                               {can("booking", "transfer") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
-                                <ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer Booking
+                                <ArrowLeftRight className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
                               </DropdownMenuItem>
                               )}
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
-                                <FileUp className="mr-2 h-4 w-4" /> Upload Dokumen
+                                <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
                               </DropdownMenuItem>
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-                                <ListChecks className="mr-2 h-4 w-4" /> Edit TOP
+                                <ListChecks className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
                               </DropdownMenuItem>
                               {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
                                 <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={async () => {
@@ -504,29 +496,29 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                     setIsGeneratingPO(null);
                                   }
                                 }}>
-                                  <Printer className="mr-2 h-4 w-4" /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                                  <Printer className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
                                 </DropdownMenuItem>
                               )}
                               {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
                               {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
-                                  <SquareX className="mr-2 h-4 w-4 text-red-500" /> Reject Booking
+                                  <SquareX className={cn('mr-2', 'h-4', 'w-4', 'text-red-500')} /> Reject Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
-                                <DropdownMenuItem className="cursor-pointer text-muted-foreground focus:text-foreground" onClick={() => setLostTarget(booking)}>
-                                  <SquareX className="mr-2 h-4 w-4" /> Lost Booking
+                                <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setLostTarget(booking)}>
+                                  <SquareX className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
-                                <DropdownMenuItem className="cursor-pointer text-muted-foreground focus:text-foreground" onClick={() => setRestoreTarget(booking)}>
-                                  <RotateCcw className="mr-2 h-4 w-4" /> Restore Booking
+                                <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
+                                  <RotateCcw className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "delete") && <DropdownMenuSeparator />}
                               {can("booking", "delete") && (
-                              <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(booking)}>
-                                <Trash2 className="mr-2 h-4 w-4" /> Hapus
+                              <DropdownMenuItem className={cn('cursor-pointer', 'text-red-600', 'focus:text-red-600')} onClick={() => setDeleteTarget(booking)}>
+                                <Trash2 className={cn('mr-2', 'h-4', 'w-4')} /> Hapus
                               </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
@@ -542,14 +534,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-t">
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-4', 'sm:px-6', 'py-4', 'border-t')}>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-                <ArrowLeft className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Previous</span>
+                <ArrowLeft className={cn('w-4', 'h-4', 'sm:mr-2')} /> <span className={cn('hidden', 'sm:inline')}>Previous</span>
               </Button>
               {/* Mobile: page X/Y */}
-              <span className="text-sm text-muted-foreground sm:hidden">{currentPage} / {totalPages}</span>
+              <span className={cn('text-sm', 'text-muted-foreground', 'sm:hidden')}>{currentPage} / {totalPages}</span>
               {/* Desktop: page numbers */}
-              <div className="hidden sm:flex items-center gap-1">
+              <div className={cn('hidden', 'sm:flex', 'items-center', 'gap-1')}>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <button key={page} onClick={() => setCurrentPage(page)}
                     className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === page ? "bg-gray-200 text-gray-900" : "text-gray-700 hover:bg-gray-100")}>
@@ -558,7 +550,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 ))}
               </div>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-                <span className="hidden sm:inline">Next</span> <ArrowRight className="w-4 h-4 sm:ml-2" />
+                <span className={cn('hidden', 'sm:inline')}>Next</span> <ArrowRight className={cn('w-4', 'h-4', 'sm:ml-2')} />
               </Button>
             </div>
           )}
@@ -576,41 +568,41 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Hapus</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>Hapus</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Reject */}
       {rejectTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
-            <div className="flex items-start justify-between gap-4 mb-4">
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
+          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
               <div>
-                <h2 className="text-lg font-bold text-[#19202C]">Reject Booking</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Reject booking <span className="font-semibold text-gray-800">{rejectTarget.snapCustomer?.name}</span>?
+                <h2 className={cn('text-lg', 'font-bold', 'text-[#19202C]')}>Reject Booking</h2>
+                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>
+                  Reject booking <span className={cn('font-semibold', 'text-gray-800')}>{rejectTarget.snapCustomer?.name}</span>?
                 </p>
               </div>
               <button
                 type="button"
-                className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+                className={cn('rounded-full', 'bg-red-100', 'hover:bg-red-200', 'p-1.5', 'shrink-0')}
                 onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
                 aria-label="Tutup"
               >
-                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                <svg className={cn('h-5', 'w-5', 'text-red-500')} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
             <div className="mb-4">
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Alasan Penolakan</label>
+              <label className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Alasan Penolakan</label>
               <Input placeholder="Alasan penolakan (opsional)..." value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} />
             </div>
 
-            <div className="flex gap-3">
+            <div className={cn('flex', 'gap-3')}>
               <button
                 type="button"
-                className="flex-1 bg-red-600 text-white rounded-lg py-2 font-medium text-sm hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn('flex-1', 'bg-red-600', 'text-white', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-red-700', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
                 disabled={updateMut.isPending}
                 onClick={async () => {
                   const r = await updateMut.mutateAsync({ id: rejectTarget.id, bookingStatus: "Rejected", rejectionNotes: rejectNotes || null });
@@ -622,7 +614,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               </button>
               <button
                 type="button"
-                className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition"
+                className={cn('flex-1', 'border', 'border-gray-300', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-gray-100', 'transition')}
                 onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
               >
                 Batal
@@ -638,7 +630,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <AlertDialogTitle>Lost Booking</AlertDialogTitle>
             <AlertDialogDescription>Tandai booking <strong>{lostTarget?.snapCustomer?.name}</strong> sebagai Lost?</AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="px-6 pb-2">
+          <div className={cn('px-6', 'pb-2')}>
             <Input placeholder="Alasan lost (opsional)..." value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
           </div>
           <AlertDialogFooter>
@@ -648,30 +640,30 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               const r = await updateMut.mutateAsync({ id: lostTarget.id, bookingStatus: "Lost", lostReason: lostReason || null });
               if (!r.success) toast.error(r.error); else { toast.success("Booking ditandai Lost."); refetch(); }
               setLostTarget(null); setLostReason("");
-            }} className="bg-primary text-primary-foreground hover:bg-primary/90">Lost Booking</AlertDialogAction>
+            }} className={cn('bg-primary', 'text-primary-foreground', 'hover:bg-primary/90')}>Lost Booking</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Restore Booking Modal */}
       {restoreTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
-            <div className="flex items-start justify-between gap-4 mb-4">
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
+          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
               <div>
-                <h2 className="text-lg font-bold text-[#19202C]">Restore Booking</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Restore booking <span className="font-semibold text-gray-800">{restoreTarget.snapCustomer?.name}</span> ke status Pending?
+                <h2 className={cn('text-lg', 'font-bold', 'text-[#19202C]')}>Restore Booking</h2>
+                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>
+                  Restore booking <span className={cn('font-semibold', 'text-gray-800')}>{restoreTarget.snapCustomer?.name}</span> ke status Pending?
                 </p>
               </div>
-              <button type="button" className="rounded-full hover:bg-muted p-1.5 shrink-0" onClick={() => setRestoreTarget(null)} aria-label="Tutup">
-                <svg className="h-5 w-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button type="button" className={cn('rounded-full', 'hover:bg-muted', 'p-1.5', 'shrink-0')} onClick={() => setRestoreTarget(null)} aria-label="Tutup">
+                <svg className={cn('h-5', 'w-5', 'text-muted-foreground')} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="flex gap-3">
+            <div className={cn('flex', 'gap-3')}>
               <button
                 type="button"
-                className="flex-1 bg-primary text-primary-foreground rounded-lg py-2 font-medium text-sm hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn('flex-1', 'bg-primary', 'text-primary-foreground', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-primary/90', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
                 disabled={updateMut.isPending}
                 onClick={async () => {
                   const r = await updateMut.mutateAsync({ id: restoreTarget.id, bookingStatus: "Pending" });
@@ -681,7 +673,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               >
                 {updateMut.isPending ? "Memproses..." : "Restore"}
               </button>
-              <button type="button" className="flex-1 border border-border rounded-lg py-2 font-medium text-sm hover:bg-accent transition" onClick={() => setRestoreTarget(null)}>
+              <button type="button" className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-accent', 'transition')} onClick={() => setRestoreTarget(null)}>
                 Batal
               </button>
             </div>
@@ -691,39 +683,39 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Transfer Booking Modal */}
       {transferTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
-            <div className="flex items-start justify-between gap-4 mb-6">
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
+          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-6')}>
               <div>
-                <h2 className="text-lg font-bold text-[#19202C]">Transfer Booking</h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <h2 className={cn('text-lg', 'font-bold', 'text-[#19202C]')}>Transfer Booking</h2>
+                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>
                   Memindahkan kepemilikan data booking dari sales sebelumnya ke sales yang dipilih.
                 </p>
               </div>
               <button
-                className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+                className={cn('rounded-full', 'bg-red-100', 'hover:bg-red-200', 'p-1.5', 'shrink-0')}
                 onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
                 type="button"
                 aria-label="Tutup"
               >
-                <X className="h-5 w-5 text-red-500" />
+                <X className={cn('h-5', 'w-5', 'text-red-500')} />
               </button>
             </div>
 
             <div className="mb-4">
-              <p className="text-xs text-gray-400 mb-1">Sales saat ini</p>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-800">
-                  {transferTarget.sales?.fullName ?? <span className="text-gray-400 italic">Tidak ada</span>}
+              <p className={cn('text-xs', 'text-gray-400', 'mb-1')}>Sales saat ini</p>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <span className={cn('text-sm', 'font-medium', 'text-gray-800')}>
+                  {transferTarget.sales?.fullName ?? <span className={cn('text-gray-400', 'italic')}>Tidak ada</span>}
                 </span>
                 {transferTarget.sales?.fullName && (
-                  <span className="text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-500">sales</span>
+                  <span className={cn('text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'text-gray-500')}>sales</span>
                 )}
               </div>
             </div>
 
             <div>
-              <p className="text-xs text-gray-400 mb-1">Pilih Sales</p>
+              <p className={cn('text-xs', 'text-gray-400', 'mb-1')}>Pilih Sales</p>
               <SearchableSelect
                 options={salesProfiles
                   .filter((s) => s.id !== transferTarget.salesId)
@@ -736,9 +728,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               />
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className={cn('flex', 'gap-3', 'mt-6')}>
               <button
-                className="flex-1 border border-gray-300 rounded-lg py-2 font-medium hover:bg-gray-100 transition text-sm"
+                className={cn('flex-1', 'border', 'border-gray-300', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-gray-100', 'transition', 'text-sm')}
                 onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
                 disabled={transferMut.isPending}
                 type="button"
@@ -746,7 +738,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 Batal
               </button>
               <button
-                className="flex-1 bg-black text-white rounded-lg py-2 font-medium hover:bg-gray-900 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn('flex-1', 'bg-black', 'text-white', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-gray-900', 'transition', 'text-sm', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
                 disabled={!transferSalesId || transferMut.isPending}
                 type="button"
                 onClick={async () => {
@@ -842,31 +834,31 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Vendor PO Approval Modal */}
       {vendorApproveModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
-            <div className="flex items-start justify-between gap-4 mb-4">
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
+          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
               <div>
-                <h2 className="text-lg font-bold">Approve {vendorApproveModal.roleLabel} — {vendorApproveModal.categoryType === "catering" ? "Catering" : "Dekorasi"}</h2>
-                <p className="text-sm text-gray-500 mt-1">Tanda tangan {vendorApproveModal.roleLabel} diperlukan.</p>
+                <h2 className={cn('text-lg', 'font-bold')}>Approve {vendorApproveModal.roleLabel} — {vendorApproveModal.categoryType === "catering" ? "Catering" : "Dekorasi"}</h2>
+                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>Tanda tangan {vendorApproveModal.roleLabel} diperlukan.</p>
               </div>
-              <button type="button" className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 shrink-0"
+              <button type="button" className={cn('rounded-full', 'bg-red-100', 'hover:bg-red-200', 'p-1.5', 'shrink-0')}
                 onClick={() => { setVendorApproveModal((p) => ({ ...p, open: false })); sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>
-                <X className="h-5 w-5 text-red-500" />
+                <X className={cn('h-5', 'w-5', 'text-red-500')} />
               </button>
             </div>
             <div className="mb-4">
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Tanda Tangan {vendorApproveModal.roleLabel}</label>
-              <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50">
+              <label className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Tanda Tangan {vendorApproveModal.roleLabel}</label>
+              <div className={cn('border-2', 'border-dashed', 'border-gray-300', 'rounded-xl', 'overflow-hidden', 'bg-gray-50')}>
                 <SignatureCanvas ref={sigVendorRef} penColor="black"
                   canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
                   onEnd={() => setHasVendorSigned(true)} />
               </div>
-              <button type="button" className="mt-1.5 text-xs text-red-500 hover:text-red-700 underline"
+              <button type="button" className={cn('mt-1.5', 'text-xs', 'text-red-500', 'hover:text-red-700', 'underline')}
                 onClick={() => { sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>Hapus tanda tangan</button>
             </div>
-            <div className="flex gap-3">
+            <div className={cn('flex', 'gap-3')}>
               <button type="button" disabled={!hasVendorSigned || isApprovingVendor}
-                className="flex-1 bg-black text-white rounded-lg py-2 font-medium text-sm hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn('flex-1', 'bg-black', 'text-white', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-gray-900', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
                 onClick={async () => {
                   if (!hasVendorSigned || sigVendorRef.current?.isEmpty()) { toast.error("Tanda tangan harus diisi"); return; }
                   setIsApprovingVendor(true);
@@ -890,7 +882,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 }}>
                 {isApprovingVendor ? "Menyetujui..." : "Setujui"}
               </button>
-              <button type="button" className="flex-1 border border-gray-300 rounded-lg py-2 font-medium text-sm hover:bg-gray-100 transition"
+              <button type="button" className={cn('flex-1', 'border', 'border-gray-300', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-gray-100', 'transition')}
                 onClick={() => { setVendorApproveModal((p) => ({ ...p, open: false })); sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>
                 Batal
               </button>
@@ -918,8 +910,8 @@ function CateringDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: s
   if (loading || !booking) {
     return (
       <Drawer isOpen onClose={onClose} title="Catering" maxWidth="sm:max-w-full">
-        <div className="p-4 space-y-2">
-          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+        <div className={cn('p-4', 'space-y-2')}>
+          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className={cn('h-8', 'w-full')} />)}
         </div>
       </Drawer>
     );
@@ -944,7 +936,7 @@ function DecorationDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId:
   if (loading || !booking) {
     return (
       <Drawer isOpen onClose={onClose} title="Dekorasi">
-        <div className="flex items-center justify-center h-full"><p className="text-sm text-gray-400">Memuat...</p></div>
+        <div className={cn('flex', 'items-center', 'justify-center', 'h-full')}><p className={cn('text-sm', 'text-gray-400')}>Memuat...</p></div>
       </Drawer>
     );
   }
@@ -985,26 +977,26 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         </AlertDialogHeader>
 
         {isPending || !agreement ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
-            <RefreshCw className="h-4 w-4 animate-spin" /> Generating...
+          <div className={cn('flex', 'items-center', 'justify-center', 'py-8', 'gap-2', 'text-sm', 'text-muted-foreground')}>
+            <RefreshCw className={cn('h-4', 'w-4', 'animate-spin')} /> Generating...
           </div>
         ) : (
-          <div className="space-y-3 py-1">
+          <div className={cn('space-y-3', 'py-1')}>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground font-medium">Link Agreement</p>
-              <div className="flex items-center gap-2 overflow-hidden">
-                <code className="min-w-0 flex-1 text-xs bg-muted rounded px-2 py-1.5 block break-all">{agreementUrl}</code>
+              <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Link Agreement</p>
+              <div className={cn('flex', 'items-center', 'gap-2', 'overflow-hidden')}>
+                <code className={cn('min-w-0', 'flex-1', 'text-xs', 'bg-muted', 'rounded', 'px-2', 'py-1.5', 'block', 'break-all')}>{agreementUrl}</code>
                 <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreementUrl!); toast.success("Link disalin"); }}>
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className={cn('h-3.5', 'w-3.5')} />
                 </Button>
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground font-medium">Kode Akses</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-lg font-mono font-bold tracking-widest bg-muted rounded px-2 py-1.5">{agreement.accessCode}</code>
+              <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Kode Akses</p>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <code className={cn('flex-1', 'text-lg', 'font-mono', 'font-bold', 'tracking-widest', 'bg-muted', 'rounded', 'px-2', 'py-1.5')}>{agreement.accessCode}</code>
                 <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreement.accessCode); toast.success("Kode disalin"); }}>
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className={cn('h-3.5', 'w-3.5')} />
                 </Button>
               </div>
             </div>
@@ -1013,10 +1005,10 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
 
         <AlertDialogFooter>
           {agreement?.status === "Signed" ? (
-            <p className="text-xs text-muted-foreground mr-auto">✓ Sudah ditandatangani</p>
+            <p className={cn('text-xs', 'text-muted-foreground', 'mr-auto')}>✓ Sudah ditandatangani</p>
           ) : (
             <Button variant="outline" size="default" disabled={isPending} onClick={generate}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Regenerate
+              <RefreshCw className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Regenerate
             </Button>
           )}
           <AlertDialogCancel onClick={onClose}>Tutup</AlertDialogCancel>

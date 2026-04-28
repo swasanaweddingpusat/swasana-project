@@ -105,7 +105,7 @@ export function DecorationSelectionDrawer({ isOpen, onClose, booking, onUpdated,
     setPOData(injected);
     try { localStorage.setItem(draftKey, JSON.stringify(injected)); } catch {}
     isLoadedRef.current = true;
-  }, [isOpen, decorationItem, injectIncomingRows]);
+  }, [isOpen, decorationItem, injectIncomingRows, draftKey]);
 
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {

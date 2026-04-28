@@ -43,14 +43,6 @@ function stripHtml(html: string | null | undefined): string {
   return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim() || "-";
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  Pending: "bg-yellow-100 text-yellow-800",
-  Uploaded: "bg-blue-100 text-blue-800",
-  Confirmed: "bg-green-100 text-green-800",
-  Rejected: "bg-red-100 text-red-800",
-  Canceled: "bg-gray-100 text-gray-700",
-  Lost: "bg-purple-100 text-purple-800",
-};
 
 const AGREEMENT_COLOR: Record<string, string> = {
   Pending: "bg-gray-100 text-gray-700",
@@ -88,6 +80,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
   useEffect(() => {
     if (!open || !bookingId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveTab("booking");
     setSelectedDocIds(new Set());
     fetchBooking(bookingId);
@@ -406,7 +399,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                           {Object.entries(grouped).map(([docName, docs]) => {
                             const groupIds = docs.map((d) => d.id);
                             const allSelected = groupIds.every((id) => selectedDocIds.has(id));
-                            const someSelected = groupIds.some((id) => selectedDocIds.has(id));
                             const toggleGroup = () => {
                               setSelectedDocIds((prev) => {
                                 const next = new Set(prev);
@@ -527,7 +519,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
               {/* ═══ TAB: Client Agreement ═══ */}
               {activeTab === "agreement" && (
-                <ClientAgreementSection booking={booking} onRefresh={() => fetchBooking(bookingId!)} />
+                <ClientAgreementSection booking={booking} />
               )}
             </>
           )}
@@ -575,7 +567,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
 /* ─── Client Agreement Sub-component ───────────────────────────────────────── */
 
-function ClientAgreementSection({ booking, onRefresh }: { booking: BookingDetail; onRefresh: () => void }) {
+function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
   const [agreement, setAgreement] = useState(booking.clientAgreement);
   const [isPending, startTransition] = useTransition();
 

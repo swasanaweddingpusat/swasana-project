@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { X } from "lucide-react";
@@ -51,16 +51,17 @@ const FIELD_LABEL: Record<string, string> = {
 export function ActivityLogModal({ open, onClose, bookingId, customerName }: Props) {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const fetchIdRef = useRef(0);
 
   useEffect(() => {
     if (!open || !bookingId) return;
-    setLoading(true);
+    const id = ++fetchIdRef.current;
 
     fetch(`/api/bookings/${bookingId}/activity-logs`)
-      .then((r) => r.json())
-      .then((data) => setLogs(data ?? []))
-      .catch(() => setLogs([]))
-      .finally(() => setLoading(false));
+      .then((r) => { if (id === fetchIdRef.current) setLoading(true); return r.json(); })
+      .then((data) => { if (id === fetchIdRef.current) setLogs(data ?? []); })
+      .catch(() => { if (id === fetchIdRef.current) setLogs([]); })
+      .finally(() => { if (id === fetchIdRef.current) setLoading(false); });
   }, [open, bookingId]);
 
   const formatValue = (field: string, value: unknown): string => {
