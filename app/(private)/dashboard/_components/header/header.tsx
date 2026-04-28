@@ -1,18 +1,23 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import { ROUTE_META } from "@/lib/route-meta";
 import { useSidebar } from "../sidebar/sidebar-context";
 import { UserMenu } from "./user-menu";
 import { NotificationBell } from "./notification-bell";
 import { useHeaderAction } from "@/components/providers/header-action-provider";
+import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
+import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/use-permissions";
 
 export function Header() {
   const pathname = usePathname();
   const meta = ROUTE_META[pathname];
   const { toggleMobile } = useSidebar();
   const { action } = useHeaderAction();
+  const { openBookingDrawer } = useBookingDrawer();
+  const { can } = usePermissions();
 
   return (
     <header className="bg-white border-b border-gray-200 px-4 lg:px-6 h-16 flex items-center justify-between shrink-0">
@@ -39,6 +44,12 @@ export function Header() {
 
       <div className="flex items-center gap-2">
         {action}
+        {can("booking", "create") && (
+          <Button size="sm" onClick={openBookingDrawer} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline ml-1">Tambah Booking</span>
+          </Button>
+        )}
         <NotificationBell />
         <UserMenu />
       </div>

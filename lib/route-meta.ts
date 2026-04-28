@@ -65,6 +65,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola status order vendor",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/approval-flow": {
+    title: "Approval Flow",
+    subtitle: "Atur alur persetujuan",
+    parent: "/dashboard/settings",
+  },
   "/dashboard/settings/user-management": {
     title: "User Management",
     subtitle: "Kelola akses dan undangan user",
