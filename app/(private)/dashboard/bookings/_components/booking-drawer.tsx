@@ -245,6 +245,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
   };
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType"]);
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType);
   const isStep2Complete = getBasePrice() === 0 || getDifference() === 0;

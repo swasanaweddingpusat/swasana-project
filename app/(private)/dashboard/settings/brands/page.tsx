@@ -3,11 +3,12 @@ import { getBrands } from "@/lib/queries/venues";
 import { BrandsManager } from "./_components/brands-manager";
 import { BrandsLoading } from "./_components/loading";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { cn } from "../../../../../lib/utils";
 
 export default async function BrandsSettingsPage() {
   await requirePagePermission("brand_management");
   return (
-    <div className="px-6 pb-4">
+    <div className={cn('px-6', 'pb-4')}>
       <Suspense fallback={<BrandsLoading />}>
         <BrandsContent />
       </Suspense>

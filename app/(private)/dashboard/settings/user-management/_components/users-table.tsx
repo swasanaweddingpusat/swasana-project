@@ -21,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { InviteDrawer } from "./invite-drawer";
 import { BulkEditModal } from "./BulkEditModal";
 import { useUsers, useDeleteUser } from "@/hooks/use-users";
-import { useQueryClient } from "@tanstack/react-query";
 import { resendInvitation } from "@/actions/user";
 import type { UsersQueryResult, UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
@@ -52,7 +51,6 @@ interface UsersTableProps {
 
 export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
   const { data, refetch, isRefetching } = useUsers(initialData);
-  const qc = useQueryClient();
   const users: UserQueryItem[] = useMemo(() => data?.users ?? [], [data]);
   const deleteUserMutation = useDeleteUser();
 
@@ -177,61 +175,61 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
 
   return (
     <div>
-      <Card className="p-0 shadow-none">
+      <Card className={cn('p-0', 'shadow-none')}>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="px-6 py-4 space-y-3">
+          <div className={cn('px-6', 'py-4', 'space-y-3')}>
             {/* Top row */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-foreground">List Users</span>
-                <span className="text-[11px] font-medium bg-secondary text-secondary-foreground px-2.5 py-0.5 border border-border rounded-full">
+            <div className={cn('flex', 'items-center', 'justify-between')}>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <span className={cn('text-base', 'font-bold', 'text-foreground')}>List Users</span>
+                <span className={cn('text-[11px]', 'font-medium', 'bg-secondary', 'text-secondary-foreground', 'px-2.5', 'py-0.5', 'border', 'border-border', 'rounded-full')}>
                   {filteredUsers.length} Users available
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className={cn('flex', 'items-center', 'gap-2')}>
                 {selectedUsers.size > 1 && (
                   <>
-                    <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-8 text-xs" onClick={() => setBulkEditOpen(true)}>
-                      <PenLine className="w-3.5 h-3.5" /> Edit ({selectedUsers.size})
+                    <Button variant="outline" size="sm" className={cn('flex', 'items-center', 'gap-1.5', 'h-8', 'text-xs')} onClick={() => setBulkEditOpen(true)}>
+                      <PenLine className={cn('w-3.5', 'h-3.5')} /> Edit ({selectedUsers.size})
                     </Button>
-                    <Button variant="destructive" size="sm" className="flex items-center gap-1.5 h-8 text-xs" onClick={() => setBulkDeleteOpen(true)}>
-                      <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedUsers.size})
+                    <Button variant="destructive" size="sm" className={cn('flex', 'items-center', 'gap-1.5', 'h-8', 'text-xs')} onClick={() => setBulkDeleteOpen(true)}>
+                      <Trash2 className={cn('w-3.5', 'h-3.5')} /> Delete ({selectedUsers.size})
                     </Button>
                   </>
                 )}
-                <Button size="sm" onClick={handleAddNew} className="flex items-center gap-1.5 text-xs h-8">
-                  <UserPlus className="w-3.5 h-3.5" /> Invite User
+                <Button size="sm" onClick={handleAddNew} className={cn('flex', 'items-center', 'gap-1.5', 'text-xs', 'h-8')}>
+                  <UserPlus className={cn('w-3.5', 'h-3.5')} /> Invite User
                 </Button>
               </div>
             </div>
 
             {/* Bottom row: Search + Filters */}
-            <div className="flex items-center gap-2">
+            <div className={cn('flex', 'items-center', 'gap-2')}>
               <Input
                 placeholder="Cari nama, email..."
                 value={searchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="h-8 text-xs border-border bg-secondary flex-1 lg:flex-none lg:w-64"
+                className={cn('h-8', 'text-xs', 'border-border', 'bg-secondary', 'flex-1', 'lg:flex-none', 'lg:w-64')}
               />
 
               {/* Desktop filters */}
-              <div className="hidden lg:flex items-center gap-2">
+              <div className={cn('hidden', 'lg:flex', 'items-center', 'gap-2')}>
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="h-8 w-28 text-xs border-border bg-secondary"><SelectValue placeholder="Role" /></SelectTrigger>
+                  <SelectTrigger className={cn('h-8', 'w-28', 'text-xs', 'border-border', 'bg-secondary')}><SelectValue placeholder="Role" /></SelectTrigger>
                   <SelectContent>
                     {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-8 w-28 text-xs border-border bg-secondary"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectTrigger className={cn('h-8', 'w-28', 'text-xs', 'border-border', 'bg-secondary')}><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="verified">Verified</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={venueFilter} onValueChange={setVenueFilter}>
-                  <SelectTrigger className="h-8 w-36 text-xs border-border bg-secondary"><SelectValue placeholder="Venue" /></SelectTrigger>
+                  <SelectTrigger className={cn('h-8', 'w-36', 'text-xs', 'border-border', 'bg-secondary')}><SelectValue placeholder="Venue" /></SelectTrigger>
                   <SelectContent>
                     {allVenues.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                   </SelectContent>
@@ -241,14 +239,14 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                   size="sm"
                   onClick={() => refetch()}
                   disabled={isRefetching}
-                  className="h-8 px-2 border-border bg-secondary hover:bg-accent"
+                  className={cn('h-8', 'px-2', 'border-border', 'bg-secondary', 'hover:bg-accent')}
                   title="Refresh data"
                 >
                   <RefreshCw className={cn("h-3.5 w-3.5 text-muted-foreground", isRefetching && "animate-spin")} />
                 </Button>
                 {hasFilters && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-muted-foreground hover:text-foreground">
-                    <X className="h-3.5 w-3.5" />
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className={cn('h-8', 'px-2', 'text-muted-foreground', 'hover:text-foreground')}>
+                    <X className={cn('h-3.5', 'w-3.5')} />
                   </Button>
                 )}
               </div>
@@ -256,33 +254,33 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
               {/* Mobile filter */}
               <div className="lg:hidden">
                 <Button variant="outline" size="sm" className={cn("h-8 w-8 p-0 border-gray-200", hasFilters && "border-[#1D1D1D] bg-[#1D1D1D] text-white hover:bg-[#333] hover:text-white")}>
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <SlidersHorizontal className={cn('h-3.5', 'w-3.5')} />
                 </Button>
               </div>
             </div>
           </div>
 
           {/* Table */}
-          <div className="relative overflow-x-auto w-full">
+          <div className={cn('relative', 'overflow-x-auto', 'w-full')}>
             {filteredUsers.length === 0 ? (
-              <div className="flex justify-center items-center py-8">
-                <div className="text-xs text-gray-500">No users found</div>
+              <div className={cn('flex', 'justify-center', 'items-center', 'py-8')}>
+                <div className={cn('text-xs', 'text-gray-500')}>No users found</div>
               </div>
             ) : (
-              <Table className="min-w-full text-xs">
+              <Table className={cn('min-w-full', 'text-xs')}>
                 <TableHeader>
-                  <TableRow className="border-b-2 border-border bg-secondary">
-                    <TableHead className="px-4 py-2.5 font-semibold text-muted-foreground text-xs">
+                  <TableRow className={cn('border-b-2', 'border-border', 'bg-secondary')}>
+                    <TableHead className={cn('px-4', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>
                       <Checkbox ref={headerCheckboxRef} checked={isAllSelected} onCheckedChange={handleSelectAll} className="cursor-pointer" />
                     </TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs w-10">No</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Nama</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Email</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Role</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Assigned Venues</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Created Date</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Status</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs text-right"></TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs', 'w-10')}>No</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Nama</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Email</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Role</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Assigned Venues</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Created Date</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Status</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs', 'text-right')}></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -295,71 +293,71 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                       ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
                       : "—";
                     return (
-                      <TableRow key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <TableCell className="px-4 py-2.5">
+                      <TableRow key={user.id} className={cn('border-b', 'border-gray-100', 'hover:bg-gray-50')}>
+                        <TableCell className={cn('px-4', 'py-2.5')}>
                           <Checkbox checked={selectedUsers.has(user.id)} onCheckedChange={(c) => handleSelectUser(user.id, c as boolean)} className="cursor-pointer" />
                         </TableCell>
-                        <TableCell className="px-2 py-2.5 text-xs text-muted-foreground">{rowNumber}</TableCell>
-                        <TableCell className="px-2 py-2.5">
-                          <div className="flex items-center gap-2">
+                        <TableCell className={cn('px-2', 'py-2.5', 'text-xs', 'text-muted-foreground')}>{rowNumber}</TableCell>
+                        <TableCell className={cn('px-2', 'py-2.5')}>
+                          <div className={cn('flex', 'items-center', 'gap-2')}>
                             <ProfileAvatar name={user.profile?.fullName ?? user.email} src={user.profile?.avatarUrl ?? undefined} size="sm" />
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-medium text-xs">{user.profile?.fullName ?? user.name ?? "—"}</span>
+                            <div className={cn('flex', 'flex-col', 'gap-0.5')}>
+                              <span className={cn('font-medium', 'text-xs')}>{user.profile?.fullName ?? user.name ?? "—"}</span>
                               {(user.profile?.dataGroupMemberships?.length ?? 0) > 0 && (
-                                <div className="flex flex-wrap gap-1">
+                                <div className={cn('flex', 'flex-wrap', 'gap-1')}>
                                   {user.profile!.dataGroupMemberships!.map((m) => (
-                                    <span key={m.group.id} className="px-1.5 py-0.5 text-[10px] bg-secondary text-secondary-foreground rounded-full border">{m.group.name}</span>
+                                    <span key={m.group.id} className={cn('px-1.5', 'py-0.5', 'text-[10px]', 'bg-secondary', 'text-secondary-foreground', 'rounded-full', 'border')}>{m.group.name}</span>
                                   ))}
                                 </div>
                               )}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="px-2 py-2.5 text-xs text-muted-foreground">{user.email}</TableCell>
-                        <TableCell className="px-2 py-2.5">
+                        <TableCell className={cn('px-2', 'py-2.5', 'text-xs', 'text-muted-foreground')}>{user.email}</TableCell>
+                        <TableCell className={cn('px-2', 'py-2.5')}>
                           {roleName ? (
                             <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getRoleBadgeClass())}>
                               {roleName.replace(/\b\w/g, (c: string) => c.toUpperCase())}
                             </span>
                           ) : "—"}
                         </TableCell>
-                        <TableCell className="px-2 py-2.5">
+                        <TableCell className={cn('px-2', 'py-2.5')}>
                           {venues.length > 0 ? (
-                            <div className="flex items-center gap-1 flex-wrap">
-                              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-secondary-foreground truncate max-w-32">
+                            <div className={cn('flex', 'items-center', 'gap-1', 'flex-wrap')}>
+                              <span className={cn('px-2', 'py-0.5', 'rounded-full', 'text-[11px]', 'font-medium', 'bg-secondary', 'text-secondary-foreground', 'truncate', 'max-w-32')}>
                                 {venues[0].venue.name}
                               </span>
                               {venues.length > 1 && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                                <span className={cn('px-1.5', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium', 'bg-muted', 'text-muted-foreground')}>
                                   +{venues.length - 1} more
                                 </span>
                               )}
                             </div>
                           ) : "—"}
                         </TableCell>
-                        <TableCell className="px-2 py-2.5 text-xs text-muted-foreground">{createdDate}</TableCell>
-                        <TableCell className="px-2 py-2.5">
+                        <TableCell className={cn('px-2', 'py-2.5', 'text-xs', 'text-muted-foreground')}>{createdDate}</TableCell>
+                        <TableCell className={cn('px-2', 'py-2.5')}>
                           <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getStatusBadgeClass(isVerified))}>
                             {isVerified ? "Verified" : "Pending"}
                           </span>
                         </TableCell>
-                        <TableCell className="px-2 py-2.5">
-                          <div className="flex items-center justify-end gap-1">
+                        <TableCell className={cn('px-2', 'py-2.5')}>
+                          <div className={cn('flex', 'items-center', 'justify-end', 'gap-1')}>
                             <DropdownMenu>
-                              <DropdownMenuTrigger className="p-1 hover:bg-gray-100 rounded cursor-pointer outline-none" title="Actions">
-                                <MoreHorizontal className="h-3.5 w-3.5 text-gray-700" />
+                              <DropdownMenuTrigger className={cn('p-1', 'hover:bg-gray-100', 'rounded', 'cursor-pointer', 'outline-none')} title="Actions">
+                                <MoreHorizontal className={cn('h-3.5', 'w-3.5', 'text-gray-700')} />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleEdit(user)}>
-                                  <PenLine className="h-3.5 w-3.5 mr-2" /> Edit
+                                  <PenLine className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit
                                 </DropdownMenuItem>
                                 {!isVerified && (
                                   <DropdownMenuItem onClick={() => handleResend(user)} disabled={resendingId === user.profile?.id}>
-                                    <Mail className="h-3.5 w-3.5 mr-2" /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
+                                    <Mail className={cn('h-3.5', 'w-3.5', 'mr-2')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }} className="text-red-600">
-                                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                                  <Trash2 className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -375,11 +373,11 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
 
           {/* Pagination */}
           {filteredUsers.length > 0 && (
-            <div className="flex justify-between items-center px-6 py-3 border-t">
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="text-xs h-8">
-                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Previous
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className={cn('text-xs', 'h-8')}>
+                <ArrowLeft className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
               </Button>
-              <div className="flex items-center gap-1">
+              <div className={cn('flex', 'items-center', 'gap-1')}>
                 {(() => {
                   const pages: (number | string)[] = [];
                   if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
@@ -392,7 +390,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                   }
                   return pages.map((page, idx) =>
                     typeof page === "string" ? (
-                      <span key={`e-${idx}`} className="px-2 py-1 text-xs text-gray-400">...</span>
+                      <span key={`e-${idx}`} className={cn('px-2', 'py-1', 'text-xs', 'text-gray-400')}>...</span>
                     ) : (
                       <button key={page} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", currentPage === page ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary")} onClick={() => setCurrentPage(page)}>
                         {page}
@@ -401,8 +399,8 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                   );
                 })()}
               </div>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="text-xs h-8">
-                Next <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className={cn('text-xs', 'h-8')}>
+                Next <ArrowRight className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
               </Button>
             </div>
           )}
@@ -439,16 +437,16 @@ function DeleteDialog({ open, onOpenChange, isDeleting, onConfirm, title, descri
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden rounded-2xl border-0 shadow-xl" showCloseButton={false}>
+      <DialogContent className={cn('max-w-sm', 'p-0', 'gap-0', 'overflow-hidden', 'rounded-2xl', 'border-0', 'shadow-xl')} showCloseButton={false}>
         <DialogTitle className="sr-only">{title}</DialogTitle>
-        <div className="px-8 py-8">
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
-          <p className="text-gray-600 mb-8">{description}</p>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting} className="flex-1 h-12 text-base font-medium cursor-pointer">
+        <div className={cn('px-8', 'py-8')}>
+          <h3 className={cn('text-xl', 'font-semibold', 'text-gray-900', 'mb-2')}>{title}</h3>
+          <p className={cn('text-gray-600', 'mb-8')}>{description}</p>
+          <div className={cn('flex', 'gap-3')}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting} className={cn('flex-1', 'h-12', 'text-base', 'font-medium', 'cursor-pointer')}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={onConfirm} disabled={isDeleting} className="flex-1 h-12 text-base font-medium cursor-pointer">
+            <Button variant="destructive" onClick={onConfirm} disabled={isDeleting} className={cn('flex-1', 'h-12', 'text-base', 'font-medium', 'cursor-pointer')}>
               {isDeleting ? "Deleting..." : confirmLabel}
             </Button>
           </div>

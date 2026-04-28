@@ -114,15 +114,15 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
 
   return (
     <Drawer isOpen={open} onClose={handleClose} title={`Bulk Edit (${selectedUserIds.length} users)`}>
-      <div className="flex flex-col justify-between h-full">
-        <div className="flex-1 overflow-y-auto scrollbar-hide">
-          <div className="space-y-3 px-2">
+      <div className={cn('flex', 'flex-col', 'justify-between', 'h-full')}>
+        <div className={cn('flex-1', 'overflow-y-auto', 'scrollbar-hide')}>
+          <div className={cn('space-y-3', 'px-2')}>
 
             {/* Role */}
             <div>
-              <Label className="text-sm font-medium text-gray-700">Role</Label>
+              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Role</Label>
               <Select value={roleId} onValueChange={setRoleId}>
-                <SelectTrigger className="mt-1 w-full border-[#CCCCCC] bg-[#F9F9F9]">
+                <SelectTrigger className={cn('mt-1', 'w-full', 'border-[#CCCCCC]', 'bg-[#F9F9F9]')}>
                   <SelectValue placeholder="Pilih role baru (opsional)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -133,16 +133,16 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-gray-400 mt-1">Kosongkan jika tidak ingin mengubah role</p>
+              <p className={cn('text-[11px]', 'text-gray-400', 'mt-1')}>Kosongkan jika tidak ingin mengubah role</p>
             </div>
 
             {/* Data Access */}
             <div>
-              <Label className="text-sm font-medium text-gray-700">Data Access</Label>
-              <p className="text-xs text-gray-500 mt-1 mb-2">Controls which booking data this user can see</p>
-              <div className="flex gap-2">
+              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Data Access</Label>
+              <p className={cn('text-xs', 'text-gray-500', 'mt-1', 'mb-2')}>Controls which booking data this user can see</p>
+              <div className={cn('flex', 'gap-2')}>
                 {(["own", "group", "all"] as const).map((scope) => {
-                  const icons = { own: <User className="h-3 w-3" />, group: <Users className="h-3 w-3" />, all: <Globe className="h-3 w-3" /> };
+                  const icons = { own: <User className={cn('h-3', 'w-3')} />, group: <Users className={cn('h-3', 'w-3')} />, all: <Globe className={cn('h-3', 'w-3')} /> };
                   const labels = { own: "Own", group: "Group", all: "All" };
                   const isActive = dataScope === scope;
                   return (
@@ -156,17 +156,17 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                 })}
               </div>
               {dataScope === "group" && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-gray-500">Assign ke group:</p>
+                <div className={cn('mt-3', 'space-y-2')}>
+                  <p className={cn('text-xs', 'text-gray-500')}>Assign ke group:</p>
                   {selectedGroupIds.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
+                    <div className={cn('flex', 'flex-wrap', 'gap-1.5', 'mb-2')}>
                       {selectedGroupIds.map((gid) => {
                         const g = groups.find((x) => x.id === gid);
                         if (!g) return null;
                         return (
-                          <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full">
+                          <span key={gid} className={cn('flex', 'items-center', 'gap-1', 'px-2', 'py-0.5', 'text-xs', 'bg-gray-900', 'text-white', 'rounded-full')}>
                             {g.name}
-                            <button type="button" onClick={() => setSelectedGroupIds((prev) => prev.filter((id) => id !== gid))} className="ml-0.5 hover:text-gray-300"><X className="h-3 w-3" /></button>
+                            <button type="button" onClick={() => setSelectedGroupIds((prev) => prev.filter((id) => id !== gid))} className={cn('ml-0.5', 'hover:text-gray-300')}><X className={cn('h-3', 'w-3')} /></button>
                           </span>
                         );
                       })}
@@ -186,16 +186,16 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
 
             {/* Assigned Venues */}
             <div>
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-gray-700">Assigned Venues</Label>
+              <div className={cn('flex', 'items-center', 'justify-between')}>
+                <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Assigned Venues</Label>
                 {allVenueIds.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-gray-400">All</span>
+                  <div className={cn('flex', 'items-center', 'gap-2')}>
+                    <span className={cn('text-[11px]', 'text-gray-400')}>All</span>
                     <Switch checked={allVenuesSelected} onCheckedChange={toggleAllVenues} className="scale-75" />
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-500 mt-1 mb-2">Kosongkan jika tidak ingin mengubah venue</p>
+              <p className={cn('text-xs', 'text-gray-500', 'mt-1', 'mb-2')}>Kosongkan jika tidak ingin mengubah venue</p>
 
               <div className="space-y-2">
                 {brands.map((brand) => {
@@ -205,18 +205,18 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                   const allSelectedForBrand = brandVenues.length > 0 && selectedCount === brandVenues.length;
                   return (
                     <div key={brand.id} className={cn("rounded-lg border transition-all duration-200", isExpanded ? "border-gray-300 bg-white shadow-sm" : "border-gray-200 bg-gray-50/50")}>
-                      <button type="button" onClick={() => setExpandedBrands((prev) => { const n = new Set(prev); if (n.has(brand.id)) { n.delete(brand.id); } else { n.add(brand.id); } return n; })} className="flex items-center w-full px-3 py-2.5 gap-2.5">
+                      <button type="button" onClick={() => setExpandedBrands((prev) => { const n = new Set(prev); if (n.has(brand.id)) { n.delete(brand.id); } else { n.add(brand.id); } return n; })} className={cn('flex', 'items-center', 'w-full', 'px-3', 'py-2.5', 'gap-2.5')}>
                         <Building2 className={cn("h-4 w-4 shrink-0 transition-colors", isExpanded ? "text-gray-900" : "text-gray-400")} />
                         <span className={cn("text-sm flex-1 text-left transition-colors", isExpanded ? "font-semibold text-gray-900" : "font-medium text-gray-600")}>{brand.name}</span>
-                        {selectedCount > 0 && <span className="text-[10px] font-medium bg-black text-white rounded-full px-1.5 py-0.5 min-w-5 text-center">{selectedCount}</span>}
+                        {selectedCount > 0 && <span className={cn('text-[10px]', 'font-medium', 'bg-black', 'text-white', 'rounded-full', 'px-1.5', 'py-0.5', 'min-w-5', 'text-center')}>{selectedCount}</span>}
                         <ChevronDown className={cn("h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200", isExpanded && "rotate-180")} />
                       </button>
                       {isExpanded && (
-                        <div className="px-3 pb-3">
+                        <div className={cn('px-3', 'pb-3')}>
                           {brandVenues.length > 0 && (
-                            <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
-                              <span className="text-[11px] text-gray-400 uppercase tracking-wider">{brandVenues.length} venue{brandVenues.length > 1 ? "s" : ""}</span>
-                              <button type="button" onClick={() => selectAllForBrand(brand.id)} className="text-[11px] font-medium text-gray-500 hover:text-gray-900 transition-colors">
+                            <div className={cn('flex', 'items-center', 'justify-between', 'mb-2', 'pb-2', 'border-b', 'border-gray-100')}>
+                              <span className={cn('text-[11px]', 'text-gray-400', 'uppercase', 'tracking-wider')}>{brandVenues.length} venue{brandVenues.length > 1 ? "s" : ""}</span>
+                              <button type="button" onClick={() => selectAllForBrand(brand.id)} className={cn('text-[11px]', 'font-medium', 'text-gray-500', 'hover:text-gray-900', 'transition-colors')}>
                                 {allSelectedForBrand ? "Deselect all" : "Select all"}
                               </button>
                             </div>
@@ -228,10 +228,10 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                                 <div key={venue.id} className="space-y-1.5">
                                   <div className={cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150 cursor-pointer", isSelected ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700 hover:bg-gray-100")} onClick={() => toggleVenue(venue.id, !isSelected)}>
                                     <Checkbox checked={isSelected} onCheckedChange={(c) => toggleVenue(venue.id, c as boolean)} onClick={(e) => e.stopPropagation()} className={cn("shrink-0 border-gray-300", isSelected && "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900")} />
-                                    <span className="text-xs font-medium flex-1 truncate">{venue.name}</span>
+                                    <span className={cn('text-xs', 'font-medium', 'flex-1', 'truncate')}>{venue.name}</span>
                                   </div>
                                   {isSelected && managers.length > 0 && (
-                                    <div className="pl-7 pr-1">
+                                    <div className={cn('pl-7', 'pr-1')}>
                                       <SearchableSelect
                                         options={[{ id: "", name: "Tanpa manager" }, ...managers.map((m) => ({ id: m.id, name: m.fullName ?? "" }))]}
                                         value={venueManagers[venue.id] ?? ""}
@@ -260,10 +260,10 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white pt-4 px-2">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleClose} disabled={submitting} className="flex-1 cursor-pointer text-red-600 border-red-600 hover:bg-red-50">Batal</Button>
-            <Button onClick={handleSubmit} disabled={submitting} className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer">{submitting ? "Menyimpan..." : "Simpan"}</Button>
+        <div className={cn('sticky', 'bottom-0', 'bg-white', 'pt-4', 'px-2')}>
+          <div className={cn('flex', 'gap-2')}>
+            <Button variant="outline" onClick={handleClose} disabled={submitting} className={cn('flex-1', 'cursor-pointer', 'text-red-600', 'border-red-600', 'hover:bg-red-50')}>Batal</Button>
+            <Button onClick={handleSubmit} disabled={submitting} className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}>{submitting ? "Menyimpan..." : "Simpan"}</Button>
           </div>
         </div>
       </div>

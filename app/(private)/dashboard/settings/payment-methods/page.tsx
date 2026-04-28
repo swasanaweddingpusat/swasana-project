@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { usePermissions } from "@/hooks/use-permissions";
 import { createPaymentMethod, updatePaymentMethod, deletePaymentMethod } from "@/actions/payment-method";
+import { cn } from "../../../../../lib/utils";
 
 type PaymentMethodItem = {
   id: string;
@@ -123,31 +124,31 @@ export default function PaymentMethodsPage() {
 
   if (loading) {
     return (
-      <div className="px-2 pb-6">
+      <div className={cn('px-2', 'pb-6')}>
         <Card className="shadow-none">
           <CardContent className="p-0">
-            <div className="flex justify-between items-center px-6 pb-4 border-b">
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-5 w-36" />
-                <Skeleton className="h-4 w-8" />
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <Skeleton className={cn('h-5', 'w-36')} />
+                <Skeleton className={cn('h-4', 'w-8')} />
               </div>
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-9 w-50" />
-                <Skeleton className="h-9 w-40" />
+              <div className={cn('flex', 'items-center', 'gap-3')}>
+                <Skeleton className={cn('h-9', 'w-50')} />
+                <Skeleton className={cn('h-9', 'w-40')} />
               </div>
             </div>
             <div className="px-6">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4 py-3 border-b last:border-0">
-                  <Skeleton className="h-4 w-8" />
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-4 w-28" />
+                <div key={i} className={cn('flex', 'items-center', 'gap-4', 'py-3', 'border-b', 'last:border-0')}>
+                  <Skeleton className={cn('h-4', 'w-8')} />
+                  <Skeleton className={cn('h-4', 'w-28')} />
+                  <Skeleton className={cn('h-4', 'w-28')} />
+                  <Skeleton className={cn('h-4', 'w-36')} />
+                  <Skeleton className={cn('h-4', 'w-28')} />
                   <div className="flex-1" />
-                  <div className="flex gap-1">
-                    <Skeleton className="h-7 w-7" />
-                    <Skeleton className="h-7 w-7" />
+                  <div className={cn('flex', 'gap-1')}>
+                    <Skeleton className={cn('h-7', 'w-7')} />
+                    <Skeleton className={cn('h-7', 'w-7')} />
                   </div>
                 </div>
               ))}
@@ -159,16 +160,16 @@ export default function PaymentMethodsPage() {
   }
 
   return (
-    <div className="px-2 pb-6">
+    <div className={cn('px-2', 'pb-6')}>
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 pb-4 border-b">
-            <div className="flex items-center gap-2">
-              <span className="text-base font-semibold text-gray-900">Payment Methods</span>
-              <span className="text-sm text-muted-foreground">({filtered.length})</span>
+          <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
+            <div className={cn('flex', 'items-center', 'gap-2')}>
+              <span className={cn('text-base', 'font-semibold', 'text-gray-900')}>Payment Methods</span>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className={cn('flex', 'items-center', 'gap-3')}>
               <SearchableSelect
                 options={[{ id: "all", name: "All Venues" }, ...venues]}
                 value={venueFilter}
@@ -179,7 +180,7 @@ export default function PaymentMethodsPage() {
               />
               {(can("payment_methods", "create") || isAdmin) && (
                 <Button onClick={openAdd}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Payment Method
+                  <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Payment Method
                 </Button>
               )}
             </div>
@@ -187,8 +188,8 @@ export default function PaymentMethodsPage() {
 
           {/* Table */}
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-muted-foreground">
-              <CreditCard className="h-12 w-12 mb-3 opacity-30" />
+            <div className={cn('flex', 'flex-col', 'items-center', 'py-12', 'text-muted-foreground')}>
+              <CreditCard className={cn('h-12', 'w-12', 'mb-3', 'opacity-30')} />
               <p>No payment methods yet</p>
             </div>
           ) : (
@@ -212,15 +213,15 @@ export default function PaymentMethodsPage() {
                     <TableCell>{item.bankAccountNumber}</TableCell>
                     <TableCell>{item.bankRecipient}</TableCell>
                     <TableCell>
-                      <div className="flex gap-1 justify-end">
+                      <div className={cn('flex', 'gap-1', 'justify-end')}>
                         {(can("payment_methods", "edit") || isAdmin) && (
-                          <button className="p-1.5 hover:bg-muted rounded cursor-pointer" onClick={() => openEdit(item)}>
-                            <PenLine className="w-4 h-4 text-muted-foreground" />
+                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)}>
+                            <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                           </button>
                         )}
                         {(can("payment_methods", "delete") || isAdmin) && (
-                          <button className="p-1.5 hover:bg-muted rounded cursor-pointer" onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
+                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
+                            <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
                           </button>
                         )}
                       </div>
@@ -233,13 +234,13 @@ export default function PaymentMethodsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center px-6 py-3 border-t">
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
               <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Previous
+                <ArrowLeft className={cn('w-4', 'h-4', 'mr-1')} /> Previous
               </Button>
-              <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+              <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
               <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                Next <ArrowRight className="w-4 h-4 ml-1" />
+                Next <ArrowRight className={cn('w-4', 'h-4', 'ml-1')} />
               </Button>
             </div>
           )}
@@ -250,7 +251,7 @@ export default function PaymentMethodsPage() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-md">
           <DialogTitle>{editingItem ? "Edit Payment Method" : "Add Payment Method"}</DialogTitle>
-          <div className="space-y-3 mt-2">
+          <div className={cn('space-y-3', 'mt-2')}>
             <div>
               <Label className="text-sm">Venue *</Label>
               <Select value={formData.venueId} onValueChange={(v) => setFormData((p) => ({ ...p, venueId: v }))}>
@@ -277,7 +278,7 @@ export default function PaymentMethodsPage() {
               <Input className="mt-1" value={formData.bankRecipient} onChange={(e) => setFormData((p) => ({ ...p, bankRecipient: e.target.value }))} placeholder="Nama pemilik rekening" />
             </div>
           </div>
-          <div className="flex gap-2 mt-4">
+          <div className={cn('flex', 'gap-2', 'mt-4')}>
             <Button variant="outline" className="flex-1" onClick={() => setFormOpen(false)}>Cancel</Button>
             <Button className="flex-1" onClick={handleSave} disabled={saving}>
               {saving ? "Saving..." : editingItem ? "Update" : "Add"}
@@ -290,8 +291,8 @@ export default function PaymentMethodsPage() {
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Delete Payment Method</DialogTitle>
-          <p className="text-sm text-muted-foreground">Are you sure? This action cannot be undone.</p>
-          <div className="flex gap-2 mt-4">
+          <p className={cn('text-sm', 'text-muted-foreground')}>Are you sure? This action cannot be undone.</p>
+          <div className={cn('flex', 'gap-2', 'mt-4')}>
             <Button variant="outline" className="flex-1" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button variant="destructive" className="flex-1" onClick={handleDelete}>Delete</Button>
           </div>

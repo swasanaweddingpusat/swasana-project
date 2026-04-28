@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useCreateVendorCategory, useUpdateVendorCategory } from "@/hooks/use-vendors";
 import type { VendorCategoryItem } from "@/lib/queries/vendors";
+import { cn } from "../../../../../lib/utils";
 
 interface VendorCategoryDrawerProps {
   isOpen: boolean;
@@ -63,25 +64,25 @@ export function VendorCategoryDrawer({ isOpen, onClose, category }: VendorCatego
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} title={isEdit ? "Edit Vendor Category" : "Add Vendor Category"}>
-      <div className="flex flex-col justify-between h-full">
-        <div className="space-y-4 px-1">
+      <div className={cn('flex', 'flex-col', 'justify-between', 'h-full')}>
+        <div className={cn('space-y-4', 'px-1')}>
           <div className="space-y-1">
-            <Label className="text-sm font-medium">Nama Kategori *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Catering, Decoration" className="border-[#CCCCCC] bg-[#F9F9F9]" />
+            <Label className={cn('text-sm', 'font-medium')}>Nama Kategori *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Catering, Decoration" className={cn('border-[#CCCCCC]', 'bg-[#F9F9F9]')} />
           </div>
 
           <div className="space-y-1">
-            <Label className="text-sm font-medium">Description (Optional)</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi kategori" className="border-[#CCCCCC] bg-[#F9F9F9]" />
+            <Label className={cn('text-sm', 'font-medium')}>Description (Optional)</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi kategori" className={cn('border-[#CCCCCC]', 'bg-[#F9F9F9]')} />
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t pt-4 mt-4">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} className="flex-1 text-red-600 border-red-600 hover:bg-red-50 cursor-pointer" disabled={saving}>
+        <div className={cn('sticky', 'bottom-0', 'bg-white', 'border-t', 'pt-4', 'mt-4')}>
+          <div className={cn('flex', 'gap-2')}>
+            <Button variant="outline" onClick={onClose} className={cn('flex-1', 'text-red-600', 'border-red-600', 'hover:bg-red-50', 'cursor-pointer')} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer" disabled={saving || !name.trim()}>
+            <Button onClick={handleSubmit} className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')} disabled={saving || !name.trim()}>
               {saving ? "Processing..." : isEdit ? "Update Category" : "Add Category"}
             </Button>
           </div>

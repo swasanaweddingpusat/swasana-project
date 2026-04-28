@@ -33,6 +33,7 @@ export function SubMenuItemRow({
   const [open, setOpen] = useState(active || childActive);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (active || childActive) setOpen(true);
   }, [active, childActive]);
 
@@ -49,21 +50,21 @@ export function SubMenuItemRow({
               : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
           )}
         >
-          <Link href={item.href} className="flex items-center flex-1 min-w-0">
-            {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" style={{ color: "#A4A7AE" }} />}
+          <Link href={item.href} className={cn('flex', 'items-center', 'flex-1', 'min-w-0')}>
+            {Icon && <Icon className={cn('mr-2', 'h-4', 'w-4', 'shrink-0')} style={{ color: "#A4A7AE" }} />}
             {!collapsed && <span>{item.name}</span>}
           </Link>
           {!collapsed && (
             <button
               onClick={() => setOpen(!open)}
-              className="p-1 rounded hover:bg-gray-200 transition-colors cursor-pointer shrink-0"
+              className={cn('p-1', 'rounded', 'hover:bg-gray-200', 'transition-colors', 'cursor-pointer', 'shrink-0')}
             >
-              {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {open ? <ChevronDown className={cn('h-3.5', 'w-3.5')} /> : <ChevronRight className={cn('h-3.5', 'w-3.5')} />}
             </button>
           )}
         </div>
         {open && !collapsed && (
-          <div className="ml-4 mt-1 space-y-1">
+          <div className={cn('ml-4', 'mt-1', 'space-y-1')}>
             {item.submenu.map((sub) => (
               <SubMenuItemRow key={sub.href} item={sub} collapsed={collapsed} depth={depth + 1} />
             ))}
@@ -83,7 +84,7 @@ export function SubMenuItemRow({
           : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
       )}
     >
-      {Icon && <Icon className="mr-2 h-4 w-4" style={{ color: "#A4A7AE" }} />}
+      {Icon && <Icon className={cn('mr-2', 'h-4', 'w-4')} style={{ color: "#A4A7AE" }} />}
       {!collapsed && <span>{item.name}</span>}
     </Link>
   );

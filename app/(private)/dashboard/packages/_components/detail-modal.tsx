@@ -38,8 +38,10 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
 
   useEffect(() => {
     if (!open || !pkg) return;
-    setCreatedByName(null);
-    getPackageCreatedBy(pkg.id).then(setCreatedByName);
+    getPackageCreatedBy(pkg.id)
+      .then(setCreatedByName)
+      .catch(() => setCreatedByName(null));
+    return () => { setCreatedByName(null); };
   }, [open, pkg]);
 
   if (!pkg) return null;

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import { verifyEmail } from "@/actions/auth"
+import { cn } from "../../../../../lib/utils";
 
 type State = "loading" | "verified" | "error"
 
@@ -17,8 +18,9 @@ export function VerifyForm() {
   const token = searchParams.get("token")
   const message = searchParams.get("message")
 
-  const [state, setState] = useState<State>("loading")
-  const [errorMessage, setErrorMessage] = useState<string>("")
+  const noToken = !token && !message;
+  const [state, setState] = useState<State>(noToken ? "error" : "loading")
+  const [errorMessage, setErrorMessage] = useState<string>(noToken ? "Token tidak valid." : "")
 
   useEffect(() => {
     if (message && !token) {
@@ -27,11 +29,7 @@ export function VerifyForm() {
       return () => clearTimeout(timer)
     }
 
-    if (!token) {
-      setErrorMessage("Token tidak valid.")
-      setState("error")
-      return
-    }
+    if (!token) return
 
     verifyEmail(token).then((result) => {
       if (result.success) {
@@ -51,32 +49,32 @@ export function VerifyForm() {
   }, [token, message, router])
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className={cn('w-full', 'max-w-sm')}>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">Verifikasi Email</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4 text-center">
+      <CardContent className={cn('flex', 'flex-col', 'items-center', 'gap-4', 'text-center')}>
         {state === "loading" && (
           <>
-            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <Loader2 className={cn('h-10', 'w-10', 'animate-spin', 'text-blue-600')} />
             <p className="text-muted-foreground">Memverifikasi email...</p>
           </>
         )}
 
         {state === "verified" && (
           <>
-            <CheckCircle2 className="h-10 w-10 text-green-600" />
+            <CheckCircle2 className={cn('h-10', 'w-10', 'text-green-600')} />
             <p className="font-semibold">Email berhasil diverifikasi!</p>
-            <p className="text-sm text-muted-foreground">Mengarahkan ke halaman buat password...</p>
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <p className={cn('text-sm', 'text-muted-foreground')}>Mengarahkan ke halaman buat password...</p>
+            <Loader2 className={cn('h-5', 'w-5', 'animate-spin', 'text-muted-foreground')} />
           </>
         )}
 
         {state === "error" && (
           <>
-            <XCircle className="h-10 w-10 text-red-600" />
-            <p className="font-semibold text-red-600">Verifikasi Gagal</p>
-            <p className="text-sm text-muted-foreground">{errorMessage}</p>
+            <XCircle className={cn('h-10', 'w-10', 'text-red-600')} />
+            <p className={cn('font-semibold', 'text-red-600')}>Verifikasi Gagal</p>
+            <p className={cn('text-sm', 'text-muted-foreground')}>{errorMessage}</p>
             <Link href="/auth/login">
               <Button variant="outline" className="w-full">Kembali ke Login</Button>
             </Link>

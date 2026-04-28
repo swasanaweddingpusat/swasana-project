@@ -39,8 +39,8 @@ export function ResetPasswordForm({
           className
         )}
       >
-        <div className="text-center space-y-4">
-          <h2 className="text-xl font-semibold text-red-600">
+        <div className={cn('text-center', 'space-y-4')}>
+          <h2 className={cn('text-xl', 'font-semibold', 'text-red-600')}>
             Link Tidak Valid
           </h2>
           <p className="text-muted-foreground">
@@ -88,20 +88,20 @@ export function ResetPasswordForm({
       {...props}
       action={handleSubmit}
     >
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">Buat kata sandi baru!</h1>
+      <div className={cn('flex', 'flex-col', 'gap-2')}>
+        <h1 className={cn('text-2xl', 'font-bold')}>Buat kata sandi baru!</h1>
         {isForceReset && (
-          <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <p className={cn('text-sm', 'text-amber-600', 'bg-amber-50', 'border', 'border-amber-200', 'rounded-md', 'px-3', 'py-2')}>
             {message || "Silakan ganti kata sandi sementara Anda untuk keamanan akun."}
           </p>
         )}
-        <p className="text-balance text-sm text-muted-foreground">
+        <p className={cn('text-balance', 'text-sm', 'text-muted-foreground')}>
           Untuk keamanan, Anda akan keluar dari semua perangkat setelah kata
           sandi diubah.
         </p>
       </div>
-      <div className="grid gap-6">
-        <div className="grid gap-2">
+      <div className={cn('grid', 'gap-6')}>
+        <div className={cn('grid', 'gap-2')}>
           <Label htmlFor="password" className="font-semibold">
             Pilih kata sandi baru
           </Label>
@@ -119,19 +119,19 @@ export function ResetPasswordForm({
               type="button"
               variant="ghost"
               size="sm"
-              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+              className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'py-2', 'hover:bg-transparent')}
               onClick={() => setShowPassword(!showPassword)}
               disabled={isPending}
             >
               {showPassword ? (
-                <EyeOff className="h-4 w-4" />
+                <EyeOff className={cn('h-4', 'w-4')} />
               ) : (
-                <Eye className="h-4 w-4" />
+                <Eye className={cn('h-4', 'w-4')} />
               )}
             </Button>
           </div>
         </div>
-        <div className="grid gap-2">
+        <div className={cn('grid', 'gap-2')}>
           <Label htmlFor="confirmPassword" className="font-semibold">
             Konfirmasi
           </Label>
@@ -149,14 +149,14 @@ export function ResetPasswordForm({
               type="button"
               variant="ghost"
               size="sm"
-              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+              className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'py-2', 'hover:bg-transparent')}
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               disabled={isPending}
             >
               {showConfirmPassword ? (
-                <EyeOff className="h-4 w-4" />
+                <EyeOff className={cn('h-4', 'w-4')} />
               ) : (
-                <Eye className="h-4 w-4" />
+                <Eye className={cn('h-4', 'w-4')} />
               )}
             </Button>
           </div>
@@ -164,7 +164,7 @@ export function ResetPasswordForm({
         <Button type="submit" className="w-full" disabled={isPending}>
           {isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
               Membuat kata sandi...
             </>
           ) : (
@@ -180,8 +180,8 @@ export function ResetPasswordWrapper() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6 items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className={cn('flex', 'flex-col', 'gap-6', 'items-center', 'justify-center', 'py-12')}>
+          <div className={cn('animate-spin', 'rounded-full', 'h-8', 'w-8', 'border-b-2', 'border-blue-600')} />
           <p className="text-muted-foreground">Loading...</p>
         </div>
       }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { format } from 'date-fns';
+
 import { CalendarDays } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import type { CalendarEventsResult } from '@/lib/queries/calendar-events';
@@ -73,12 +73,12 @@ export function CalendarEventView({
   return (
     <div className="space-y-6">
       {/* Top bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CalendarDays className="size-5 text-muted-foreground" />
+      <div className={cn('flex', 'items-center', 'justify-between')}>
+        <div className={cn('flex', 'items-center', 'gap-2')}>
+          <CalendarDays className={cn('size-5', 'text-muted-foreground')} />
           {/* Year select */}
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-            <SelectTrigger className="w-24 h-9">
+            <SelectTrigger className={cn('w-24', 'h-9')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -89,7 +89,7 @@ export function CalendarEventView({
           </Select>
           {/* Month select */}
           <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-            <SelectTrigger className="w-32 h-9">
+            <SelectTrigger className={cn('w-32', 'h-9')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -107,7 +107,7 @@ export function CalendarEventView({
               setViewMode('day');
             }}
           >
-            <SelectTrigger className="w-20 h-9">
+            <SelectTrigger className={cn('w-20', 'h-9')}>
               <SelectValue placeholder="Tgl" />
             </SelectTrigger>
             <SelectContent>
@@ -121,7 +121,7 @@ export function CalendarEventView({
           </Button>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className={cn('flex', 'items-center', 'gap-1')}>
           {viewModes.map((vm) => (
             <Button
               key={vm.value}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -23,11 +23,9 @@ export function NavItemRow({ item, collapsed }: { item: NavItem; collapsed: bool
   const pathname = usePathname();
   const active = isPathActive(item.href, pathname);
   const childActive = item.submenu ? hasActiveChild(item.submenu, pathname) : false;
-  const [open, setOpen] = useState(active || childActive);
-
-  useEffect(() => {
-    if (active || childActive) setOpen(true);
-  }, [active, childActive]);
+  const [manualOpen, setManualOpen] = useState(false);
+  const open = active || childActive || manualOpen;
+  const setOpen = (v: boolean) => setManualOpen(v);
 
   const Icon = item.icon;
 
@@ -46,25 +44,25 @@ export function NavItemRow({ item, collapsed }: { item: NavItem; collapsed: bool
         >
           {collapsed ? (
             <Link href={item.href}>
-              <Icon className="h-5 w-5" style={{ color: "#A4A7AE" }} />
+              <Icon className={cn('h-5', 'w-5')} style={{ color: "#A4A7AE" }} />
             </Link>
           ) : (
             <>
               <button
                 onClick={() => setOpen(!open)}
-                className="flex items-center flex-1 min-w-0 text-left"
+                className={cn('flex', 'items-center', 'flex-1', 'min-w-0', 'text-left')}
               >
-                <Icon className="mr-3 h-5 w-5 shrink-0" style={{ color: "#A4A7AE" }} />
+                <Icon className={cn('mr-3', 'h-5', 'w-5', 'shrink-0')} style={{ color: "#A4A7AE" }} />
                 <span className="font-semibold">{item.name}</span>
               </button>
-              <span className="p-1 shrink-0 pointer-events-none">
-                {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <span className={cn('p-1', 'shrink-0', 'pointer-events-none')}>
+                {open ? <ChevronDown className={cn('h-4', 'w-4')} /> : <ChevronRight className={cn('h-4', 'w-4')} />}
               </span>
             </>
           )}
         </div>
         {open && !collapsed && (
-          <div className="ml-4 mt-2 space-y-1">
+          <div className={cn('ml-4', 'mt-2', 'space-y-1')}>
             {item.submenu.map((sub) => (
               <SubMenuItemRow key={sub.href} item={sub} collapsed={collapsed} depth={1} />
             ))}

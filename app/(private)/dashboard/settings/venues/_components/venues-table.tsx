@@ -12,6 +12,7 @@ import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-rea
 import { deleteVenue } from "@/actions/venue";
 import { VenueDrawer } from "./venue-drawer";
 import type { VenuesQueryResult, VenueQueryItem, BrandsQueryResult } from "@/lib/queries/venues";
+import { cn } from "../../../../../../lib/utils";
 
 interface VenuesTableProps {
   initialVenues: VenuesQueryResult;
@@ -95,28 +96,28 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 pb-4 border-b">
-            <div className="flex items-center gap-2">
-              <span className="text-base font-bold text-[#1D1D1D]">List Venues</span>
-              <span className="text-sm text-muted-foreground">({filtered.length})</span>
+          <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
+            <div className={cn('flex', 'items-center', 'gap-2')}>
+              <span className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>List Venues</span>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className={cn('flex', 'items-center', 'gap-2')}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
                 <Input
                   placeholder="Cari venue..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 w-50 h-9 text-sm"
+                  className={cn('pl-9', 'w-50', 'h-9', 'text-sm')}
                 />
               </div>
               {selected.size > 1 && (
-                <Button variant="outline" onClick={() => setBulkDeleteOpen(true)} className="h-9 text-red-500 border-red-500 hover:bg-red-50 cursor-pointer">
-                  <Trash2 className="w-4 h-4 mr-1" /> Hapus ({selected.size})
+                <Button variant="outline" onClick={() => setBulkDeleteOpen(true)} className={cn('h-9', 'text-red-500', 'border-red-500', 'hover:bg-red-50', 'cursor-pointer')}>
+                  <Trash2 className={cn('w-4', 'h-4', 'mr-1')} /> Hapus ({selected.size})
                 </Button>
               )}
-              <Button onClick={handleAdd} className="h-9 cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
-                <Plus className="w-4 h-4 mr-1" /> Add Venue
+              <Button onClick={handleAdd} className={cn('h-9', 'cursor-pointer', 'bg-gray-900', 'hover:bg-gray-800', 'text-white')}>
+                <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Venue
               </Button>
             </div>
           </div>
@@ -125,7 +126,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10 px-4">
+                <TableHead className={cn('w-10', 'px-4')}>
                   <Checkbox checked={isAllSelected} data-indeterminate={isIndeterminate} onCheckedChange={handleSelectAll} className="cursor-pointer" />
                 </TableHead>
                 <TableHead className="w-12">#</TableHead>
@@ -139,7 +140,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
                     {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada venue."}
                   </TableCell>
                 </TableRow>
@@ -155,12 +156,12 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                     <TableCell>{venue.code}</TableCell>
                     <TableCell>{venue.capacity ?? "—"}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1 justify-end pr-2">
-                        <button onClick={() => handleEdit(venue)} className="p-1.5 rounded-md hover:bg-muted cursor-pointer" aria-label="Edit">
-                          <PenLine className="w-4 h-4 text-muted-foreground" />
+                      <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
+                        <button onClick={() => handleEdit(venue)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                          <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                         </button>
-                        <button onClick={() => setDeleteTarget(venue)} className="p-1.5 rounded-md hover:bg-muted cursor-pointer" aria-label="Hapus">
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                        <button onClick={() => setDeleteTarget(venue)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                          <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
                         </button>
                       </div>
                     </TableCell>
@@ -172,14 +173,14 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-3 border-t">
-              <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-              <div className="flex gap-1">
+            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
+              <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
+              <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className={cn('h-4', 'w-4')} />
                 </Button>
                 <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className={cn('h-4', 'w-4')} />
                 </Button>
               </div>
             </div>
@@ -206,7 +207,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleDelete} disabled={deleting} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>
               {deleting ? "Menghapus..." : "Hapus"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -224,7 +225,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleBulkDelete} disabled={deleting} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>
               {deleting ? "Menghapus..." : `Hapus ${selected.size} Venue`}
             </AlertDialogAction>
           </AlertDialogFooter>

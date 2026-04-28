@@ -28,6 +28,7 @@ import { Package, Plus, X, GripVertical } from "lucide-react";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { useSaveVariantPrices } from "@/hooks/use-packages";
 import { toast } from "sonner";
+import { cn } from "../../../../../lib/utils";
 
 interface DrawerFinanceProps {
   isOpen: boolean;
@@ -102,28 +103,28 @@ function SortableCategoryRow({
       <button
         {...attributes}
         {...listeners}
-        className="p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing shrink-0"
+        className={cn('p-1', 'text-muted-foreground', 'hover:text-foreground', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')}
         tabIndex={-1}
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <GripVertical className={cn('h-3.5', 'w-3.5')} />
       </button>
-      <span className="text-sm w-32 shrink-0 truncate" title={cat}>{cat}</span>
-      <div className="relative flex-1">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+      <span className={cn('text-sm', 'w-32', 'shrink-0', 'truncate')} title={cat}>{cat}</span>
+      <div className={cn('relative', 'flex-1')}>
+        <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>Rp</span>
         <Input
           type="text"
           inputMode="numeric"
           placeholder="0"
           value={fmt(value)}
           onChange={(e) => onChange(parse(e.target.value))}
-          className="pl-8 h-9 text-sm"
+          className={cn('pl-8', 'h-9', 'text-sm')}
         />
       </div>
       <button
         onClick={onRemove}
-        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors shrink-0"
+        className={cn('p-1', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-destructive', 'transition-colors', 'shrink-0')}
       >
-        <X className="h-3.5 w-3.5" />
+        <X className={cn('h-3.5', 'w-3.5')} />
       </button>
     </div>
   );
@@ -221,23 +222,23 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} title="Set Harga Package" maxWidth="sm:max-w-130">
-      <div className="flex flex-col h-full">
+      <div className={cn('flex', 'flex-col', 'h-full')}>
         {/* Sticky Header */}
-        <div className="space-y-3 pb-3 border-b border-border">
+        <div className={cn('space-y-3', 'pb-3', 'border-b', 'border-border')}>
           {/* Package Info */}
-          <div className="flex items-start gap-3 p-3 bg-muted/40 rounded-lg border border-border">
-            <div className="p-2 bg-background rounded-md border border-border">
-              <Package className="h-4 w-4" />
+          <div className={cn('flex', 'items-start', 'gap-3', 'p-3', 'bg-muted/40', 'rounded-lg', 'border', 'border-border')}>
+            <div className={cn('p-2', 'bg-background', 'rounded-md', 'border', 'border-border')}>
+              <Package className={cn('h-4', 'w-4')} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm truncate">{pkg.packageName}</p>
-              <p className="text-xs text-muted-foreground">{pkg.venue?.name ?? "-"}</p>
+            <div className={cn('flex-1', 'min-w-0')}>
+              <p className={cn('font-semibold', 'text-sm', 'truncate')}>{pkg.packageName}</p>
+              <p className={cn('text-xs', 'text-muted-foreground')}>{pkg.venue?.name ?? "-"}</p>
             </div>
           </div>
 
           {/* Variant Dropdown */}
           <div className="space-y-1.5">
-            <Label className="text-sm font-semibold">Varian</Label>
+            <Label className={cn('text-sm', 'font-semibold')}>Varian</Label>
             <SearchableSelect
               options={pkg.variants.map((v, idx) => ({
                 id: String(idx),
@@ -252,10 +253,10 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
 
           {/* Sync All Toggle */}
           {pkg.variants.length > 1 && (
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+            <div className={cn('flex', 'items-center', 'justify-between', 'p-3', 'rounded-lg', 'border', 'border-border', 'bg-muted/30')}>
               <div>
-                <p className="text-sm font-medium">Edit Semua Varian Sekaligus</p>
-                <p className="text-xs text-muted-foreground">Perubahan harga & margin berlaku untuk semua varian</p>
+                <p className={cn('text-sm', 'font-medium')}>Edit Semua Varian Sekaligus</p>
+                <p className={cn('text-xs', 'text-muted-foreground')}>Perubahan harga & margin berlaku untuk semua varian</p>
               </div>
               <Switch checked={syncAll} onCheckedChange={setSyncAll} />
             </div>
@@ -263,7 +264,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto space-y-4 px-1 pt-4">
+        <div className={cn('flex-1', 'overflow-y-auto', 'space-y-4', 'px-1', 'pt-4')}>
           {active && (
             <>
               <Separator />
@@ -271,8 +272,8 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
               {/* Category List */}
               <div className="space-y-3">
                 <div>
-                  <Label className="text-sm font-semibold">Harga Pokok per Kategori</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Untuk varian <span className="font-medium text-foreground">{pkg.variants[activeVariantIdx]?.variantName}</span></p>
+                  <Label className={cn('text-sm', 'font-semibold')}>Harga Pokok per Kategori</Label>
+                  <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>Untuk varian <span className={cn('font-medium', 'text-foreground')}>{pkg.variants[activeVariantIdx]?.variantName}</span></p>
                 </div>
 
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -297,22 +298,22 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
                 </DndContext>
 
                 {/* Add Custom Category */}
-                <div className="flex items-center gap-2">
+                <div className={cn('flex', 'items-center', 'gap-2')}>
                   <Input
                     placeholder="Tambah kategori..."
                     value={active.newCat}
                     onChange={(e) => updateVariant(activeVariantIdx, (v) => ({ ...v, newCat: e.target.value }))}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCategory(activeVariantIdx); } }}
-                    className="h-9 text-sm flex-1"
+                    className={cn('h-9', 'text-sm', 'flex-1')}
                   />
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => addCategory(activeVariantIdx)}
                     disabled={!active.newCat.trim() || active.categories.includes(active.newCat.trim())}
-                    className="h-9 shrink-0"
+                    className={cn('h-9', 'shrink-0')}
                   >
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Tambah
+                    <Plus className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tambah
                   </Button>
                 </div>
               </div>
@@ -320,20 +321,20 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
               <Separator />
 
               {/* Total Harga Pokok */}
-              <div className="flex items-center justify-between px-1">
-                <span className="text-sm text-muted-foreground">Total Harga Pokok</span>
-                <span className="text-sm font-semibold">{totalBase > 0 ? `Rp ${fmt(totalBase)}` : "-"}</span>
+              <div className={cn('flex', 'items-center', 'justify-between', 'px-1')}>
+                <span className={cn('text-sm', 'text-muted-foreground')}>Total Harga Pokok</span>
+                <span className={cn('text-sm', 'font-semibold')}>{totalBase > 0 ? `Rp ${fmt(totalBase)}` : "-"}</span>
               </div>
 
               <Separator />
 
               {/* Margin */}
-              <div className="flex items-center justify-between px-1">
+              <div className={cn('flex', 'items-center', 'justify-between', 'px-1')}>
                 <div>
-                  <Label className="text-sm font-semibold">Margin</Label>
-                  <p className="text-xs text-muted-foreground">Persentase dari total harga pokok</p>
+                  <Label className={cn('text-sm', 'font-semibold')}>Margin</Label>
+                  <p className={cn('text-xs', 'text-muted-foreground')}>Persentase dari total harga pokok</p>
                 </div>
-                <div className="relative w-24">
+                <div className={cn('relative', 'w-24')}>
                   <Input
                     type="number"
                     min={0}
@@ -345,23 +346,23 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
                         margin: Math.max(0, parseFloat(e.target.value) || 0),
                       }))
                     }
-                    className="h-9 text-sm pr-7 text-right"
+                    className={cn('h-9', 'text-sm', 'pr-7', 'text-right')}
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  <span className={cn('absolute', 'right-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>%</span>
                 </div>
               </div>
 
               <Separator />
 
               {/* Harga Jual */}
-              <div className="space-y-2 px-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Keuntungan</span>
-                  <span className="text-sm text-muted-foreground">{profit > 0 ? `+ Rp ${fmt(profit)}` : "-"}</span>
+              <div className={cn('space-y-2', 'px-1')}>
+                <div className={cn('flex', 'items-center', 'justify-between')}>
+                  <span className={cn('text-sm', 'text-muted-foreground')}>Keuntungan</span>
+                  <span className={cn('text-sm', 'text-muted-foreground')}>{profit > 0 ? `+ Rp ${fmt(profit)}` : "-"}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg border border-border">
-                  <span className="text-sm font-bold">Harga Jual</span>
-                  <span className="text-lg font-bold">{totalSelling > 0 ? `Rp ${fmt(totalSelling)}` : "-"}</span>
+                <div className={cn('flex', 'items-center', 'justify-between', 'p-3', 'bg-muted/40', 'rounded-lg', 'border', 'border-border')}>
+                  <span className={cn('text-sm', 'font-bold')}>Harga Jual</span>
+                  <span className={cn('text-lg', 'font-bold')}>{totalSelling > 0 ? `Rp ${fmt(totalSelling)}` : "-"}</span>
                 </div>
               </div>
 
@@ -369,17 +370,17 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
               {pkg.variants.length > 1 && (
                 <>
                   <Separator />
-                  <div className="space-y-1.5 px-1">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ringkasan Semua Varian</p>
+                  <div className={cn('space-y-1.5', 'px-1')}>
+                    <p className={cn('text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Ringkasan Semua Varian</p>
                     {pkg.variants.map((v, idx) => {
                       const vd = variantData[idx];
                       if (!vd) return null;
                       const vBase = vd.categories.reduce((s, c) => s + (vd.basePrices[c] ?? 0), 0);
                       const vSell = vBase + Math.round(vBase * (vd.margin / 100));
                       return (
-                        <div key={v.id} className="flex items-center justify-between text-xs">
+                        <div key={v.id} className={cn('flex', 'items-center', 'justify-between', 'text-xs')}>
                           <span className="text-muted-foreground">{v.variantName} ({v.pax} pax)</span>
-                          <div className="flex items-center gap-2">
+                          <div className={cn('flex', 'items-center', 'gap-2')}>
                             {vd.margin > 0 && <Badge variant="secondary" className="text-xs">{vd.margin}%</Badge>}
                             <span className="font-medium">{vSell > 0 ? `Rp ${fmt(vSell)}` : "-"}</span>
                           </div>
@@ -394,8 +395,8 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
         </div>
 
         {/* Footer */}
-        <div className="pt-4 border-t border-border mt-auto">
-          <div className="flex gap-2">
+        <div className={cn('pt-4', 'border-t', 'border-border', 'mt-auto')}>
+          <div className={cn('flex', 'gap-2')}>
             <Button variant="outline" onClick={onClose} className="flex-1" disabled={saving}>Tutup</Button>
             <Button className="flex-1" onClick={handleSave} disabled={saving || variantData.every((v) => Object.values(v.basePrices).every((p) => !p))}>
               {saving ? "Menyimpan..." : "Simpan Harga"}

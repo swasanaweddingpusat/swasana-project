@@ -15,8 +15,8 @@ const tabs: { key: FinanceTabType; label: string }[] = [
 
 export function FinanceTabs({ activeTab, onTabChange }: FinanceTabsProps) {
   return (
-    <div className="border-b border-border w-full">
-      <div className="flex gap-6">
+    <div className={cn('border-b', 'border-border', 'w-full')}>
+      <div className={cn('flex', 'gap-6')}>
         {tabs.map((tab) => (
           <button
             key={tab.key}

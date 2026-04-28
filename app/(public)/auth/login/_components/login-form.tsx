@@ -80,17 +80,17 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="overflow-hidden p-0">
-        <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="p-6 md:p-8 flex flex-col justify-center min-h-105" action={handleSubmit}>
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col">
-                <h1 className="text-2xl font-bold">Welcome back</h1>
-                <p className="text-muted-foreground text-balance">
+      <Card className={cn('overflow-hidden', 'p-0')}>
+        <CardContent className={cn('grid', 'p-0', 'md:grid-cols-2')}>
+          <form className={cn('p-6', 'md:p-8', 'flex', 'flex-col', 'justify-center', 'min-h-105')} action={handleSubmit}>
+            <div className={cn('flex', 'flex-col', 'gap-6')}>
+              <div className={cn('flex', 'flex-col')}>
+                <h1 className={cn('text-2xl', 'font-bold')}>Welcome back</h1>
+                <p className={cn('text-muted-foreground', 'text-balance')}>
                   Login to your Swasana account
                 </p>
               </div>
-              <div className="grid gap-3">
+              <div className={cn('grid', 'gap-3')}>
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -101,12 +101,12 @@ export function LoginForm({
                   disabled={isPending}
                 />
               </div>
-              <div className="grid gap-3">
-                <div className="flex items-center">
+              <div className={cn('grid', 'gap-3')}>
+                <div className={cn('flex', 'items-center')}>
                   <Label htmlFor="password">Password</Label>
                   <Link
                     href="/auth/forgot-password"
-                    className="ml-auto text-sm underline-offset-2 hover:underline text-muted-foreground hover:text-primary"
+                    className={cn('ml-auto', 'text-sm', 'underline-offset-2', 'hover:underline', 'text-muted-foreground', 'hover:text-primary')}
                   >
                     Forgot your password?
                   </Link>
@@ -123,14 +123,14 @@ export function LoginForm({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'py-2', 'hover:bg-transparent')}
                     onClick={() => setShowPassword(!showPassword)}
                     disabled={isPending}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
+                      <EyeOff className={cn('h-4', 'w-4')} />
                     ) : (
-                      <Eye className="h-4 w-4" />
+                      <Eye className={cn('h-4', 'w-4')} />
                     )}
                   </Button>
                 </div>
@@ -138,7 +138,7 @@ export function LoginForm({
               <Button type="submit" className="w-full" disabled={isPending}>
                 {isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
                     Logging in...
                   </>
                 ) : (
@@ -147,24 +147,24 @@ export function LoginForm({
               </Button>
             </div>
           </form>
-          <div className="bg-muted relative hidden md:block overflow-hidden min-h-105">
+          <div className={cn('bg-muted', 'relative', 'hidden', 'md:block', 'overflow-hidden', 'min-h-105')}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/thumbnail.png"
               alt="Login background"
-              className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
+              className={cn('absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'dark:brightness-[0.2]', 'dark:grayscale')}
               loading="eager"
             />
           </div>
         </CardContent>
       </Card>
-      <div className="text-muted-foreground text-center text-xs text-balance">
+      <div className={cn('text-muted-foreground', 'text-center', 'text-xs', 'text-balance')}>
         By clicking continue, you agree to our{" "}
-        <Link href="#" className="underline underline-offset-4 hover:text-primary">
+        <Link href="#" className={cn('underline', 'underline-offset-4', 'hover:text-primary')}>
           Terms of Service
         </Link>{" "}
         and{" "}
-        <Link href="#" className="underline underline-offset-4 hover:text-primary">
+        <Link href="#" className={cn('underline', 'underline-offset-4', 'hover:text-primary')}>
           Privacy Policy
         </Link>
         .

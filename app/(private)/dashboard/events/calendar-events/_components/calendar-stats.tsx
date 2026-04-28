@@ -3,6 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import type { CalendarEventsResult } from '@/lib/queries/calendar-events';
 import { CalendarCheck, CalendarClock, CalendarDays, CalendarRange } from 'lucide-react';
+import { cn } from "../../../../../../lib/utils";
 
 interface CalendarStatsProps {
   events: CalendarEventsResult;
@@ -17,16 +18,16 @@ const stats = [
 
 export function CalendarStats({ events }: CalendarStatsProps) {
   return (
-    <div className='grid grid-cols-2 md:grid-cols-4 gap-4 mb-6'>
+    <div className={cn('grid', 'grid-cols-2', 'md:grid-cols-4', 'gap-4', 'mb-6')}>
       {stats.map(({ label, icon: Icon, getValue }) => (
         <Card key={label}>
           <CardContent className='p-4'>
-            <div className='flex items-center justify-between'>
+            <div className={cn('flex', 'items-center', 'justify-between')}>
               <div>
-                <p className='text-sm text-muted-foreground'>{label}</p>
-                <p className='text-2xl font-bold'>{getValue(events)}</p>
+                <p className={cn('text-sm', 'text-muted-foreground')}>{label}</p>
+                <p className={cn('text-2xl', 'font-bold')}>{getValue(events)}</p>
               </div>
-              <Icon className='h-8 w-8 text-muted-foreground/50' />
+              <Icon className={cn('h-8', 'w-8', 'text-muted-foreground/50')} />
             </div>
           </CardContent>
         </Card>

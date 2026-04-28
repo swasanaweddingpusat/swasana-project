@@ -8,6 +8,7 @@ import { SignaturePad } from "@/components/shared/signature-pad";
 import { toast } from "sonner";
 import { approveStep, rejectStep } from "@/actions/approval";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "../../../../../lib/utils";
 
 interface ApproveModalProps {
   open: boolean;
@@ -61,13 +62,13 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
         <DialogHeader>
           <DialogTitle>Approve {stepLabel}</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">Package: <span className="font-medium text-foreground">{packageName}</span></p>
+        <p className={cn('text-sm', 'text-muted-foreground')}>Package: <span className={cn('font-medium', 'text-foreground')}>{packageName}</span></p>
 
         {!showReject ? (
           <div className="space-y-4">
             <SignaturePad onSignature={setSignature} />
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowReject(true)} className="flex-1 text-destructive border-destructive hover:bg-destructive/10" disabled={submitting}>
+            <div className={cn('flex', 'gap-2')}>
+              <Button variant="outline" onClick={() => setShowReject(true)} className={cn('flex-1', 'text-destructive', 'border-destructive', 'hover:bg-destructive/10')} disabled={submitting}>
                 Tolak
               </Button>
               <Button onClick={handleApprove} disabled={submitting || !signature} className="flex-1">
@@ -78,7 +79,7 @@ export function ApproveModal({ open, onClose, stepId, stepLabel, packageName }: 
         ) : (
           <div className="space-y-4">
             <Textarea value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} placeholder="Alasan penolakan..." className="text-sm" />
-            <div className="flex gap-2">
+            <div className={cn('flex', 'gap-2')}>
               <Button variant="outline" onClick={() => setShowReject(false)} className="flex-1" disabled={submitting}>
                 Batal
               </Button>

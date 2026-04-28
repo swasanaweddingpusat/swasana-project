@@ -93,11 +93,6 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Bookings",
     subtitle: "Kelola data booking",
   },
-  "/dashboard/bookings/[id]": {
-    title: "Detail Booking",
-    parent: "/dashboard/bookings",
-  },
-
   // ─── Finance ────────────────────────────────────────────────────────────────
   "/dashboard/finance": {
     title: "Finance",

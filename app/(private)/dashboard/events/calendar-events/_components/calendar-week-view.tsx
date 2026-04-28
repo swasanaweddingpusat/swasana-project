@@ -75,16 +75,16 @@ export function CalendarWeekView({
   }, [events]);
 
   return (
-    <div className="grid grid-cols-7 gap-0 overflow-hidden rounded-lg border bg-white">
+    <div className={cn('grid', 'grid-cols-7', 'gap-0', 'overflow-hidden', 'rounded-lg', 'border', 'bg-white')}>
       {weekDays.map((day, i) => {
         const dayEvents = eventsByDate.get(day.toDateString()) ?? [];
         const today = isToday(day);
 
         return (
-          <div key={day.toISOString()} className="flex flex-col">
+          <div key={day.toISOString()} className={cn('flex', 'flex-col')}>
             {/* Header */}
-            <div className="border-b bg-muted/50 px-2 py-2 text-center">
-              <div className="text-xs text-muted-foreground">
+            <div className={cn('border-b', 'bg-muted/50', 'px-2', 'py-2', 'text-center')}>
+              <div className={cn('text-xs', 'text-muted-foreground')}>
                 {DAY_NAMES[i]}
               </div>
               <div
@@ -105,7 +105,7 @@ export function CalendarWeekView({
               )}
             >
               {dayEvents.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted-foreground">
+                <p className={cn('py-4', 'text-center', 'text-xs', 'text-muted-foreground')}>
                   Tidak ada event
                 </p>
               ) : (
@@ -114,9 +114,9 @@ export function CalendarWeekView({
                     <TooltipTrigger>
                       <div
                         onClick={() => onDateClick(day)}
-                        className="cursor-pointer rounded-md border px-2 py-1 text-xs hover:bg-accent/50"
+                        className={cn('cursor-pointer', 'rounded-md', 'border', 'px-2', 'py-1', 'text-xs', 'hover:bg-accent/50')}
                       >
-                        <div className="flex items-center gap-1.5">
+                        <div className={cn('flex', 'items-center', 'gap-1.5')}>
                           <span
                             className={cn(
                               'h-2 w-2 shrink-0 rounded-full',
@@ -128,7 +128,7 @@ export function CalendarWeekView({
                             {event.snapCustomer?.name ?? '—'}
                           </span>
                         </div>
-                        <p className="truncate pl-3.5 text-muted-foreground">
+                        <p className={cn('truncate', 'pl-3.5', 'text-muted-foreground')}>
                           {event.snapVenue?.venueName ?? '—'}
                         </p>
                       </div>

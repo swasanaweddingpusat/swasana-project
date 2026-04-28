@@ -12,6 +12,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { cn } from "@/lib/utils";
 
 export default function SettingsLayout({
   children,
@@ -22,9 +23,9 @@ export default function SettingsLayout({
   const crumbs = getBreadcrumbs(pathname);
 
   return (
-    <div className="flex-1 min-w-0">
+    <div className={cn('flex-1', 'min-w-0')}>
       {crumbs.length > 1 && (
-        <div className="px-6 py-4">
+        <div className={cn('px-6', 'py-4')}>
           <Breadcrumb>
             <BreadcrumbList>
               {crumbs.map((crumb, i) => {

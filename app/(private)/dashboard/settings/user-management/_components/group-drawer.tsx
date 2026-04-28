@@ -1,7 +1,6 @@
-// @ts-nocheck
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -40,6 +39,7 @@ import { createGroup, updateGroup, addGroupMember, removeGroupMember } from "@/a
 import type { GroupQueryItem } from "@/lib/queries/groups";
 import type { UsersQueryResult } from "@/lib/queries/users";
 import type { z } from "zod";
+import { cn } from "../../../../../../lib/utils";
 
 type CreateFormValues = z.infer<typeof createGroupSchema>;
 type UpdateFormValues = z.infer<typeof updateGroupSchema>;
@@ -68,8 +68,14 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
     defaultValues: { name: "", description: "", leaderId: "" },
   });
 
+  const prevOpenRef = useRef(false);
+
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!justOpened) return;
+
+    queueMicrotask(() => {
       if (editGroup) {
         form.reset({
           name: editGroup.name,
@@ -81,7 +87,7 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
         form.reset({ name: "", description: "", leaderId: "" });
         setMemberIds([]);
       }
-    }
+    });
   }, [open, editGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onSubmit(values: CreateFormValues | UpdateFormValues) {
@@ -138,7 +144,7 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md flex flex-col">
+      <SheetContent className={cn('w-full', 'sm:max-w-md', 'flex', 'flex-col')}>
         <SheetHeader>
           <SheetTitle>{isEdit ? "Edit Grup" : "Buat Grup"}</SheetTitle>
           <SheetDescription>
@@ -146,11 +152,11 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
           </SheetDescription>
         </SheetHeader>
 
-        <ScrollArea className="flex-1 pr-1">
+        <ScrollArea className={cn('flex-1', 'pr-1')}>
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(onSubmit as (v: CreateFormValues | UpdateFormValues) => void)}
-              className="mt-4 space-y-4 px-1"
+              className={cn('mt-4', 'space-y-4', 'px-1')}
             >
               {/* Name */}
               <FormField
@@ -218,7 +224,7 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
                 )}
               />
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className={cn('flex', 'justify-end', 'gap-2', 'pt-2')}>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Batal
                 </Button>
@@ -233,29 +239,29 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
           {isEdit && (
             <>
               <Separator className="my-5" />
-              <div className="space-y-3 px-1">
-                <p className="text-sm font-medium">Anggota Grup</p>
+              <div className={cn('space-y-3', 'px-1')}>
+                <p className={cn('text-sm', 'font-medium')}>Anggota Grup</p>
 
                 {/* Current members */}
                 {memberProfiles.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">Belum ada anggota.</p>
+                  <p className={cn('text-muted-foreground', 'text-sm')}>Belum ada anggota.</p>
                 ) : (
                   <div className="space-y-2">
                     {memberProfiles.map((profile) => (
-                      <div key={profile.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7">
+                      <div key={profile.id} className={cn('flex', 'items-center', 'justify-between', 'rounded-md', 'border', 'px-3', 'py-2')}>
+                        <div className={cn('flex', 'items-center', 'gap-2')}>
+                          <Avatar className={cn('h-7', 'w-7')}>
                             <AvatarImage src={profile.avatarUrl ?? undefined} />
                             <AvatarFallback className="text-xs">
-                              {getInitials(profile.fullName, profile.email)}
+                              {getInitials(profile.fullName, profile.fullName ?? "")}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="text-sm font-medium leading-none">
-                              {profile.fullName ?? profile.email}
+                            <p className={cn('text-sm', 'font-medium', 'leading-none')}>
+                              {profile.fullName ?? profile.fullName ?? ""}
                             </p>
                             {profile.role && (
-                              <Badge variant="outline" className="mt-1 text-xs">
+                              <Badge variant="outline" className={cn('mt-1', 'text-xs')}>
                                 {profile.role.name}
                               </Badge>
                             )}
@@ -264,10 +270,10 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          className={cn('h-7', 'w-7', 'text-destructive', 'hover:text-destructive')}
                           onClick={() => handleRemoveMember(profile.id)}
                         >
-                          <X className="h-3.5 w-3.5" />
+                          <X className={cn('h-3.5', 'w-3.5')} />
                         </Button>
                       </div>
                     ))}
@@ -277,15 +283,15 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
                 {/* Add member */}
                 {availableUsers.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-muted-foreground text-xs">Tambah anggota:</p>
+                    <p className={cn('text-muted-foreground', 'text-xs')}>Tambah anggota:</p>
                     <div className="space-y-1">
                       {availableUsers.map((u) => (
                         <div
                           key={u.profile!.id}
-                          className="flex items-center justify-between rounded-md px-3 py-1.5 hover:bg-muted"
+                          className={cn('flex', 'items-center', 'justify-between', 'rounded-md', 'px-3', 'py-1.5', 'hover:bg-muted')}
                         >
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-6 w-6">
+                          <div className={cn('flex', 'items-center', 'gap-2')}>
+                            <Avatar className={cn('h-6', 'w-6')}>
                               <AvatarImage src={u.profile!.avatarUrl ?? undefined} />
                               <AvatarFallback className="text-xs">
                                 {getInitials(u.profile!.fullName, u.email)}
@@ -296,11 +302,11 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
+                            className={cn('h-7', 'w-7')}
                             disabled={addingMemberId === u.profile!.id}
                             onClick={() => handleAddMember(u.profile!.id)}
                           >
-                            <UserPlus className="h-3.5 w-3.5" />
+                            <UserPlus className={cn('h-3.5', 'w-3.5')} />
                           </Button>
                         </div>
                       ))}

@@ -55,18 +55,18 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold text-gray-900">Notifikasi</h2>
+      <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'justify-between', 'gap-3')}>
+        <div className={cn('flex', 'items-center', 'gap-3')}>
+          <h2 className={cn('text-lg', 'font-bold', 'text-gray-900')}>Notifikasi</h2>
           {unreadCount > 0 && (
-            <span className="text-sm text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-3 py-0.5">
+            <span className={cn('text-sm', 'text-gray-500', 'bg-gray-100', 'border', 'border-gray-200', 'rounded-full', 'px-3', 'py-0.5')}>
               {unreadCount} belum dibaca
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className={cn('flex', 'items-center', 'gap-2')}>
           {/* Filter tabs */}
-          <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+          <div className={cn('flex', 'border', 'border-gray-200', 'rounded-lg', 'overflow-hidden')}>
             <button type="button" onClick={() => setFilter("all")}
               className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer", filter === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50")}>
               Semua
@@ -77,8 +77,8 @@ export default function NotificationsPage() {
             </button>
           </div>
           {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={() => markAll.mutate()} className="text-xs cursor-pointer">
-              <CheckCheck className="h-3.5 w-3.5 mr-1" /> Tandai Semua Dibaca
+            <Button variant="outline" size="sm" onClick={() => markAll.mutate()} className={cn('text-xs', 'cursor-pointer')}>
+              <CheckCheck className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tandai Semua Dibaca
             </Button>
           )}
         </div>
@@ -88,30 +88,30 @@ export default function NotificationsPage() {
       <Card>
         <CardContent className="p-0">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Bell className="h-10 w-10 text-gray-300 mb-3" />
-              <p className="text-sm text-gray-500">{filter === "unread" ? "Semua notifikasi sudah dibaca." : "Belum ada notifikasi."}</p>
+            <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-center')}>
+              <Bell className={cn('h-10', 'w-10', 'text-gray-300', 'mb-3')} />
+              <p className={cn('text-sm', 'text-gray-500')}>{filter === "unread" ? "Semua notifikasi sudah dibaca." : "Belum ada notifikasi."}</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className={cn('divide-y', 'divide-gray-100')}>
               {filtered.map((n) => {
                 const Icon = TYPE_ICON[n.type] ?? Bell;
                 return (
                   <button key={n.id} type="button" onClick={() => handleClick(n)}
                     className={cn("w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-4", !n.isRead && "bg-blue-50/40")}>
                     <div className={cn("shrink-0 h-9 w-9 rounded-full flex items-center justify-center", !n.isRead ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500")}>
-                      <Icon className="h-4 w-4" />
+                      <Icon className={cn('h-4', 'w-4')} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                    <div className={cn('flex-1', 'min-w-0')}>
+                      <div className={cn('flex', 'items-center', 'gap-2')}>
                         <p className={cn("text-sm", !n.isRead ? "font-semibold text-gray-900" : "text-gray-700")}>{n.title}</p>
-                        <span className="text-[10px] text-gray-400 bg-gray-100 rounded px-1.5 py-0.5 shrink-0">
+                        <span className={cn('text-[10px]', 'text-gray-400', 'bg-gray-100', 'rounded', 'px-1.5', 'py-0.5', 'shrink-0')}>
                           {TYPE_LABEL[n.type] ?? n.type}
                         </span>
-                        {!n.isRead && <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />}
+                        {!n.isRead && <span className={cn('h-2', 'w-2', 'rounded-full', 'bg-blue-500', 'shrink-0')} />}
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">
+                      <p className={cn('text-xs', 'text-gray-500', 'mt-0.5', 'line-clamp-2')}>{n.message}</p>
+                      <p className={cn('text-[10px]', 'text-gray-400', 'mt-1')}>
                         {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: localeId })}
                       </p>
                     </div>

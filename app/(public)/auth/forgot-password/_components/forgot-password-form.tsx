@@ -51,14 +51,14 @@ export function ForgotPasswordForm({
       {...props}
       action={handleSubmit}
     >
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">Lupa kata sandi?</h1>
-        <p className="text-balance text-sm text-muted-foreground">
+      <div className={cn('flex', 'flex-col', 'gap-2')}>
+        <h1 className={cn('text-2xl', 'font-bold')}>Lupa kata sandi?</h1>
+        <p className={cn('text-balance', 'text-sm', 'text-muted-foreground')}>
           Masukkan email terdaftar untuk mereset kata sandi
         </p>
       </div>
-      <div className="grid gap-6">
-        <div className="grid gap-2">
+      <div className={cn('grid', 'gap-6')}>
+        <div className={cn('grid', 'gap-2')}>
           <Label htmlFor="email" className="font-semibold">
             Email
           </Label>
@@ -73,12 +73,12 @@ export function ForgotPasswordForm({
         </div>
         <Button
           type="submit"
-          className="w-full cursor-pointer"
+          className={cn('w-full', 'cursor-pointer')}
           disabled={isPending}
         >
           {isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
               Mengirim link...
             </>
           ) : (

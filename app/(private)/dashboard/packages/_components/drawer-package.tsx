@@ -114,7 +114,7 @@ function SortableItemRow({ id, children }: { id: string; children: React.ReactNo
         <button type="button" {...attributes} {...listeners} className={cn('text-gray-400', 'hover:text-gray-600', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')} tabIndex={-1}>
           <GripVertical className={cn('h-4', 'w-4')} />
         </button>
-        <div className="flex-1 space-y-2">{children}</div>
+        <div className={cn('flex-1', 'space-y-2')}>{children}</div>
       </div>
     </div>
   );
@@ -769,8 +769,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                 </p>
               </div>
               <div className={cn('border', 'border-gray-200', 'rounded-lg', 'p-4', 'bg-gray-50', 'space-y-1')}>
-                <p className="text-sm font-medium">{packageName}</p>
-                <p className="text-xs text-muted-foreground">{variants.length} varian · {venues.find((v) => v.id === venueId)?.name ?? "-"}</p>
+                <p className={cn('text-sm', 'font-medium')}>{packageName}</p>
+                <p className={cn('text-xs', 'text-muted-foreground')}>{variants.length} varian · {venues.find((v) => v.id === venueId)?.name ?? "-"}</p>
               </div>
               <SignaturePad onSignature={setSignature} />
             </div>

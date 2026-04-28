@@ -68,10 +68,10 @@ export function VendorsTable() {
 
   if (isLoading) {
     return (
-      <Card><CardContent className="p-6 space-y-3">
+      <Card><CardContent className={cn('p-6', 'space-y-3')}>
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="flex items-center space-x-4 py-3">
-            <Skeleton className="h-4 w-8" /><Skeleton className="h-4 w-40" /><Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-20" />
+          <div key={i} className={cn('flex', 'items-center', 'space-x-4', 'py-3')}>
+            <Skeleton className={cn('h-4', 'w-8')} /><Skeleton className={cn('h-4', 'w-40')} /><Skeleton className={cn('h-4', 'w-32')} /><Skeleton className={cn('h-4', 'w-20')} />
           </div>
         ))}
       </CardContent></Card>
@@ -80,14 +80,14 @@ export function VendorsTable() {
 
   return (
     <>
-      <div className="flex justify-end items-center mb-4 gap-2">
+      <div className={cn('flex', 'justify-end', 'items-center', 'mb-4', 'gap-2')}>
         {(can("vendor", "create") || isAdmin) && (
           <>
             <Button variant="outline" onClick={() => { setEditingVendor(null); setVendorDrawerOpen(true); }}>
-              <Plus className="w-4 h-4 mr-1" /> Add Vendor
+              <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Vendor
             </Button>
             <Button onClick={() => { setEditingCategory(null); setCategoryDrawerOpen(true); }}>
-              <Plus className="w-4 h-4 mr-1" /> New Category
+              <Plus className={cn('w-4', 'h-4', 'mr-1')} /> New Category
             </Button>
           </>
         )}
@@ -95,14 +95,14 @@ export function VendorsTable() {
 
       <Card className="shadow-none">
         <CardContent className="p-0">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 pb-4 gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-base font-bold text-[#1D1D1D]">List Vendors</span>
-              <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 border rounded-full">
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'justify-between', 'items-start', 'sm:items-center', 'px-6', 'pb-4', 'gap-3')}>
+            <div className={cn('flex', 'items-center', 'gap-2')}>
+              <span className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>List Vendors</span>
+              <span className={cn('text-xs', 'font-medium', 'bg-gray-100', 'text-gray-600', 'px-3', 'py-1', 'border', 'rounded-full')}>
                 {filtered.length} vendor
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className={cn('flex', 'items-center', 'gap-3')}>
               <SearchableSelect
                 options={[{ id: "all", name: "All Categories" }, ...categories.map((cat) => ({ id: cat.id, name: `${cat.name} (${cat.vendors.length})` }))]}
                 value={categoryFilter}
@@ -130,29 +130,29 @@ export function VendorsTable() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No vendors found</TableCell>
+                  <TableCell colSpan={7} className={cn('text-center', 'py-8', 'text-muted-foreground')}>No vendors found</TableCell>
                 </TableRow>
               ) : (
                 paginated.map((vendor, idx) => (
                   <TableRow key={vendor.id}>
                     <TableCell className="text-muted-foreground">{(currentPage - 1) * rowsPerPage + idx + 1}</TableCell>
                     <TableCell className="font-medium">{vendor.name}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{vendor.description || "-"}</TableCell>
+                    <TableCell className={cn('text-xs', 'text-muted-foreground')}>{vendor.description || "-"}</TableCell>
                     <TableCell className="text-xs">{vendor.phone || "-"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-45 truncate">{vendor.address || "-"}</TableCell>
+                    <TableCell className={cn('text-xs', 'text-muted-foreground', 'max-w-45', 'truncate')}>{vendor.address || "-"}</TableCell>
                     <TableCell>
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{vendor.categoryName}</span>
+                      <span className={cn('px-2', 'py-1', 'rounded-full', 'text-xs', 'font-medium', 'bg-gray-100', 'text-gray-700')}>{vendor.categoryName}</span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-1 justify-end">
+                      <div className={cn('flex', 'gap-1', 'justify-end')}>
                         {(can("vendor", "edit") || isAdmin) && (
-                          <button className="p-1.5 hover:bg-muted rounded cursor-pointer" onClick={() => { setEditingVendor(vendor); setVendorDrawerOpen(true); }}>
-                            <PenLine className="w-4 h-4 text-muted-foreground" />
+                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setEditingVendor(vendor); setVendorDrawerOpen(true); }}>
+                            <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                           </button>
                         )}
                         {(can("vendor", "delete") || isAdmin) && (
-                          <button className="p-1.5 hover:bg-muted rounded cursor-pointer" onClick={() => { setVendorToDelete(vendor); setDeleteOpen(true); }}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
+                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setVendorToDelete(vendor); setDeleteOpen(true); }}>
+                            <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
                           </button>
                         )}
                       </div>
@@ -164,11 +164,11 @@ export function VendorsTable() {
           </Table>
 
           {filtered.length > 0 && (
-            <div className="flex justify-between items-center px-6 py-3 border-t">
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="text-xs h-8">
-                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Previous
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className={cn('text-xs', 'h-8')}>
+                <ArrowLeft className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
               </Button>
-              <div className="flex items-center gap-1">
+              <div className={cn('flex', 'items-center', 'gap-1')}>
                 {(() => {
                   const pages: (number | string)[] = [];
                   if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
@@ -181,7 +181,7 @@ export function VendorsTable() {
                   }
                   return pages.map((page, idx) =>
                     typeof page === "string" ? (
-                      <span key={`e-${idx}`} className="px-2 py-1 text-xs text-gray-400">...</span>
+                      <span key={`e-${idx}`} className={cn('px-2', 'py-1', 'text-xs', 'text-gray-400')}>...</span>
                     ) : (
                       <button key={page} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", currentPage === page ? "bg-[#eeeeee] text-gray-900" : "text-gray-700 hover:bg-[#eeeeee]")} onClick={() => setCurrentPage(page)}>
                         {page}
@@ -190,8 +190,8 @@ export function VendorsTable() {
                   );
                 })()}
               </div>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="text-xs h-8">
-                Next <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className={cn('text-xs', 'h-8')}>
+                Next <ArrowRight className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
               </Button>
             </div>
           )}
@@ -204,8 +204,8 @@ export function VendorsTable() {
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-md">
           <DialogTitle>Delete Vendor</DialogTitle>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete &quot;{vendorToDelete?.name}&quot;? This action cannot be undone.</p>
-          <div className="flex gap-3 mt-4">
+          <p className={cn('text-sm', 'text-muted-foreground')}>Are you sure you want to delete &quot;{vendorToDelete?.name}&quot;? This action cannot be undone.</p>
+          <div className={cn('flex', 'gap-3', 'mt-4')}>
             <Button variant="outline" className="flex-1" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button variant="destructive" className="flex-1" onClick={handleDelete} disabled={deleteMutation.isPending}>
               {deleteMutation.isPending ? "Deleting..." : "Delete"}

@@ -2,7 +2,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getGroups } from "@/lib/queries/groups";
 
-export async function GET(request: Request) {
+export async function GET() {
   const { session, response } = await requirePermissionForRoute({
     module: "settings",
     action: "view",

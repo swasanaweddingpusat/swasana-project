@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { FinanceBooking } from "@/types/finance";
+import { cn } from "../../../../../lib/utils";
 
 interface RecentBookingsTableProps {
   bookings: FinanceBooking[];
@@ -28,19 +29,19 @@ function BookingStatusBadge({ status }: { status: FinanceBooking["bookingStatus"
 
 export function RecentBookingsTable({ bookings, loading }: RecentBookingsTableProps) {
   return (
-    <div className="flex flex-col gap-4 bg-card rounded-xl border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-[#1D1D1D]">Recently Bookings</h3>
-        <Link href="/dashboard/bookings" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+    <div className={cn('flex', 'flex-col', 'gap-4', 'bg-card', 'rounded-xl', 'border', 'p-4')}>
+      <div className={cn('flex', 'items-center', 'justify-between')}>
+        <h3 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Recently Bookings</h3>
+        <Link href="/dashboard/bookings" className={cn('text-sm', 'font-medium', 'text-muted-foreground', 'hover:text-foreground')}>
           See all bookings
         </Link>
       </div>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableRow className={cn('bg-muted/40', 'hover:bg-muted/40')}>
               {columns.map((col) => (
-                <TableHead key={col} className="text-xs font-medium px-3 py-3">{col}</TableHead>
+                <TableHead key={col} className={cn('text-xs', 'font-medium', 'px-3', 'py-3')}>{col}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -49,29 +50,29 @@ export function RecentBookingsTable({ bookings, loading }: RecentBookingsTablePr
               [...Array(5)].map((_, i) => (
                 <TableRow key={i} className="h-18">
                   {columns.map((_, j) => (
-                    <TableCell key={j} className="px-3 py-2"><Skeleton className="h-4 w-full" /></TableCell>
+                    <TableCell key={j} className={cn('px-3', 'py-2')}><Skeleton className={cn('h-4', 'w-full')} /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : bookings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-18 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={columns.length} className={cn('h-18', 'text-center', 'text-sm', 'text-muted-foreground')}>
                   No bookings found
                 </TableCell>
               </TableRow>
             ) : (
               bookings.map((booking, idx) => (
                 <TableRow key={booking.id} className="h-18">
-                  <TableCell className="px-3 py-2 text-sm">{idx + 1}</TableCell>
-                  <TableCell className="px-3 py-2 text-sm font-medium">{booking.customerName}</TableCell>
-                  <TableCell className="px-3 py-2 text-sm">{booking.customerPhone}</TableCell>
-                  <TableCell className="px-3 py-2 text-sm">{formatDate(booking.bookingDate)}</TableCell>
-                  <TableCell className="px-3 py-2"><BookingStatusBadge status={booking.bookingStatus} /></TableCell>
-                  <TableCell className="px-3 py-2 text-sm">{booking.paymentStatus}</TableCell>
-                  <TableCell className="px-3 py-2">
+                  <TableCell className={cn('px-3', 'py-2', 'text-sm')}>{idx + 1}</TableCell>
+                  <TableCell className={cn('px-3', 'py-2', 'text-sm', 'font-medium')}>{booking.customerName}</TableCell>
+                  <TableCell className={cn('px-3', 'py-2', 'text-sm')}>{booking.customerPhone}</TableCell>
+                  <TableCell className={cn('px-3', 'py-2', 'text-sm')}>{formatDate(booking.bookingDate)}</TableCell>
+                  <TableCell className={cn('px-3', 'py-2')}><BookingStatusBadge status={booking.bookingStatus} /></TableCell>
+                  <TableCell className={cn('px-3', 'py-2', 'text-sm')}>{booking.paymentStatus}</TableCell>
+                  <TableCell className={cn('px-3', 'py-2')}>
                     {booking.paymentMethod !== "-"
                       ? <Badge variant="outline">{booking.paymentMethod}</Badge>
-                      : <span className="text-sm text-muted-foreground">-</span>
+                      : <span className={cn('text-sm', 'text-muted-foreground')}>-</span>
                     }
                   </TableCell>
                 </TableRow>

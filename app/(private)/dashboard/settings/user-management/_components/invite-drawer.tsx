@@ -91,9 +91,9 @@ export function InviteDrawer({
   const isPending = isEdit ? updateUser.isPending : inviteUser.isPending;
 
   // Populate when opening
+  const editId = editUser?.id;
   useEffect(() => {
     if (!open) return;
-
     if (editUser?.profile) {
       const p = editUser.profile;
       const venueIds = p.userVenueAccess?.map((v) => v.venue.id) ?? [];
@@ -104,6 +104,7 @@ export function InviteDrawer({
         if (v.managerId) venueManagers[v.venue.id] = v.managerId;
       });
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         email: editUser.email,
         fullName: p.fullName ?? "",
@@ -145,7 +146,7 @@ export function InviteDrawer({
       setSelectedGroupIds([]);
     }
     setErrors({});
-  }, [open, editUser, brands]);
+  }, [open, editId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearError = (field: string) => {
     if (errors[field]) {
@@ -332,13 +333,13 @@ export function InviteDrawer({
       onClose={handleClose}
       title={isEdit ? "Edit User" : "Invite New User"}
     >
-      <div className="flex flex-col justify-between h-full">
-        <div className="flex-1 overflow-y-auto scrollbar-hide">
-          <div className="space-y-3 px-2">
+      <div className={cn('flex', 'flex-col', 'justify-between', 'h-full')}>
+        <div className={cn('flex-1', 'overflow-y-auto', 'scrollbar-hide')}>
+          <div className={cn('space-y-3', 'px-2')}>
             {/* Email — invite only */}
             {!isEdit && (
               <div>
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="email" className={cn('text-sm', 'font-medium', 'text-gray-700')}>
                   Email *
                 </Label>
                 <Input
@@ -352,14 +353,14 @@ export function InviteDrawer({
                   disabled={isEdit}
                 />
                 {errors.email && (
-                  <p className="mt-1 text-sm text-[#E80606]">{errors.email}</p>
+                  <p className={cn('mt-1', 'text-sm', 'text-[#E80606]')}>{errors.email}</p>
                 )}
               </div>
             )}
 
             {/* Full Name */}
             <div>
-              <Label htmlFor="fullName" className="text-sm font-medium text-gray-700">
+              <Label htmlFor="fullName" className={cn('text-sm', 'font-medium', 'text-gray-700')}>
                 Full Name *
               </Label>
               <Input
@@ -371,13 +372,13 @@ export function InviteDrawer({
                 onChange={(e) => handleInput("fullName", e.target.value)}
               />
               {errors.fullName && (
-                <p className="mt-1 text-sm text-[#E80606]">{errors.fullName}</p>
+                <p className={cn('mt-1', 'text-sm', 'text-[#E80606]')}>{errors.fullName}</p>
               )}
             </div>
 
             {/* Role */}
             <div className="w-full">
-              <Label htmlFor="roleId" className="text-sm font-medium text-gray-700">
+              <Label htmlFor="roleId" className={cn('text-sm', 'font-medium', 'text-gray-700')}>
                 Role *
               </Label>
               <Select
@@ -401,22 +402,22 @@ export function InviteDrawer({
                 </SelectContent>
               </Select>
               {errors.roleId && (
-                <p className="mt-1 text-sm text-[#E80606]">{errors.roleId}</p>
+                <p className={cn('mt-1', 'text-sm', 'text-[#E80606]')}>{errors.roleId}</p>
               )}
             </div>
 
             {/* Data Access */}
             <div>
-              <Label className="text-sm font-medium text-gray-700">Data Access</Label>
-              <p className="text-xs text-gray-500 mt-1 mb-2">
+              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Data Access</Label>
+              <p className={cn('text-xs', 'text-gray-500', 'mt-1', 'mb-2')}>
                 Controls which booking data this user can see
               </p>
-              <div className="flex gap-2">
+              <div className={cn('flex', 'gap-2')}>
                 {(["own", "group", "all"] as const).map((scope) => {
                   const icons = {
-                    own: <User className="h-3 w-3" />,
-                    group: <Users className="h-3 w-3" />,
-                    all: <Globe className="h-3 w-3" />,
+                    own: <User className={cn('h-3', 'w-3')} />,
+                    group: <Users className={cn('h-3', 'w-3')} />,
+                    all: <Globe className={cn('h-3', 'w-3')} />,
                   };
                   const labels = { own: "Own", group: "Group", all: "All" };
                   const descs = {
@@ -448,22 +449,22 @@ export function InviteDrawer({
               </div>
 
               {formData.dataScope === "group" && (
-                <div className="mt-3 space-y-2">
+                <div className={cn('mt-3', 'space-y-2')}>
                   {!isEdit && (
-                    <p className="text-[11px] text-amber-600">
+                    <p className={cn('text-[11px]', 'text-amber-600')}>
                       Group akan ditetapkan setelah user dibuat.
                     </p>
                   )}
-                  <p className="text-xs text-gray-500">Assign to groups:</p>
+                  <p className={cn('text-xs', 'text-gray-500')}>Assign to groups:</p>
                   {selectedGroupIds.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
+                    <div className={cn('flex', 'flex-wrap', 'gap-1.5', 'mb-2')}>
                       {selectedGroupIds.map((gid) => {
                         const g = groups.find((x) => x.id === gid);
                         if (!g) return null;
                         return (
                           <span
                             key={gid}
-                            className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full"
+                            className={cn('flex', 'items-center', 'gap-1', 'px-2', 'py-0.5', 'text-xs', 'bg-gray-900', 'text-white', 'rounded-full')}
                           >
                             {g.name}
                             <button
@@ -473,7 +474,7 @@ export function InviteDrawer({
                                   prev.filter((id) => id !== gid)
                                 )
                               }
-                              className="ml-0.5 hover:text-gray-300"
+                              className={cn('ml-0.5', 'hover:text-gray-300')}
                             >
                               ×
                             </button>
@@ -510,13 +511,13 @@ export function InviteDrawer({
 
             {/* Assigned Venues */}
             <div>
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-gray-700">
+              <div className={cn('flex', 'items-center', 'justify-between')}>
+                <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>
                   Assigned Venues
                 </Label>
                 {allVenuesCount > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-gray-400">All</span>
+                  <div className={cn('flex', 'items-center', 'gap-2')}>
+                    <span className={cn('text-[11px]', 'text-gray-400')}>All</span>
                     <Switch
                       checked={allVenuesSelected}
                       onCheckedChange={toggleAllVenues}
@@ -525,11 +526,11 @@ export function InviteDrawer({
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-500 mt-1 mb-2">
+              <p className={cn('text-xs', 'text-gray-500', 'mt-1', 'mb-2')}>
                 Select brands and venues that this user will have access to
               </p>
               {errors.venueIds && (
-                <p className="mb-2 text-sm text-[#E80606]">{errors.venueIds}</p>
+                <p className={cn('mb-2', 'text-sm', 'text-[#E80606]')}>{errors.venueIds}</p>
               )}
 
               <div className="space-y-2">
@@ -562,7 +563,7 @@ export function InviteDrawer({
                               : [...prev, brand.id]
                           )
                         }
-                        className="flex items-center w-full px-3 py-2.5 gap-2.5"
+                        className={cn('flex', 'items-center', 'w-full', 'px-3', 'py-2.5', 'gap-2.5')}
                       >
                         <Building2
                           className={cn(
@@ -581,7 +582,7 @@ export function InviteDrawer({
                           {brand.name}
                         </span>
                         {selectedCount > 0 && (
-                          <span className="text-[10px] font-medium bg-black text-white rounded-full px-1.5 py-0.5 min-w-5 text-center">
+                          <span className={cn('text-[10px]', 'font-medium', 'bg-black', 'text-white', 'rounded-full', 'px-1.5', 'py-0.5', 'min-w-5', 'text-center')}>
                             {selectedCount}
                           </span>
                         )}
@@ -594,17 +595,17 @@ export function InviteDrawer({
                       </button>
 
                       {isExpanded && (
-                        <div className="px-3 pb-3">
+                        <div className={cn('px-3', 'pb-3')}>
                           {brandVenues.length > 0 && (
-                            <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
-                              <span className="text-[11px] text-gray-400 uppercase tracking-wider">
+                            <div className={cn('flex', 'items-center', 'justify-between', 'mb-2', 'pb-2', 'border-b', 'border-gray-100')}>
+                              <span className={cn('text-[11px]', 'text-gray-400', 'uppercase', 'tracking-wider')}>
                                 {brandVenues.length} venue
                                 {brandVenues.length > 1 ? "s" : ""}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => selectAllForBrand(brand.id)}
-                                className="text-[11px] font-medium text-gray-500 hover:text-gray-900 transition-colors"
+                                className={cn('text-[11px]', 'font-medium', 'text-gray-500', 'hover:text-gray-900', 'transition-colors')}
                               >
                                 {allSelectedForBrand
                                   ? "Deselect all"
@@ -614,7 +615,7 @@ export function InviteDrawer({
                           )}
 
                           {brandVenues.length === 0 ? (
-                            <p className="text-xs text-gray-400 py-2 text-center">
+                            <p className={cn('text-xs', 'text-gray-400', 'py-2', 'text-center')}>
                               No venues available
                             </p>
                           ) : (
@@ -649,12 +650,12 @@ export function InviteDrawer({
                                             "border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900"
                                         )}
                                       />
-                                      <span className="text-xs font-medium flex-1 truncate">
+                                      <span className={cn('text-xs', 'font-medium', 'flex-1', 'truncate')}>
                                         {venue.name}
                                       </span>
                                     </div>
                                     {isSelected && managers.length > 0 && (
-                                      <div className="pl-7 pr-1">
+                                      <div className={cn('pl-7', 'pr-1')}>
                                         <SearchableSelect
                                           options={[{ id: "", name: "Tanpa manager" }, ...managers.map((m) => ({ id: m.id, name: m.fullName ?? "" }))]}
                                           value={formData.venueManagers[venue.id] ?? ""}
@@ -688,19 +689,19 @@ export function InviteDrawer({
         </div>
 
         {/* Footer */}
-        <div className="bg-white sticky bottom-0 z-10">
-          <div className="flex py-4 gap-2">
+        <div className={cn('bg-white', 'sticky', 'bottom-0', 'z-10')}>
+          <div className={cn('flex', 'py-4', 'gap-2')}>
             <Button
               variant="outline"
               onClick={handleClose}
-              className="flex-1 cursor-pointer text-[#E80606] border-[#E80606] hover:bg-[#FFD6D6]"
+              className={cn('flex-1', 'cursor-pointer', 'text-[#E80606]', 'border-[#E80606]', 'hover:bg-[#FFD6D6]')}
               disabled={isPending}
             >
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
-              className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer"
+              className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}
               disabled={isPending}
             >
               {isPending

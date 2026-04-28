@@ -28,6 +28,7 @@ import type { GroupsQueryResult, GroupQueryItem } from "@/lib/queries/groups";
 import type { UsersQueryResult } from "@/lib/queries/users";
 import { deleteGroup } from "@/actions/group";
 import { GroupDrawer } from "./group-drawer";
+import { cn } from "../../../../../../lib/utils";
 
 interface GroupsTableProps {
   initialData: GroupsQueryResult;
@@ -82,15 +83,15 @@ export function GroupsTable({ initialData, users }: GroupsTableProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <p className="text-muted-foreground text-sm">{groups.length} grup</p>
+      <div className={cn('flex', 'items-center', 'justify-between')}>
+        <p className={cn('text-muted-foreground', 'text-sm')}>{groups.length} grup</p>
         <Button onClick={handleCreate} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className={cn('mr-2', 'h-4', 'w-4')} />
           Buat Grup
         </Button>
       </div>
 
-      <div className="rounded-md border overflow-x-auto">
+      <div className={cn('rounded-md', 'border', 'overflow-x-auto')}>
         <Table className="min-w-150">
           <TableHeader>
             <TableRow>
@@ -104,7 +105,7 @@ export function GroupsTable({ initialData, users }: GroupsTableProps) {
           <TableBody>
             {groups.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                <TableCell colSpan={5} className={cn('text-muted-foreground', 'py-8', 'text-center')}>
                   Belum ada grup.
                 </TableCell>
               </TableRow>
@@ -112,13 +113,13 @@ export function GroupsTable({ initialData, users }: GroupsTableProps) {
               groups.map((group) => (
                 <TableRow key={group.id}>
                   <TableCell className="font-medium">{group.name}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell className={cn('text-muted-foreground', 'text-sm')}>
                     {group.description ?? "—"}
                   </TableCell>
                   <TableCell>
                     {group.leader ? (
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
+                      <div className={cn('flex', 'items-center', 'gap-2')}>
+                        <Avatar className={cn('h-6', 'w-6')}>
                           <AvatarImage src={group.leader.avatarUrl ?? undefined} />
                           <AvatarFallback className="text-xs">
                             {getInitials(group.leader.fullName, group.leader.email)}
@@ -132,28 +133,28 @@ export function GroupsTable({ initialData, users }: GroupsTableProps) {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="gap-1">
-                      <Users className="h-3 w-3" />
+                      <Users className={cn('h-3', 'w-3')} />
                       {group._count.members}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-end gap-1">
+                    <div className={cn('flex', 'items-center', 'justify-end', 'gap-1')}>
                       <Button
                         variant="ghost"
                         size="icon"
                         title="Edit"
                         onClick={() => handleEdit(group)}
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className={cn('h-4', 'w-4')} />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         title="Hapus"
-                        className="text-destructive hover:text-destructive"
+                        className={cn('text-destructive', 'hover:text-destructive')}
                         onClick={() => setDeleteTarget(group)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className={cn('h-4', 'w-4')} />
                       </Button>
                     </div>
                   </TableCell>
@@ -186,7 +187,7 @@ export function GroupsTable({ initialData, users }: GroupsTableProps) {
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}
             >
               {isDeleting ? "Menghapus..." : "Hapus"}
             </AlertDialogAction>

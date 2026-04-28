@@ -30,16 +30,16 @@ const formatCurrency = (amount: number) =>
 
 function SkeletonTable() {
   return (
-    <div className="space-y-4 p-6">
+    <div className={cn('space-y-4', 'p-6')}>
       {[...Array(5)].map((_, i) => (
-        <div key={i} className="flex items-center space-x-4 py-3">
-          <Skeleton className="h-4 w-4" />
-          <Skeleton className="h-4 w-8" />
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-16" />
-          <div className="flex gap-2"><Skeleton className="h-6 w-6" /><Skeleton className="h-6 w-6" /></div>
+        <div key={i} className={cn('flex', 'items-center', 'space-x-4', 'py-3')}>
+          <Skeleton className={cn('h-4', 'w-4')} />
+          <Skeleton className={cn('h-4', 'w-8')} />
+          <Skeleton className={cn('h-4', 'w-32')} />
+          <Skeleton className={cn('h-4', 'w-20')} />
+          <Skeleton className={cn('h-4', 'w-24')} />
+          <Skeleton className={cn('h-4', 'w-16')} />
+          <div className={cn('flex', 'gap-2')}><Skeleton className={cn('h-6', 'w-6')} /><Skeleton className={cn('h-6', 'w-6')} /></div>
         </div>
       ))}
     </div>
@@ -182,24 +182,24 @@ export function PackagesTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 pb-4 border-b">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#1D1D1D]">Packages</h2>
-              <span className="text-sm text-muted-foreground">({filtered.length})</span>
-              <button onClick={handleRefresh} disabled={refreshing} className="p-1 rounded-md hover:bg-muted cursor-pointer text-muted-foreground">
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'pb-4', 'border-b')}>
+            <div className={cn('flex', 'items-center', 'gap-2')}>
+              <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Packages</h2>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
+              <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
                 <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className={cn('flex', 'items-center', 'gap-2')}>
               <SearchBar placeholder="Search packages..." />
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                  <Trash2 className="h-4 w-4 mr-1" /> Delete ({selectedIds.size})
+                  <Trash2 className={cn('h-4', 'w-4', 'mr-1')} /> Delete ({selectedIds.size})
                 </Button>
               )}
               {canCreate("package") && (
-                <Button onClick={openAdd} className="cursor-pointer flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white rounded-md px-4 py-2 text-sm font-medium">
-                  <Plus className="h-4 w-4" /> Add New Package
+                <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'rounded-md', 'px-4', 'py-2', 'text-sm', 'font-medium')}>
+                  <Plus className={cn('h-4', 'w-4')} /> Add New Package
                 </Button>
               )}
             </div>
@@ -225,7 +225,7 @@ export function PackagesTable() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
                     {searchQuery ? "No packages found" : "No packages yet"}
                   </TableCell>
                 </TableRow>
@@ -270,14 +270,14 @@ export function PackagesTable() {
                       </button>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1 justify-end">
+                      <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
                         {can("package", "view") && (
                           <Tooltip>
                             <TooltipTrigger
-                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
                             >
-                              <Eye className="h-4 w-4 text-muted-foreground" />
+                              <Eye className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Lihat Detail</TooltipContent>
                           </Tooltip>
@@ -285,10 +285,10 @@ export function PackagesTable() {
                         {can("package", "set_harga") && (
                           <Tooltip>
                             <TooltipTrigger
-                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               onClick={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
                             >
-                              <Settings2 className="h-4 w-4 text-muted-foreground" />
+                              <Settings2 className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Set Harga</TooltipContent>
                           </Tooltip>
@@ -299,8 +299,8 @@ export function PackagesTable() {
                           return (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button className="p-1.5 rounded-md hover:bg-muted cursor-pointer" title="Approval">
-                                  <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+                                <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} title="Approval">
+                                  <ClipboardCheck className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
@@ -339,10 +339,10 @@ export function PackagesTable() {
                         {can("package", "edit") && (
                           <Tooltip>
                             <TooltipTrigger
-                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               onClick={() => openEdit(pkg)}
                             >
-                              <PenLine className="h-4 w-4 text-muted-foreground" />
+                              <PenLine className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
@@ -350,10 +350,10 @@ export function PackagesTable() {
                         {can("package", "delete") && (
                           <Tooltip>
                             <TooltipTrigger
-                              className="p-1.5 rounded-md hover:bg-muted cursor-pointer"
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               onClick={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
+                              <Trash2 className={cn('h-4', 'w-4', 'text-red-500')} />
                             </TooltipTrigger>
                             <TooltipContent>Hapus</TooltipContent>
                           </Tooltip>
@@ -368,16 +368,16 @@ export function PackagesTable() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-3 border-t">
-              <span className="text-sm text-muted-foreground">
+            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
+              <span className={cn('text-sm', 'text-muted-foreground')}>
                 Page {currentPage} of {totalPages}
               </span>
-              <div className="flex gap-1">
+              <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className={cn('h-4', 'w-4')} />
                 </Button>
                 <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className={cn('h-4', 'w-4')} />
                 </Button>
               </div>
             </div>
@@ -436,8 +436,8 @@ export function PackagesTable() {
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Delete Package</DialogTitle>
-          <p className="text-sm text-muted-foreground">Are you sure? This action cannot be undone.</p>
-          <div className="flex justify-end gap-2 mt-4">
+          <p className={cn('text-sm', 'text-muted-foreground')}>Are you sure? This action cannot be undone.</p>
+          <div className={cn('flex', 'justify-end', 'gap-2', 'mt-4')}>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
@@ -450,8 +450,8 @@ export function PackagesTable() {
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Delete {selectedIds.size} Packages</DialogTitle>
-          <p className="text-sm text-muted-foreground">Are you sure? This action cannot be undone.</p>
-          <div className="flex justify-end gap-2 mt-4">
+          <p className={cn('text-sm', 'text-muted-foreground')}>Are you sure? This action cannot be undone.</p>
+          <div className={cn('flex', 'justify-end', 'gap-2', 'mt-4')}>
             <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
               {bulkDeleteMutation.isPending ? "Deleting..." : "Delete All"}

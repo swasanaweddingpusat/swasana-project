@@ -60,11 +60,11 @@ interface ProfileClientProps {
 
 function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
-    <div className="flex items-center gap-2 mb-4">
-      <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/8 text-primary">
-        <Icon className="h-3.5 w-3.5" />
+    <div className={cn('flex', 'items-center', 'gap-2', 'mb-4')}>
+      <div className={cn('flex', 'items-center', 'justify-center', 'w-7', 'h-7', 'rounded-md', 'bg-primary/8', 'text-primary')}>
+        <Icon className={cn('h-3.5', 'w-3.5')} />
       </div>
-      <span className="text-sm font-semibold text-foreground">{title}</span>
+      <span className={cn('text-sm', 'font-semibold', 'text-foreground')}>{title}</span>
     </div>
   )
 }
@@ -72,7 +72,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</Label>
+      <Label className={cn('text-xs', 'font-medium', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>{label}</Label>
       {children}
     </div>
   )
@@ -176,13 +176,13 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
   ]
 
   return (
-    <div className="space-y-6 sm:p-6">
+    <div className={cn('space-y-6', 'sm:p-6')}>
       {user.mustChangePassword && (
-        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+        <div className={cn('flex', 'items-start', 'gap-3', 'p-4', 'bg-amber-50', 'border', 'border-amber-200', 'rounded-lg', 'text-amber-800')}>
+          <AlertTriangle className={cn('h-5', 'w-5', 'shrink-0', 'mt-0.5')} />
           <div>
-            <p className="font-semibold text-sm">Ganti Password Diperlukan</p>
-            <p className="text-sm mt-0.5">Anda menggunakan kata sandi sementara. Silakan ganti sebelum melanjutkan.</p>
+            <p className={cn('font-semibold', 'text-sm')}>Ganti Password Diperlukan</p>
+            <p className={cn('text-sm', 'mt-0.5')}>Anda menggunakan kata sandi sementara. Silakan ganti sebelum melanjutkan.</p>
           </div>
         </div>
       )}
@@ -190,24 +190,24 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
       {/* Profile header */}
       <Card className="border-border/60">
         <CardContent className="">
-          <div className="flex items-center gap-5">
+          <div className={cn('flex', 'items-center', 'gap-5')}>
             <AvatarUpload
               currentUrl={profile?.avatarUrl ?? user.image ?? null}
               name={form.fullName || user.name}
               userId={user.id}
               onUploaded={() => {}}
             />
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-semibold truncate">{form.fullName || user.name || "—"}</h2>
-              <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <div className={cn('flex-1', 'min-w-0')}>
+              <h2 className={cn('text-lg', 'font-semibold', 'truncate')}>{form.fullName || user.name || "—"}</h2>
+              <p className={cn('text-sm', 'text-muted-foreground', 'truncate')}>{user.email}</p>
+              <div className={cn('flex', 'items-center', 'gap-2', 'mt-1.5', 'flex-wrap')}>
                 {profile && (
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono">
+                  <span className={cn('text-xs', 'text-muted-foreground', 'bg-muted', 'px-2', 'py-0.5', 'rounded', 'font-mono')}>
                     {`EMP-${String(profile.employeeNumber).padStart(4, "0")}`}
                   </span>
                 )}
                 {user.role && (
-                  <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium capitalize">
+                  <span className={cn('text-xs', 'bg-primary', 'text-primary-foreground', 'px-2', 'py-0.5', 'rounded', 'font-medium', 'capitalize')}>
                     {user.role}
                   </span>
                 )}
@@ -218,7 +218,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
       </Card>
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
+      <div className={cn('flex', 'border-b', 'border-border')}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -229,7 +229,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
               user.mustChangePassword && tab.id !== "security" && "opacity-40 cursor-not-allowed"
             )}
           >
-            <tab.icon className="h-4 w-4" />
+            <tab.icon className={cn('h-4', 'w-4')} />
             {tab.label}
           </button>
         ))}
@@ -242,7 +242,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
           <Card className="border-border/60">
             <CardContent className="">
               <SectionHeader icon={Briefcase} title="Data Pribadi" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-2', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama Lengkap *">
                   <Input value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="Nama lengkap" />
                 </Field>
@@ -274,7 +274,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                   <Input value={form.phoneNumber} onChange={(e) => set("phoneNumber", e.target.value)} placeholder="08xxxxxxxxxx" />
                 </Field>
                 <Field label="Email">
-                  <Input value={user.email} readOnly className="bg-muted text-muted-foreground cursor-not-allowed" />
+                  <Input value={user.email} readOnly className={cn('bg-muted', 'text-muted-foreground', 'cursor-not-allowed')} />
                 </Field>
                 <Field label="Kota">
                   <Input value={form.city} onChange={(e) => set("city", e.target.value)} placeholder="Kota domisili" />
@@ -304,7 +304,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
           <Card className="border-border/60">
             <CardContent className="">
               <SectionHeader icon={CreditCard} title="Rekening" />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
+              <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-3', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama Bank">
                   <Input value={form.bankName} onChange={(e) => set("bankName", e.target.value)} placeholder="BCA, BNI, Mandiri, dll" />
                 </Field>
@@ -322,7 +322,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
           <Card className="border-border/60">
             <CardContent className="">
               <SectionHeader icon={User} title="Data Tambahan" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-2', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama Ibu Kandung">
                   <Input value={form.motherName} onChange={(e) => set("motherName", e.target.value)} placeholder="Nama ibu kandung" />
                 </Field>
@@ -345,7 +345,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
               <Separator className="my-5" />
 
               <SectionHeader icon={Users} title="Kontak Darurat" />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
+              <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-3', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama">
                   <Input value={form.emergencyContactName} onChange={(e) => set("emergencyContactName", e.target.value)} placeholder="Nama kontak darurat" />
                 </Field>
@@ -357,9 +357,9 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                 </Field>
               </div>
 
-              <div className="mt-6 flex justify-end">
+              <div className={cn('mt-6', 'flex', 'justify-end')}>
                 <Button onClick={handleSaveProfile} disabled={savingProfile} className="min-w-32">
-                  {savingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</> : "Simpan Profil"}
+                  {savingProfile ? <><Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Profil"}
                 </Button>
               </div>
             </CardContent>
@@ -371,22 +371,22 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
       {activeTab === "security" && (
         <Card className="border-border/60">
           <CardContent className="">
-            <div className="flex items-center gap-2 mb-6">
-              <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/8 text-primary">
-                <Lock className="h-3.5 w-3.5" />
+            <div className={cn('flex', 'items-center', 'gap-2', 'mb-6')}>
+              <div className={cn('flex', 'items-center', 'justify-center', 'w-7', 'h-7', 'rounded-md', 'bg-primary/8', 'text-primary')}>
+                <Lock className={cn('h-3.5', 'w-3.5')} />
               </div>
-              <span className="text-sm font-semibold">
+              <span className={cn('text-sm', 'font-semibold')}>
                 {user.mustChangePassword ? "Buat Kata Sandi Baru" : "Ubah Kata Sandi"}
               </span>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
+              <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-3', 'gap-x-6', 'gap-y-4')}>
               {!user.mustChangePassword && (
                 <Field label="Password Saat Ini">
                   <div className="relative">
                     <Input type={showCurrentPw ? "text" : "password"} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Password saat ini" required disabled={isPending} />
-                    <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowCurrentPw(!showCurrentPw)}>
-                      {showCurrentPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <Button type="button" variant="ghost" size="sm" className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'hover:bg-transparent')} onClick={() => setShowCurrentPw(!showCurrentPw)}>
+                      {showCurrentPw ? <EyeOff className={cn('h-4', 'w-4')} /> : <Eye className={cn('h-4', 'w-4')} />}
                     </Button>
                   </div>
                 </Field>
@@ -394,22 +394,22 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
               <Field label="Password Baru">
                 <div className="relative">
                   <Input type={showNewPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimal 12 karakter" required minLength={12} disabled={isPending} />
-                  <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowNewPw(!showNewPw)}>
-                    {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <Button type="button" variant="ghost" size="sm" className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'hover:bg-transparent')} onClick={() => setShowNewPw(!showNewPw)}>
+                    {showNewPw ? <EyeOff className={cn('h-4', 'w-4')} /> : <Eye className={cn('h-4', 'w-4')} />}
                   </Button>
                 </div>
               </Field>
               <Field label="Konfirmasi Password Baru">
                 <div className="relative">
                   <Input type={showConfirmPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Ulangi password baru" required minLength={12} disabled={isPending} />
-                  <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowConfirmPw(!showConfirmPw)}>
-                    {showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <Button type="button" variant="ghost" size="sm" className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'hover:bg-transparent')} onClick={() => setShowConfirmPw(!showConfirmPw)}>
+                    {showConfirmPw ? <EyeOff className={cn('h-4', 'w-4')} /> : <Eye className={cn('h-4', 'w-4')} />}
                   </Button>
                 </div>
               </Field>
               </div>
-              <Button type="submit" className="w-full sm:w-auto" disabled={isPending}>
-                {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</> : "Simpan Password Baru"}
+              <Button type="submit" className={cn('w-full', 'sm:w-auto')} disabled={isPending}>
+                {isPending ? <><Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Password Baru"}
               </Button>
             </form>
           </CardContent>

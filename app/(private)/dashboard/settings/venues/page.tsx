@@ -3,11 +3,12 @@ import { getVenues, getBrands } from "@/lib/queries/venues";
 import { VenuesTable } from "./_components/venues-table";
 import { VenuesLoading } from "./_components/loading";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { cn } from "../../../../../lib/utils";
 
 export default async function VenuesSettingsPage() {
   await requirePagePermission("venue_management");
   return (
-    <div className="px-6 pb-4">
+    <div className={cn('px-6', 'pb-4')}>
       <Suspense fallback={<VenuesLoading />}>
         <VenuesContent />
       </Suspense>

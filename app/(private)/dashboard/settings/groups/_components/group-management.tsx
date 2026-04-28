@@ -24,6 +24,7 @@ import {
 } from "@/actions/group";
 import type { GroupsQueryResult, GroupQueryItem } from "@/lib/queries/groups";
 import type { UsersQueryResult } from "@/lib/queries/users";
+import { cn } from "../../../../../../lib/utils";
 
 interface GroupManagementProps {
   initialGroups: GroupsQueryResult;
@@ -160,20 +161,20 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
   }
 
   return (
-    <div className="px-6 pb-4 w-full">
-      <div className="flex items-center justify-between mb-6">
+    <div className={cn('px-6', 'pb-4', 'w-full')}>
+      <div className={cn('flex', 'items-center', 'justify-between', 'mb-6')}>
         <div>
-          <h1 className="text-base font-bold text-[#1D1D1D]">Group Management</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Kelola grup data untuk scope akses user</p>
+          <h1 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Group Management</h1>
+          <p className={cn('text-sm', 'text-gray-500', 'mt-0.5')}>Kelola grup data untuk scope akses user</p>
         </div>
-        <Button onClick={openCreate} className="bg-gray-900 text-white hover:bg-gray-800 cursor-pointer">
-          <Plus className="h-4 w-4 mr-2" /> Buat Grup
+        <Button onClick={openCreate} className={cn('bg-gray-900', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}>
+          <Plus className={cn('h-4', 'w-4', 'mr-2')} /> Buat Grup
         </Button>
       </div>
 
       {groups.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <Users2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <div className={cn('text-center', 'py-16', 'text-gray-400')}>
+          <Users2 className={cn('h-10', 'w-10', 'mx-auto', 'mb-3', 'opacity-40')} />
           <p className="text-sm">Belum ada grup. Buat grup untuk memulai.</p>
         </div>
       ) : (
@@ -196,45 +197,45 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                           className={`border border-gray-200 rounded-lg bg-white overflow-hidden transition-shadow ${dragSnapshot.isDragging ? "shadow-lg" : ""}`}
                         >
                           {/* Group header */}
-                          <div className="flex items-center justify-between px-4 py-3">
-                            <div {...dragProvided.dragHandleProps} className="mr-2 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0">
-                              <GripVertical className="h-4 w-4" />
+                          <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'py-3')}>
+                            <div {...dragProvided.dragHandleProps} className={cn('mr-2', 'text-gray-300', 'hover:text-gray-500', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')}>
+                              <GripVertical className={cn('h-4', 'w-4')} />
                             </div>
                             <button
                               type="button"
-                              className="flex items-center gap-3 flex-1 text-left cursor-pointer"
+                              className={cn('flex', 'items-center', 'gap-3', 'flex-1', 'text-left', 'cursor-pointer')}
                               onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
                             >
-                              <div className="h-8 w-8 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                              <div className={cn('h-8', 'w-8', 'rounded-full', 'bg-gray-900', 'text-white', 'flex', 'items-center', 'justify-center', 'text-xs', 'font-semibold', 'shrink-0')}>
                                 {group._count.members}
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900">{group.name}</p>
-                                <div className="flex items-center gap-3 mt-0.5">
-                                  {group.description && <span className="text-xs text-gray-500">{group.description}</span>}
+                              <div className={cn('flex-1', 'min-w-0')}>
+                                <p className={cn('text-sm', 'font-medium', 'text-gray-900')}>{group.name}</p>
+                                <div className={cn('flex', 'items-center', 'gap-3', 'mt-0.5')}>
+                                  {group.description && <span className={cn('text-xs', 'text-gray-500')}>{group.description}</span>}
                                   {leaderName && (
-                                    <span className="flex items-center gap-1 text-xs text-amber-600">
-                                      <Crown className="h-3 w-3" /> {leaderName}
+                                    <span className={cn('flex', 'items-center', 'gap-1', 'text-xs', 'text-amber-600')}>
+                                      <Crown className={cn('h-3', 'w-3')} /> {leaderName}
                                     </span>
                                   )}
                                 </div>
                               </div>
-                              {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
+                              {isExpanded ? <ChevronUp className={cn('h-4', 'w-4', 'text-gray-400', 'shrink-0')} /> : <ChevronDown className={cn('h-4', 'w-4', 'text-gray-400', 'shrink-0')} />}
                             </button>
-                            <div className="flex items-center gap-1 ml-3">
-                              <button type="button" onClick={() => openEdit(group)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-900 cursor-pointer">
-                                <Pencil className="h-3.5 w-3.5" />
+                            <div className={cn('flex', 'items-center', 'gap-1', 'ml-3')}>
+                              <button type="button" onClick={() => openEdit(group)} className={cn('p-1.5', 'rounded', 'hover:bg-gray-100', 'text-gray-500', 'hover:text-gray-900', 'cursor-pointer')}>
+                                <Pencil className={cn('h-3.5', 'w-3.5')} />
                               </button>
-                              <button type="button" onClick={() => setDeleteTarget(group)} className="p-1.5 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 cursor-pointer">
-                                <Trash2 className="h-3.5 w-3.5" />
+                              <button type="button" onClick={() => setDeleteTarget(group)} className={cn('p-1.5', 'rounded', 'hover:bg-red-50', 'text-gray-500', 'hover:text-red-600', 'cursor-pointer')}>
+                                <Trash2 className={cn('h-3.5', 'w-3.5')} />
                               </button>
                             </div>
                           </div>
 
                           {/* Members section */}
                           {isExpanded && (
-                            <div className="border-t border-gray-100">
-                              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                            <div className={cn('border-t', 'border-gray-100')}>
+                              <div className={cn('px-4', 'py-3', 'bg-gray-50', 'border-b', 'border-gray-100')}>
                                 <SearchableSelect
                                   options={nonMembers.map((p) => ({ id: p.id, name: p.name, badge: p.role }))}
                                   value={undefined}
@@ -246,19 +247,19 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                               </div>
 
                               {group.members.length > 0 ? (
-                                <table className="w-full text-sm">
+                                <table className={cn('w-full', 'text-sm')}>
                                   <thead>
-                                    <tr className="bg-gray-50 border-b border-gray-100">
-                                      <th className="w-8 px-3 py-2.5"></th>
-                                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
-                                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Keanggotaan</th>
-                                      <th className="px-4 py-2.5 w-16"></th>
+                                    <tr className={cn('bg-gray-50', 'border-b', 'border-gray-100')}>
+                                      <th className={cn('w-8', 'px-3', 'py-2.5')}></th>
+                                      <th className={cn('text-left', 'px-4', 'py-2.5', 'text-xs', 'font-medium', 'text-gray-500', 'uppercase', 'tracking-wider')}>Nama</th>
+                                      <th className={cn('text-left', 'px-4', 'py-2.5', 'text-xs', 'font-medium', 'text-gray-500', 'uppercase', 'tracking-wider')}>Role</th>
+                                      <th className={cn('text-left', 'px-4', 'py-2.5', 'text-xs', 'font-medium', 'text-gray-500', 'uppercase', 'tracking-wider')}>Keanggotaan</th>
+                                      <th className={cn('px-4', 'py-2.5', 'w-16')}></th>
                                     </tr>
                                   </thead>
                                   <Droppable droppableId={`members-${group.id}`} type="MEMBER">
                                     {(memberProvided) => (
-                                      <tbody ref={memberProvided.innerRef} {...memberProvided.droppableProps} className="divide-y divide-gray-50">
+                                      <tbody ref={memberProvided.innerRef} {...memberProvided.droppableProps} className={cn('divide-y', 'divide-gray-50')}>
                                         {group.members.map((member, memberIndex) => {
                                           const isLeader = member.userId === group.leaderId;
                                           return (
@@ -269,19 +270,19 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                                                   {...memberDrag.draggableProps}
                                                   className={`hover:bg-gray-50 transition-colors ${memberSnapshot.isDragging ? "bg-blue-50 shadow-sm" : ""}`}
                                                 >
-                                                  <td className="px-3 py-2.5">
-                                                    <div {...memberDrag.dragHandleProps} className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing">
-                                                      <GripVertical className="h-3.5 w-3.5" />
+                                                  <td className={cn('px-3', 'py-2.5')}>
+                                                    <div {...memberDrag.dragHandleProps} className={cn('text-gray-300', 'hover:text-gray-500', 'cursor-grab', 'active:cursor-grabbing')}>
+                                                      <GripVertical className={cn('h-3.5', 'w-3.5')} />
                                                     </div>
                                                   </td>
-                                                  <td className="px-4 py-2.5">
-                                                    <div className="flex items-center gap-2">
-                                                      {isLeader && <Crown className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
-                                                      <span className="font-medium text-gray-900">{member.profile.fullName ?? member.profile.email}</span>
+                                                  <td className={cn('px-4', 'py-2.5')}>
+                                                    <div className={cn('flex', 'items-center', 'gap-2')}>
+                                                      {isLeader && <Crown className={cn('h-3.5', 'w-3.5', 'text-amber-500', 'shrink-0')} />}
+                                                      <span className={cn('font-medium', 'text-gray-900')}>{member.profile.fullName ?? member.profile.email}</span>
                                                     </div>
                                                   </td>
-                                                  <td className="px-4 py-2.5 text-gray-500 capitalize">{member.profile.role?.name ?? "—"}</td>
-                                                  <td className="px-4 py-2.5">
+                                                  <td className={cn('px-4', 'py-2.5', 'text-gray-500', 'capitalize')}>{member.profile.role?.name ?? "—"}</td>
+                                                  <td className={cn('px-4', 'py-2.5')}>
                                                     <button
                                                       type="button"
                                                       onClick={() => handleSetLeader(group.id, isLeader ? null : member.userId)}
@@ -294,11 +295,11 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                                                       {isLeader ? "Leader" : "Anggota"}
                                                     </button>
                                                   </td>
-                                                  <td className="px-4 py-2.5 text-right">
+                                                  <td className={cn('px-4', 'py-2.5', 'text-right')}>
                                                     <button
                                                       type="button"
                                                       onClick={() => handleRemoveMember(group.id, member.userId)}
-                                                      className="text-xs text-gray-400 hover:text-red-500 cursor-pointer transition-colors"
+                                                      className={cn('text-xs', 'text-gray-400', 'hover:text-red-500', 'cursor-pointer', 'transition-colors')}
                                                     >
                                                       Hapus
                                                     </button>
@@ -314,7 +315,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                                   </Droppable>
                                 </table>
                               ) : (
-                                <p className="text-xs text-gray-400 px-4 py-3">Belum ada anggota</p>
+                                <p className={cn('text-xs', 'text-gray-400', 'px-4', 'py-3')}>Belum ada anggota</p>
                               )}
                             </div>
                           )}
@@ -332,23 +333,23 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
 
       {/* Create/Edit Drawer */}
       <Drawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} title={editingGroup ? "Edit Grup" : "Buat Grup"}>
-        <div className="flex flex-col justify-between h-full">
-          <div className="space-y-4 px-2">
+        <div className={cn('flex', 'flex-col', 'justify-between', 'h-full')}>
+          <div className={cn('space-y-4', 'px-2')}>
             <div>
-              <Label className="text-sm font-medium text-gray-700">Nama Grup *</Label>
+              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Nama Grup *</Label>
               <Input className="mt-1" placeholder="Contoh: Sales Thamrin" value={formName} onChange={(e) => setFormName(e.target.value)} />
             </div>
             <div>
-              <Label className="text-sm font-medium text-gray-700">Deskripsi</Label>
+              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Deskripsi</Label>
               <Input className="mt-1" placeholder="Deskripsi opsional" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
             </div>
           </div>
-          <div className="sticky bottom-0 bg-white z-10">
-            <div className="flex py-4 gap-2">
-              <Button variant="outline" onClick={() => setDrawerOpen(false)} className="flex-1 cursor-pointer text-red-600 border-red-600 hover:bg-red-50" disabled={saving}>
+          <div className={cn('sticky', 'bottom-0', 'bg-white', 'z-10')}>
+            <div className={cn('flex', 'py-4', 'gap-2')}>
+              <Button variant="outline" onClick={() => setDrawerOpen(false)} className={cn('flex-1', 'cursor-pointer', 'text-red-600', 'border-red-600', 'hover:bg-red-50')} disabled={saving}>
                 Batal
               </Button>
-              <Button onClick={handleSave} className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer" disabled={saving || !formName.trim()}>
+              <Button onClick={handleSave} className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')} disabled={saving || !formName.trim()}>
                 {saving ? "Menyimpan..." : editingGroup ? "Simpan" : "Buat"}
               </Button>
             </div>
@@ -366,7 +367,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Hapus</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>Hapus</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

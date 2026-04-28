@@ -12,6 +12,7 @@ import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight } from "lucide-react";
 import { createOrderStatus, updateOrderStatus, deleteOrderStatus } from "@/actions/order-status";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { OrderStatusesResult, OrderStatusItem } from "@/lib/queries/order-status";
+import { cn } from "../../../../../../lib/utils";
 
 interface Props { initialData: OrderStatusesResult }
 
@@ -62,18 +63,18 @@ export function OrderStatusManager({ initialData }: Props) {
 
   return (
     <>
-      <div className="px-6 pb-6">
+      <div className={cn('px-6', 'pb-6')}>
         <Card>
           <CardContent className="p-0">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pb-4 border-b">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-[#1D1D1D]">Order Status</h2>
-                <span className="text-sm text-muted-foreground">({items.length})</span>
+            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'pb-4', 'border-b')}>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Order Status</h2>
+                <span className={cn('text-sm', 'text-muted-foreground')}>({items.length})</span>
               </div>
               {(can("settings", "create") || isAdmin) && (
-                <Button onClick={handleOpenAdd} className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer">
-                  <Plus className="w-4 h-4 mr-2" /> Tambah
+                <Button onClick={handleOpenAdd} className={cn('bg-gray-900', 'hover:bg-gray-800', 'text-white', 'cursor-pointer')}>
+                  <Plus className={cn('w-4', 'h-4', 'mr-2')} /> Tambah
                 </Button>
               )}
             </div>
@@ -82,7 +83,7 @@ export function OrderStatusManager({ initialData }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12 px-6">#</TableHead>
+                  <TableHead className={cn('w-12', 'px-6')}>#</TableHead>
                   <TableHead>Nama Status</TableHead>
                   <TableHead className="w-24"></TableHead>
                 </TableRow>
@@ -90,23 +91,23 @@ export function OrderStatusManager({ initialData }: Props) {
               <TableBody>
                 {paginatedItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">Belum ada data.</TableCell>
+                    <TableCell colSpan={3} className={cn('text-center', 'py-8', 'text-muted-foreground')}>Belum ada data.</TableCell>
                   </TableRow>
                 ) : (
                   paginatedItems.map((item, idx) => (
                     <TableRow key={item.id}>
-                      <TableCell className="px-6 text-muted-foreground">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                      <TableCell className={cn('px-6', 'text-muted-foreground')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 justify-end pr-2">
+                        <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
                           {(can("settings", "edit") || isAdmin) && (
-                            <button onClick={() => handleOpenEdit(item)} className="p-1.5 rounded-md hover:bg-muted cursor-pointer" aria-label="Edit">
-                              <PenLine className="w-4 h-4 text-muted-foreground" />
+                            <button onClick={() => handleOpenEdit(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                              <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                             </button>
                           )}
                           {(can("settings", "delete") || isAdmin) && (
-                            <button onClick={() => setDeleteTarget(item)} className="p-1.5 rounded-md hover:bg-muted cursor-pointer" aria-label="Hapus">
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                              <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
                             </button>
                           )}
                         </div>
@@ -119,14 +120,14 @@ export function OrderStatusManager({ initialData }: Props) {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-3 border-t">
-                <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-                <div className="flex gap-1">
+              <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
+                <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
+                <div className={cn('flex', 'gap-1')}>
                   <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                    <ArrowLeft className="h-4 w-4" />
+                    <ArrowLeft className={cn('h-4', 'w-4')} />
                   </Button>
                   <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className={cn('h-4', 'w-4')} />
                   </Button>
                 </div>
               </div>
@@ -138,11 +139,11 @@ export function OrderStatusManager({ initialData }: Props) {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-md">
           <DialogTitle>{editingItem ? "Edit" : "Tambah"} Order Status</DialogTitle>
-          <div className="space-y-4 pt-2">
+          <div className={cn('space-y-4', 'pt-2')}>
             <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Contoh: Sudah Diorder" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="flex-1 cursor-pointer">Batal</Button>
-              <Button onClick={handleSave} disabled={saving || !formName.trim()} className="flex-1 bg-gray-900 hover:bg-gray-800 text-white cursor-pointer">
+            <div className={cn('flex', 'gap-3')}>
+              <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className={cn('flex-1', 'cursor-pointer')}>Batal</Button>
+              <Button onClick={handleSave} disabled={saving || !formName.trim()} className={cn('flex-1', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'cursor-pointer')}>
                 {saving ? "Menyimpan..." : editingItem ? "Simpan" : "Tambah"}
               </Button>
             </div>
@@ -158,7 +159,7 @@ export function OrderStatusManager({ initialData }: Props) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Hapus</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>Hapus</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -16,6 +16,7 @@ import { useCreateCustomer, useUpdateCustomer } from "@/hooks/use-customers";
 import { createSourceOfInformation } from "@/actions/source-of-information";
 import { createMemberStatus } from "@/actions/member-status";
 import type { CustomerItem } from "@/lib/queries/customers";
+import { cn } from "../../../../../lib/utils";
 
 interface CustomerDrawerProps {
   open: boolean;
@@ -55,8 +56,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     staleTime: 5 * 60 * 1000,
   });
 
-  const [typeValue, setTypeValue] = useState("");
-  const [memberStatusValue, setMemberStatusValue] = useState("");
   const [mobileNumbers, setMobileNumbers] = useState<MobileNumberEntry[]>([]);
   const [mobileInput, setMobileInput] = useState({ name: "", number: "" });
 
@@ -64,19 +63,22 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     defaultValues: { name: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
 
+  const prevOpenRef = useRef(false);
+
   useEffect(() => {
-    if (open) {
-      const tv = editCustomer?.type ?? "";
-      const mv = editCustomer?.memberStatus ?? "Non-Member";
-      setTypeValue(tv);
-      setMemberStatusValue(mv);
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!justOpened) return;
+
+    const tv = editCustomer?.type ?? "";
+    const mv = editCustomer?.memberStatus ?? "Non-Member";
+
+    queueMicrotask(() => {
       setMobileInput({ name: "", number: "" });
       if (!editCustomer) {
         const draft = loadDraft();
         if (draft) {
           setMobileNumbers(draft.mobileNumbers ?? []);
-          setTypeValue(draft.type ?? "");
-          setMemberStatusValue(draft.memberStatus ?? "Non-Member");
           form.reset({ name: draft.name, email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
           return;
         }
@@ -93,13 +95,13 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         notes: editCustomer?.notes ?? "",
         bitrixId: editCustomer?.bitrixId ?? "",
       });
-    }
+    });
   }, [open, editCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || !editCustomer) return;
     if (sourceOptions.length > 0 && editCustomer.type) {
-      setTypeValue(editCustomer.type);
+      
       form.setValue("type", editCustomer.type);
     }
   }, [sourceOptions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -107,7 +109,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   useEffect(() => {
     if (!open || !editCustomer) return;
     if (memberStatusOptions.length > 0 && editCustomer.memberStatus) {
-      setMemberStatusValue(editCustomer.memberStatus);
+      
       form.setValue("memberStatus", editCustomer.memberStatus);
     }
   }, [memberStatusOptions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -122,7 +124,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     const result = await createSourceOfInformation(name);
     if (!result.success) { toast.error(result.error); return; }
     qc.invalidateQueries({ queryKey: ["source-of-informations"] });
-    setTypeValue(name);
+    
     form.setValue("type", name);
     toast.success(`"${name}" ditambahkan.`);
   }
@@ -131,7 +133,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     const result = await createMemberStatus(name);
     if (!result.success) { toast.error(result.error); return; }
     qc.invalidateQueries({ queryKey: ["member-statuses"] });
-    setMemberStatusValue(name);
+    
     form.setValue("memberStatus", name);
     toast.success(`"${name}" ditambahkan.`);
   }
@@ -170,8 +172,8 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title={isEdit ? "Edit Customer" : "Tambah Customer"}>
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto">
+      <div className={cn('flex', 'flex-col', 'h-full')}>
+        <div className={cn('flex-1', 'overflow-y-auto')}>
           <Form {...form}>
             <form className="space-y-4">
               <FormField control={form.control} name="name" render={({ field }) => (
@@ -181,36 +183,36 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               )} />
               <FormItem>
                 <FormLabel>No. HP *</FormLabel>
-                <div className="rounded-lg bg-muted p-3 space-y-2">
+                <div className={cn('rounded-lg', 'bg-muted', 'p-3', 'space-y-2')}>
                   {mobileNumbers.map((entry, idx) => (
-                    <div key={idx} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
-                      <div className="flex-1 min-w-0">
-                        {entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}
-                        <p className="text-sm font-medium">{entry.number}</p>
+                    <div key={idx} className={cn('flex', 'items-center', 'gap-2', 'rounded-md', 'bg-white', 'border', 'px-3', 'py-2')}>
+                      <div className={cn('flex-1', 'min-w-0')}>
+                        {entry.name && <p className={cn('text-xs', 'text-muted-foreground')}>{entry.name}</p>}
+                        <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
                       </div>
-                      <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
-                        <X className="w-3.5 h-3.5" />
+                      <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                        <X className={cn('w-3.5', 'h-3.5')} />
                       </button>
                     </div>
                   ))}
-                  <div className="flex gap-2">
+                  <div className={cn('flex', 'gap-2')}>
                     <Input
                       value={mobileInput.name}
                       onChange={(e) => setMobileInput((p) => ({ ...p, name: e.target.value }))}
                       placeholder="Label (opsional)"
-                      className="flex-1 bg-white"
+                      className={cn('flex-1', 'bg-white')}
                     />
                     <Input
                       value={mobileInput.number}
                       onChange={(e) => setMobileInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))}
                       placeholder="081234567890"
                       inputMode="numeric"
-                      className="flex-1 bg-white"
+                      className={cn('flex-1', 'bg-white')}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") { e.preventDefault(); addMobileNumber(); }
                       }}
                     />
-                    <Button type="button" variant="outline" className="shrink-0 bg-white" onClick={addMobileNumber}>
+                    <Button type="button" variant="outline" className={cn('shrink-0', 'bg-white')} onClick={addMobileNumber}>
                       Tambah
                     </Button>
                   </div>
@@ -245,7 +247,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                     value={nameToId(sourceOptions, field.value)}
                     onChange={(id) => {
                       const name = idToName(sourceOptions, id);
-                      setTypeValue(name);
+                      
                       field.onChange(name);
                     }}
                     placeholder="Pilih atau tambah sumber lead..."
@@ -270,7 +272,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                     value={nameToId(memberStatusOptions, field.value)}
                     onChange={(id) => {
                       const name = idToName(memberStatusOptions, id);
-                      setMemberStatusValue(name);
+                      
                       field.onChange(name);
                     }}
                     placeholder="Pilih atau tambah status..."
@@ -290,12 +292,12 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
             </form>
           </Form>
         </div>
-        <div className="sticky bottom-0 bg-white pt-4">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1 cursor-pointer" disabled={isPending}>
+        <div className={cn('sticky', 'bottom-0', 'bg-white', 'pt-4')}>
+          <div className={cn('flex', 'gap-2')}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} className={cn('flex-1', 'cursor-pointer')} disabled={isPending}>
               Batal
             </Button>
-            <Button onClick={form.handleSubmit(onSubmit)} className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer" disabled={isPending}>
+            <Button onClick={form.handleSubmit(onSubmit)} className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')} disabled={isPending}>
               {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
             </Button>
           </div>

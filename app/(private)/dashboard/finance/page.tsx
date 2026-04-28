@@ -9,6 +9,7 @@ import { RecentBookingsTable } from "./_components/recent-bookings-table";
 import { WeeklyActivity } from "./_components/weekly-activity";
 import { LeaderboardSales } from "./_components/leaderboard-sales";
 import type { FinanceStats, FinanceBooking, ActivityItem, SalesLeader, FinanceTabType } from "@/types/finance";
+import { cn } from "../../../../lib/utils";
 
 const MOCK_STATS: FinanceStats = {
   pendingBookingProcess: 12,
@@ -42,17 +43,17 @@ export default function FinancePage() {
   const [activeTab, setActiveTab] = useState<FinanceTabType>("receivable");
 
   return (
-    <div className="flex flex-col gap-6 py-6 px-2">
+    <div className={cn('flex', 'flex-col', 'gap-6', 'py-6', 'px-2')}>
       {/* Action Buttons */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-3')}>
         <Button size="sm">
-          <Upload className="h-4 w-4 mr-2" /> Export CSV
+          <Upload className={cn('h-4', 'w-4', 'mr-2')} /> Export CSV
         </Button>
         <Button variant="outline" size="sm">
-          <Calendar className="h-4 w-4 mr-2" /> Apr 2026
+          <Calendar className={cn('h-4', 'w-4', 'mr-2')} /> Apr 2026
         </Button>
         <Button variant="outline" size="sm">
-          <Filter className="h-4 w-4 mr-2" /> Filter
+          <Filter className={cn('h-4', 'w-4', 'mr-2')} /> Filter
         </Button>
       </div>
 
@@ -63,11 +64,11 @@ export default function FinancePage() {
       <FinanceTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Main Content */}
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className="grow min-w-0">
+      <div className={cn('flex', 'flex-col', 'md:flex-row', 'gap-6')}>
+        <div className={cn('grow', 'min-w-0')}>
           <RecentBookingsTable bookings={MOCK_BOOKINGS} loading={false} />
         </div>
-        <div className="flex flex-col gap-6 md:w-96 shrink-0">
+        <div className={cn('flex', 'flex-col', 'gap-6', 'md:w-96', 'shrink-0')}>
           <WeeklyActivity activities={MOCK_ACTIVITIES} loading={false} />
           <LeaderboardSales leaders={MOCK_LEADERS} loading={false} />
         </div>

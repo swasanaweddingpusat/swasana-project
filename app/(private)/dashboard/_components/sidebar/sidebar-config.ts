@@ -28,7 +28,7 @@ import {
   Wrench,
   CheckCircle,
   Settings,
-  ShieldCheck,
+
   type LucideIcon,
 } from "lucide-react";
 

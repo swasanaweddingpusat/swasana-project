@@ -1,7 +1,5 @@
 import React from "react";
-import { Document, Page, Text, View, StyleSheet, Image, Font } from "@react-pdf/renderer";
-import { format } from "date-fns";
-import { id as localeId } from "date-fns/locale";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -346,7 +344,7 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
                     <Text style={{ fontSize: 10, fontWeight: "bold", marginBottom: 8 }}>ATURAN PEMBAYARAN</Text>
                     <View style={{ marginBottom: 8 }}>
                       <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>1. Jadwal Pembayaran</Text>
-                      {booking.termOfPayments.map((t, i) => (
+                      {booking.termOfPayments.map((t) => (
                         <Text key={t.id} style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>
                           • {t.name} sebesar {fmtRp(t.amount)}{t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : ""}
                         </Text>

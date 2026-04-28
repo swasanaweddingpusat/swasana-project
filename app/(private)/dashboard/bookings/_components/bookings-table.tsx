@@ -213,13 +213,25 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className={cn('px-2', 'py-2')}>
                         <div className="overflow-hidden">
                           <p className={cn('text-sm', 'font-medium', 'text-gray-900', 'truncate')}>{booking.snapCustomer?.name ?? "—"}</p>
-                          <p className={cn('text-xs', 'text-gray-400', 'truncate', 'mt-0.5')}>
-                            {(() => {
-                              const raw = booking.snapCustomer?.mobileNumber ?? "";
-                              try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
-                              return raw;
-                            })()}
-                          </p>
+                          <Tooltip>
+                            <TooltipTrigger className="block truncate w-full text-left text-xs text-gray-400 mt-0.5">
+                              {(() => {
+                                const raw = booking.snapCustomer?.mobileNumber ?? "";
+                                try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
+                                return raw;
+                              })()}
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="start" className="max-w-72">
+                              <ul className="space-y-1">
+                                {(() => {
+                                  const raw = booking.snapCustomer?.mobileNumber ?? "";
+                                  let nums: { name?: string; number: string }[] = [];
+                                  try { const arr = JSON.parse(raw); if (Array.isArray(arr)) nums = arr; } catch { nums = raw.split(/[,\n]+/).map((s: string) => ({ number: s.trim() })).filter((e) => e.number); }
+                                  return nums.map((e, i) => <li key={i} className="text-sm">{e.name ? <><span className="text-muted-foreground">{e.name}:</span> {e.number}</> : e.number}</li>);
+                                })()}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
                           {/* Event date — mobile only */}
                           <p className={cn('text-xs', 'text-gray-500', 'mt-0.5', 'sm:hidden')}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
                           <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-1', 'mt-1')}>

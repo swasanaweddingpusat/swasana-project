@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useCreateVendor, useUpdateVendor } from "@/hooks/use-vendors";
 import type { VendorCategoryItem } from "@/lib/queries/vendors";
 import type { PaymentMethodInput } from "@/lib/validations/vendor";
+import { cn } from "../../../../../lib/utils";
 
 type VendorWithPayments = VendorCategoryItem["vendors"][number] & { categoryName?: string };
 
@@ -103,15 +104,15 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
       title={`${isEdit ? "Edit" : "Tambah"} Vendor${selectedCatName ? ` - ${selectedCatName}` : ""}`}
       maxWidth="sm:max-w-lg"
     >
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto space-y-4">
+      <div className={cn('flex', 'flex-col', 'h-full')}>
+        <div className={cn('flex-1', 'overflow-y-auto', 'space-y-4')}>
           <div className="space-y-1">
-            <Label className="text-sm font-medium">Nama Vendor *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama vendor" className="h-9 text-sm" />
+            <Label className={cn('text-sm', 'font-medium')}>Nama Vendor *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama vendor" className={cn('h-9', 'text-sm')} />
           </div>
 
           <div className="space-y-1">
-            <Label className="text-sm font-medium">Kategori Vendor *</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Kategori Vendor *</Label>
             <SearchableSelect
               options={categories.map((cat) => ({ id: cat.id, name: cat.name }))}
               value={categoryId}
@@ -124,50 +125,50 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
           </div>
 
           <div className="space-y-1">
-            <Label className="text-sm font-medium">Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi vendor..." className="min-h-15 text-sm resize-y" />
+            <Label className={cn('text-sm', 'font-medium')}>Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi vendor..." className={cn('min-h-15', 'text-sm', 'resize-y')} />
           </div>
 
           <div className="space-y-1">
-            <Label className="text-sm font-medium">No. Telepon</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Contoh: 08123456789" className="h-9 text-sm" />
+            <Label className={cn('text-sm', 'font-medium')}>No. Telepon</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Contoh: 08123456789" className={cn('h-9', 'text-sm')} />
           </div>
 
           <div className="space-y-1">
-            <Label className="text-sm font-medium">Alamat</Label>
-            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Alamat vendor..." className="min-h-15 text-sm resize-y" />
+            <Label className={cn('text-sm', 'font-medium')}>Alamat</Label>
+            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Alamat vendor..." className={cn('min-h-15', 'text-sm', 'resize-y')} />
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Rekening Bank</Label>
-              <Button type="button" variant="outline" size="sm" onClick={() => setPaymentMethods((p) => [...p, { bankName: "", bankAccountNumber: "", bankRecipient: "" }])} className="h-7 px-2 text-xs">
-                <Plus className="h-3 w-3 mr-1" /> Tambah
+            <div className={cn('flex', 'items-center', 'justify-between')}>
+              <Label className={cn('text-sm', 'font-medium')}>Rekening Bank</Label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setPaymentMethods((p) => [...p, { bankName: "", bankAccountNumber: "", bankRecipient: "" }])} className={cn('h-7', 'px-2', 'text-xs')}>
+                <Plus className={cn('h-3', 'w-3', 'mr-1')} /> Tambah
               </Button>
             </div>
 
             {paymentMethods.length === 0 && (
-              <p className="text-xs text-muted-foreground">Belum ada rekening bank</p>
+              <p className={cn('text-xs', 'text-muted-foreground')}>Belum ada rekening bank</p>
             )}
 
             {paymentMethods.map((pm, idx) => (
-              <div key={idx} className="border rounded-lg p-3 space-y-2 bg-muted/30">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Rekening {idx + 1}</span>
-                  <button className="p-1 hover:bg-muted rounded cursor-pointer" onClick={() => setPaymentMethods((p) => p.filter((_, i) => i !== idx))}>
-                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+              <div key={idx} className={cn('border', 'rounded-lg', 'p-3', 'space-y-2', 'bg-muted/30')}>
+                <div className={cn('flex', 'items-center', 'justify-between')}>
+                  <span className={cn('text-xs', 'font-medium', 'text-muted-foreground')}>Rekening {idx + 1}</span>
+                  <button className={cn('p-1', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => setPaymentMethods((p) => p.filter((_, i) => i !== idx))}>
+                    <Trash2 className={cn('h-3.5', 'w-3.5', 'text-red-500')} />
                   </button>
                 </div>
-                <Input value={pm.bankName} onChange={(e) => updatePM(idx, "bankName", e.target.value)} placeholder="Nama Bank (BCA, Mandiri, dll)" className="h-8 text-xs" />
-                <Input value={pm.bankAccountNumber} onChange={(e) => updatePM(idx, "bankAccountNumber", e.target.value)} placeholder="No. Rekening" className="h-8 text-xs" />
-                <Input value={pm.bankRecipient} onChange={(e) => updatePM(idx, "bankRecipient", e.target.value)} placeholder="Nama Pemilik Rekening" className="h-8 text-xs" />
+                <Input value={pm.bankName} onChange={(e) => updatePM(idx, "bankName", e.target.value)} placeholder="Nama Bank (BCA, Mandiri, dll)" className={cn('h-8', 'text-xs')} />
+                <Input value={pm.bankAccountNumber} onChange={(e) => updatePM(idx, "bankAccountNumber", e.target.value)} placeholder="No. Rekening" className={cn('h-8', 'text-xs')} />
+                <Input value={pm.bankRecipient} onChange={(e) => updatePM(idx, "bankRecipient", e.target.value)} placeholder="Nama Pemilik Rekening" className={cn('h-8', 'text-xs')} />
               </div>
             ))}
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t pt-4 mt-4">
-          <Button onClick={handleSave} disabled={saving || !name.trim() || !categoryId} className="w-full bg-black text-white hover:bg-gray-800 cursor-pointer">
+        <div className={cn('sticky', 'bottom-0', 'bg-white', 'border-t', 'pt-4', 'mt-4')}>
+          <Button onClick={handleSave} disabled={saving || !name.trim() || !categoryId} className={cn('w-full', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}>
             {saving ? "Menyimpan..." : isEdit ? "Simpan Perubahan" : "Tambah Vendor"}
           </Button>
         </div>

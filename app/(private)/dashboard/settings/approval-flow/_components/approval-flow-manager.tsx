@@ -292,7 +292,7 @@ export function ApprovalFlowManager() {
                             </select>
                             <div className="flex-1">
                               {step.approverType === "client" ? (
-                                <span className="text-sm text-muted-foreground px-2">Client (via Agreement Link)</span>
+                                <span className={cn('text-sm', 'text-muted-foreground', 'px-2')}>Client (via Agreement Link)</span>
                               ) : step.approverType === "role" ? (
                                 <SearchableSelect
                                   options={rolesData.map((r) => ({ id: r.id, name: r.name }))}

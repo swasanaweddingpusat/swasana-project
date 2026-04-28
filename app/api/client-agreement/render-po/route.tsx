@@ -83,9 +83,10 @@ export async function POST(req: Request) {
       createdAt: booking.createdAt,
     };
 
-    const stream = await renderToStream(
-      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} />
-    );
+    // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
+    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} />;
+
+    const stream = await renderToStream(pdfElement);
 
     return new NextResponse(stream as unknown as ReadableStream, {
       headers: {
