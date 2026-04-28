@@ -66,13 +66,14 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
 
     // Remove stale incoming rows, then re-inject fresh ones
     const withoutIncoming = base.rows.filter((r) => !r.isIncoming);
-    const incomingRows: PORow[] = incomingSettlements.map((s) => ({
+    const incomingRows: PORow[] = incomingSettlements.map((s: (typeof booking.bookingRefunds)[number]) => ({
       id: s.id,
       type: "settlement" as const,
       settlementType: "allocation" as const,
       isIncoming: true,
       grandTotal: Number(s.amount),
       description: s.notes ?? "Alokasi masuk",
+      
       settlementSourceLabel: eligibleBookings.find((eb) => eb.id === s.bookingId)?.label ?? "Booking lain",
     }));
     return { ...base, rows: [...withoutIncoming, ...incomingRows] };
