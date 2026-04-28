@@ -60,7 +60,7 @@ export function DecorationSelectionDrawer({ isOpen, onClose, booking, onUpdated,
   const injectIncomingRows = React.useCallback((base: POCateringV2): POCateringV2 => {
     if (!decorationItem) return base;
     const incomingSettlements = (booking.bookingRefunds ?? []).filter(
-      (s) => s.type === "allocation" && s.targetBookingId === booking.id
+      (s: typeof booking.bookingRefunds[number]) => s.type === "allocation" && s.targetBookingId === booking.id
     );
     if (incomingSettlements.length === 0) return base;
     const withoutIncoming = base.rows.filter((r) => !r.isIncoming);
