@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { isSuperAdmin } from "@/lib/permissions";
 import type { PermissionMatrix } from "@/types/user";
@@ -8,6 +9,7 @@ export async function GET() {
   if (!session?.user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!apiLimiter.check(`me-permissions:${session.user.id}`)) return rateLimitResponse();
 
   const roleId = session.user.roleId;
   if (!roleId) return Response.json({ isAdmin: false, permissions: {} });

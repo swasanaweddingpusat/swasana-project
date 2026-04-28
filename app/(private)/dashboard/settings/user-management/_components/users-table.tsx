@@ -35,21 +35,10 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const getRoleBadgeColor = (role: string) => {
-  switch (role?.toLowerCase()) {
-    case "super admin": return "bg-purple-100 text-purple-800";
-    case "admin": return "bg-purple-100 text-purple-800";
-    case "operation": case "opration": return "bg-red-100 text-red-800";
-    case "manager": return "bg-indigo-100 text-indigo-800";
-    case "sales": return "bg-blue-100 text-blue-800";
-    case "vendor specialist": return "bg-teal-100 text-teal-800";
-    case "finance": return "bg-amber-100 text-amber-800";
-    default: return "bg-gray-100 text-gray-800";
-  }
-};
+const getRoleBadgeClass = () => "bg-secondary text-secondary-foreground";
 
-const getStatusBadgeColor = (verified: boolean) =>
-  verified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
+const getStatusBadgeClass = (verified: boolean) =>
+  verified ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -195,8 +184,8 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
             {/* Top row */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-[#1D1D1D]">List Users</span>
-                <span className="text-[11px] font-medium bg-[#F5F5F5] text-[#404040] px-2.5 py-0.5 border border-[#D0D0D0] rounded-full">
+                <span className="text-base font-bold text-foreground">List Users</span>
+                <span className="text-[11px] font-medium bg-secondary text-secondary-foreground px-2.5 py-0.5 border border-border rounded-full">
                   {filteredUsers.length} Users available
                 </span>
               </div>
@@ -206,12 +195,12 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                     <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-8 text-xs" onClick={() => setBulkEditOpen(true)}>
                       <PenLine className="w-3.5 h-3.5" /> Edit ({selectedUsers.size})
                     </Button>
-                    <Button variant="outline" size="sm" className="flex items-center gap-1.5 border-red-500 text-red-500 hover:bg-red-50 h-8 text-xs" onClick={() => setBulkDeleteOpen(true)}>
+                    <Button variant="destructive" size="sm" className="flex items-center gap-1.5 h-8 text-xs" onClick={() => setBulkDeleteOpen(true)}>
                       <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedUsers.size})
                     </Button>
                   </>
                 )}
-                <Button size="sm" onClick={handleAddNew} className="flex items-center gap-1.5 bg-[#1D1D1D] text-white hover:bg-[#333] text-xs h-8">
+                <Button size="sm" onClick={handleAddNew} className="flex items-center gap-1.5 text-xs h-8">
                   <UserPlus className="w-3.5 h-3.5" /> Invite User
                 </Button>
               </div>
@@ -223,26 +212,26 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                 placeholder="Cari nama, email..."
                 value={searchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="h-8 text-xs border-gray-200 bg-[#F0F2F5] flex-1 lg:flex-none lg:w-65"
+                className="h-8 text-xs border-border bg-secondary flex-1 lg:flex-none lg:w-64"
               />
 
               {/* Desktop filters */}
               <div className="hidden lg:flex items-center gap-2">
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="h-8 w-27.5 text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Role" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-28 text-xs border-border bg-secondary"><SelectValue placeholder="Role" /></SelectTrigger>
                   <SelectContent>
                     {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-8 w-27.5 text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-28 text-xs border-border bg-secondary"><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="verified">Verified</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={venueFilter} onValueChange={setVenueFilter}>
-                  <SelectTrigger className="h-8 w-35 text-xs border-gray-200 bg-[#F0F2F5]"><SelectValue placeholder="Venue" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-36 text-xs border-border bg-secondary"><SelectValue placeholder="Venue" /></SelectTrigger>
                   <SelectContent>
                     {allVenues.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                   </SelectContent>
@@ -252,13 +241,13 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                   size="sm"
                   onClick={() => refetch()}
                   disabled={isRefetching}
-                  className="h-8 px-2 border-gray-200 bg-[#F0F2F5] hover:bg-gray-200"
+                  className="h-8 px-2 border-border bg-secondary hover:bg-accent"
                   title="Refresh data"
                 >
-                  <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", isRefetching && "animate-spin")} />
+                  <RefreshCw className={cn("h-3.5 w-3.5 text-muted-foreground", isRefetching && "animate-spin")} />
                 </Button>
                 {hasFilters && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-gray-400 hover:text-gray-600">
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-muted-foreground hover:text-foreground">
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 )}
@@ -282,18 +271,18 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
             ) : (
               <Table className="min-w-full text-xs">
                 <TableHeader>
-                  <TableRow className="border-b-2 border-gray-200 bg-[#F9FAFB]">
-                    <TableHead className="px-4 py-2.5 font-semibold text-gray-600 text-xs">
+                  <TableRow className="border-b-2 border-border bg-secondary">
+                    <TableHead className="px-4 py-2.5 font-semibold text-muted-foreground text-xs">
                       <Checkbox ref={headerCheckboxRef} checked={isAllSelected} onCheckedChange={handleSelectAll} className="cursor-pointer" />
                     </TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs w-10">No</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs">Nama</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs">Email</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs">Role</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs">Assigned Venues</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs">Created Date</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs">Status</TableHead>
-                    <TableHead className="px-2 py-2.5 font-semibold text-gray-600 text-xs text-right"></TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs w-10">No</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Nama</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Email</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Role</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Assigned Venues</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Created Date</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs">Status</TableHead>
+                    <TableHead className="px-2 py-2.5 font-semibold text-muted-foreground text-xs text-right"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -329,7 +318,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                         <TableCell className="px-2 py-2.5 text-xs text-muted-foreground">{user.email}</TableCell>
                         <TableCell className="px-2 py-2.5">
                           {roleName ? (
-                            <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getRoleBadgeColor(roleName))}>
+                            <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getRoleBadgeClass())}>
                               {roleName.replace(/\b\w/g, (c: string) => c.toUpperCase())}
                             </span>
                           ) : "—"}
@@ -337,11 +326,11 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                         <TableCell className="px-2 py-2.5">
                           {venues.length > 0 ? (
                             <div className="flex items-center gap-1 flex-wrap">
-                              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 truncate max-w-30">
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-secondary-foreground truncate max-w-32">
                                 {venues[0].venue.name}
                               </span>
                               {venues.length > 1 && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
                                   +{venues.length - 1} more
                                 </span>
                               )}
@@ -350,7 +339,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                         </TableCell>
                         <TableCell className="px-2 py-2.5 text-xs text-muted-foreground">{createdDate}</TableCell>
                         <TableCell className="px-2 py-2.5">
-                          <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getStatusBadgeColor(isVerified))}>
+                          <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getStatusBadgeClass(isVerified))}>
                             {isVerified ? "Verified" : "Pending"}
                           </span>
                         </TableCell>
@@ -405,7 +394,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                     typeof page === "string" ? (
                       <span key={`e-${idx}`} className="px-2 py-1 text-xs text-gray-400">...</span>
                     ) : (
-                      <button key={page} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", currentPage === page ? "bg-[#eeeeee] text-gray-900" : "text-gray-700 hover:bg-[#eeeeee]")} onClick={() => setCurrentPage(page)}>
+                      <button key={page} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", currentPage === page ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary")} onClick={() => setCurrentPage(page)}>
                         {page}
                       </button>
                     )
@@ -456,10 +445,10 @@ function DeleteDialog({ open, onOpenChange, isDeleting, onConfirm, title, descri
           <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
           <p className="text-gray-600 mb-8">{description}</p>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting} className="flex-1 h-12 text-base font-medium border-gray-300 hover:bg-gray-50 cursor-pointer">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting} className="flex-1 h-12 text-base font-medium cursor-pointer">
               Cancel
             </Button>
-            <Button onClick={onConfirm} disabled={isDeleting} className="flex-1 h-12 text-base font-medium bg-red-600 hover:bg-red-700 text-white cursor-pointer">
+            <Button variant="destructive" onClick={onConfirm} disabled={isDeleting} className="flex-1 h-12 text-base font-medium cursor-pointer">
               {isDeleting ? "Deleting..." : confirmLabel}
             </Button>
           </div>

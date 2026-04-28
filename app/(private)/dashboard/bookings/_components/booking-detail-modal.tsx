@@ -183,7 +183,12 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     <p className={lbl + " mt-4"}>Email</p>
                     <p className={val}>{booking.snapCustomer?.email ?? "-"}</p>
                     <p className={lbl + " mt-4"}>Phone Number</p>
-                    <p className={val}>{booking.snapCustomer?.mobileNumber ?? "-"}</p>
+                    {(() => {
+                      const raw = booking.snapCustomer?.mobileNumber ?? "";
+                      const nums = raw.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+                      if (nums.length <= 1) return <p className={val}>{nums[0] ?? "-"}</p>;
+                      return <ul className="mt-1 space-y-0.5">{nums.map((n, i) => <li key={i} className={val}>• {n}</li>)}</ul>;
+                    })()}
                     <p className={lbl + " mt-4"}>Venue</p>
                     <p className={val}>{booking.snapVenue?.venueName ?? "-"}</p>
                     <p className={lbl + " mt-4"}>Package Type</p>

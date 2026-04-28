@@ -20,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { approveCategoryPO } from "@/actions/catering-approval";
 import { BookingDrawer } from "./booking-drawer";
+import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { EditTopDrawer } from "./edit-top-drawer";
 import { ActivityLogModal } from "./activity-log-modal";
@@ -91,21 +92,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const transferMut = useTransferBooking();
   const approveMut = useApproveBooking();
   const { can } = usePermissions();
-  const { setAction, clearAction } = useHeaderAction();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { openBookingDrawer } = useBookingDrawer();
 
-  useEffect(() => {
-    if (!can("booking", "create")) return;
-    setAction(
-      <Button size="sm" onClick={() => setDrawerOpen(true)} className="cursor-pointer bg-gray-900 hover:bg-gray-800 text-white">
-        <Plus className="h-4 w-4" /> <span className="hidden sm:inline ml-1">Tambah Booking</span><span className="sm:hidden ml-1">Booking</span>
-      </Button>
-    );
-    return () => clearAction();
-  }, [setAction, clearAction]); // eslint-disable-line react-hooks/exhaustive-deps
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
   const [approveTarget, setApproveTarget] = useState<BookingListItem | null>(null);
@@ -277,9 +268,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <div className="leading-tight">
                           <span className="truncate block">{booking.snapPackage?.packageName ?? "—"}</span>
                           {booking.snapPackageVariant && (
-                            <span className="text-xs text-gray-400 block">
-                              {booking.snapPackageVariant.pax} PAX · {fmtRp(booking.snapPackageVariant.price)}
-                            </span>
+                            <>
+                              <span className="text-xs text-gray-400 block">{booking.snapPackageVariant.variantName}</span>
+                              <span className="text-xs text-gray-400 block">{booking.snapPackageVariant.pax} PAX · {fmtRp(booking.snapPackageVariant.price)}</span>
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -524,8 +516,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           )}
         </CardContent>
       </Card>
-
-      <BookingDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
 
       <EditBookingDrawer key={editTarget?.id ?? ""} booking={editTarget} open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }} />
 

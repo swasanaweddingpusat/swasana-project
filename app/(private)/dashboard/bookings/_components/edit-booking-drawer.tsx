@@ -26,7 +26,7 @@ interface Props {
 }
 
 interface VenueOption { id: string; name: string }
-interface PackageVariant { id: string; variantName: string; pax: number; price: number }
+interface PackageVariant { id: string; variantName: string; pax: number; margin: number; categoryPrices: { basePrice: number }[] }
 interface PackageOption { id: string; packageName: string; variants: PackageVariant[] }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -37,6 +37,11 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
+}
+
+function getVariantPrice(v: PackageVariant) {
+  const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+  return base + Math.round(base * ((v.margin ?? 0) / 100));
 }
 
 export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
@@ -51,24 +56,21 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
-  const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
-  const [availLoading, setAvailLoading] = useState(false);
+  const [availability, setAvailability] = useState<Record<string, DayAvail> | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => booking ? new Date(booking.bookingDate) : new Date());
 
   useEffect(() => {
-    if (!venueId) { setAvailability({}); return; }
-    setAvailLoading(true);
+    if (!venueId) return;
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     fetch(`/api/venues/${venueId}/availability?month=${month}`)
       .then((r) => r.json())
       .then((data: Record<string, DayAvail>) => setAvailability(data))
-      .catch(() => setAvailability({}))
-      .finally(() => setAvailLoading(false));
+      .catch(() => setAvailability({}));
   }, [venueId, visibleMonth]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
     const key = format(d, "yyyy-MM-dd");
-    const a = availability[key];
+    const a = availability?.[key];
     if (!a) return "available";
     const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
     if (count === 0) return "unavailable";
@@ -115,8 +117,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   });
 
   const { data: packages = [] } = useQuery<PackageOption[]>({
-    queryKey: ["packages", venueId],
-    queryFn: () => fetchJson(`/api/packages?venueId=${venueId}`),
+    queryKey: ["packages", venueId, "booking"],
+    queryFn: () => fetchJson(`/api/packages?venueId=${venueId}&forBooking=true`),
     enabled: !!venueId,
     staleTime: 5 * 60 * 1000,
   });
@@ -288,7 +290,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <div>
               <label className={LBL}>Pilih Tipe Paket *</label>
               <SearchableSelect
-                options={variants.map((v) => ({ id: v.id, name: `${v.variantName ? v.variantName + " · " : ""}${v.pax} PAX · Rp ${fmtRp(v.price)}` }))}
+                options={variants.map((v) => ({ id: v.id, name: `${v.variantName ? v.variantName + " · " : ""}${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))}
                 value={variantId}
                 onChange={setVariantId}
                 placeholder="Pilih tipe paket..."
@@ -313,7 +315,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   {bookingDate ? format(bookingDate, "PPP") : <span>Select Date</span>}
                 </Button>
               } />
-              <PopoverContent className="w-auto p-0" align="start">
+              <PopoverContent className={cn('w-auto', 'p-0')} align="start">
                 <Calendar
                   mode="single"
                   selected={bookingDate}
@@ -340,7 +342,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 />
               </PopoverContent>
             </Popover>
-            {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+            {availability === null && venueId && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Mengecek ketersediaan...</p>}
           </div>
 
           {/* Event Session — native Select */}
@@ -414,8 +416,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   </button>
                 </div>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
-                  <input type="text" inputMode="numeric" className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white"
+                  <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-gray-400')}>Rp</span>
+                  <input type="text" inputMode="numeric" className={cn('w-full', 'pl-8', 'pr-3', 'py-1.5', 'text-sm', 'border', 'border-gray-200', 'rounded-md', 'bg-white')}
                     placeholder="Nominal"
                     value={b.nominal ? new Intl.NumberFormat("id-ID").format(b.nominal) : ""}
                     onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); const base = bonuses.length > 0 ? bonuses : resolvedBonuses; setBonuses(base.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }}

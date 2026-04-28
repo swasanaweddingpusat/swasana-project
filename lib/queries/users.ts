@@ -36,6 +36,7 @@ const PROFILE_SELECT = {
     select: {
       id: true,
       scope: true,
+      managerId: true,
       venue: { select: { id: true, name: true } },
     },
   },
@@ -116,3 +117,17 @@ export async function getUserById(userId: string) {
 
 export type UsersQueryResult = Awaited<ReturnType<typeof getUsers>>;
 export type UserQueryItem = UsersQueryResult["users"][number];
+
+export async function getManagerProfiles() {
+  "use cache";
+  cacheTag("users");
+  cacheLife("minutes");
+
+  return db.profile.findMany({
+    where: { status: "active", role: { name: "manager" } },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: "asc" },
+  });
+}
+
+export type ManagerProfile = Awaited<ReturnType<typeof getManagerProfiles>>[number];

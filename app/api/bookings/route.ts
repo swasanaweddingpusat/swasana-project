@@ -1,11 +1,13 @@
 import { getBookings } from "@/lib/queries/bookings";
 import { requirePermissionForRoute } from "@/lib/permissions";
+import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import type { DataScope } from "@/types/user";
 
 export async function GET() {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
   if (response) return response;
+  if (!apiLimiter.check(`bookings:${session.user.id}`)) return rateLimitResponse();
 
   const profileId = session.user.profileId ?? undefined;
   let dataScope: DataScope = "own";

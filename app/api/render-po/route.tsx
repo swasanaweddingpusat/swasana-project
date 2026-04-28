@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { renderToStream } from "@react-pdf/renderer";
 import { db } from "@/lib/db";
 import { requirePermissionForRoute } from "@/lib/permissions";
+import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
 import path from "path";
@@ -22,6 +23,7 @@ async function loadLogoBase64(fileName: string): Promise<string | null> {
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
   if (response) return response;
+  if (!apiLimiter.check(`render-po:${session.user.id}`)) return rateLimitResponse();
 
   try {
     const { bookingId } = await req.json();

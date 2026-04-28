@@ -124,13 +124,36 @@ export default function PaymentMethodsPage() {
   if (loading) {
     return (
       <div className="px-2 pb-6">
-        <Card className="shadow-none"><CardContent className="p-6 space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-center space-x-4 py-3">
-              <Skeleton className="h-4 w-8" /><Skeleton className="h-4 w-48" /><Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-32" />
+        <Card className="shadow-none">
+          <CardContent className="p-0">
+            <div className="flex justify-between items-center px-6 pb-4 border-b">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-4 w-8" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-9 w-50" />
+                <Skeleton className="h-9 w-40" />
+              </div>
             </div>
-          ))}
-        </CardContent></Card>
+            <div className="px-6">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4 py-3 border-b last:border-0">
+                  <Skeleton className="h-4 w-8" />
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-4 w-28" />
+                  <div className="flex-1" />
+                  <div className="flex gap-1">
+                    <Skeleton className="h-7 w-7" />
+                    <Skeleton className="h-7 w-7" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
