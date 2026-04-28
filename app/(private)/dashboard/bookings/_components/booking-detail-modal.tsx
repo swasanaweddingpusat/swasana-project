@@ -642,7 +642,7 @@ function ClientAgreementSection({ booking, onRefresh }: { booking: BookingDetail
                 startTransition(async () => {
                   const r = await markAgreementSent(booking.id);
                   if (!r.success) { toast.error(r.error); return; }
-                  setAgreement((prev) => prev ? { ...prev, status: "Sent", sentAt: new Date() } : prev);
+                  setAgreement((prev: BookingDetail['clientAgreement']) => prev ? { ...prev, status: "Sent", sentAt: new Date() } : prev);
                   toast.success("Status diupdate ke Sent");
                 });
               }} disabled={isPending}>Tandai Sudah Dikirim</Button>
