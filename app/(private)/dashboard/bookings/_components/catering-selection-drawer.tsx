@@ -59,7 +59,7 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
   const injectIncomingRows = React.useCallback((base: POCateringV2): POCateringV2 => {
     if (!cateringItem) return base;
     const incomingSettlements = (booking.bookingRefunds ?? []).filter(
-      (s) => s.type === "allocation" && s.targetBookingId === booking.id &&
+      (s: typeof booking.bookingRefunds[number]) => s.type === "allocation" && s.targetBookingId === booking.id &&
         (s.snapVendorItemId === cateringItem.id || eligibleBookings.some((eb) => eb.snapVendorItemId === s.snapVendorItemId))
     );
     if (incomingSettlements.length === 0) return base;
