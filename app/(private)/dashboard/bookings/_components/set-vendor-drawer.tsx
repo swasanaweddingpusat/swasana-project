@@ -182,11 +182,11 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="px-4 w-[180px]">Kategori</TableHead>
-                <TableHead className="px-4 min-w-[220px]">Nama Vendor</TableHead>
-                <TableHead className="px-4 w-[180px]">Nominal</TableHead>
-                <TableHead className="px-4 min-w-[200px]">Keterangan</TableHead>
-                <TableHead className="px-4 w-[180px]">Status Order</TableHead>
+                <TableHead className="px-4 w-45">Kategori</TableHead>
+                <TableHead className="px-4 min-w-55">Nama Vendor</TableHead>
+                <TableHead className="px-4 w-45">Nominal</TableHead>
+                <TableHead className="px-4 min-w-50">Keterangan</TableHead>
+                <TableHead className="px-4 w-45">Status Order</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -207,11 +207,11 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="px-4 w-[180px]">Kategori</TableHead>
-                <TableHead className="px-4 min-w-[220px]">Nama Vendor</TableHead>
-                <TableHead className="px-4 w-[180px]">Nominal</TableHead>
-                <TableHead className="px-4 min-w-[200px]">Keterangan</TableHead>
-                <TableHead className="px-4 w-[180px]">Status Order</TableHead>
+                <TableHead className="px-4 w-45">Kategori</TableHead>
+                <TableHead className="px-4 min-w-55">Nama Vendor</TableHead>
+                <TableHead className="px-4 w-45">Nominal</TableHead>
+                <TableHead className="px-4 min-w-50">Keterangan</TableHead>
+                <TableHead className="px-4 w-45">Status Order</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

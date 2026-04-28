@@ -220,7 +220,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
   const totalSelling = totalBase + profit;
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} title="Set Harga Package" maxWidth="sm:max-w-[520px]">
+    <Drawer isOpen={isOpen} onClose={onClose} title="Set Harga Package" maxWidth="sm:max-w-130">
       <div className="flex flex-col h-full">
         {/* Sticky Header */}
         <div className="space-y-3 pb-3 border-b border-border">

@@ -348,7 +348,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                                       const isImg = att.type.startsWith("image/");
                                       return isImg ? (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img key={i} src={url} alt={att.name} className="rounded-lg max-w-[180px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setPreviewImage(url)} />
+                                        <img key={i} src={url} alt={att.name} className="rounded-lg max-w-45 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setPreviewImage(url)} />
                                       ) : (
                                         <div key={i} className="flex items-center gap-2 bg-black/10 rounded-lg px-2 py-1.5 cursor-pointer" onClick={() => window.open(url, "_blank")}>
                                           <div className="shrink-0 flex flex-col items-center justify-center w-8 h-8 rounded bg-black/10">
@@ -358,7 +358,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                                             </span>
                                           </div>
                                           <div className="min-w-0">
-                                            <p className="text-xs font-medium truncate max-w-[140px]">{att.name}</p>
+                                            <p className="text-xs font-medium truncate max-w-35">{att.name}</p>
                                             <p className="text-[10px] opacity-70">{fmtSize(att.size)}</p>
                                           </div>
                                         </div>
@@ -427,7 +427,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
           {pendingAttachments.length > 0 && (
             <div className="shrink-0 mx-3 mb-1 flex flex-wrap gap-1.5">
               {pendingAttachments.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 px-2 py-1.5 bg-muted rounded-lg max-w-[180px]">
+                <div key={i} className="flex items-center gap-2 px-2 py-1.5 bg-muted rounded-lg max-w-45">
                   {a.type === "image"
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={a.url} alt="" className="h-7 w-7 rounded object-cover shrink-0" />

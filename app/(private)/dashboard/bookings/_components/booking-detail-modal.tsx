@@ -15,8 +15,8 @@ import type { BookingDetail } from "@/lib/queries/bookings";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
 
-const lbl = "text-[14px] font-medium mb-0 text-[#637587]";
-const val = "text-[14px] font-normal text-black";
+const lbl = "text-sm font-medium mb-0 text-[#637587]";
+const val = "text-sm font-normal text-black";
 
 function fmtPrice(v: bigint | number | null | undefined): string {
   if (v == null) return "-";
@@ -239,7 +239,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     {booking.bookingStatus === "Rejected" && booking.rejectionNotes && (
                       <>
                         <p className={lbl + " mt-4"}>Notes of rejection</p>
-                        <p className="text-gray-500 text-[14px] font-normal">{booking.rejectionNotes}</p>
+                        <p className="text-gray-500 text-sm font-normal">{booking.rejectionNotes}</p>
                       </>
                     )}
                     <p className={lbl + " mt-4"}>Venue Address</p>
@@ -289,11 +289,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-gray-50">
-                            <TableHead className="px-4 w-[160px]">Kategori</TableHead>
+                            <TableHead className="px-4 w-40">Kategori</TableHead>
                             <TableHead className="px-4">Nama Vendor</TableHead>
-                            <TableHead className="px-4 w-[150px]">Nominal</TableHead>
+                            <TableHead className="px-4 w-37.5">Nominal</TableHead>
                             <TableHead className="px-4">Keterangan</TableHead>
-                            <TableHead className="px-4 w-[150px]">Status Order</TableHead>
+                            <TableHead className="px-4 w-37.5">Status Order</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -433,10 +433,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                     const ext = doc.fileName?.split(".").pop() ?? "FILE";
                                     const isSelected = selectedDocIds.has(doc.id);
                                     return (
-                                      <div key={doc.id} className={`w-[100px] border rounded-lg overflow-hidden bg-white transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-gray-200"}`}>
+                                      <div key={doc.id} className={`w-25 border rounded-lg overflow-hidden bg-white transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-gray-200"}`}>
                                         <div className="relative">
                                           <div
-                                            className="h-[80px] w-full bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                                            className="h-20 w-full bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
                                             onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
                                           >
                                             {isImage && url ? (

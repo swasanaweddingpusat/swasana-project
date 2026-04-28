@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { CalendarIcon, FileText, Plus, Trash2, X } from "lucide-react";
+import { CalendarIcon, FileText, Trash2, X } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
@@ -131,7 +131,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const { data: packages = [] } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
   const { data: paymentMethods = [] } = useQuery({ queryKey: ["payment-methods"], queryFn: () => fetchJson<PaymentMethodData[]>("/api/payment-methods"), staleTime: 5 * 60_000 });
-  const venuePaymentMethods = paymentMethods.filter((pm) => pm.venueId === selectedVenueId);
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const selectedPackage = packages.find((p) => p.id === selectedPackageId);
@@ -651,7 +650,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                           </div>
                           {/* Amount + Date row */}
                           <div className="flex gap-3 items-center">
-                            <div className="flex-[2]">
+                            <div className="flex-2">
                               <Input
                                 value={t.amount ? fmtRp(t.amount) : ""}
                                 onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }}
