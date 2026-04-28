@@ -222,7 +222,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <div className="overflow-hidden">
                           <p className="text-sm font-medium text-gray-900 truncate">{booking.snapCustomer?.name ?? "—"}</p>
                           <p className="text-xs text-gray-400 truncate mt-0.5">
-                            {booking.snapCustomer?.mobileNumber ?? ""}
+                            {(() => {
+                              const raw = booking.snapCustomer?.mobileNumber ?? "";
+                              try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
+                              return raw;
+                            })()}
                           </p>
                           {/* Event date — mobile only */}
                           <p className="text-xs text-gray-500 mt-0.5 sm:hidden">{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>

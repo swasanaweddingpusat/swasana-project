@@ -185,7 +185,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     <p className={lbl + " mt-4"}>Phone Number</p>
                     {(() => {
                       const raw = booking.snapCustomer?.mobileNumber ?? "";
-                      const nums = raw.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+                      let nums: string[] = []; try { const arr = JSON.parse(raw); if (Array.isArray(arr)) nums = arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number); } catch { nums = raw.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean); }
                       if (nums.length <= 1) return <p className={val}>{nums[0] ?? "-"}</p>;
                       return <ul className="mt-1 space-y-0.5">{nums.map((n, i) => <li key={i} className={val}>• {n}</li>)}</ul>;
                     })()}
