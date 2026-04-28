@@ -38,7 +38,7 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
   });
 
   const cateringItem = React.useMemo(() => {
-    return booking.snapVendorItems.find((v) => v.vendorCategoryName.toLowerCase().includes("catering") && !v.isAddons);
+    return booking.snapVendorItems.find((v: typeof booking.snapVendorItems[number]) => v.vendorCategoryName.toLowerCase().includes("catering") && !v.isAddons);
   }, [booking.snapVendorItems]);
 
   const { data: eligibleBookings = [] } = useQuery<EligibleBooking[]>({
