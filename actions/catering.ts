@@ -4,11 +4,16 @@ import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { revalidateTag } from "next/cache";
 import type { CateringPaketData } from "@/types/catering";
 import type { POCateringV2, PORow } from "@/types/po-catering";
+import type { Prisma } from "@prisma/client";
 import type { SettlementType } from "@prisma/client";
 
+type TxClient = Prisma.TransactionClient;
+
 async function syncSettlementRows(
+  tx: TxClient,
   snapVendorItemId: string,
   bookingId: string,
   rows: PORow[],
@@ -18,13 +23,13 @@ async function syncSettlementRows(
   const rowIds = settlementRows.map((r) => r.id);
 
   // Delete settlements no longer in rows
-  await db.bookingPaymentSettlement.deleteMany({
+  await tx.bookingPaymentSettlement.deleteMany({
     where: { snapVendorItemId, id: { notIn: rowIds }, status: { not: "completed" } },
   });
 
   // Upsert each settlement row
   for (const row of settlementRows) {
-    await db.bookingPaymentSettlement.upsert({
+    await tx.bookingPaymentSettlement.upsert({
       where: { id: row.id },
       create: {
         id: row.id,
@@ -63,10 +68,12 @@ export async function saveCateringPaketData(
     });
     if (!item) return { success: false, error: "Vendor item tidak ditemukan." };
 
-    await db.snapVendorItem.update({
-      where: { id: snapVendorItemId },
-      data: { paketData: JSON.parse(JSON.stringify(paketData)) },
-    });
+    await db.$transaction([
+      db.snapVendorItem.update({
+        where: { id: snapVendorItemId },
+        data: { paketData: JSON.parse(JSON.stringify(paketData)) },
+      }),
+    ]);
 
     await logAudit({
       userId: session!.user.id,
@@ -77,8 +84,10 @@ export async function saveCateringPaketData(
       description: `Updated catering paket data (${paketData.sections.length} sections)`,
     });
 
+    revalidateTag("caterings", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[saveCateringPaketData]", e);
     return { success: false, error: "Gagal menyimpan data catering." };
   }
 }
@@ -100,12 +109,14 @@ export async function savePOCateringData(
 
     const typed = poData as POCateringV2;
 
-    await db.snapVendorItem.update({
-      where: { id: snapVendorItemId },
-      data: { paketData: JSON.parse(JSON.stringify(poData)) },
-    });
+    await db.$transaction(async (tx) => {
+      await tx.snapVendorItem.update({
+        where: { id: snapVendorItemId },
+        data: { paketData: JSON.parse(JSON.stringify(poData)) },
+      });
 
-    await syncSettlementRows(snapVendorItemId, item.bookingId, typed.rows ?? [], session!.user.id);
+      await syncSettlementRows(tx, snapVendorItemId, item.bookingId, typed.rows ?? [], session!.user.id);
+    });
 
     await logAudit({
       userId: session!.user.id,
@@ -115,8 +126,10 @@ export async function savePOCateringData(
       description: "Updated PO Catering table data",
     });
 
+    revalidateTag("caterings", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[savePOCateringData]", e);
     return { success: false, error: "Gagal menyimpan PO Catering." };
   }
 }

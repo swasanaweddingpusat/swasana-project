@@ -4,11 +4,16 @@ import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { revalidateTag } from "next/cache";
 import type { POCateringV2 } from "@/types/po-catering";
+import type { Prisma } from "@prisma/client";
 import type { SettlementType } from "@prisma/client";
 import type { PORow } from "@/types/po-catering";
 
+type TxClient = Prisma.TransactionClient;
+
 async function syncSettlementRows(
+  tx: TxClient,
   snapVendorItemId: string,
   bookingId: string,
   rows: PORow[],
@@ -17,12 +22,12 @@ async function syncSettlementRows(
   const settlementRows = rows.filter((r) => r.type === "settlement" && r.grandTotal && r.grandTotal > 0 && !r.isIncoming);
   const rowIds = settlementRows.map((r) => r.id);
 
-  await db.bookingPaymentSettlement.deleteMany({
+  await tx.bookingPaymentSettlement.deleteMany({
     where: { snapVendorItemId, id: { notIn: rowIds }, status: { not: "completed" } },
   });
 
   for (const row of settlementRows) {
-    await db.bookingPaymentSettlement.upsert({
+    await tx.bookingPaymentSettlement.upsert({
       where: { id: row.id },
       create: {
         id: row.id,
@@ -63,12 +68,14 @@ export async function savePODecorationData(
 
     const typed = poData as POCateringV2;
 
-    await db.snapVendorItem.update({
-      where: { id: snapVendorItemId },
-      data: { paketData: JSON.parse(JSON.stringify(poData)) },
-    });
+    await db.$transaction(async (tx) => {
+      await tx.snapVendorItem.update({
+        where: { id: snapVendorItemId },
+        data: { paketData: JSON.parse(JSON.stringify(poData)) },
+      });
 
-    await syncSettlementRows(snapVendorItemId, item.bookingId, typed.rows ?? [], session!.user.id);
+      await syncSettlementRows(tx, snapVendorItemId, item.bookingId, typed.rows ?? [], session!.user.id);
+    });
 
     await logAudit({
       userId: session!.user.id,
@@ -78,8 +85,10 @@ export async function savePODecorationData(
       description: "Updated PO Decoration table data",
     });
 
+    revalidateTag("decorations", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[savePODecorationData]", e);
     return { success: false, error: "Gagal menyimpan PO Dekorasi." };
   }
 }

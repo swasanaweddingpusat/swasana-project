@@ -3,51 +3,58 @@
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 
 const nameSchema = z.string().min(1, "Nama wajib diisi").max(100);
 
 export async function createSourceOfInformation(name: string) {
-  const { error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings", action: "create" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`soi-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = nameSchema.safeParse(name);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
-    const item = await db.sourceOfInformation.create({ data: { name: parsed.data.trim() } });
+    const [item] = await db.$transaction([db.sourceOfInformation.create({ data: { name: parsed.data.trim() } })]);
     revalidateTag("source-of-informations", "max");
     return { success: true, item };
-  } catch {
+  } catch (e) {
+    console.error("[createSourceOfInformation]", e);
     return { success: false, error: "Nama sudah digunakan." };
   }
 }
 
 export async function updateSourceOfInformation(id: string, name: string) {
-  const { error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`soi-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = nameSchema.safeParse(name);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
-    const item = await db.sourceOfInformation.update({ where: { id }, data: { name: parsed.data.trim() } });
+    const [item] = await db.$transaction([db.sourceOfInformation.update({ where: { id }, data: { name: parsed.data.trim() } })]);
     revalidateTag("source-of-informations", "max");
     return { success: true, item };
-  } catch {
+  } catch (e) {
+    console.error("[updateSourceOfInformation]", e);
     return { success: false, error: "Gagal memperbarui. Nama mungkin sudah digunakan." };
   }
 }
 
 export async function deleteSourceOfInformation(id: string) {
-  const { error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`soi-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    await db.sourceOfInformation.delete({ where: { id } });
+    await db.$transaction([db.sourceOfInformation.delete({ where: { id } })]);
     revalidateTag("source-of-informations", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[deleteSourceOfInformation]", e);
     return { success: false, error: "Gagal menghapus." };
   }
 }

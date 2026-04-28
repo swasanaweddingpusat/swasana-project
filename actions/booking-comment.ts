@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { deleteFromR2 } from "@/lib/r2";
+import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 
 const contentSchema = z.string().max(2000);
 
@@ -24,13 +25,14 @@ export async function createBookingComment(data: {
 }) {
   const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`comment-create:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   const parsed = contentSchema.safeParse(data.content);
   if (!parsed.success) return { success: false as const, error: "Komentar tidak valid." };
   if (!data.content.trim() && !data.attachments?.length) return { success: false as const, error: "Komentar tidak boleh kosong." };
 
   try {
-    const comment = await db.bookingComment.create({
+    const [comment] = await db.$transaction([db.bookingComment.create({
       data: {
         bookingId: data.bookingId,
         authorId: session!.user.profileId,
@@ -43,19 +45,20 @@ export async function createBookingComment(data: {
         author: { select: { id: true, fullName: true, avatarUrl: true } },
         replyTo: { select: { id: true, content: true, author: { select: { fullName: true } } } },
       },
-    });
+    })]);
 
     revalidateTag(`booking-comments-${data.bookingId}`, "max");
     return { success: true as const, comment };
   } catch (e) {
     console.error("[createBookingComment]", e);
-    return { success: false as const, error: "Gagal mengirim komentar." };
+    return { success: false as const, error: "Terjadi kesalahan." };
   }
 }
 
 export async function editBookingComment(id: string, content: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`comment-edit:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   const parsed = contentSchema.safeParse(content);
   if (!parsed.success) return { success: false as const, error: "Komentar tidak valid." };
@@ -65,22 +68,23 @@ export async function editBookingComment(id: string, content: string) {
     if (!existing) return { success: false as const, error: "Komentar tidak ditemukan." };
     if (existing.authorId !== session!.user.profileId) return { success: false as const, error: "Tidak diizinkan." };
 
-    const comment = await db.bookingComment.update({
+    const [comment] = await db.$transaction([db.bookingComment.update({
       where: { id },
       data: { content: parsed.data.trim(), edited: true },
-    });
+    })]);
 
     revalidateTag(`booking-comments-${existing.bookingId}`, "max");
     return { success: true as const, comment };
   } catch (e) {
     console.error("[editBookingComment]", e);
-    return { success: false as const, error: "Gagal mengedit komentar." };
+    return { success: false as const, error: "Terjadi kesalahan." };
   }
 }
 
 export async function deleteBookingComment(id: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`comment-delete:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
     const existing = await db.bookingComment.findUnique({
@@ -90,7 +94,7 @@ export async function deleteBookingComment(id: string) {
     if (!existing) return { success: false as const, error: "Komentar tidak ditemukan." };
     if (existing.authorId !== session!.user.profileId) return { success: false as const, error: "Tidak diizinkan." };
 
-    await db.bookingComment.delete({ where: { id } });
+    await db.$transaction([db.bookingComment.delete({ where: { id } })]);
 
     // Delete attachments from R2
     if (Array.isArray(existing.attachments) && existing.attachments.length > 0) {
@@ -102,20 +106,21 @@ export async function deleteBookingComment(id: string) {
     return { success: true as const };
   } catch (e) {
     console.error("[deleteBookingComment]", e);
-    return { success: false as const, error: "Gagal menghapus komentar." };
+    return { success: false as const, error: "Terjadi kesalahan." };
   }
 }
 
 export async function markCommentsRead(bookingId: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "comment" });
   if (error) return;
+  if (!mutationLimiter.check(`comments-read:${session!.user.id}`)) return;
 
   try {
-    await db.bookingCommentRead.upsert({
+    await db.$transaction([db.bookingCommentRead.upsert({
       where: { profileId_bookingId: { profileId: session!.user.profileId, bookingId } },
       create: { profileId: session!.user.profileId, bookingId },
       update: { lastReadAt: new Date() },
-    });
+    })]);
   } catch (e) {
     console.error("[markCommentsRead]", e);
   }

@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
@@ -36,15 +37,18 @@ export async function saveBookingVendors(
 
     // Delete rows for categories that user cleared (no longer in selections)
     const toDelete = existing.filter((e) => !incomingCatIds.has(e.vendorCategoryId)).map((e) => e.id);
+
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
     if (toDelete.length > 0) {
-      await db.snapVendorItem.deleteMany({ where: { id: { in: toDelete } } });
+      ops.push(db.snapVendorItem.deleteMany({ where: { id: { in: toDelete } } }));
     }
 
     // Upsert each selection
     for (const s of selections.filter((s) => s.vendorId)) {
       const existingId = existingMap.get(s.vendorCategoryId);
       if (existingId) {
-        await db.snapVendorItem.update({
+        ops.push(db.snapVendorItem.update({
           where: { id: existingId },
           data: {
             vendorId: s.vendorId,
@@ -55,9 +59,9 @@ export async function saveBookingVendors(
             description: s.description ?? null,
             orderStatusId: s.orderStatusId ?? null,
           },
-        });
+        }));
       } else {
-        await db.snapVendorItem.create({
+        ops.push(db.snapVendorItem.create({
           data: {
             bookingId,
             vendorCategoryId: s.vendorCategoryId,
@@ -71,9 +75,11 @@ export async function saveBookingVendors(
             description: s.description ?? null,
             orderStatusId: s.orderStatusId ?? null,
           },
-        });
+        }));
       }
     }
+
+    if (ops.length > 0) await db.$transaction(ops);
 
     await logAudit({
       userId: session!.user.id,
@@ -85,8 +91,10 @@ export async function saveBookingVendors(
     });
 
     revalidateTag("bookings", "max");
+    revalidateTag("booking-vendors", "max");
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error("[saveBookingVendors]", e);
     return { success: false, error: "Gagal menyimpan vendor." };
   }
 }
@@ -97,7 +105,7 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
   if (!mutationLimiter.check(`update-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
-    await db.snapBonus.update({
+    await db.$transaction([db.snapBonus.update({
       where: { id },
       data: {
         ...(data.vendorId && { vendorId: data.vendorId }),
@@ -106,10 +114,11 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
         description: data.description ?? null,
         orderStatusId: data.orderStatusId ?? null,
       },
-    });
+    })]);
     revalidateTag("bookings", "max");
     return { success: true as const };
-  } catch {
+  } catch (e) {
+    console.error("[updateSnapBonus]", e);
     return { success: false as const, error: "Gagal update bonus." };
   }
 }
@@ -120,7 +129,7 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
   if (!mutationLimiter.check(`add-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
-    const item = await db.snapBonus.create({
+    const [item] = await db.$transaction([db.snapBonus.create({
       data: {
         bookingId,
         vendorId: data.vendorId,
@@ -132,23 +141,26 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
         qty: 1,
       },
       include: { orderStatus: { select: { id: true, name: true } } },
-    });
+    })]);
     revalidateTag("bookings", "max");
     return { success: true as const, item };
-  } catch {
+  } catch (e) {
+    console.error("[addSnapBonus]", e);
     return { success: false as const, error: "Gagal menambah bonus." };
   }
 }
 
 export async function deleteSnapBonus(id: string) {
-  const { error } = await requirePermission({ module: "booking", action: "edit" });
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`delete-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
-    await db.snapBonus.delete({ where: { id } });
+    await db.$transaction([db.snapBonus.delete({ where: { id } })]);
     revalidateTag("bookings", "max");
     return { success: true as const };
-  } catch {
+  } catch (e) {
+    console.error("[deleteSnapBonus]", e);
     return { success: false as const, error: "Gagal menghapus bonus." };
   }
 }

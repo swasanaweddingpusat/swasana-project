@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { revalidateTag } from "next/cache";
 import { Gender } from "@prisma/client";
 import { z } from "zod";
 
@@ -40,19 +41,30 @@ export async function updateMyProfile(data: unknown) {
 
   const { dateOfBirth, ...rest } = parsed.data;
 
-  await db.$transaction([
-    db.profile.update({
-      where: { userId: session.user.id },
-      data: {
-        ...rest,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-      },
-    }),
-  ]);
+  try {
+    await db.$transaction([
+      db.profile.update({
+        where: { userId: session.user.id },
+        data: {
+          ...rest,
+          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        },
+      }),
+    ]);
 
-  return { success: true };
+    revalidateTag("profiles", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[updateMyProfile]", e);
+    return { success: false, error: "Gagal memperbarui profil." };
+  }
 }
 
 export async function getEducationLevels() {
-  return db.educationLevel.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true } });
+  try {
+    return await db.educationLevel.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true } });
+  } catch (e) {
+    console.error("[getEducationLevels]", e);
+    return [];
+  }
 }

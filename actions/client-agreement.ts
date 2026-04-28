@@ -1,10 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { headers } from "next/headers";
 import { randomUUID } from "crypto";
 import { revalidateTag } from "next/cache";
 
@@ -17,12 +15,9 @@ function getExpiresAt(): Date {
 }
 
 export async function generateAgreementToken(bookingId: string) {
-  const session = await auth();
-  if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  if (!mutationLimiter.check(`gen-agreement:${session.user.id}:${ip}`)) {
+  const { session, error } = await requirePermission({ module: "client_agreement", action: "create" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`gen-agreement:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -37,11 +32,11 @@ export async function generateAgreementToken(bookingId: string) {
       return { success: false as const, error: "Agreement sudah ditandatangani, tidak bisa di-regenerate." };
     }
 
-    const agreement = await db.clientAgreement.upsert({
+    const [agreement] = await db.$transaction([db.clientAgreement.upsert({
       where: { bookingId },
       update: { token, accessCode, expiresAt, status: "Pending", sentAt: null, viewedAt: null, signedAt: null },
       create: { bookingId, token, accessCode, expiresAt },
-    });
+    })]);
 
     revalidateTag("bookings", "max");
     return { success: true as const, agreement };
@@ -52,17 +47,19 @@ export async function generateAgreementToken(bookingId: string) {
 }
 
 export async function markAgreementSent(bookingId: string) {
-  const { error } = await requirePermission({ module: "client_agreement", action: "edit" });
+  const { session, error } = await requirePermission({ module: "client_agreement", action: "edit" });
   if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`agreement-sent:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
-    await db.clientAgreement.update({
+    await db.$transaction([db.clientAgreement.update({
       where: { bookingId },
       data: { status: "Sent", sentAt: new Date() },
-    });
+    })]);
     revalidateTag("bookings", "max");
     return { success: true as const };
-  } catch {
+  } catch (e) {
+    console.error("[markAgreementSent]", e);
     return { success: false as const, error: "Gagal update status" };
   }
 }
