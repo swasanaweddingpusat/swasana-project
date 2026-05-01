@@ -18,7 +18,7 @@ export async function createMemberStatus(name: string) {
 
   try {
     const [item] = await db.$transaction([db.customerMemberStatus.create({ data: { name: parsed.data.trim() } })]);
-    revalidateTag("member-statuses", "max");
+    revalidateTag("member-statuses", { expire: 0 });
     return { success: true, item };
   } catch (e) {
     console.error("[createMemberStatus]", e);

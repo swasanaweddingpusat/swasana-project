@@ -34,7 +34,7 @@ export async function createCustomer(data: unknown) {
       description: `Customer ${parsed.data.name} ditambahkan`,
       changes: { after: parsed.data },
     });
-    revalidateTag("customers", "max");
+    revalidateTag("customers", { expire: 0 });
     return { success: true, customer };
   } catch (e) {
     console.error("[createCustomer]", e);
@@ -70,7 +70,7 @@ export async function updateCustomer(data: unknown) {
       description: `Customer ${customer.id} diperbarui`,
       changes: { before: { id }, after: rest },
     });
-    revalidateTag("customers", "max");
+    revalidateTag("customers", { expire: 0 });
     return { success: true, customer };
   } catch (e) {
     console.error("[updateCustomer]", e);
@@ -92,7 +92,7 @@ export async function deleteCustomer(id: string) {
       entityId: id,
       description: `Customer ${id} dihapus`,
     });
-    revalidateTag("customers", "max");
+    revalidateTag("customers", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteCustomer]", e);

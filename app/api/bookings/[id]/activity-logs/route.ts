@@ -58,12 +58,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!apiLimiter.check(`activity-logs:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
+  const { searchParams } = new URL(_req.url);
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 10));
+  const skip = (page - 1) * limit;
 
-  const logs = await db.activityLog.findMany({
-    where: { entityType: "booking", entityId: id },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    select: {
+  const where = { entityType: "booking" as const, entityId: id };
+
+  const [logs, total] = await Promise.all([
+    db.activityLog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      select: {
       id: true,
       userId: true,
       action: true,
@@ -75,7 +83,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       createdAt: true,
       profile: { select: { fullName: true, role: { select: { name: true } } } },
     },
-  });
+  }),
+    db.activityLog.count({ where }),
+  ]);
 
   const resolved = await Promise.all(
     logs.map(async (log) => ({
@@ -84,5 +94,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }))
   );
 
-  return NextResponse.json(resolved);
+  return NextResponse.json({ data: resolved, total, page, limit });
 }

@@ -1,30 +1,40 @@
 import { db } from "@/lib/db";
 
-export async function getBookingComments(bookingId: string) {
-  return db.bookingComment.findMany({
-    where: { bookingId },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      content: true,
-      mentions: true,
-      edited: true,
-      attachments: true,
-      createdAt: true,
-      author: { select: { id: true, fullName: true, avatarUrl: true } },
-      replyTo: {
-        select: {
-          id: true,
-          content: true,
-          author: { select: { fullName: true } },
+export async function getBookingComments(bookingId: string, page = 1, limit = 10) {
+  const where = { bookingId };
+  const skip = (page - 1) * limit;
+
+  const [data, total] = await Promise.all([
+    db.bookingComment.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        content: true,
+        mentions: true,
+        edited: true,
+        attachments: true,
+        createdAt: true,
+        author: { select: { id: true, fullName: true, avatarUrl: true } },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            author: { select: { fullName: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    db.bookingComment.count({ where }),
+  ]);
+
+  return { data, total, page, limit };
 }
 
 export type BookingCommentsResult = Awaited<ReturnType<typeof getBookingComments>>;
-export type BookingCommentItem = BookingCommentsResult[number];
+export type BookingCommentItem = BookingCommentsResult["data"][number];
 
 /** Returns unread comment counts per bookingId for a given profile */
 export async function getUnreadCommentCounts(

@@ -24,7 +24,7 @@ export async function createPaymentMethod(data: unknown) {
 
   try {
     const [pm] = await db.$transaction([db.paymentMethod.create({ data: parsed.data })]);
-    revalidateTag("payment-methods", "max");
+    revalidateTag("payment-methods", { expire: 0 });
     return { success: true, data: pm };
   } catch (e) {
     console.error("[createPaymentMethod]", e);
@@ -43,7 +43,7 @@ export async function updatePaymentMethod(id: string, data: unknown) {
 
   try {
     const [pm] = await db.$transaction([db.paymentMethod.update({ where: { id }, data: parsed.data })]);
-    revalidateTag("payment-methods", "max");
+    revalidateTag("payment-methods", { expire: 0 });
     return { success: true, data: pm };
   } catch (e) {
     console.error("[updatePaymentMethod]", e);
@@ -59,7 +59,7 @@ export async function deletePaymentMethod(id: string) {
 
   try {
     await db.$transaction([db.paymentMethod.delete({ where: { id } })]);
-    revalidateTag("payment-methods", "max");
+    revalidateTag("payment-methods", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deletePaymentMethod]", e);

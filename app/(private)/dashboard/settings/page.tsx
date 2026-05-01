@@ -12,6 +12,7 @@ import {
   ListOrdered,
   GraduationCap,
   GitPullRequestArrow,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -98,6 +99,12 @@ const GROUPS: SettingGroup[] = [
         description: "Kelola status order vendor (belum diorder, sudah diajukan, dll).",
         icon: ListOrdered,
         href: "/dashboard/settings/order-status",
+      },
+      {
+        title: "Event Types",
+        description: "Kelola tipe acara (Resepsi, Akad & Resepsi, dll) untuk nomor PO.",
+        icon: CalendarCheck,
+        href: "/dashboard/settings/event-types",
       },
     ],
   },

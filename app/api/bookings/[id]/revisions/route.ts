@@ -9,21 +9,32 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!apiLimiter.check(`revisions:${session.user.id}`)) return rateLimitResponse();
 
   try {
-    const revisions = await db.bookingRevision.findMany({
-      where: { bookingId: id },
-      orderBy: { revisionNumber: "desc" },
-      select: {
-        id: true,
-        revisionNumber: true,
-        reason: true,
-        packageName: true,
-        variantName: true,
-        variantPrice: true,
-        venueName: true,
-        createdAt: true,
-      },
-    });
-    return Response.json(revisions);
+    const { searchParams } = new URL(_req.url);
+    const page = Math.max(1, Number(searchParams.get("page")) || 1);
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 10));
+    const skip = (page - 1) * limit;
+    const where = { bookingId: id };
+
+    const [data, total] = await Promise.all([
+      db.bookingRevision.findMany({
+        where,
+        orderBy: { revisionNumber: "desc" },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          revisionNumber: true,
+          reason: true,
+          packageName: true,
+          variantName: true,
+          variantPrice: true,
+          venueName: true,
+          createdAt: true,
+        },
+      }),
+      db.bookingRevision.count({ where }),
+    ]);
+    return Response.json({ data, total, page, limit });
   } catch {
     return Response.json({ error: "Failed to fetch" }, { status: 500 });
   }

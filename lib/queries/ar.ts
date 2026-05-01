@@ -19,37 +19,45 @@ function deriveBookingStatus(termins: ARTermin[]): ARTerminStatus {
   return "not_due_yet";
 }
 
-export async function getARBookings(): Promise<ARBooking[]> {
+export async function getARBookings(page = 1, limit = 10): Promise<{ data: ARBooking[]; total: number; page: number; limit: number }> {
   const now = new Date();
+  const skip = (page - 1) * limit;
 
-  const bookings = await db.booking.findMany({
-    where: {
-      bookingStatus: "Confirmed",
-      termOfPayments: { some: {} },
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      poNumber: true,
-      bookingDate: true,
-      snapCustomer: { select: { name: true } },
-      snapVenue: { select: { venueName: true } },
-      termOfPayments: {
-        orderBy: { sortOrder: "asc" },
-        select: {
-          id: true,
-          name: true,
-          amount: true,
-          dueDate: true,
-          paymentStatus: true,
-          invoiceNumber: true,
-          notes: true,
+  const where = {
+    bookingStatus: "Confirmed" as const,
+    termOfPayments: { some: {} },
+  };
+
+  const [bookings, total] = await Promise.all([
+    db.booking.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        poNumber: true,
+        bookingDate: true,
+        snapCustomer: { select: { name: true } },
+        snapVenue: { select: { venueName: true } },
+        termOfPayments: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            name: true,
+            amount: true,
+            dueDate: true,
+            paymentStatus: true,
+            invoiceNumber: true,
+            notes: true,
+          },
         },
       },
-    },
-  });
+    }),
+    db.booking.count({ where }),
+  ]);
 
-  return bookings.map((b) => {
+  const mapped = bookings.map((b) => {
     const termins: ARTermin[] = b.termOfPayments.map((t) => {
       const status = deriveTerminStatus(t.paymentStatus, t.dueDate, now);
       const agingDays =
@@ -97,6 +105,8 @@ export async function getARBookings(): Promise<ARBooking[]> {
       termins,
     };
   });
+
+  return { data: mapped, total, page, limit };
 }
 
 export type ARBookingsResult = Awaited<ReturnType<typeof getARBookings>>;

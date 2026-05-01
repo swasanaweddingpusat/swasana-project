@@ -41,7 +41,7 @@ export async function addPartialPayment(termId: string, data: { amount: number; 
       description: `Partial payment Rp${new Intl.NumberFormat("id-ID").format(data.amount)} untuk ${term.name}`,
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true, paymentId: payment.id, newStatus };
   } catch (e) {
     console.error("[addPartialPayment]", e);
@@ -76,7 +76,7 @@ export async function deletePartialPayment(paymentId: string) {
       description: `Hapus partial payment Rp${new Intl.NumberFormat("id-ID").format(payment.amount)} dari ${payment.term.name}`,
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true, newStatus };
   } catch (e) {
     console.error("[deletePartialPayment]", e);

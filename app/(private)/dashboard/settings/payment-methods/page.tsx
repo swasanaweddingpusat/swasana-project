@@ -56,7 +56,8 @@ export default function PaymentMethodsPage() {
         fetch("/api/venues"),
       ]);
       if (!pmRes.ok) throw new Error();
-      const data: PaymentMethodItem[] = await pmRes.json();
+      const pmJson = await pmRes.json();
+      const data: PaymentMethodItem[] = pmJson.data ?? pmJson;
       setItems(data);
       if (venueRes.ok) {
         const venueData: VenueOption[] = await venueRes.json();

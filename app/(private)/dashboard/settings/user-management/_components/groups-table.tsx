@@ -43,7 +43,7 @@ function getInitials(name: string | null | undefined, fallback: string) {
 }
 
 export function GroupsTable({ initialData, users }: GroupsTableProps) {
-  const [groups, setGroups] = useState(initialData);
+  const [groups, setGroups] = useState(initialData.data);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<GroupQueryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GroupQueryItem | null>(null);

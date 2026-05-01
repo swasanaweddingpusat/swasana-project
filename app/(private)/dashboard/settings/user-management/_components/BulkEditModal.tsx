@@ -31,7 +31,8 @@ interface Props {
 }
 
 export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, onSuccess }: Props) {
-  const { data: groups = [] } = useGroups();
+  const { data: groupsResult } = useGroups();
+  const groups = groupsResult?.data ?? [];
   const { data: managers = [] } = useQuery<ManagerProfile[]>({
     queryKey: ["managers"],
     queryFn: async () => {

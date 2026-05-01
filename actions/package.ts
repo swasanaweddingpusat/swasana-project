@@ -94,7 +94,7 @@ export async function createPackage(data: unknown) {
       description: `Created package "${pkg.packageName}"`,
     });
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true, data: pkg };
   } catch (e) {
     console.error("[createPackage]", e);
@@ -178,7 +178,7 @@ export async function updatePackage(id: string, data: unknown) {
       description: `Updated package`,
     });
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true, data: { id } };
   } catch (e) {
     console.error("[updatePackage]", e);
@@ -203,7 +203,7 @@ export async function deletePackage(id: string) {
       description: `Deleted package "${pkg.packageName}"`,
     });
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deletePackage]", e);
@@ -228,7 +228,7 @@ export async function deleteBulkPackages(ids: string[]) {
       description: `Deleted ${ids.length} packages`,
     });
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteBulkPackages]", e);
@@ -249,7 +249,7 @@ export async function createVariant(data: unknown) {
 
   try {
     const variant = await db.packageVariant.create({ data: parsed.data });
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true, data: variant };
   } catch (e) {
     console.error("[createVariant]", e);
@@ -268,7 +268,7 @@ export async function updateVariant(id: string, data: unknown) {
 
   try {
     const variant = await db.packageVariant.update({ where: { id }, data: parsed.data });
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true, data: variant };
   } catch (e) {
     console.error("[updateVariant]", e);
@@ -284,7 +284,7 @@ export async function deleteVariant(id: string) {
 
   try {
     await db.packageVariant.delete({ where: { id } });
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteVariant]", e);
@@ -318,7 +318,7 @@ export async function saveVendorItems(
       ),
     ]);
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[saveVendorItems]", e);
@@ -352,7 +352,7 @@ export async function saveInternalItems(
       ),
     ]);
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[saveInternalItems]", e);
@@ -384,7 +384,7 @@ export async function saveVariantPrices(
       db.packageVariant.update({ where: { id: variantId }, data: { margin } }),
     ]);
 
-    revalidateTag("packages", "max");
+    revalidateTag("packages", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[saveVariantPrices]", e);

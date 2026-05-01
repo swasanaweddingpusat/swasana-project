@@ -30,8 +30,10 @@ export function useInviteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (formData: FormData) => inviteUser(formData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+      }
     },
   });
 }
@@ -40,8 +42,10 @@ export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => updateUser(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+      }
     },
   });
 }
@@ -50,8 +54,10 @@ export function useDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => deleteUser(userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+      }
     },
   });
 }
