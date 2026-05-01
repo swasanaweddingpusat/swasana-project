@@ -134,7 +134,7 @@ export async function resetPassword(formData: FormData) {
       }),
     ]);
 
-    revalidateTag("users", "max");
+    revalidateTag("users", { expire: 0 });
 
     await logAudit({
       userId: resetToken.userId,
@@ -175,6 +175,20 @@ export async function verifyEmail(token: string) {
     }
 
     if (verificationToken.usedAt) {
+      if (verificationToken.profile.mustChangePassword) {
+        const cryptoMod = await import("crypto");
+        const newToken = cryptoMod.randomBytes(32).toString("hex");
+        await db.$transaction([
+          db.passwordResetToken.create({
+            data: {
+              userId: verificationToken.profileId,
+              token: newToken,
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+          }),
+        ]);
+        return { success: true, setupToken: newToken };
+      }
       return { success: false, error: "Token sudah digunakan." };
     }
 

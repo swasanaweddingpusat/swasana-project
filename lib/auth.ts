@@ -127,7 +127,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.roleId = user.roleId ?? null;
@@ -138,6 +138,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // Only refresh profile from DB when cache has expired (reduces DB load)
+      // Force re-fetch when client calls update() (e.g. after profile edit)
+      if (trigger === "update") {
+        token.profileCachedAt = 0;
+      }
       const cachedAt = (token.profileCachedAt as number | undefined) ?? 0;
       const cacheExpired = Date.now() - cachedAt > PROFILE_CACHE_TTL_MS;
 

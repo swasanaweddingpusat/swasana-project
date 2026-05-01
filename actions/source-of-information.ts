@@ -18,7 +18,7 @@ export async function createSourceOfInformation(name: string) {
 
   try {
     const [item] = await db.$transaction([db.sourceOfInformation.create({ data: { name: parsed.data.trim() } })]);
-    revalidateTag("source-of-informations", "max");
+    revalidateTag("source-of-informations", { expire: 0 });
     return { success: true, item };
   } catch (e) {
     console.error("[createSourceOfInformation]", e);
@@ -36,7 +36,7 @@ export async function updateSourceOfInformation(id: string, name: string) {
 
   try {
     const [item] = await db.$transaction([db.sourceOfInformation.update({ where: { id }, data: { name: parsed.data.trim() } })]);
-    revalidateTag("source-of-informations", "max");
+    revalidateTag("source-of-informations", { expire: 0 });
     return { success: true, item };
   } catch (e) {
     console.error("[updateSourceOfInformation]", e);
@@ -51,7 +51,7 @@ export async function deleteSourceOfInformation(id: string) {
 
   try {
     await db.$transaction([db.sourceOfInformation.delete({ where: { id } })]);
-    revalidateTag("source-of-informations", "max");
+    revalidateTag("source-of-informations", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteSourceOfInformation]", e);

@@ -38,7 +38,7 @@ export async function generateAgreementToken(bookingId: string) {
       create: { bookingId, token, accessCode, expiresAt },
     })]);
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true as const, agreement };
   } catch (e) {
     console.error("[generateAgreementToken]", e);
@@ -56,7 +56,7 @@ export async function markAgreementSent(bookingId: string) {
       where: { bookingId },
       data: { status: "Sent", sentAt: new Date() },
     })]);
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true as const };
   } catch (e) {
     console.error("[markAgreementSent]", e);

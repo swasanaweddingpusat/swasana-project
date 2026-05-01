@@ -38,7 +38,8 @@ const MEMBER_STATUS_COLORS: Record<string, string> = {
 };
 
 export function CustomersTable({ initialData }: { initialData: CustomersResult }) {
-  const { data: customers = initialData } = useCustomers(initialData);
+  const { data: customersResult } = useCustomers(initialData);
+  const customers = customersResult?.data ?? initialData.data;
   const deleteMut = useDeleteCustomer();
 
   const [currentPage, setCurrentPage] = useState(1);

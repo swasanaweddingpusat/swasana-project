@@ -244,11 +244,11 @@ model UserGroupMember {
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
 
 model Brand {
-  id        String   @id @default(uuid())
-  name      String
-  code      String   @unique
-  createdAt DateTime @default(now())
-  venues    Venue[]
+  id               String   @id @default(uuid())
+  name             String
+  code             String   @unique
+  createdAt        DateTime @default(now())
+  venues           Venue[]
 
   @@map("brands")
 }
@@ -263,6 +263,7 @@ model Venue {
   code            String            @default("KODE")
   brandId         String?
   isActive        Boolean           @default(true)
+  termAndCondition String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
@@ -531,7 +532,7 @@ model Booking {
   bookingStatus         BookingStatus   @default(Pending)
   paymentStatus         String          @default("")
   weddingSession        WeddingSession?
-  weddingType           WeddingType?
+  weddingType           String?
   poNumber              String?
   rejectionNotes        String?
   lostReason            String?
@@ -899,13 +900,7 @@ enum WeddingSession {
   fullday
 }
 
-enum WeddingType {
-  wedding
-  engagement
-  akad
-  resepsi
-  other
-}
+
 
 enum TermOfPaymentStatus {
   unpaid
@@ -1060,6 +1055,18 @@ model Notification {
   @@index([userId, isRead, createdAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+model EventType {
+  id        String   @id @default(uuid())
+  name      String   // e.g. "Resepsi", "Akad & Resepsi", "Teapai & Resepsi"
+  code      String   @unique // e.g. "R", "AR", "TR" — used in PO number
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("event_types")
 }
 
 model Counter {

@@ -34,7 +34,7 @@ export function UserMenu() {
             {session?.user?.name ?? "—"}
           </span>
           <span className={cn('text-[10px]', 'text-gray-400', 'mt-0.5')}>
-            {session?.user?.email ?? ""}
+            {session?.user?.roleName ?? ""}
           </span>
         </div>
         <Avatar className={cn('h-8', 'w-8')}>

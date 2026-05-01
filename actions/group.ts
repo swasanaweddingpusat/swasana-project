@@ -33,7 +33,7 @@ export async function createGroup(data: unknown) {
       });
     });
 
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -77,7 +77,7 @@ export async function updateGroup(data: unknown) {
       },
     })]);
 
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -111,7 +111,7 @@ export async function deleteGroup(groupId: string) {
 
     await db.$transaction([db.userGroup.delete({ where: { id: groupId } })]);
 
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -156,7 +156,7 @@ export async function addGroupMember(groupId: string, userId: string) {
       });
     });
 
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[addGroupMember]", e);
@@ -174,7 +174,7 @@ export async function removeGroupMember(groupId: string, userId: string) {
 
   try {
     await db.$transaction([db.userGroupMember.delete({ where: { groupId_userId: { groupId, userId } } })]);
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[removeGroupMember]", e);
@@ -194,7 +194,7 @@ export async function reorderGroups(orderedIds: string[]) {
     await db.$transaction(
       orderedIds.map((id, index) => db.userGroup.update({ where: { id }, data: { sortOrder: index + 1 } }))
     );
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[reorderGroups]", e);
@@ -219,7 +219,7 @@ export async function reorderGroupMembers(groupId: string, orderedUserIds: strin
         })
       )
     );
-    revalidateTag("groups", "max");
+    revalidateTag("groups", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[reorderGroupMembers]", e);

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useSession } from "next-auth/react"
 const Gender = { MALE: "MALE", FEMALE: "FEMALE" } as const;
 type Gender = (typeof Gender)[keyof typeof Gender];
 import { Card, CardContent } from "@/components/ui/card"
@@ -83,6 +84,8 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
     user.mustChangePassword ? "security" : "overview"
   )
 
+  const { update: updateSession } = useSession()
+
   const [form, setForm] = useState({
     fullName: profile?.fullName ?? user.name ?? "",
     nickName: profile?.nickName ?? "",
@@ -140,8 +143,12 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
         bankAccountNumber: form.bankAccountNumber || null,
         bankAccountHolder: form.bankAccountHolder || null,
       })
-      if (res.success) toast.success("Profil berhasil disimpan")
-      else toast.error(res.error ?? "Gagal menyimpan")
+      if (res.success) {
+        await updateSession()
+        toast.success("Profil berhasil disimpan")
+      } else {
+        toast.error(res.error ?? "Gagal menyimpan")
+      }
     } finally {
       setSavingProfile(false)
     }

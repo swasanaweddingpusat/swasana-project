@@ -107,7 +107,8 @@ export function usePackageApprovals() {
     queryFn: async () => {
       const res = await fetch("/api/approval-records?module=package");
       if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
+      const json = await res.json();
+      return json.data ?? json;
     },
     staleTime: 30 * 1000,
   });

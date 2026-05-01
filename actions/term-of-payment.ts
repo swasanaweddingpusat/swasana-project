@@ -84,7 +84,7 @@ export async function updateTermOfPayments(
       description: `Updated ${terms.length} term(s)${newTerms?.length ? `, added ${newTerms.length} new term(s)` : ""}${discount ? ", updated discount" : ""}`,
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[updateTermOfPayments]", e);
@@ -119,7 +119,7 @@ export async function addTermOfPayment(bookingId: string, data: { name: string; 
       description: `Added term: ${data.name}`,
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[addTermOfPayment]", e);

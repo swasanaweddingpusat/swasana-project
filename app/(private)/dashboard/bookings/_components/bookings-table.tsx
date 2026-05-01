@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, Palette, MessageSquare, ClipboardCheck } from "lucide-react";
+import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, Palette, MessageSquare, ClipboardCheck, WalletMinimal } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
@@ -143,11 +143,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     queryFn: async () => {
       const res = await fetch("/api/approval-records?module=booking");
       if (!res.ok) return [];
-      return res.json();
+      const json = await res.json();
+      return json.data ?? json;
     },
     staleTime: 5 * 60 * 1000,
   });
-  const approvalMap = new Map(bookingApprovals.map((r) => [r.entityId, r]));
+  const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
 
   async function generatePO(bookingId: string, revisionId?: string) {
     setIsGeneratingPO(bookingId);
@@ -548,7 +549,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
                               </DropdownMenuItem>
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-                                <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
+                                <WalletMinimal className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
                               </DropdownMenuItem>
 
                               {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
