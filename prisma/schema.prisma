@@ -133,8 +133,10 @@ model Profile {
   bookingCommentReads     BookingCommentRead[]
   approvalSteps           ApprovalFlowStep[]
   approvalRecordsCreated  ApprovalRecord[]           @relation("ApprovalRecordCreator")
+  approvalRecordsUpdated  ApprovalRecord[]           @relation("ApprovalRecordUpdater")
   approvalStepApprovals   ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
   approvalStepDecisions   ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
+  bookingRevisions         BookingRevision[]
 
   @@index([roleId])
   @@index([dataScope])
@@ -535,6 +537,8 @@ model Booking {
   lostReason            String?
   signingLocation       String?
   signatures            Json?
+  discountName          String?
+  discountAmount        Int             @default(0)
   salesId               String
   managerId             String?
   customerId            String
@@ -575,6 +579,7 @@ model Booking {
   clientAgreement   ClientAgreement?
   bookingComments   BookingComment[]
   commentReads      BookingCommentRead[]
+  revisions         BookingRevision[]
 
   @@index([salesId])
   @@index([managerId])
@@ -587,6 +592,38 @@ model Booking {
   @@index([bookingStatus])
   @@index([bookingDate])
   @@map("bookings")
+}
+
+model BookingRevision {
+  id             String   @id @default(uuid())
+  bookingId      String
+  revisionNumber Int
+  reason         String?
+
+  // Queryable fields
+  packageId      String
+  packageName    String
+  variantId      String?
+  variantName    String?
+  variantPrice   Int      @default(0)
+  venueId        String
+  venueName      String
+  discountName   String?
+  discountAmount Int      @default(0)
+
+  // Full snapshot for PDF rendering
+  snapshotData   Json
+
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  createdBy      Profile  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, revisionNumber])
+  @@index([bookingId])
+  @@index([createdById])
+  @@map("booking_revisions")
 }
 
 // ─── Snapshot Tables ─────────────────────────────────────────────────────────
@@ -736,11 +773,27 @@ model TermOfPayment {
   sortOrder       Int                 @default(0)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
-  booking         Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partialPayments  PartialPayment[]
 
   @@unique([invoiceNumber])
   @@index([bookingId])
   @@map("term_of_payments")
+}
+
+model PartialPayment {
+  id        String        @id @default(uuid())
+  termId    String
+  amount    Int
+  paidAt    DateTime
+  evidence  String?
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  term      TermOfPayment @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@index([termId])
+  @@map("partial_payments")
 }
 
 model BookingDocument {
@@ -952,13 +1005,16 @@ model ApprovalRecord {
   status      String               @default("pending")
   signature   String?
   createdById String
+  updatedById String?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   createdBy   Profile              @relation("ApprovalRecordCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy   Profile?             @relation("ApprovalRecordUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   steps       ApprovalRecordStep[]
 
   @@unique([module, entityId])
   @@index([createdById])
+  @@index([updatedById])
   @@map("approval_records")
 }
 

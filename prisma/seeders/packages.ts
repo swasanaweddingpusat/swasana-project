@@ -1,18 +1,14 @@
 import { prisma } from "./_client";
 
 export async function seedPackages() {
-  // Cleanup orphan approval records for packages and bookings
-  const packageIds = (await prisma.package.findMany({ select: { id: true } })).map((p) => p.id);
-  const bookingIds = (await prisma.booking.findMany({ select: { id: true } })).map((b) => b.id);
-
-  await prisma.approvalRecord.deleteMany({
-    where: {
-      OR: [
-        { module: "package", entityId: { notIn: packageIds } },
-        { module: "booking", entityId: { notIn: bookingIds } },
-      ],
-    },
+  // Truncate approval data for packages & bookings (steps cascade from records)
+  const { count: approvalSteps } = await prisma.approvalRecordStep.deleteMany({
+    where: { record: { module: { in: ["package", "booking"] } } },
   });
+  const { count: approvalRecords } = await prisma.approvalRecord.deleteMany({
+    where: { module: { in: ["package", "booking"] } },
+  });
+  console.log(`🗑️  Deleted ${approvalRecords} approval records, ${approvalSteps} steps`);
 
   // Delete all bookings (cascade: snap*, etc.)
   await prisma.booking.deleteMany({});

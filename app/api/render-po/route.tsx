@@ -26,52 +26,92 @@ export async function POST(req: Request) {
   if (!apiLimiter.check(`render-po:${session.user.id}`)) return rateLimitResponse();
 
   try {
-    const { bookingId } = await req.json();
+    const { bookingId, revisionId } = await req.json();
     if (!bookingId) return NextResponse.json({ error: "bookingId required" }, { status: 400 });
 
-    const booking = await db.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        snapCustomer: true,
-        snapVenue: true,
-        snapPackage: true,
-        snapPackageVariant: true,
-        snapPackageInternalItems: { orderBy: { sortOrder: "asc" } },
-        snapPackageVendorItems: { orderBy: { sortOrder: "asc" } },
-        snapVendorItems: true,
-        snapBonuses: true,
-        termOfPayments: { orderBy: { sortOrder: "asc" } },
-        paymentMethod: true,
-        sales: true,
-      },
-    });
+    let pdfBooking: POPdfBooking;
+    let customerName: string;
+    let venueName: string;
+    let eventDate: string;
 
-    if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    if (revisionId) {
+      // Render from frozen revision snapshot
+      const revision = await db.bookingRevision.findUnique({ where: { id: revisionId } });
+      if (!revision || revision.bookingId !== bookingId) return NextResponse.json({ error: "Revision not found" }, { status: 404 });
+      const snap = revision.snapshotData as Record<string, unknown>;
+      pdfBooking = {
+        poNumber: snap.poNumber as string | null,
+        bookingDate: new Date(snap.bookingDate as string),
+        weddingSession: snap.weddingSession as string | null,
+        weddingType: snap.weddingType as string | null,
+        signingLocation: snap.signingLocation as string | null,
+        snapCustomer: snap.snapCustomer as POPdfBooking["snapCustomer"],
+        snapVenue: snap.snapVenue as POPdfBooking["snapVenue"],
+        snapPackage: snap.snapPackage as POPdfBooking["snapPackage"],
+        snapPackageVariant: snap.snapPackageVariant as POPdfBooking["snapPackageVariant"],
+        snapPackageInternalItems: (snap.snapPackageInternalItems ?? []) as POPdfBooking["snapPackageInternalItems"],
+        snapPackageVendorItems: (snap.snapPackageVendorItems ?? []) as POPdfBooking["snapPackageVendorItems"],
+        snapVendorItems: (snap.snapVendorItems ?? []) as POPdfBooking["snapVendorItems"],
+        snapBonuses: (snap.snapBonuses ?? []) as POPdfBooking["snapBonuses"],
+        termOfPayments: (snap.termOfPayments ?? []) as POPdfBooking["termOfPayments"],
+        paymentMethod: snap.paymentMethod as POPdfBooking["paymentMethod"],
+        sales: snap.sales as POPdfBooking["sales"],
+        signatures: snap.signatures as Record<string, unknown> | null,
+        createdAt: revision.createdAt,
+        discountName: snap.discountName as string | null,
+        discountAmount: Number(snap.discountAmount) || 0,
+      };
+      customerName = ((snap.snapCustomer as Record<string, unknown> | null)?.name as string ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
+      venueName = (revision.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
+      eventDate = new Date(snap.bookingDate as string).toISOString().split("T")[0];
+    } else {
+      // Render from live booking data (backward compatible)
+      const booking = await db.booking.findUnique({
+        where: { id: bookingId },
+        include: {
+          snapCustomer: true,
+          snapVenue: true,
+          snapPackage: true,
+          snapPackageVariant: true,
+          snapPackageInternalItems: { orderBy: { sortOrder: "asc" } },
+          snapPackageVendorItems: { orderBy: { sortOrder: "asc" } },
+          snapVendorItems: true,
+          snapBonuses: true,
+          termOfPayments: { orderBy: { sortOrder: "asc" } },
+          paymentMethod: true,
+          sales: true,
+        },
+      });
 
-    const pdfBooking: POPdfBooking = {
-      poNumber: booking.poNumber,
-      bookingDate: booking.bookingDate,
-      weddingSession: booking.weddingSession,
-      weddingType: booking.weddingType,
-      signingLocation: booking.signingLocation,
-      snapCustomer: booking.snapCustomer,
-      snapVenue: booking.snapVenue,
-      snapPackage: booking.snapPackage,
-      snapPackageVariant: booking.snapPackageVariant,
-      snapPackageInternalItems: booking.snapPackageInternalItems,
-      snapPackageVendorItems: booking.snapPackageVendorItems,
-      snapVendorItems: booking.snapVendorItems,
-      snapBonuses: booking.snapBonuses,
-      termOfPayments: booking.termOfPayments,
-      paymentMethod: booking.paymentMethod,
-      sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
-      signatures: booking.signatures as Record<string, unknown> | null,
-      createdAt: booking.createdAt,
-    };
+      if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
 
-    const customerName = (booking.snapCustomer?.name ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
-    const venueName = (booking.snapVenue?.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
-    const eventDate = booking.bookingDate.toISOString().split("T")[0];
+      pdfBooking = {
+        poNumber: booking.poNumber,
+        bookingDate: booking.bookingDate,
+        weddingSession: booking.weddingSession,
+        weddingType: booking.weddingType,
+        signingLocation: booking.signingLocation,
+        snapCustomer: booking.snapCustomer,
+        snapVenue: booking.snapVenue,
+        snapPackage: booking.snapPackage,
+        snapPackageVariant: booking.snapPackageVariant,
+        snapPackageInternalItems: booking.snapPackageInternalItems,
+        snapPackageVendorItems: booking.snapPackageVendorItems,
+        snapVendorItems: booking.snapVendorItems,
+        snapBonuses: booking.snapBonuses,
+        termOfPayments: booking.termOfPayments,
+        paymentMethod: booking.paymentMethod,
+        sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
+        signatures: booking.signatures as Record<string, unknown> | null,
+        createdAt: booking.createdAt,
+        discountName: booking.discountName,
+        discountAmount: booking.discountAmount,
+      };
+      customerName = (booking.snapCustomer?.name ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
+      venueName = (booking.snapVenue?.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
+      eventDate = booking.bookingDate.toISOString().split("T")[0];
+    }
+
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
     const logoBase64 = await loadLogoBase64("swasana-logo.png");

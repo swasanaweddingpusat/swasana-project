@@ -22,6 +22,8 @@ export interface POPdfBooking {
   sales: { fullName: string } | null;
   signatures: Record<string, unknown> | null;
   createdAt?: Date;
+  discountName?: string | null;
+  discountAmount?: number;
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -456,6 +458,18 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
                 <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Total Payment</Text></View>
                 <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text></View>
               </View>
+              {(booking.discountAmount ?? 0) > 0 && (
+                <>
+                  <View style={s.paymentRow}>
+                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8, color: "red" }}>{booking.discountName || "Discount"}</Text></View>
+                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text></View>
+                  </View>
+                  <View style={s.paymentRow}>
+                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Harga Setelah Discount</Text></View>
+                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text></View>
+                  </View>
+                </>
+              )}
               <View style={s.paymentRow}>
                 <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}</Text></View>
                 <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8 }}>{(() => { const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>

@@ -39,7 +39,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
 
   const { data: paymentMethods = [] } = useQuery<PaymentMethod[]>({
     queryKey: ["payment-methods"],
-    queryFn: () => fetch("/api/payment-methods").then((r) => r.json()),
+    queryFn: async () => { const r = await fetch("/api/payment-methods"); if (!r.ok) return []; const d = await r.json(); return Array.isArray(d) ? d : []; },
     staleTime: 5 * 60 * 1000,
   });
 

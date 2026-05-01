@@ -81,6 +81,8 @@ export async function POST(req: Request) {
       sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
       signatures: booking.signatures as Record<string, unknown> | null,
       createdAt: booking.createdAt,
+      discountName: booking.discountName,
+      discountAmount: booking.discountAmount,
     };
 
     // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React

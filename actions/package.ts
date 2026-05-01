@@ -123,12 +123,26 @@ export async function updatePackage(id: string, data: unknown) {
       await tx.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending" } });
 
       if (flow && flow.steps.length > 0) {
-        // Delete existing approval record (cascade deletes steps)
-        await tx.approvalRecord.deleteMany({ where: { module: "package", entityId: id } });
-
-        const record = await tx.approvalRecord.create({
-          data: { module: "package", entityId: id, status: "pending", createdById: session.user.profileId, signature: signature ?? null },
+        const existing = await tx.approvalRecord.findUnique({
+          where: { module_entityId: { module: "package", entityId: id } },
         });
+
+        let recordId: string;
+
+        if (existing) {
+          // Delete old steps only, preserve record + createdById
+          await tx.approvalRecordStep.deleteMany({ where: { recordId: existing.id } });
+          await tx.approvalRecord.update({
+            where: { id: existing.id },
+            data: { status: "pending", updatedById: session.user.profileId, signature: signature ?? null },
+          });
+          recordId = existing.id;
+        } else {
+          const record = await tx.approvalRecord.create({
+            data: { module: "package", entityId: id, status: "pending", createdById: session.user.profileId, signature: signature ?? null },
+          });
+          recordId = record.id;
+        }
 
         const creatorRoleId = session.user.roleId;
         const creatorStepIdx = flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId);
@@ -138,7 +152,7 @@ export async function updatePackage(id: string, data: unknown) {
           const shouldAutoApprove = creatorStepIdx >= 0 && i <= creatorStepIdx;
           await tx.approvalRecordStep.create({
             data: {
-              recordId: record.id, stepOrder: step.sortOrder, approverType: step.approverType,
+              recordId, stepOrder: step.sortOrder, approverType: step.approverType,
               approverRoleId: step.approverRoleId, approverUserId: step.approverUserId,
               status: shouldAutoApprove ? "approved" : "pending",
               decidedById: shouldAutoApprove ? session.user.profileId : null,
@@ -148,9 +162,9 @@ export async function updatePackage(id: string, data: unknown) {
           });
         }
 
-        const allSteps = await tx.approvalRecordStep.findMany({ where: { recordId: record.id } });
+        const allSteps = await tx.approvalRecordStep.findMany({ where: { recordId } });
         if (allSteps.every((s) => s.status === "approved")) {
-          await tx.approvalRecord.update({ where: { id: record.id }, data: { status: "approved" } });
+          await tx.approvalRecord.update({ where: { id: recordId }, data: { status: "approved" } });
           await tx.package.update({ where: { id }, data: { approvalStatus: "approved" } });
         }
       }

@@ -30,7 +30,7 @@ interface BookingDrawerProps {
 }
 
 type Option = { id: string; name: string };
-interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null }
+interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
 interface PackageData { id: string; packageName: string; variants: { id: string; variantName: string; pax: number; margin: number; categoryPrices: { basePrice: number }[] }[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
@@ -61,16 +61,30 @@ function toLocalISO(date: Date): string {
 }
 
 function makeDefaultTerms(): TermRow[] {
-  const now = new Date();
   return [
-    { name: "Booking Fee", amount: 0, dueDate: toLocalISO(now), sortOrder: 0 },
-    { name: "DP", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 14 * DAY)), sortOrder: 1 },
-    { name: "Angsuran 1", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 44 * DAY)), sortOrder: 2 },
-    { name: "Angsuran 2", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 74 * DAY)), sortOrder: 3 },
-    { name: "Pelunasan 1", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 104 * DAY)), sortOrder: 4 },
-    { name: "Pelunasan 2", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 134 * DAY)), sortOrder: 5 },
-    { name: "Final", amount: 0, dueDate: toLocalISO(new Date(now.getTime() + 164 * DAY)), sortOrder: 6 },
+    { name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0 },
+    { name: "DP", amount: 0, dueDate: "", sortOrder: 1 },
+    { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2 },
+    { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3 },
+    { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4 },
+    { name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5 },
+    { name: "Final", amount: 0, dueDate: "", sortOrder: 6 },
   ];
+}
+
+function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
+  if (!eventDate || terms.length === 0) return terms;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const event = new Date(eventDate);
+  event.setHours(0, 0, 0, 0);
+  const totalMs = event.getTime() - now.getTime();
+  if (totalMs <= 0) return terms;
+  const n = terms.length;
+  return terms.map((t, i) => ({
+    ...t,
+    dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
+  }));
 }
 
 const DRAFT_KEY = "booking_draft";
@@ -82,6 +96,7 @@ interface BookingDraft {
   contactEmail: string;
   contactNik: string;
   contactKtpAddress: string;
+  contactBitrixId: string;
   noteDateEvent: string;
   signingLocation: string;
   specialBonusName: string;
@@ -119,6 +134,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [contactEmail, setContactEmail] = useState("");
   const [contactNik, setContactNik] = useState("");
   const [contactKtpAddress, setContactKtpAddress] = useState("");
+  const [contactBitrixId, setContactBitrixId] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [customerName, setCustomerName] = useState("");
 
@@ -165,7 +181,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   function getAvailableSessions(dateStr: string): string[] {
     const a = availability[dateStr];
     if (!a) return ["morning", "evening", "fullday"];
-    return (["morning", "evening", "fullday"] as const).filter((s) => a[s]);
+    const sessions: string[] = [];
+    if (a.morning) sessions.push("morning");
+    if (a.evening) sessions.push("evening");
+    if (a.fullday && a.morning && a.evening) sessions.push("fullday");
+    return sessions;
   }
 
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
@@ -194,6 +214,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setContactEmail(draft.contactEmail);
         setContactNik(draft.contactNik);
         setContactKtpAddress(draft.contactKtpAddress);
+        setContactBitrixId(draft.contactBitrixId ?? "");
         setNoteDateEvent(draft.noteDateEvent);
         setSigningLocation(draft.signingLocation);
         setSpecialBonusName(draft.specialBonusName);
@@ -210,7 +231,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setBonuses([]); setTerms(makeDefaultTerms());
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
         setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
-        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setNoteDateEvent(""); setCustomerName("");
+        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName("");
         sigSalesRef.current?.clear();
       }
     }
@@ -224,13 +245,14 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     draftTimer.current = setTimeout(() => {
       saveDraft({
         currentStep, customerName, contactNumbers, contactEmail, contactNik,
-        contactKtpAddress, noteDateEvent, signingLocation, specialBonusName,
+        contactKtpAddress,
+      contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
         specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice,
         bonuses, terms, formValues: form.getValues(),
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice, bonuses, terms]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice, bonuses, terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBasePrice = () => selectedVariantPrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
@@ -246,10 +268,15 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   };
 
   // eslint-disable-next-line react-hooks/incompatible-library
-  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType"]);
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType);
+  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wVariantId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "packageVariantId"]);
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && (variants.length === 0 || wVariantId));
   const isStep2Complete = getBasePrice() === 0 || getDifference() === 0;
   const isStep3Complete = !!signatureSales && !!signingLocation.trim();
+
+  // Recalc term dates when event date changes
+  useEffect(() => {
+    if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
+  }, [wBookingDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi terlebih dahulu."); return; }
@@ -263,7 +290,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
   };
 
-  const handlePrevious = () => { if (currentStep > 1) setCurrentStep(currentStep - 1); };
+  const handlePrevious = () => { if (currentStep > 1) { if (currentStep === 3) { sigSalesRef.current?.clear(); setSignatureSales(""); } setCurrentStep(currentStep - 1); } };
 
   async function onSubmit(values: BookingInput) {
     const payload: BookingInput = {
@@ -274,6 +301,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       contactEmail,
       contactNik,
       contactKtpAddress,
+      contactBitrixId,
       specialBonusName: specialBonusName || null,
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
@@ -340,6 +368,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                           if (c.email) setContactEmail(c.email);
                           if (c.nikNumber) setContactNik(c.nikNumber);
                           if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
+                          if (c.bitrixId) setContactBitrixId(c.bitrixId);
                           if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
                         }
                       }}
@@ -423,6 +452,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Alamat (sesuai KTP)</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} rows={3} className="mt-1" />
+                  </div>
+
+                  {/* Bitrix ID */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Bitrix ID</FormLabel>
+                    <Input placeholder="e.g. 12345" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} className="mt-1" />
                   </div>
 
                   {/* Venue */}
@@ -642,7 +677,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-gray-700', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
                             />
                             {terms.length > 1 && (
-                              <button type="button" onClick={() => setTerms((prev) => prev.filter((_, i) => i !== idx))} className={cn('text-red-400', 'hover:text-red-600', 'shrink-0')}>
+                              <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), wBookingDate))} className={cn('text-red-400', 'hover:text-red-600', 'shrink-0')}>
                                 <Trash2 className={cn('h-3.5', 'w-3.5')} />
                               </button>
                             )}
@@ -697,7 +732,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
                     {/* Add button */}
                     <div className={cn('flex', 'gap-2', 'mt-4')}>
-                      <Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => [...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }])}>
+                      <Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }], wBookingDate))}>
                         Tambah Payment
                       </Button>
                     </div>

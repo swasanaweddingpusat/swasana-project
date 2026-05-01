@@ -43,16 +43,17 @@ export function SearchableSelect({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const selectedOption = options.find((o) => o.id === value);
+  const safeOptions = Array.isArray(options) ? options : [];
+  const selectedOption = safeOptions.find((o) => o.id === value);
 
-  const filtered = options.filter((o) =>
+  const filtered = safeOptions.filter((o) =>
     o.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const showAddButton =
     onAdd &&
     search.trim() &&
-    !options.some((o) => o.name.toLowerCase() === search.trim().toLowerCase());
+    !safeOptions.some((o) => o.name.toLowerCase() === search.trim().toLowerCase());
 
   const [pos, setPos] = React.useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
   const portalRef = React.useRef<HTMLDivElement>(null);
@@ -133,11 +134,11 @@ export function SearchableSelect({
       )}
     >
       {!pos.openUp && (
-        <div className="flex items-center border-b px-3">
-          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+        <div className={cn('flex', 'items-center', 'border-b', 'px-3')}>
+          <Search className={cn('mr-2', 'h-4', 'w-4', 'shrink-0', 'opacity-50')} />
           <input
             ref={inputRef}
-            className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+            className={cn('flex', 'h-10', 'w-full', 'bg-transparent', 'py-3', 'text-sm', 'outline-none', 'placeholder:text-muted-foreground')}
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -147,22 +148,22 @@ export function SearchableSelect({
           />
         </div>
       )}
-      <div className="max-h-50 overflow-y-auto p-1">
+      <div className={cn('max-h-50', 'overflow-y-auto', 'p-1')}>
         {filtered.length === 0 && !showAddButton && (
-          <p className="py-4 text-center text-sm text-muted-foreground">{emptyText}</p>
+          <p className={cn('py-4', 'text-center', 'text-sm', 'text-muted-foreground')}>{emptyText}</p>
         )}
         {filtered.map((opt) => (
           <div
             key={opt.id}
-            className="flex items-center justify-between rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+            className={cn('flex', 'items-center', 'justify-between', 'rounded-sm', 'px-2', 'py-1.5', 'text-sm', 'cursor-pointer', 'hover:bg-accent', 'hover:text-accent-foreground')}
             onMouseDown={(e) => { e.preventDefault(); handleSelect(opt.id); }}
           >
-            <div className="flex items-center min-w-0">
+            <div className={cn('flex', 'items-center', 'min-w-0')}>
               <Check className={cn("mr-2 h-4 w-4 shrink-0", value === opt.id ? "opacity-100" : "opacity-0")} />
               <span className="truncate">{opt.name}</span>
             </div>
             {opt.badge && (
-              <span className="ml-2 shrink-0 text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-500">
+              <span className={cn('ml-2', 'shrink-0', 'text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'text-gray-500')}>
                 {opt.badge}
               </span>
             )}
@@ -170,7 +171,7 @@ export function SearchableSelect({
         ))}
         {showAddButton && (
           <div
-            className="flex items-center rounded-sm px-2 py-1.5 text-sm cursor-pointer text-blue-600 hover:bg-accent"
+            className={cn('flex', 'items-center', 'rounded-sm', 'px-2', 'py-1.5', 'text-sm', 'cursor-pointer', 'text-blue-600', 'hover:bg-accent')}
             onMouseDown={(e) => { e.preventDefault(); handleAdd(); }}
           >
             {isAdding ? addingLabel : `+ Tambah "${search.trim()}"`}
@@ -178,11 +179,11 @@ export function SearchableSelect({
         )}
       </div>
       {pos.openUp && (
-        <div className="flex items-center border-t px-3">
-          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+        <div className={cn('flex', 'items-center', 'border-t', 'px-3')}>
+          <Search className={cn('mr-2', 'h-4', 'w-4', 'shrink-0', 'opacity-50')} />
           <input
             ref={inputRef}
-            className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+            className={cn('flex', 'h-10', 'w-full', 'bg-transparent', 'py-3', 'text-sm', 'outline-none', 'placeholder:text-muted-foreground')}
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

@@ -42,9 +42,11 @@ interface ApprovalDialogProps {
   packageName: string;
   userProfileId: string;
   userRoleId: string | null;
+  isSuperAdmin?: boolean;
+  module?: string;
 }
 
-export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId, userRoleId }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId, userRoleId, isSuperAdmin, module = "package" }: ApprovalDialogProps) {
   const [record, setRecord] = useState<ApprovalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [signature, setSignature] = useState<string | null>(null);
@@ -56,11 +58,11 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
   const fetchRecord = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/approval-records?module=package&entityId=${packageId}`);
+      const res = await fetch(`/api/approval-records?module=${module}&entityId=${packageId}`);
       if (res.ok) setRecord(await res.json());
     } catch { /* ignore */ }
     setLoading(false);
-  }, [packageId]);
+  }, [module, packageId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -69,6 +71,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
 
   const activeStep = record?.steps.find((s) => s.status === "pending");
   const canApprove = activeStep && (
+    isSuperAdmin ||
     (activeStep.approverType === "role" && activeStep.approverRoleId === userRoleId) ||
     (activeStep.approverType === "user" && activeStep.approverUserId === userProfileId)
   );
@@ -134,7 +137,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                   </div>
                   <div className={cn('flex-1', 'min-w-0')}>
                     <p className={cn('text-sm', 'font-medium')}>
-                      Step {step.stepOrder}: {step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName}
+                      Step {step.stepOrder}: {step.approverType === "client" ? `Client — ${packageName}` : step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName}
                     </p>
                     {step.status === "approved" && step.decidedBy && (
                       <p className={cn('text-xs', 'text-muted-foreground')}>Disetujui oleh {step.decidedBy.fullName} {step.decidedAt ? `· ${new Date(step.decidedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</p>

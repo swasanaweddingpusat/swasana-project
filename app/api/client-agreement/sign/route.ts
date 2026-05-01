@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
+import { createBookingRevision } from "@/lib/booking-revision";
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
@@ -104,6 +106,19 @@ export async function POST(req: Request) {
           ]);
         }
       }
+    }
+
+    await logAudit({
+      action: "client_signed",
+      entityType: "booking",
+      entityId: agreement.bookingId,
+      description: `Client agreement ditandatangani oleh ${signerName ?? "Client"}`,
+    });
+
+    // Create revision snapshot with client signature included
+    const bookingForRev = await db.booking.findUnique({ where: { id: agreement.bookingId }, select: { salesId: true } });
+    if (bookingForRev) {
+      await createBookingRevision(agreement.bookingId, bookingForRev.salesId, `Client signed — ${signerName ?? "Client"}`);
     }
 
     return NextResponse.json({ success: true });

@@ -10,6 +10,7 @@ export const bookingSchema = z.object({
   contactEmail: z.string().optional().default(""),
   contactNik: z.string().optional().default(""),
   contactKtpAddress: z.string().optional().default(""),
+  contactBitrixId: z.string().optional().default(""),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().min(1, "Package wajib dipilih"),
   packageVariantId: z.string().optional().nullable(),
@@ -65,6 +66,7 @@ export const editBookingSchema = z.object({
   contactEmail: z.string().optional().default(""),
   contactNik: z.string().optional().default(""),
   contactKtpAddress: z.string().optional().default(""),
+  contactBitrixId: z.string().optional().default(""),
   bonuses: z.array(z.object({
     vendorId: z.string().min(1),
     vendorCategoryId: z.string().min(1),
@@ -73,6 +75,16 @@ export const editBookingSchema = z.object({
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
   })).optional().default([]),
+  termOfPayments: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    amount: z.coerce.number().min(0),
+    dueDate: z.string().min(1),
+    sortOrder: z.coerce.number().int().default(0),
+  })).optional().default([]),
+  specialBonusName: z.string().optional().nullable(),
+  specialBonusAmount: z.coerce.number().optional().nullable(),
+  signatureSales: z.string().optional().nullable(),
 });
 
 export const approveBookingSchema = z.object({

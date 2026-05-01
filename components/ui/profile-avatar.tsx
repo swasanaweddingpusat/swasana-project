@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import { getAvatarColor, getUserInitials } from '@/lib/avatar-utils';
 import Image from 'next/image';
+import { cn } from "../../lib/utils";
 
 interface ProfileAvatarProps {
   name: string;
@@ -43,7 +44,7 @@ export const ProfileAvatar = React.memo(function ProfileAvatar({
       <Image
         src={src}
         alt={`${name}'s profile`}
-        className="w-full h-full object-cover"
+        className={cn('w-full', 'h-full', 'object-cover')}
         onError={handleImageError}
         width={100}
         height={100}
