@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/validations/booking";
 import { getNextSequence } from "@/lib/counter";
+import { createBookingRevision } from "@/lib/booking-revision";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -33,6 +34,7 @@ export async function createBooking(data: unknown) {
           email: input.contactEmail || "-@placeholder.com",
           nikNumber: input.contactNik || null,
           ktpAddress: input.contactKtpAddress || null,
+          bitrixId: input.contactBitrixId || null,
           type: "Other",
           memberStatus: "Non-Member",
           updatedBy: session!.user.name ?? session!.user.email,
@@ -49,6 +51,7 @@ export async function createBooking(data: unknown) {
       if (input.contactEmail) updates.email = input.contactEmail;
       if (input.contactNik) updates.nikNumber = input.contactNik;
       if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
+      if (input.contactBitrixId) updates.bitrixId = input.contactBitrixId;
       if (Object.keys(updates).length > 0) {
         updates.updatedBy = session!.user.name ?? session!.user.email;
         await db.customer.update({ where: { id: customerId }, data: updates });
@@ -117,6 +120,8 @@ export async function createBooking(data: unknown) {
           weddingSession: input.weddingSession ?? null,
           weddingType: input.weddingType ?? null,
           signingLocation: input.signingLocation ?? null,
+          discountName: input.specialBonusName ?? null,
+          discountAmount: input.specialBonusAmount ?? 0,
           poNumber,
           signatures: input.signatureSales
             ? { sales: { signature: input.signatureSales, signedAt: new Date().toISOString() } }
@@ -158,7 +163,8 @@ export async function createBooking(data: unknown) {
     ];
 
     if (variant) {
-      const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+      const variantBase = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+      const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
       ops.push(
         db.snapPackageVariant.create({
           data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
@@ -255,6 +261,9 @@ export async function createBooking(data: unknown) {
       changes: { customerId, venueId: input.venueId, packageId: input.packageId },
       description: `Created booking for ${customer.name}`,
     });
+
+    // Create initial PO revision snapshot
+    await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
@@ -405,18 +414,25 @@ export async function editBooking(data: unknown) {
   const parsed = editBookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { id, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, ...rest } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, ...rest } = parsed.data;
 
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true },
+      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
     const variantChanged = rest.packageVariantId !== booking.packageVariantId;
+
+    // Fetch old snap names for activity log (before transaction overwrites them)
+    const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
+      db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
+      db.snapPackage.findUnique({ where: { bookingId: id }, select: { packageName: true } }),
+      db.snapPackageVariant.findUnique({ where: { bookingId: id }, select: { variantName: true, pax: true, price: true } }),
+    ]);
 
     const ops: any[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
       // Update booking
@@ -432,6 +448,9 @@ export async function editBooking(data: unknown) {
           weddingSession: rest.weddingSession ?? null,
           weddingType: rest.weddingType ?? null,
           signingLocation: rest.signingLocation ?? null,
+          discountName: rest.specialBonusName ?? null,
+          discountAmount: rest.specialBonusAmount ?? 0,
+          ...(rest.signatureSales ? { signatures: { sales: { signature: rest.signatureSales, signedAt: new Date().toISOString() } } } : {}),
         },
       }),
       // Update customer snapshot
@@ -454,6 +473,7 @@ export async function editBooking(data: unknown) {
           email: contactEmail || "-@placeholder.com",
           nikNumber: contactNik || null,
           ktpAddress: contactKtpAddress || null,
+          bitrixId: contactBitrixId || null,
           updatedBy: session!.user.name ?? session!.user.email,
         },
       }),
@@ -495,7 +515,8 @@ export async function editBooking(data: unknown) {
           where: { id: rest.packageVariantId },
           include: { vendorItems: true, internalItems: true, categoryPrices: true },
         });
-        const variantPrice = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+        const variantBase = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+        const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
 
         // Upsert variant snapshot
         ops.push(
@@ -533,14 +554,126 @@ export async function editBooking(data: unknown) {
       ));
     }
 
+    // Upsert term of payments (only when significant change triggers step 2)
+    if ((venueChanged || packageChanged || variantChanged) && rest.termOfPayments && rest.termOfPayments.length > 0) {
+      const existingTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
+      // Delete terms not in the new list
+      await db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: existingTermIds } } });
+      // Upsert each term
+      for (const t of rest.termOfPayments) {
+        if (t.id) {
+          await db.termOfPayment.update({ where: { id: t.id }, data: { name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
+        } else {
+          await db.termOfPayment.create({ data: { bookingId: id, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
+        }
+      }
+    }
+
+    // Append new approval round — only when package/venue/variant changed
+    if (venueChanged || packageChanged || variantChanged) {
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: id } },
+      include: { steps: { orderBy: { stepOrder: "asc" } } },
+    });
+    if (approvalRecord) {
+      const maxStepOrder = approvalRecord.steps.reduce((max, s) => Math.max(max, s.stepOrder), 0);
+
+      // Get flow template for new steps
+      const flow = await db.approvalFlow.findUnique({
+        where: { module: "booking" },
+        include: { steps: { orderBy: { sortOrder: "asc" } } },
+      });
+
+      if (flow) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newStepOps: any[] = flow.steps.map((flowStep, i) => {
+          const stepOrder = maxStepOrder + 1 + i;
+          const isSalesStep = i === 0 && flowStep.approverType !== "client";
+          return db.approvalRecordStep.create({
+            data: {
+              recordId: approvalRecord.id,
+              stepOrder,
+              approverType: flowStep.approverType,
+              approverRoleId: flowStep.approverRoleId,
+              approverUserId: flowStep.approverUserId,
+              status: isSalesStep ? "approved" : "pending",
+              decidedById: isSalesStep ? session!.user.profileId : null,
+              decidedAt: isSalesStep ? new Date() : null,
+              signature: isSalesStep ? (rest.signatureSales ?? null) : null,
+            },
+          });
+        });
+
+        await db.$transaction([
+          db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
+          db.booking.update({ where: { id }, data: { bookingStatus: "Pending" } }),
+          ...newStepOps,
+        ]);
+      }
+
+      // Reset client agreement so client can sign again
+      await db.clientAgreement.updateMany({
+        where: { bookingId: id },
+        data: { status: "Pending", signedAt: null, viewedAt: null },
+      });
+    }
+    } // end if venueChanged || packageChanged || variantChanged
+
     await logAudit({
       userId: session!.user.id,
       action: "updated",
       entityType: "booking",
       entityId: id,
-      changes: { venueId: rest.venueId, packageId: rest.packageId, bookingDate: rest.bookingDate },
+      changes: await (async () => {
+        const diff: Record<string, unknown> = {};
+        const fmtNum = (n: number) => `Rp${new Intl.NumberFormat("id-ID").format(n)}`;
+        const fmtContact = (raw: string) => { try { const arr = JSON.parse(raw) as Array<{name?: string; number: string}>; return arr.map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { return raw; } };
+
+        if (customerName !== (booking.snapCustomer?.name ?? "")) diff.customerName = customerName;
+        const oldContact = booking.snapCustomer?.mobileNumber ?? "";
+        const newContact = contactNumbers ? fmtContact(contactNumbers) : "";
+        if (newContact !== oldContact) diff.contactNumbers = newContact;
+        if (contactEmail !== (booking.snapCustomer?.email ?? "")) diff.email = contactEmail;
+        if (rest.bookingDate !== booking.bookingDate.toISOString().split("T")[0]) diff.bookingDate = rest.bookingDate;
+        if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
+        if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
+
+        if (venueChanged || packageChanged || variantChanged) {
+          // New snap values (already updated by transaction)
+          const [newSnapV, newSnapP, newSnapPV] = await Promise.all([
+            db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
+            db.snapPackage.findUnique({ where: { bookingId: id }, select: { packageName: true } }),
+            db.snapPackageVariant.findUnique({ where: { bookingId: id }, select: { variantName: true, pax: true, price: true } }),
+          ]);
+          if (venueChanged) diff.venue = `${oldSnapVenue?.venueName ?? "—"} → ${newSnapV?.venueName ?? rest.venueId}`;
+          if (packageChanged) diff.package = `${oldSnapPackage?.packageName ?? "—"} → ${newSnapP?.packageName ?? rest.packageId}`;
+          if (variantChanged) {
+            const oldV = oldSnapVariant ? `${oldSnapVariant.variantName} · ${oldSnapVariant.pax} PAX · ${fmtNum(oldSnapVariant.price)}` : "—";
+            const newV = newSnapPV ? `${newSnapPV.variantName} · ${newSnapPV.pax} PAX · ${fmtNum(newSnapPV.price)}` : "—";
+            diff.variant = `${oldV} → ${newV}`;
+          }
+          const discount = rest.specialBonusAmount ?? 0;
+          const oldDiscount = booking.discountAmount ?? 0;
+          if (discount !== oldDiscount) {
+            diff.discount = `${fmtNum(oldDiscount)} → ${rest.specialBonusName ?? "Discount"}: -${fmtNum(discount)}`;
+            const newPrice = newSnapPV?.price ?? 0;
+            diff.priceAfterDiscount = fmtNum(Math.max(0, newPrice - discount));
+          }
+        }
+
+        return diff;
+      })(),
       description: `Edited booking for ${customerName}`,
     });
+
+    // Create new revision if package/venue/variant changed
+    if (venueChanged || packageChanged || variantChanged) {
+      const reasons: string[] = [];
+      if (venueChanged) reasons.push("venue");
+      if (packageChanged) reasons.push("package");
+      if (variantChanged) reasons.push("variant");
+      await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
+    }
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");

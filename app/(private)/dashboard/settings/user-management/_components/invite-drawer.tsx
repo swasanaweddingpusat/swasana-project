@@ -655,7 +655,7 @@ export function InviteDrawer({
                                       </span>
                                     </div>
                                     {isSelected && managers.length > 0 && (
-                                      <div className={cn('pl-7', 'pr-1')}>
+                                      <div className={cn('mt-1.5')}>
                                         <SearchableSelect
                                           options={[{ id: "", name: "Tanpa manager" }, ...managers.map((m) => ({ id: m.id, name: m.fullName ?? "" }))]}
                                           value={formData.venueManagers[venue.id] ?? ""}

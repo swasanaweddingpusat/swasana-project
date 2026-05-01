@@ -1,22 +1,36 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import type { BookingsResult, BookingDetail } from "@/lib/queries/bookings";
 import { createBooking, updateBooking, deleteBooking, transferBooking } from "@/actions/booking";
 import type { BookingInput, UpdateBookingInput } from "@/lib/validations/booking";
 
-async function fetchBookings(): Promise<BookingsResult> {
-  const res = await fetch("/api/bookings");
+interface BookingsParams {
+  page: number;
+  pageSize: number;
+  search: string;
+}
+
+async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
+  const qs = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+    ...(params.search ? { search: params.search } : {}),
+  });
+  const res = await fetch(`/api/bookings?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch bookings");
   return res.json();
 }
 
-export function useBookings(initialData?: BookingsResult) {
+export function useBookings(params: BookingsParams, initialData?: BookingsResult) {
   return useQuery({
-    queryKey: ["bookings"],
-    queryFn: fetchBookings,
+    queryKey: ["bookings", params.page, params.pageSize, params.search],
+    queryFn: () => fetchBookings(params),
     initialData,
+    placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 }
 

@@ -32,17 +32,29 @@ export async function approveStep(stepId: string, signature: string) {
     const allPrevApproved = prevSteps.every((s) => s.status === "approved");
     if (!allPrevApproved) return { success: false as const, error: "Step sebelumnya belum disetujui" };
 
-    const allSteps = await db.approvalRecordStep.findMany({ where: { recordId: step.recordId } });
-    const allApproved = allSteps.every((s) => s.id === stepId ? true : s.status === "approved");
+    const allSteps = await db.approvalRecordStep.findMany({ where: { recordId: step.recordId }, orderBy: { stepOrder: "asc" } });
+
+    // Super Admin: approve all pending non-client steps at once
+    const superAdminRole = await db.role.findUnique({ where: { name: "Super Admin" }, select: { id: true } });
+    const isSuperAdmin = !!(superAdminRole && session.user.roleId === superAdminRole.id);
+
+    const stepsToApprove = isSuperAdmin
+      ? allSteps.filter((s) => s.status === "pending" && s.approverType !== "client")
+      : [step];
+
+    const allApprovedAfter = allSteps.every((s) =>
+      stepsToApprove.some((a) => a.id === s.id) ? true : s.status === "approved"
+    );
 
     await db.$transaction(async (tx) => {
-      // Approve step
-      await tx.approvalRecordStep.update({
-        where: { id: stepId },
-        data: { status: "approved", decidedById: session.user.profileId, decidedAt: new Date(), signature },
-      });
+      for (const s of stepsToApprove) {
+        await tx.approvalRecordStep.update({
+          where: { id: s.id },
+          data: { status: "approved", decidedById: session.user.profileId, decidedAt: new Date(), signature },
+        });
+      }
 
-      if (allApproved) {
+      if (allApprovedAfter) {
         await tx.approvalRecord.update({ where: { id: step.recordId }, data: { status: "approved" } });
         if (step.record.module === "package") {
           await tx.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } });
@@ -53,11 +65,13 @@ export async function approveStep(stepId: string, signature: string) {
       }
     });
 
-    const nextStep = allSteps.find((s) => s.stepOrder === step.stepOrder + 1 && s.status === "pending");
-    if (nextStep) {
-      await notifyApprover(nextStep, step.record.module, step.record.entityId);
+    if (!allApprovedAfter) {
+      const nextStep = allSteps.find((s) => s.status === "pending" && !stepsToApprove.some((a) => a.id === s.id));
+      if (nextStep) {
+        await notifyApprover(nextStep, step.record.module, step.record.entityId);
+      }
     }
-    await notifyCreator(step.record, `Step ${step.stepOrder} disetujui`, allApproved ? "approved" : undefined);
+    await notifyCreator(step.record, isSuperAdmin ? `Semua step disetujui oleh ${session.user.name ?? "Super Admin"}` : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`, allApprovedAfter ? "approved" : undefined);
 
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
@@ -105,7 +119,7 @@ export async function rejectStep(stepId: string, notes: string) {
       }
     });
 
-    await notifyCreator(step.record, `Ditolak: ${notes.trim()}`);
+    await notifyCreator(step.record, `Ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`);
 
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");

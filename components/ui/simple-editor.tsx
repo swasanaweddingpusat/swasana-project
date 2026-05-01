@@ -69,22 +69,22 @@ export function SimpleEditor({ value, onChange, placeholder, className }: Simple
 
   return (
     <div className={cn("border border-[#CCCCCC] rounded-md bg-[#F9F9F9] overflow-hidden", className)}>
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[#CCCCCC] bg-white">
+      <div className={cn('flex', 'items-center', 'gap-0.5', 'px-2', 'py-1.5', 'border-b', 'border-[#CCCCCC]', 'bg-white')}>
         <ToolbarButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold">
-          <Bold className="h-4 w-4" />
+          <Bold className={cn('h-4', 'w-4')} />
         </ToolbarButton>
         <ToolbarButton active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic">
-          <Italic className="h-4 w-4" />
+          <Italic className={cn('h-4', 'w-4')} />
         </ToolbarButton>
         <ToolbarButton active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline">
-          <UnderlineIcon className="h-4 w-4" />
+          <UnderlineIcon className={cn('h-4', 'w-4')} />
         </ToolbarButton>
-        <div className="w-px h-5 bg-gray-300 mx-1" />
+        <div className={cn('w-px', 'h-5', 'bg-gray-300', 'mx-1')} />
         <ToolbarButton active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet List">
-          <List className="h-4 w-4" />
+          <List className={cn('h-4', 'w-4')} />
         </ToolbarButton>
         <ToolbarButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numbered List">
-          <ListOrdered className="h-4 w-4" />
+          <ListOrdered className={cn('h-4', 'w-4')} />
         </ToolbarButton>
       </div>
       <EditorContent editor={editor} />

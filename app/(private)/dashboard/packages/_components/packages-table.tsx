@@ -298,11 +298,16 @@ export function PackagesTable() {
                           const steps = record.steps;
                           return (
                             <DropdownMenu>
+                              <Tooltip>
                               <DropdownMenuTrigger asChild>
-                                <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} title="Approval">
+                                <TooltipTrigger
+                                  className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                                >
                                   <ClipboardCheck className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                                </button>
+                                </TooltipTrigger>
                               </DropdownMenuTrigger>
+                              <TooltipContent>Approval</TooltipContent>
+                              </Tooltip>
                               <DropdownMenuContent align="end">
                                 {steps.map((step) => {
                                   const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
@@ -419,6 +424,7 @@ export function PackagesTable() {
           packageName={approvalPkg.packageName}
           userProfileId={user.profileId}
           userRoleId={user.roleId}
+          isSuperAdmin={user.roleName?.toLowerCase() === "super admin"}
         />
       )}
 

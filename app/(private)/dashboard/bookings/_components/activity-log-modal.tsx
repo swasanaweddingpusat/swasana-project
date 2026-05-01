@@ -57,8 +57,9 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
     if (!open || !bookingId) return;
     const id = ++fetchIdRef.current;
 
+    setLoading(true);
     fetch(`/api/bookings/${bookingId}/activity-logs`)
-      .then((r) => { if (id === fetchIdRef.current) setLoading(true); return r.json(); })
+      .then((r) => r.json())
       .then((data) => { if (id === fetchIdRef.current) setLogs(data ?? []); })
       .catch(() => { if (id === fetchIdRef.current) setLogs([]); })
       .finally(() => { if (id === fetchIdRef.current) setLoading(false); });

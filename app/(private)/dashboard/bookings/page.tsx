@@ -4,6 +4,7 @@ import { BookingsTable } from "./_components/bookings-table";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { DataScope } from "@/types/user";
+import { requirePagePermission } from "@/lib/require-page-permission";
 
 export const metadata: Metadata = {
   title: "Bookings",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function BookingsPage() {
+  await requirePagePermission("booking");
   const session = await auth();
   const profileId = session?.user?.profileId ?? undefined;
   let dataScope: DataScope = "own";

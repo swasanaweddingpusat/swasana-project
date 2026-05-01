@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { toast } from "sonner";
 import SignatureCanvas from "react-signature-canvas";
 import { format } from "date-fns";
@@ -9,9 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, ListChecks, Palette, MessageSquare } from "lucide-react";
+import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, Palette, MessageSquare, ClipboardCheck } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
@@ -20,9 +20,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { approveCategoryPO } from "@/actions/catering-approval";
 import { UploadDocumentModal } from "./upload-document-modal";
-import { EditTopDrawer } from "./edit-top-drawer";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
+import { EditTopDrawer } from "./edit-top-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { SetVendorDrawer } from "./set-vendor-drawer";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,9 +32,10 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { Drawer } from "@/components/shared/drawer";
+import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
+import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
-
-const ROWS_PER_PAGE = 10;
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-green-500",
@@ -81,16 +82,35 @@ function fmtRp(n: unknown) {
   return `Rp ${new Intl.NumberFormat("id-ID").format(Number(n))}`;
 }
 
+
+const ROWS_PER_PAGE = 10;
+
 export function BookingsTable({ initialData, salesProfiles }: { initialData: BookingsResult; salesProfiles: SalesProfile[] }) {
-  const { data: bookings = initialData, refetch, isFetching } = useBookings(initialData);
   const qc = useQueryClient();
   const deleteMut = useDeleteBooking();
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
+  const { user } = useCurrentUser();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setCurrentPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: result = initialData, refetch, isFetching } = useBookings(
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch },
+    initialData,
+  );
+  const bookings = result.data;
+  const totalBookings = result.total;
+  const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
+  const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; bookingName: string } | null>(null);
+  const [approvalDialogTarget, setApprovalDialogTarget] = useState<BookingListItem | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
@@ -100,7 +120,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [lostReason, setLostReason] = useState("");
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
   const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
-  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
   const [transferSalesId, setTransferSalesId] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
@@ -115,7 +134,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [decorationTarget, setDecorationTarget] = useState<string | null>(null);
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
+  const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; variantName: string | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
 
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
@@ -128,25 +149,33 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   });
   const approvalMap = new Map(bookingApprovals.map((r) => [r.entityId, r]));
 
-  const filtered = bookings.filter((b: BookingListItem) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      (b.snapCustomer?.name ?? "").toLowerCase().includes(q) ||
-      (b.snapCustomer?.mobileNumber ?? "").toLowerCase().includes(q) ||
-      (b.snapVenue?.venueName ?? "").toLowerCase().includes(q) ||
-      (b.snapPackage?.packageName ?? "").toLowerCase().includes(q) ||
-      (b.sales?.fullName ?? "").toLowerCase().includes(q) ||
-      (b.bookingStatus ?? "").toLowerCase().includes(q) ||
-      (b.poNumber ?? "").toLowerCase().includes(q) ||
-      (b.paymentMethod?.bankName ?? "").toLowerCase().includes(q) ||
-      (b.sourceOfInformation?.name ?? "").toLowerCase().includes(q)
-    );
-  });
+  async function generatePO(bookingId: string, revisionId?: string) {
+    setIsGeneratingPO(bookingId);
+    const t = toast.loading("Membuat PDF...");
+    try {
+      const res = await fetch("/api/render-po", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, revisionId }) });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      toast.success("PDF siap!", { id: t });
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch {
+      toast.error("Gagal membuat PDF", { id: t });
+    } finally {
+      setIsGeneratingPO(null);
+    }
+  }
 
-  const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-  const paginated = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
-  const { data: unreadCounts = {} } = useUnreadCommentCounts(paginated.map((b: BookingListItem) => b.id));
+  function fetchRevisions(bookingId: string) {
+    if (revisionCache[bookingId]) return;
+    fetch(`/api/bookings/${bookingId}/revisions`).then((r) => r.json()).then((data) => {
+      if (Array.isArray(data)) setRevisionCache((p) => ({ ...p, [bookingId]: data }));
+    }).catch(() => {});
+  }
+
+
+  const { data: unreadCounts = {} } = useUnreadCommentCounts(bookings.map((b: BookingListItem) => b.id));
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -165,9 +194,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <div className={cn('flex', 'items-center', 'gap-3')}>
               <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Wedding Bookings</h2>
               <span className={cn('text-gray-700', 'text-sm', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'px-3', 'py-1')}>
-                {filtered.length} {search ? `dari ${bookings.length}` : "Bookings"}
+                {totalBookings} Bookings
               </span>
-              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
+              <Button variant="ghost" size="sm" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
                 <span className="text-xs">Refresh</span>
               </Button>
@@ -175,16 +204,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2')}>
               <div className={cn('relative', 'flex-1', 'sm:flex-none')}>
                 <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
-                <Input placeholder="Cari booking..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} className={cn('pl-9', 'w-full', 'sm:w-55')} />
+                <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn('pl-9', 'w-full', 'sm:w-55')} />
               </div>
-              <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
+              <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               </Button>
             </div>
           </div>
 
           {/* Table */}
-          {filtered.length === 0 ? (
+          {bookings.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-gray-400')}>
               <CalendarDays className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
@@ -205,13 +234,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginated.map((booking: BookingListItem, idx: number) => (
+                  {bookings.map((booking: BookingListItem, idx: number) => (
                     <TableRow key={booking.id} className={cn('hover:bg-gray-50', 'cursor-pointer')} onClick={() => setDetailTarget(booking.id)}>
                       <TableCell className={cn('px-2', 'py-2', 'text-center', 'hidden', 'sm:table-cell')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
 
                       {/* Customer cell */}
                       <TableCell className={cn('px-2', 'py-2')}>
-                        <div className="overflow-hidden">
+                        <div className="overflow-hidden max-w-0 min-w-full">
                           <p className={cn('text-sm', 'font-medium', 'text-gray-900', 'truncate')}>{booking.snapCustomer?.name ?? "—"}</p>
                           <Tooltip>
                             <TooltipTrigger className="block truncate w-full text-left text-xs text-gray-400 mt-0.5">
@@ -290,7 +319,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           {booking.snapPackageVariant && (
                             <>
                               <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.variantName}</span>
-                              <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.pax} PAX · {fmtRp(booking.snapPackageVariant.price)}</span>
+                              <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackageVariant.price) - (booking.discountAmount ?? 0)))}</span>
                             </>
                           )}
                         </div>
@@ -319,7 +348,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           return (
                             <button
                               type="button"
-                              
+                              onClick={() => setApprovalDialogTarget(booking)}
                               className={cn(
                                 "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
                                 record.status === "approved" && "bg-primary text-primary-foreground",
@@ -448,6 +477,51 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             </Button>
                           </PermissionGate>
 
+                          {/* Booking Approval dropdown */}
+                          {approvalMap.has(booking.id) && (() => {
+                            const record = approvalMap.get(booking.id)!;
+                            const steps = record.steps;
+                            const nonClientSteps = steps.filter((s) => s.approverType !== "client");
+                            if (nonClientSteps.every((s) => s.status === "approved")) return null;
+                            return (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} title="Approval">
+                                    <ClipboardCheck className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {steps.filter((s) => s.approverType !== "client").map((step) => {
+                                    const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+                                    const isApproved = step.status === "approved";
+                                    const isRejected = step.status === "rejected";
+                                    const isPending = step.status === "pending";
+                                    const canAct = isPending && (
+                                      isAdmin ||
+                                      (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
+                                      (step.approverType === "user" && step.approverUserId === user?.profileId)
+                                    );
+                                    const prevDone = steps.filter((s) => s.stepOrder < step.stepOrder).every((s) => s.status === "approved");
+                                    return (
+                                      <DropdownMenuItem
+                                        key={step.id}
+                                        className="cursor-pointer"
+                                        disabled={isApproved || isRejected || (isPending && (!canAct || !prevDone))}
+                                        onClick={() => {
+                                          if (canAct && prevDone) {
+                                            setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", bookingName: booking.snapCustomer?.name ?? "Booking" });
+                                          }
+                                        }}
+                                      >
+                                        {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            );
+                          })()}
+
                           {/* More actions dropdown */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -459,20 +533,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
                                 <Eye className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
                               </DropdownMenuItem>
-                              {(() => {
-                                const record = approvalMap.get(booking.id);
-                                if (!record) return null;
-                                return record.steps.map((step) => {
-                                  const label = step.approverType === "client" ? "Client" : step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
-                                  const isApproved = step.status === "approved";
-                                  const isRejected = step.status === "rejected";
-                                  return (
-                                    <DropdownMenuItem key={step.id} disabled className={cn('cursor-default', 'text-xs')}>
-                                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `⏳ ${label}`}
-                                    </DropdownMenuItem>
-                                  );
-                                });
-                              })()}
                               <DropdownMenuSeparator />
                               {can("booking", "edit") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
@@ -488,28 +548,26 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
                               </DropdownMenuItem>
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-                                <ListChecks className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
+                                <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
                               </DropdownMenuItem>
+
                               {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
-                                <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={async () => {
-                                  setIsGeneratingPO(booking.id);
-                                  const t = toast.loading("Membuat PDF...");
-                                  try {
-                                    const res = await fetch("/api/render-po", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId: booking.id }) });
-                                    if (!res.ok) throw new Error();
-                                    const blob = await res.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    toast.success("PDF siap!", { id: t });
-                                    window.open(url, "_blank");
-                                    setTimeout(() => URL.revokeObjectURL(url), 10000);
-                                  } catch {
-                                    toast.error("Gagal membuat PDF", { id: t });
-                                  } finally {
-                                    setIsGeneratingPO(null);
-                                  }
-                                }}>
-                                  <Printer className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
-                                </DropdownMenuItem>
+                                <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
+                                  <DropdownMenuSubTrigger className="cursor-pointer">
+                                    <Printer className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id)}>
+                                      Cetak Terbaru (Live)
+                                    </DropdownMenuItem>
+                                    {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
+                                    {(revisionCache[booking.id] ?? []).map((rev) => (
+                                      <DropdownMenuItem key={rev.id} className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id, rev.id)}>
+                                        <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.variantName ? ` (${rev.variantName})` : ""}</span>
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                               )}
                               {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
                               {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
@@ -827,6 +885,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
+
       {/* Edit TOP Drawer */}
       {topTarget && (
         <EditTopDrawer
@@ -839,8 +898,39 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder,
             paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
             paymentEvidence: t.paymentEvidence ?? null, notes: t.notes,
+            partialPayments: "partialPayments" in t ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments : undefined,
           }))}
           packagePrice={Number(topTarget.snapPackageVariant?.price ?? 0)}
+          discountName={topTarget.discountName ?? null}
+          discountAmount={topTarget.discountAmount ?? 0}
+        />
+      )}
+
+      {/* Booking Approval Dialog (from chip) */}
+      {approvalDialogTarget && user && (
+        <ApprovalDialog
+          open={!!approvalDialogTarget}
+          onClose={() => { setApprovalDialogTarget(null); qc.invalidateQueries({ queryKey: ["bookings"] }); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+          packageId={approvalDialogTarget.id}
+          packageName={approvalDialogTarget.snapCustomer?.name ?? "Booking"}
+          userProfileId={user.profileId}
+          userRoleId={user.roleId}
+          module="booking"
+        />
+      )}
+
+      {/* Booking Approval Modal */}
+      {approveModal && (
+        <ApproveModal
+          open={!!approveModal}
+          onClose={() => {
+            setApproveModal(null);
+            qc.invalidateQueries({ queryKey: ["bookings"] });
+            qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+          }}
+          stepId={approveModal.stepId}
+          stepLabel={approveModal.stepLabel}
+          packageName={approveModal.bookingName}
         />
       )}
 

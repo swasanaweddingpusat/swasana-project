@@ -14,36 +14,38 @@ const roleData = [
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
+// Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
-  attendance: ["view", "create", "edit", "delete"],
   booking: ["view", "create", "edit", "delete", "print", "approve", "approve_manager", "approve_finance", "approve_operations", "mark_lost", "restore", "transfer", "reject", "comment"],
-  brand_management: ["view", "create", "edit", "delete"],
-  calendar_event: ["view", "create", "edit", "delete"],
-  catering: ["view", "create", "edit", "approve"],
   client_agreement: ["view", "create", "edit"],
   customers: ["view", "create", "edit", "delete"],
-  dashboard: ["view"],
-  decoration: ["view", "create", "edit", "approve"],
   finance: ["view", "create", "edit", "delete"],
-  finance_ap: ["view", "create", "edit", "delete"],
   finance_ar: ["view", "create", "edit", "delete"],
-  hr: ["view", "create", "edit", "delete", "view_all", "approve"],
-  notification: ["view", "manage"],
   package: ["view", "create", "edit", "delete", "set_harga"],
   payment_methods: ["view", "create", "edit", "delete"],
   role_permission: ["view", "create", "edit", "delete"],
   settings: ["view", "create", "edit", "delete"],
   settlement: ["view", "create", "edit", "delete"],
   source_of_information: ["view", "create", "edit", "delete"],
-  user_management: ["view", "create", "edit", "delete"],
   vendor: ["view", "create", "edit", "delete"],
-  venue_management: ["view", "create", "edit", "delete"],
   approval: ["view", "create", "edit"],
 };
 
+// Modules removed (not used in code):
+// - attendance: fitur belum ada
+// - brand_management: redundant, pake settings
+// - calendar_event: gak pake permission check
+// - catering: actions pake booking.edit
+// - dashboard: gak pake requirePagePermission
+// - decoration: actions pake booking.edit
+// - finance_ap: gak ada page/action yang cek
+// - hr: fitur belum ada
+// - notification: gak pake permission check
+// - user_management: redundant, pake settings
+// - venue_management: redundant, pake settings
+
 // ── Role → Permission Matrix ─────────────────────────────────────────
 // "Super Admin" gets ALL permissions (handled separately).
-// "ALL" as value means all actions for that module.
 const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur sales": {
     booking: ["view", "create", "edit", "approve", "approve_manager", "comment", "print"],
@@ -55,10 +57,6 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     finance_ar: ["view"],
     settlement: ["view"],
     client_agreement: ["view", "create", "edit"],
-    dashboard: ["view"],
-    notification: ["view"],
-    catering: ["view"],
-    decoration: ["view"],
     approval: ["view"],
   },
   manager: {
@@ -73,15 +71,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     role_permission: ["view", "edit"],
     finance: ["view"],
     finance_ar: ["view"],
-    finance_ap: ["view"],
-    notification: ["view", "manage"],
-    dashboard: ["view"],
-    catering: ["view", "create", "edit", "approve"],
-    decoration: ["view", "create", "edit", "approve"],
     approval: ["view", "create", "edit"],
-    user_management: ["view", "create", "edit", "delete"],
-    venue_management: ["view", "create", "edit", "delete"],
-    brand_management: ["view", "create", "edit", "delete"],
     source_of_information: ["view", "create", "edit", "delete"],
   },
   "direktur operational": {
@@ -91,10 +81,6 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view", "create", "edit"],
     settings: ["view"],
     settlement: ["view"],
-    dashboard: ["view"],
-    notification: ["view"],
-    catering: ["view", "create", "edit", "approve"],
-    decoration: ["view", "create", "edit", "approve"],
     approval: ["view"],
   },
   operational: {
@@ -103,25 +89,16 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view"],
     settings: ["view"],
-    dashboard: ["view"],
-    notification: ["view"],
-    catering: ["view", "edit"],
-    decoration: ["view", "edit"],
   },
   finance: {
     booking: ["view", "approve_finance", "comment"],
     customers: ["view"],
     package: ["view", "create", "edit", "delete", "set_harga"],
     finance: ["view", "create", "edit", "delete"],
-    finance_ap: ["view", "create", "edit", "delete"],
     finance_ar: ["view", "create", "edit", "delete"],
     payment_methods: ["view", "create", "edit", "delete"],
     settlement: ["view", "create", "edit", "delete"],
     client_agreement: ["view"],
-    dashboard: ["view"],
-    notification: ["view"],
-    catering: ["view", "approve"],
-    decoration: ["view", "approve"],
   },
   sales: {
     booking: ["view", "create", "edit", "comment"],
@@ -130,26 +107,15 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     client_agreement: ["view", "create", "edit"],
     settlement: ["view"],
-    dashboard: ["view"],
-    notification: ["view"],
-    catering: ["view"],
-    decoration: ["view"],
   },
   "vendor specialist": {
     vendor: ["view", "create", "edit", "delete"],
     booking: ["view"],
     package: ["view"],
     settings: ["view"],
-    dashboard: ["view"],
-    notification: ["view"],
   },
   "human resource": {
-    hr: ["view", "create", "edit", "delete", "view_all", "approve"],
     settings: ["view"],
-    attendance: ["view", "create", "edit", "delete"],
-    dashboard: ["view"],
-    notification: ["view"],
-    user_management: ["view"],
   },
 };
 
@@ -160,6 +126,13 @@ function buildPermissionData(): { module: string; action: string }[] {
   );
 }
 
+// Modules that were removed — clean up stale permissions from DB
+const REMOVED_MODULES = [
+  "attendance", "brand_management", "calendar_event", "catering",
+  "dashboard", "decoration", "finance_ap", "hr", "notification",
+  "user_management", "venue_management",
+];
+
 // ── Main Seeder ──────────────────────────────────────────────────────
 export async function seedRolesPermissions(): Promise<void> {
   // 1. Seed roles
@@ -168,7 +141,7 @@ export async function seedRolesPermissions(): Promise<void> {
     if (!existing) await prisma.role.create({ data });
   }
 
-  // 2. Seed permissions (fix typo: approve_oprations → approve_operations)
+  // 2. Seed permissions
   const permissionData = buildPermissionData();
   for (const data of permissionData) {
     const existing = await prisma.permission.findUnique({
@@ -177,7 +150,16 @@ export async function seedRolesPermissions(): Promise<void> {
     if (!existing) await prisma.permission.create({ data });
   }
 
-  // 3. Fix existing typo if present
+  // 3. Clean up stale permissions from removed modules
+  for (const mod of REMOVED_MODULES) {
+    const stalePerms = await prisma.permission.findMany({ where: { module: mod } });
+    for (const perm of stalePerms) {
+      await prisma.rolePermission.deleteMany({ where: { permissionId: perm.id } });
+      await prisma.permission.delete({ where: { id: perm.id } });
+    }
+  }
+
+  // 4. Fix legacy typo if present
   const typo = await prisma.permission.findUnique({
     where: { module_action: { module: "booking", action: "approve_oprations" } },
   });
@@ -188,20 +170,11 @@ export async function seedRolesPermissions(): Promise<void> {
     if (correctExists) {
       await prisma.permission.delete({ where: { id: typo.id } });
     } else {
-      await prisma.permission.update({
-        where: { id: typo.id },
-        data: { action: "approve_operations" },
-      });
+      await prisma.permission.update({ where: { id: typo.id }, data: { action: "approve_operations" } });
     }
   }
-  const hrTypo = await prisma.permission.findUnique({
-    where: { module_action: { module: "hr", action: "approve_oprations" } },
-  });
-  if (hrTypo) {
-    await prisma.permission.delete({ where: { id: hrTypo.id } });
-  }
 
-  // 4. Assign ALL permissions to Super Admin
+  // 5. Assign ALL permissions to Super Admin
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "Super Admin" } });
   const allPermissions = await prisma.permission.findMany();
   for (const perm of allPermissions) {
@@ -211,7 +184,7 @@ export async function seedRolesPermissions(): Promise<void> {
     if (!existing) await prisma.rolePermission.create({ data: { roleId: adminRole.id, permissionId: perm.id } });
   }
 
-  // 5. Assign permissions per role from the matrix
+  // 6. Assign permissions per role from the matrix
   for (const [roleName, modules] of Object.entries(rolePermissionMap)) {
     const role = await prisma.role.findUnique({ where: { name: roleName } });
     if (!role) continue;
