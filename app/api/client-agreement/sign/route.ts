@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { createBookingRevision } from "@/lib/booking-revision";
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
@@ -115,10 +114,32 @@ export async function POST(req: Request) {
       description: `Client agreement ditandatangani oleh ${signerName ?? "Client"}`,
     });
 
-    // Create revision snapshot with client signature included
-    const bookingForRev = await db.booking.findUnique({ where: { id: agreement.bookingId }, select: { salesId: true } });
-    if (bookingForRev) {
-      await createBookingRevision(agreement.bookingId, bookingForRev.salesId, `Client signed — ${signerName ?? "Client"}`);
+    // Update signatures in the latest revision's snapshotData
+    const latestRevision = await db.bookingRevision.findFirst({
+      where: { bookingId: agreement.bookingId },
+      orderBy: { revisionNumber: "desc" },
+      select: { id: true, snapshotData: true },
+    });
+
+    if (latestRevision) {
+      const snap = (latestRevision.snapshotData as Record<string, unknown>) ?? {};
+      await db.bookingRevision.update({
+        where: { id: latestRevision.id },
+        data: {
+          snapshotData: {
+            ...snap,
+            signatures: {
+              ...((snap.signatures as Record<string, unknown>) ?? {}),
+              client: {
+                name: signerName ?? "",
+                role: "client",
+                signature: signatureData,
+                signatureDate: new Date().toISOString(),
+              },
+            },
+          },
+        },
+      });
     }
 
     return NextResponse.json({ success: true });

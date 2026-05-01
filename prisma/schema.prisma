@@ -244,11 +244,12 @@ model UserGroupMember {
 // ─── Venue (dipakai untuk user invitation — assign venue ke user) ─────────────
 
 model Brand {
-  id        String   @id @default(uuid())
-  name      String
-  code      String   @unique
-  createdAt DateTime @default(now())
-  venues    Venue[]
+  id               String   @id @default(uuid())
+  name             String
+  code             String   @unique
+  termAndCondition String?
+  createdAt        DateTime @default(now())
+  venues           Venue[]
 
   @@map("brands")
 }
