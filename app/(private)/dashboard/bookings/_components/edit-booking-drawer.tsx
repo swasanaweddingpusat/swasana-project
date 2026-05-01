@@ -251,7 +251,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       paymentMethodId: paymentMethodId || null,
       sourceOfInformationId: sourceOfInformationId || null,
       weddingSession: (weddingSession as "morning" | "evening" | "fullday") || null,
-      weddingType: (weddingType as "wedding" | "engagement" | "akad" | "resepsi" | "other") || null,
+      weddingType: weddingType || null,
       signingLocation: signingLocation || null,
       customerName, contactNumbers: JSON.stringify(contactNumbers), contactEmail, contactNik, contactKtpAddress, contactBitrixId,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),

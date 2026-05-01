@@ -12,6 +12,7 @@ const snapshotInclude = {
   termOfPayments: { orderBy: { sortOrder: "asc" as const } },
   paymentMethod: true,
   sales: { select: { fullName: true } },
+  manager: { select: { fullName: true } },
 } as const;
 
 export async function createBookingRevision(
@@ -50,6 +51,7 @@ export async function createBookingRevision(
     termOfPayments: booking.termOfPayments,
     paymentMethod: booking.paymentMethod,
     sales: booking.sales,
+    manager: booking.manager,
     discountName: booking.discountName,
     discountAmount: booking.discountAmount,
   };

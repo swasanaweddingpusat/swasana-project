@@ -58,7 +58,7 @@ export async function upsertApprovalFlow(data: unknown) {
       },
     })]);
 
-    revalidateTag("approval-flows", "max");
+    revalidateTag("approval-flows", { expire: 0 });
     return { success: true as const, flow };
   } catch (e) {
     console.error("[upsertApprovalFlow]", e);
@@ -73,7 +73,7 @@ export async function deleteApprovalFlow(id: string) {
 
   try {
     await db.$transaction([db.approvalFlow.delete({ where: { id } })]);
-    revalidateTag("approval-flows", "max");
+    revalidateTag("approval-flows", { expire: 0 });
     return { success: true as const };
   } catch (e) {
     console.error("[deleteApprovalFlow]", e);

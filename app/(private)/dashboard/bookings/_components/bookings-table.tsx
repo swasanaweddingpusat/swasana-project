@@ -143,11 +143,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     queryFn: async () => {
       const res = await fetch("/api/approval-records?module=booking");
       if (!res.ok) return [];
-      return res.json();
+      const json = await res.json();
+      return json.data ?? json;
     },
     staleTime: 5 * 60 * 1000,
   });
-  const approvalMap = new Map(bookingApprovals.map((r) => [r.entityId, r]));
+  const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
 
   async function generatePO(bookingId: string, revisionId?: string) {
     setIsGeneratingPO(bookingId);

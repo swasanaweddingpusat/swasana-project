@@ -18,7 +18,7 @@ export async function createOrderStatus(name: string) {
 
   try {
     const [item] = await db.$transaction([db.orderStatus.create({ data: { name: parsed.data.trim() } })]);
-    revalidateTag("order-statuses", "max");
+    revalidateTag("order-statuses", { expire: 0 });
     return { success: true as const, item };
   } catch (e) {
     console.error("[createOrderStatus]", e);
@@ -36,7 +36,7 @@ export async function updateOrderStatus(id: string, name: string) {
 
   try {
     const [item] = await db.$transaction([db.orderStatus.update({ where: { id }, data: { name: parsed.data.trim() } })]);
-    revalidateTag("order-statuses", "max");
+    revalidateTag("order-statuses", { expire: 0 });
     return { success: true as const, item };
   } catch (e) {
     console.error("[updateOrderStatus]", e);
@@ -51,7 +51,7 @@ export async function deleteOrderStatus(id: string) {
 
   try {
     await db.$transaction([db.orderStatus.delete({ where: { id } })]);
-    revalidateTag("order-statuses", "max");
+    revalidateTag("order-statuses", { expire: 0 });
     return { success: true as const };
   } catch (e) {
     console.error("[deleteOrderStatus]", e);

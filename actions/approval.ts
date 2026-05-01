@@ -73,9 +73,9 @@ export async function approveStep(stepId: string, signature: string) {
     }
     await notifyCreator(step.record, isSuperAdmin ? `Semua step disetujui oleh ${session.user.name ?? "Super Admin"}` : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`, allApprovedAfter ? "approved" : undefined);
 
-    revalidateTag("approvals", "max");
-    revalidateTag("packages", "max");
-    revalidateTag("bookings", "max");
+    revalidateTag("approvals", { expire: 0 });
+    revalidateTag("packages", { expire: 0 });
+    revalidateTag("bookings", { expire: 0 });
 
     return { success: true as const };
   } catch (e) {
@@ -121,9 +121,9 @@ export async function rejectStep(stepId: string, notes: string) {
 
     await notifyCreator(step.record, `Ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`);
 
-    revalidateTag("approvals", "max");
-    revalidateTag("packages", "max");
-    revalidateTag("bookings", "max");
+    revalidateTag("approvals", { expire: 0 });
+    revalidateTag("packages", { expire: 0 });
+    revalidateTag("bookings", { expire: 0 });
 
     return { success: true as const };
   } catch (e) {

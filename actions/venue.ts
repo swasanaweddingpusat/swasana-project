@@ -28,7 +28,7 @@ export async function createVenue(data: unknown) {
 
   try {
     const [venue] = await db.$transaction([db.venue.create({ data: parsed.data })]);
-    revalidateTag("venues", "max");
+    revalidateTag("venues", { expire: 0 });
     return { success: true, venue };
   } catch (e) {
     console.error("[createVenue]", e);
@@ -48,7 +48,7 @@ export async function updateVenue(data: unknown) {
 
   try {
     const [venue] = await db.$transaction([db.venue.update({ where: { id }, data: rest })]);
-    revalidateTag("venues", "max");
+    revalidateTag("venues", { expire: 0 });
     return { success: true, venue };
   } catch (e) {
     console.error("[updateVenue]", e);
@@ -63,10 +63,31 @@ export async function deleteVenue(id: string) {
 
   try {
     await db.$transaction([db.venue.update({ where: { id }, data: { isActive: false } })]);
-    revalidateTag("venues", "max");
+    revalidateTag("venues", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteVenue]", e);
     return { success: false, error: "Gagal menghapus venue." };
+  }
+}
+
+export async function updateVenueTermCondition(data: { id: string; termAndCondition: string | null }) {
+  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`venue-tc:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
+
+  const parsed = z.object({ id: z.string().min(1), termAndCondition: z.string().nullable() }).safeParse(data);
+  if (!parsed.success) return { success: false as const, error: parsed.error.issues[0].message };
+
+  try {
+    await db.$transaction([db.venue.update({
+      where: { id: parsed.data.id },
+      data: { termAndCondition: parsed.data.termAndCondition },
+    })]);
+    revalidateTag("venues", { expire: 0 });
+    return { success: true as const };
+  } catch (e) {
+    console.error("[updateVenueTermCondition]", e);
+    return { success: false as const, error: "Gagal menyimpan Term & Condition." };
   }
 }

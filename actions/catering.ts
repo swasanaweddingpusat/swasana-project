@@ -84,7 +84,7 @@ export async function saveCateringPaketData(
       description: `Updated catering paket data (${paketData.sections.length} sections)`,
     });
 
-    revalidateTag("caterings", "max");
+    revalidateTag("caterings", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[saveCateringPaketData]", e);
@@ -126,7 +126,7 @@ export async function savePOCateringData(
       description: "Updated PO Catering table data",
     });
 
-    revalidateTag("caterings", "max");
+    revalidateTag("caterings", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[savePOCateringData]", e);

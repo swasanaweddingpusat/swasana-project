@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight, Search, FileText } from "lucide-react";
 import { deleteVenue } from "@/actions/venue";
 import { VenueDrawer } from "./venue-drawer";
+import { TermConditionDrawer } from "./term-condition-drawer";
 import type { VenuesQueryResult, VenueQueryItem, BrandsQueryResult } from "@/lib/queries/venues";
 import { cn } from "../../../../../../lib/utils";
 
@@ -31,6 +33,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<VenueQueryItem | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [tcTarget, setTcTarget] = useState<VenueQueryItem | null>(null);
 
   const filtered = venues.filter((v) => {
     if (!search.trim()) return true;
@@ -89,6 +92,10 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
     setDeleting(false);
     setBulkDeleteOpen(false);
     toast.success(`${ids.length} venue dihapus.`);
+  }
+
+  function handleTcSaved(venueId: string, value: string | null) {
+    setVenues((prev) => prev.map((v) => v.id === venueId ? { ...v, termAndCondition: value } : v));
   }
 
   return (
@@ -157,12 +164,38 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                     <TableCell>{venue.capacity ?? "—"}</TableCell>
                     <TableCell>
                       <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
-                        <button onClick={() => handleEdit(venue)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
-                          <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
-                        </button>
-                        <button onClick={() => setDeleteTarget(venue)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                          <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
-                        </button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              onClick={() => setTcTarget(venue)}
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                              aria-label="Term & Condition"
+                            >
+                              <FileText className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                            </TooltipTrigger>
+                            <TooltipContent>Term & Condition</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger
+                              onClick={() => handleEdit(venue)}
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                              aria-label="Edit"
+                            >
+                              <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                            </TooltipTrigger>
+                            <TooltipContent>Edit Venue</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger
+                              onClick={() => setDeleteTarget(venue)}
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                              aria-label="Hapus"
+                            >
+                              <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
+                            </TooltipTrigger>
+                            <TooltipContent>Hapus Venue</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -195,6 +228,17 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
         brands={brands}
         onSaved={handleSaved}
       />
+
+      {tcTarget && (
+        <TermConditionDrawer
+          isOpen={!!tcTarget}
+          onClose={() => setTcTarget(null)}
+          venueId={tcTarget.id}
+          venueName={tcTarget.name}
+          initialValue={tcTarget.termAndCondition}
+          onSaved={handleTcSaved}
+        />
+      )}
 
       {/* Single delete */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

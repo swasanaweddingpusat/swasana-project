@@ -69,7 +69,8 @@ export function InviteDrawer({
   const isEdit = !!editUser;
   const inviteUser = useInviteUser();
   const updateUser = useUpdateUser();
-  const { data: groups = [] } = useGroups();
+  const { data: groupsResult } = useGroups();
+  const groups = groupsResult?.data ?? [];
   const { data: managers = [] } = useQuery<ManagerProfile[]>({
     queryKey: ["managers"],
     queryFn: async () => {

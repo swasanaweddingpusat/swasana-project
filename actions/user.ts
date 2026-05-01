@@ -105,7 +105,7 @@ export async function inviteUser(formData: FormData) {
       html: invitationEmailHtml({ fullName, verificationLink }),
     });
 
-    revalidateTag("users", "max");
+    revalidateTag("users", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -229,7 +229,7 @@ export async function updateUser(data: Record<string, unknown>) {
       ...venueOps,
     ]);
 
-    revalidateTag("users", "max");
+    revalidateTag("users", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -274,7 +274,7 @@ export async function deleteUser(userId: string) {
       db.user.delete({ where: { id: profile.userId } }),
     ]);
 
-    revalidateTag("users", "max");
+    revalidateTag("users", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -428,7 +428,7 @@ export async function bulkUpdateUsers(data: {
       description: `Bulk updated ${userIds.length} users`,
     });
 
-    revalidateTag("users", "max");
+    revalidateTag("users", { expire: 0 });
     return { success: true, updated: userIds.length };
   } catch {
     return { success: false, error: "Gagal mengupdate users." };

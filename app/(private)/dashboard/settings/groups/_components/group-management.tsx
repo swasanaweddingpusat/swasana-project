@@ -32,7 +32,7 @@ interface GroupManagementProps {
 }
 
 export function GroupManagement({ initialGroups, users }: GroupManagementProps) {
-  const [groups, setGroups] = useState(initialGroups);
+  const [groups, setGroups] = useState(initialGroups.data);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<GroupQueryItem | null>(null);

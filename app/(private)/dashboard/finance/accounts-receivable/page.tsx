@@ -10,7 +10,8 @@ import type { ARBooking, ARFilters } from "@/types/finance";
 const ROWS_PER_PAGE = 10;
 
 export default function AccountsReceivablePage() {
-  const { data: bookings = [], isLoading } = useAR();
+  const { data: arResult, isLoading } = useAR();
+  const bookings = arResult?.data ?? [];
   const [filters, setFilters] = useState<ARFilters>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [detailBooking, setDetailBooking] = useState<ARBooking | null>(null);

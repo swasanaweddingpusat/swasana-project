@@ -31,7 +31,7 @@ export async function createRole(formData: FormData) {
       },
     })]);
 
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     await logAudit({
       action: "role.created",
       entityType: "role",
@@ -72,7 +72,7 @@ export async function updateRole(formData: FormData) {
       },
     })]);
 
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     await logAudit({
       action: "role.updated",
       entityType: "role",
@@ -106,7 +106,7 @@ export async function deleteRole(roleId: string) {
 
     await db.$transaction([db.role.delete({ where: { id: roleId } })]);
 
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     await logAudit({
       action: "role.deleted",
       entityType: "role",
@@ -131,7 +131,7 @@ export async function reorderRoles(orderedIds: string[]) {
     await db.$transaction(
       orderedIds.map((id, i) => db.role.update({ where: { id }, data: { sortOrder: i } }))
     );
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[reorderRoles]", e);
@@ -150,7 +150,7 @@ export async function renameModule(oldModule: string, newModule: string) {
 
   try {
     await db.$transaction([db.permission.updateMany({ where: { module: oldModule }, data: { module: trimmed } })]);
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true, newModule: trimmed };
   } catch (e) {
     console.error("[renameModule]", e);
@@ -169,7 +169,7 @@ export async function updatePermission(permissionId: string, action: string) {
       where: { id: permissionId },
       data: { action: action.trim().toLowerCase() },
     })]);
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true, permission };
   } catch (e) {
     console.error("[updatePermission]", e);
@@ -187,7 +187,7 @@ export async function reorderModules(moduleOrder: string[]) {
     await db.$transaction(
       moduleOrder.map((mod, i) => db.permission.updateMany({ where: { module: mod }, data: { moduleSortOrder: i } }))
     );
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[reorderModules]", e);
@@ -203,7 +203,7 @@ export async function deletePermission(permissionId: string) {
 
   try {
     await db.$transaction([db.permission.delete({ where: { id: permissionId } })]);
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deletePermission]", e);
@@ -219,7 +219,7 @@ export async function deleteModulePermissions(module: string) {
 
   try {
     await db.$transaction([db.permission.deleteMany({ where: { module } })]);
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteModulePermissions]", e);
@@ -243,7 +243,7 @@ export async function createPermission(module: string, action: string) {
       }
       return perm;
     });
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     return { success: true, permission };
   } catch (e) {
     console.error("[createPermission]", e);
@@ -268,7 +268,7 @@ export async function updateRolePermissions(
       ),
     ]);
 
-    revalidateTag("roles", "max");
+    revalidateTag("roles", { expire: 0 });
     await logAudit({
       action: "permission.changed",
       entityType: "role",

@@ -34,7 +34,7 @@ export async function createVendorCategory(data: unknown) {
       description: `Created vendor category "${category.name}"`,
     });
 
-    revalidateTag("vendors", "max");
+    revalidateTag("vendors", { expire: 0 });
     return { success: true, data: category };
   } catch (e) {
     console.error("[createVendorCategory]", e);
@@ -62,7 +62,7 @@ export async function updateVendorCategory(id: string, data: unknown) {
       description: `Updated vendor category "${category.name}"`,
     });
 
-    revalidateTag("vendors", "max");
+    revalidateTag("vendors", { expire: 0 });
     return { success: true, data: category };
   } catch (e) {
     console.error("[updateVendorCategory]", e);
@@ -87,7 +87,7 @@ export async function deleteVendorCategory(id: string) {
       description: `Deleted vendor category "${category.name}"`,
     });
 
-    revalidateTag("vendors", "max");
+    revalidateTag("vendors", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[deleteVendorCategory]", e);
@@ -127,7 +127,7 @@ export async function createVendor(data: unknown) {
       description: `Created vendor "${vendor.name}"`,
     });
 
-    revalidateTag("vendors", "max");
+    revalidateTag("vendors", { expire: 0 });
     return { success: true, data: vendor };
   } catch (e) {
     console.error("[createVendor]", e);
@@ -169,7 +169,7 @@ export async function updateVendor(id: string, data: unknown) {
       description: `Updated vendor "${vendor?.name}"`,
     });
 
-    revalidateTag("vendors", "max");
+    revalidateTag("vendors", { expire: 0 });
     return { success: true, data: vendor };
   } catch (e) {
     console.error("[updateVendor]", e);

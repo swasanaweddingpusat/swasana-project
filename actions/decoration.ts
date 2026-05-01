@@ -85,7 +85,7 @@ export async function savePODecorationData(
       description: "Updated PO Decoration table data",
     });
 
-    revalidateTag("decorations", "max");
+    revalidateTag("decorations", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[savePODecorationData]", e);

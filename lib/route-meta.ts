@@ -70,6 +70,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Atur alur persetujuan",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/event-types": {
+    title: "Event Types",
+    subtitle: "Kelola tipe acara untuk nomor PO",
+    parent: "/dashboard/settings",
+  },
   "/dashboard/settings/user-management": {
     title: "User Management",
     subtitle: "Kelola akses dan undangan user",

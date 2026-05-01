@@ -6,6 +6,8 @@ import { seedVendors } from "./seeders/vendors";
 import { seedUsers } from "./seeders/users";
 import { seedGroups } from "./seeders/groups";
 import { seedOrderStatuses } from "./seeders/order-statuses";
+import { seedEventTypes } from "./seeders/event-types";
+import { seedVenueTermConditions } from "./seeders/venue-term-conditions";
 import { prisma } from "./seeders/_client";
 
 async function main() {
@@ -19,6 +21,8 @@ async function main() {
   await seedUsers();
   await seedGroups();
   await seedOrderStatuses();
+  await seedEventTypes();
+  await seedVenueTermConditions();
 
   console.log("\n🎉 Seeding completed!");
 }

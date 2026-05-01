@@ -9,6 +9,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/validations/booking";
 import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
+import { resolveManagerId } from "@/lib/resolve-manager";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -74,20 +75,20 @@ export async function createBooking(data: unknown) {
 
     const bookingId = crypto.randomUUID();
 
-    // Generate PO Number: {count}/{brandCode}/{venueCode}/W/{dd-mm-yy}
-    const bookingCount = await db.booking.count();
+    // Generate PO Number: {counter}/{brandCode}/{venueCode}/{eventTypeCode}/{dd-mm-yyyy}
     const now = new Date();
+    const year = now.getFullYear();
+    const poSeq = await getNextSequence(`po-${year}`);
     const dd = now.getDate().toString().padStart(2, "0");
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
-    const yy = now.getFullYear().toString().slice(-2);
-    const poNumber = `${(bookingCount + 1).toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/W/${dd}-${mm}-${yy}`;
+    const eventTypeCode = input.weddingType ?? "R";
+    const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/${eventTypeCode}/${dd}-${mm}-${year}`;
 
     const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 
     // Generate invoice numbers atomically before transaction
     let invoiceNumbers: string[] = [];
     if (input.termOfPayments && input.termOfPayments.length > 0) {
-      const year = now.getFullYear();
       const monthRoman = ROMAN[now.getMonth()];
       invoiceNumbers = await Promise.all(
         input.termOfPayments.map(async () => {
@@ -105,12 +106,7 @@ export async function createBooking(data: unknown) {
           id: bookingId,
           bookingDate: new Date(input.bookingDate),
           salesId: session!.user.profileId!,
-          managerId: await db.userVenueAccess
-            .findUnique({
-              where: { userId_venueId: { userId: session!.user.profileId!, venueId: input.venueId } },
-              select: { managerId: true },
-            })
-            .then((r) => r?.managerId ?? null),
+          managerId: await resolveManagerId(session!.user.profileId!, input.venueId),
           customerId,
           venueId: input.venueId,
           packageId: input.packageId,
@@ -265,8 +261,8 @@ export async function createBooking(data: unknown) {
     // Create initial PO revision snapshot
     await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
 
-    revalidateTag("bookings", "max");
-    revalidateTag("customers", "max");
+    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("customers", { expire: 0 });
 
     // Notify all super admins about new booking (exclude creator)
     notifySuperAdmins({
@@ -335,7 +331,7 @@ export async function updateBooking(data: unknown) {
       description: `Updated booking`,
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
 
     return { success: true };
   } catch {
@@ -358,7 +354,7 @@ export async function deleteBooking(id: string) {
       description: "Deleted booking",
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menghapus booking." };
@@ -400,7 +396,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
       description: `Transfer booking dari ${booking.sales?.fullName ?? "Unknown"} ke ${targetSales.fullName}`,
     });
 
-    revalidateTag("bookings", "max");
+    revalidateTag("bookings", { expire: 0 });
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mentransfer booking." };
@@ -675,8 +671,8 @@ export async function editBooking(data: unknown) {
       await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
     }
 
-    revalidateTag("bookings", "max");
-    revalidateTag("customers", "max");
+    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("customers", { expire: 0 });
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mengupdate booking." };

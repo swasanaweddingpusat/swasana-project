@@ -12,10 +12,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!apiLimiter.check(`booking-comments:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
-  const comments = await getBookingComments(id);
+  const result = await getBookingComments(id);
 
   // Resolve R2 URLs server-side so client doesn't need env var
-  const resolved = comments.map((c) => ({
+  const resolved = result.data.map((c) => ({
     ...c,
     attachments: Array.isArray(c.attachments)
       ? (c.attachments as unknown as RawAttachment[]).map((a) => ({ ...a, url: getPublicUrl(a.path) }))
