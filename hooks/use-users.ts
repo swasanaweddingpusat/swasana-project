@@ -2,17 +2,18 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UsersQueryResult } from "@/lib/queries/users";
+import type { UserFilters } from "@/types/user";
 import { inviteUser, updateUser, deleteUser } from "@/actions/user";
 import { fetchUsers, fetchUserById } from "@/services/user-service";
 
-export function useUsers(initialData?: UsersQueryResult) {
+export function useUsers(initialData?: UsersQueryResult, filters: UserFilters = {}) {
   return useQuery({
-    queryKey: ["users"],
-    queryFn: () => fetchUsers(),
-    initialData,
+    queryKey: ["users", filters],
+    queryFn: () => fetchUsers(filters),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    placeholderData: (prev) => prev,
   });
 }
 
