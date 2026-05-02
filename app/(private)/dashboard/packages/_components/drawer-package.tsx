@@ -9,7 +9,7 @@ import { SimpleEditor } from "@/components/ui/simple-editor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Users, Settings, PenLine, Plus, Trash2, ChevronDown, GripVertical } from "lucide-react";
+import { Package, Users, Settings, PenLine, Plus, Trash2, ChevronDown, GripVertical, Copy } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -477,6 +477,22 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
     }));
   }
 
+  function duplicateVendorItems(targetIdx: number, sourceIdx: number) {
+    const source = vendorItems[sourceIdx] ?? [];
+    if (source.length === 0) { toast.error("Variant sumber tidak punya item vendor."); return; }
+    const copied = source.map((item) => ({ ...item, id: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }));
+    setVendorItems((prev) => ({ ...prev, [targetIdx]: copied }));
+    toast.success(`${copied.length} item vendor diduplikat dari ${variants[sourceIdx]?.variantName ?? "variant"}.`);
+  }
+
+  function duplicateInternalItems(targetIdx: number, sourceIdx: number) {
+    const source = internalItems[sourceIdx] ?? [];
+    if (source.length === 0) { toast.error("Variant sumber tidak punya item internal."); return; }
+    const copied = source.map((item) => ({ ...item, id: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }));
+    setInternalItems((prev) => ({ ...prev, [targetIdx]: copied }));
+    toast.success(`${copied.length} item internal diduplikat dari ${variants[sourceIdx]?.variantName ?? "variant"}.`);
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -640,6 +656,17 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                       {openVariants.has(variantIdx) && (
                         <div className={cn('px-4', 'pb-4', 'space-y-3')}>
                           <DndContext sensors={itemSensors} collisionDetection={closestCenter} onDragEnd={(e) => handleVendorItemDragEnd(variantIdx, e)}>
+                          {variants.length > 1 && (
+                            <div className={cn("flex", "items-center", "gap-2", "pb-1")}>
+                              <Copy className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
+                              <span className={cn("text-xs", "text-gray-500", "shrink-0")}>Duplikat dari</span>
+                              {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
+                                <Button key={srcIdx} variant="outline" size="sm" className={cn("text-xs", "h-7", "cursor-pointer")} onClick={() => duplicateVendorItems(variantIdx, srcIdx)}>
+                                  {v.variantName}
+                                </Button>
+                              ) : null)}
+                            </div>
+                          )}
                             <SortableContext items={(vendorItems[variantIdx] ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
                               <div className="space-y-3">
                                 {(vendorItems[variantIdx] ?? []).map((item) => (
@@ -716,6 +743,17 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                       {openVariants.has(variantIdx) && (
                         <div className={cn('px-4', 'pb-4', 'space-y-3')}>
                           <DndContext sensors={itemSensors} collisionDetection={closestCenter} onDragEnd={(e) => handleInternalItemDragEnd(variantIdx, e)}>
+                          {variants.length > 1 && (
+                            <div className={cn("flex", "items-center", "gap-2", "pb-1")}>
+                              <Copy className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
+                              <span className={cn("text-xs", "text-gray-500", "shrink-0")}>Duplikat dari</span>
+                              {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
+                                <Button key={srcIdx} variant="outline" size="sm" className={cn("text-xs", "h-7", "cursor-pointer")} onClick={() => duplicateInternalItems(variantIdx, srcIdx)}>
+                                  {v.variantName}
+                                </Button>
+                              ) : null)}
+                            </div>
+                          )}
                             <SortableContext items={(internalItems[variantIdx] ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
                               <div className="space-y-3">
                                 {(internalItems[variantIdx] ?? []).map((item) => (
