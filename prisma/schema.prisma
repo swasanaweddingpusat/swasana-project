@@ -137,6 +137,8 @@ model Profile {
   approvalStepApprovals   ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
   approvalStepDecisions   ApprovalRecordStep[]       @relation("ApprovalRecordStepDecider")
   bookingRevisions         BookingRevision[]
+  userTargets              UserTarget[]               @relation("UserTargets")
+  userTargetsSet           UserTarget[]               @relation("UserTargetsSetBy")
 
   @@index([roleId])
   @@index([dataScope])
@@ -540,6 +542,8 @@ model Booking {
   signatures            Json?
   discountName          String?
   discountAmount        Int             @default(0)
+  managerApprovedAt     DateTime?
+  managerSignature      String?
   salesId               String
   managerId             String?
   customerId            String
@@ -1074,4 +1078,24 @@ model Counter {
   value Int    @default(0)
 
   @@map("counters")
+}
+
+model UserTarget {
+  id        String   @id @default(uuid())
+  profileId String
+  type      String   @default("sales") // sales, collection, revenue, etc.
+  amount    BigInt
+  startDate DateTime
+  endDate   DateTime
+  setById   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile Profile @relation("UserTargets", fields: [profileId], references: [id], onDelete: Cascade)
+  setBy   Profile @relation("UserTargetsSetBy", fields: [setById], references: [id], onDelete: Restrict)
+
+  @@index([profileId])
+  @@index([setById])
+  @@index([type, startDate, endDate])
+  @@map("user_targets")
 }

@@ -10,6 +10,7 @@ export const inviteUserSchema = z.object({
   venueScopes: z.record(z.string(), z.enum(["individual", "general"])).optional(),
   venueManagers: z.record(z.string(), z.string()).optional(),
   dataScope: z.enum(["own", "group", "all"]).default("own"),
+  groupIds: z.array(z.string()).optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -70,6 +71,16 @@ export const updateGroupSchema = z.object({
   leaderId: z.string().nullable().optional(),
 });
 
+// ─── My Team ──────────────────────────────────────────────────────────────────
+
+export const setMemberTargetSchema = z.object({
+  groupId: z.string().min(1),
+  profileId: z.string().min(1),
+  amount: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
+  startDate: z.string().min(1, "Tanggal mulai wajib diisi"),
+  endDate: z.string().min(1, "Tanggal selesai wajib diisi"),
+});
+
 // ─── Inferred types ───────────────────────────────────────────────────────────
 
 export type InviteUserInput = z.infer<typeof inviteUserSchema>;
@@ -78,3 +89,4 @@ export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
+export type SetMemberTargetInput = z.infer<typeof setMemberTargetSchema>;
