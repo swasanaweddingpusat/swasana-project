@@ -80,6 +80,12 @@ export const navItems: NavItem[] = [
     permission: { module: "booking", action: "view" },
   },
   {
+    name: "My Team",
+    href: "/dashboard/my-team",
+    icon: Users,
+    permission: { module: "booking", action: "view" },
+  },
+  {
     name: "Finance",
     href: "/dashboard/finance",
     icon: NotebookPen,
