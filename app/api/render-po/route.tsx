@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     let customerName: string;
     let venueName: string;
     let eventDate: string;
+    let termAndConditionHtml: string | null = null;
 
     if (revisionId) {
       // Render from frozen revision snapshot
@@ -64,6 +65,8 @@ export async function POST(req: Request) {
       customerName = ((snap.snapCustomer as Record<string, unknown> | null)?.name as string ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (revision.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = new Date(snap.bookingDate as string).toISOString().split("T")[0];
+      const venueForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { venue: { select: { termAndCondition: true } } } });
+      termAndConditionHtml = venueForTc?.venue?.termAndCondition ?? null;
     } else {
       // Render from live booking data (backward compatible)
       const booking = await db.booking.findUnique({
@@ -80,6 +83,7 @@ export async function POST(req: Request) {
           termOfPayments: { orderBy: { sortOrder: "asc" } },
           paymentMethod: true,
           sales: true,
+          venue: { select: { termAndCondition: true } },
         },
       });
 
@@ -110,6 +114,7 @@ export async function POST(req: Request) {
       customerName = (booking.snapCustomer?.name ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (booking.snapVenue?.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = booking.bookingDate.toISOString().split("T")[0];
+      termAndConditionHtml = booking.venue?.termAndCondition ?? null;
     }
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
@@ -117,7 +122,7 @@ export async function POST(req: Request) {
     const logoBase64 = await loadLogoBase64("swasana-logo.png");
 
     const stream = await renderToStream(
-      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} />
+      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />
     );
 
     return new NextResponse(stream as unknown as ReadableStream, {

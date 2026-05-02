@@ -25,6 +25,7 @@ import { resendInvitation } from "@/actions/user";
 import type { UsersQueryResult, UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
 import type { BrandsQueryResult } from "@/lib/queries/venues";
+import type { UserFilters } from "@/types/user";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -50,12 +51,35 @@ interface UsersTableProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
-  const { data, refetch, isRefetching } = useUsers(initialData);
+  const [page, setPage] = useState(1);
+  const [roleFilter, setRoleFilterRaw] = useState("");
+  const [statusFilter, setStatusFilterRaw] = useState("");
+  const [venueFilter, setVenueFilterRaw] = useState("");
+  const [searchQuery, setSearchQueryRaw] = useState("");
+
+  const rowsPerPage = 10;
+
+  const setRoleFilter = (v: string) => { setRoleFilterRaw(v); setPage(1); };
+  const setStatusFilter = (v: string) => { setStatusFilterRaw(v); setPage(1); };
+  const setVenueFilter = (v: string) => { setVenueFilterRaw(v); setPage(1); };
+  const setSearchQuery = (v: string) => { setSearchQueryRaw(v); setPage(1); };
+
+  const filters: UserFilters = {
+    search: searchQuery || undefined,
+    roleId: roleFilter || undefined,
+    status: (statusFilter || undefined) as UserFilters["status"],
+    venueId: venueFilter || undefined,
+    page,
+    limit: rowsPerPage,
+  };
+
+  const { data, refetch, isRefetching } = useUsers(initialData, filters);
   const users: UserQueryItem[] = useMemo(() => data?.users ?? [], [data]);
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / rowsPerPage);
+
   const deleteUserMutation = useDeleteUser();
 
-  // State
-  const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserQueryItem | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -67,22 +91,9 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
 
-  // Filters — reset page on change
-  const [roleFilter, setRoleFilterRaw] = useState("");
-  const [statusFilter, setStatusFilterRaw] = useState("");
-  const [venueFilter, setVenueFilterRaw] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const setRoleFilter = (v: string) => { setRoleFilterRaw(v); setCurrentPage(1); };
-  const setStatusFilter = (v: string) => { setStatusFilterRaw(v); setCurrentPage(1); };
-  const setVenueFilter = (v: string) => { setVenueFilterRaw(v); setCurrentPage(1); };
-
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
-  const rowsPerPage = 10;
 
-  // Selection is cleared in delete handlers
-
-  // Unique venues for filter
+  // Unique venues dari data yang ada (untuk filter dropdown)
   const allVenues = useMemo(() => {
     const map = new Map<string, string>();
     users.forEach(u => u.profile?.userVenueAccess?.forEach(v => {
@@ -91,29 +102,11 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [users]);
 
-  // Filter
-  const filteredUsers = users.filter(user => {
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const match = user.profile?.fullName?.toLowerCase().includes(q) ||
-        user.email.toLowerCase().includes(q) ||
-        user.profile?.role?.name?.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    if (roleFilter && user.profile?.role?.id !== roleFilter) return false;
-    if (statusFilter === "verified" && !user.profile?.isEmailVerified) return false;
-    if (statusFilter === "pending" && user.profile?.isEmailVerified) return false;
-    if (venueFilter && !user.profile?.userVenueAccess?.some(v => v.venue.id === venueFilter)) return false;
-    return true;
-  });
-
-  const totalPages = Math.ceil(filteredUsers.length / rowsPerPage);
-  const paginatedUsers = filteredUsers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
   const hasFilters = !!(roleFilter || statusFilter || venueFilter);
-
   const clearFilters = () => { setRoleFilter(""); setStatusFilter(""); setVenueFilter(""); };
 
-  // Checkbox
+  const paginatedUsers = users; // sudah dipaginasi server-side
+
   const isAllSelected = paginatedUsers.length > 0 && paginatedUsers.every(u => selectedUsers.has(u.id));
 
   const handleSelectAll = (checked: boolean) => {
@@ -184,7 +177,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
               <div className={cn('flex', 'items-center', 'gap-2')}>
                 <span className={cn('text-base', 'font-bold', 'text-foreground')}>List Users</span>
                 <span className={cn('text-[11px]', 'font-medium', 'bg-secondary', 'text-secondary-foreground', 'px-2.5', 'py-0.5', 'border', 'border-border', 'rounded-full')}>
-                  {filteredUsers.length} Users available
+                  {total} Users available
                 </span>
               </div>
               <div className={cn('flex', 'items-center', 'gap-2')}>
@@ -209,7 +202,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
               <Input
                 placeholder="Cari nama, email..."
                 value={searchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className={cn('h-8', 'text-xs', 'border-border', 'bg-secondary', 'flex-1', 'lg:flex-none', 'lg:w-64')}
               />
 
@@ -262,7 +255,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
 
           {/* Table */}
           <div className={cn('relative', 'overflow-x-auto', 'w-full')}>
-            {filteredUsers.length === 0 ? (
+            {paginatedUsers.length === 0 ? (
               <div className={cn('flex', 'justify-center', 'items-center', 'py-8')}>
                 <div className={cn('text-xs', 'text-gray-500')}>No users found</div>
               </div>
@@ -288,7 +281,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                     const roleName = user.profile?.role?.name ?? "";
                     const isVerified = user.profile?.isEmailVerified ?? false;
                     const venues = user.profile?.userVenueAccess ?? [];
-                    const rowNumber = (currentPage - 1) * rowsPerPage + index + 1;
+                    const rowNumber = (page - 1) * rowsPerPage + index + 1;
                     const createdDate = user.createdAt
                       ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
                       : "—";
@@ -372,9 +365,9 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
           </div>
 
           {/* Pagination */}
-          {filteredUsers.length > 0 && (
+          {total > 0 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className={cn('text-xs', 'h-8')}>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(p - 1, 1))} disabled={page === 1} className={cn('text-xs', 'h-8')}>
                 <ArrowLeft className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
               </Button>
               <div className={cn('flex', 'items-center', 'gap-1')}>
@@ -383,23 +376,23 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                   if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
                   else {
                     pages.push(1);
-                    if (currentPage > 3) pages.push("...");
-                    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
-                    if (currentPage < totalPages - 2) pages.push("...");
+                    if (page > 3) pages.push("...");
+                    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+                    if (page < totalPages - 2) pages.push("...");
                     pages.push(totalPages);
                   }
-                  return pages.map((page, idx) =>
-                    typeof page === "string" ? (
+                  return pages.map((p, idx) =>
+                    typeof p === "string" ? (
                       <span key={`e-${idx}`} className={cn('px-2', 'py-1', 'text-xs', 'text-gray-400')}>...</span>
                     ) : (
-                      <button key={page} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", currentPage === page ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary")} onClick={() => setCurrentPage(page)}>
-                        {page}
+                      <button key={p} className={cn("px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer", page === p ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary")} onClick={() => setPage(p)}>
+                        {p}
                       </button>
                     )
                   );
                 })()}
               </div>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className={cn('text-xs', 'h-8')}>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(p + 1, totalPages))} disabled={page === totalPages} className={cn('text-xs', 'h-8')}>
                 Next <ArrowRight className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
               </Button>
             </div>
