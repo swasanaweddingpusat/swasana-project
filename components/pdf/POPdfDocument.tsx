@@ -268,16 +268,54 @@ function getTerms(booking: POPdfBooking): string[] {
   ];
 }
 
+// ─── Variable Replacement ─────────────────────────────────────────────────────
+
+function replaceVariables(html: string, booking: POPdfBooking): string {
+  const vars: Record<string, string> = {
+    venue: booking.snapVenue?.venueName ?? "",
+    customer_name: booking.snapCustomer?.name ?? "",
+    booking_date: new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+    po_number: booking.poNumber ?? "",
+    wedding_type: booking.weddingType ? booking.weddingType.replace(/\b\w/g, (c) => c.toUpperCase()) : "",
+    package_name: booking.snapPackage?.packageName ?? "",
+    package_price: booking.snapPackageVariant ? fmtRp(booking.snapPackageVariant.price) : "",
+    discount_amount: fmtRp(booking.discountAmount ?? 0),
+    booking_fee: (() => { const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return bf ? fmtRp(bf.amount) : ""; })(),
+    total_paid: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0)),
+    remaining_balance: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus !== "paid").reduce((sum, t) => sum + t.amount, 0)),
+    sales_name: booking.sales?.fullName ?? "",
+    brand_name: booking.snapVenue?.brandName ?? "",
+  };
+
+  // Replace {term_of_payment} with rendered list
+  if (html.includes("{term_of_payment}")) {
+    const topHtml = booking.termOfPayments.map((t) => {
+      const due = t.dueDate ? ` — jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : "";
+      return `<li>${t.name} sebesar ${fmtRp(t.amount)}${due}</li>`;
+    }).join("");
+    html = html.replace(/\{term_of_payment\}/g, `<ul>${topHtml}</ul>`);
+  }
+
+  // Replace simple variables
+  for (const [key, value] of Object.entries(vars)) {
+    html = html.replace(new RegExp(`\\{${key}\\}`, "g"), value);
+  }
+
+  return html;
+}
+
 // ─── Main Document ────────────────────────────────────────────────────────────
 
 interface POPdfDocumentProps {
   booking: POPdfBooking;
   logoBase64?: string | null;
+  termAndConditionHtml?: string | null;
 }
 
-export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
+export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POPdfDocumentProps) {
   const tableRows = buildTableRows(booking);
   const termsList = getTerms(booking);
+  const resolvedTcHtml = termAndConditionHtml ? replaceVariables(termAndConditionHtml, booking) : null;
   const brandName = booking.snapVenue?.brandName ?? "";
   const venueName = booking.snapVenue?.venueName ?? "";
   const varSnap = booking.snapPackageVariant;
@@ -321,66 +359,17 @@ export function POPdfDocument({ booking, logoBase64 }: POPdfDocumentProps) {
             <Text style={s.poNumber}>NO. PO : {booking.poNumber ?? ""}</Text>
           </View>
 
-          {/* Terms */}
-          {termsList.map((term, idx) => {
-            if (idx === termsList.length - 1) {
-              // Last term = Hak & Kewajiban (special)
-              return (
-                <View key={idx}>
-                  <View style={s.termRow}>
-                    <Text style={s.termNo}>{idx + 1}.</Text>
-                    <Text style={s.termText}>Para Pihak dengan ini mengemban Hak dan Kewajiban sebagai berikut:</Text>
-                  </View>
-                  <View style={[s.termRow, { marginLeft: 20, marginTop: 4 }]}><Text style={[s.termText, { fontWeight: "bold" }]}>Penyewa</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>a)</Text><Text style={s.termText}>Berhak untuk mendapatkan fasilitas dan layanan sebagaimana yang disepakati dalam Purchase Order</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>b)</Text><Text style={s.termText}>Berhak untuk meminta konsultasi baik secara lisan ataupun tertulis sejak pembayaran Bookingfee sampai dengan acara pada Hari-H</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>c)</Text><Text style={s.termText}>Berkewajiban untuk melakukan pembayaran kepada pihak Penyelenggara sesuai dengan syarat dan ketentuan yang disepakati dalam Purchase Order</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>d)</Text><Text style={s.termText}>Berkewajiban untuk mematuhi ketentuan yang berlaku di lingkungan Penyelenggara ketika acara berlangsung.</Text></View>
-                  <View style={[s.termRow, { marginLeft: 20, marginTop: 4 }]}><Text style={[s.termText, { fontWeight: "bold" }]}>Penyelenggara</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>a)</Text><Text style={s.termText}>Berhak untuk mendapatkan sejumlah pembayaran sesuai dengan syarat dan ketentuan yang disepakati dalam Purchase Order</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>b)</Text><Text style={s.termText}>Berkewajiban untuk memberikan fasilitas dan layanan kepada Penyewa sebagaimana yang disepakati dalam Purchase Order</Text></View>
-                  <View style={[s.termRow, { marginLeft: 25 }]}><Text style={s.termNo}>c)</Text><Text style={s.termText}>Berkewajiban untuk memberikan informasi sebenar-benarnya terkait jumlah tamu undangan dan kesepakatan atas penambahan item pernikahan dengan pihak vendor demi kelancaran dan sukses nya penyelenggaraan acara.</Text></View>
-
-                  {/* ATURAN PEMBAYARAN */}
-                  <View style={{ marginTop: 20, marginBottom: 16 }}>
-                    <Text style={{ fontSize: 10, fontWeight: "bold", marginBottom: 8 }}>ATURAN PEMBAYARAN</Text>
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>1. Jadwal Pembayaran</Text>
-                      {booking.termOfPayments.map((t) => (
-                        <Text key={t.id} style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>
-                          • {t.name} sebesar {fmtRp(t.amount)}{t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : ""}
-                        </Text>
-                      ))}
-                    </View>
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>2. Metode Pembayaran</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Untuk setiap reminder jadwal pembayaran jatuh tempo, akan dibantu oleh Finance {brandName || "Swasana"} yang akan menghubungi via telepon dan whatsapp setiap 1 minggu sebelum jatuh tempo</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Pembayaran dapat dilakukan melalui transfer bank atau tunai.</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Untuk pembayaran tunai (hanya di office representative {venueName}). Dengan membuat appointment terlebih dahulu dengan Finance Resmi, Manager Sales dan Sales.</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Untuk transfer bank, hanya melalui nomor rekening yang tercantum dalam invoice yang diterbitkan oleh Finance Resmi setiap 1 minggu sebelum jatuh tempo pembayaran terjadwal.</Text>
-                    </View>
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>3. Konfirmasi Pembayaran</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• PIC Finance Resmi untuk {venueName} : Rosita - 0811 8884 481</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Setiap Invoice akan dikirimkan oleh Finance Resmi melalui whatsapp group persiapan pernikahan.</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Setiap pembayaran harus dilengkapi dengan bukti pembayaran yang dikirim melalui whatsapp group pernikahan</Text>
-                    </View>
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>4. Pembayaran Additional Vendor</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Pihak Penyewa wajib menginformasikan terkait segala penambahan/upgrade Catering, Dekorasi dan Entertainment kepada {brandName || "Swasana"}</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Seluruh pembayaran atas penambahan charge vendor / upgrade penambahan porsi Catering / Dekorasi dan Entertainment dibayarkan setelah menerima invoice dari Finance resmi {brandName || "Swasana"}, apabila pembayaran dilakukan sebelum diberikan invoice oleh pihak Finance Resmi {brandName || "Swasana"}, maka segala konsekuensi yang timbul tidak menjadi tanggung jawab {brandName || "Swasana"}</Text>
-                    </View>
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>5. Ketentuan Lain</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Jika keterlambatan pembayaran melebihi 14 hari, layanan akan dihentikan sementara</Text>
-                      <Text style={{ fontSize: 8, marginLeft: 12, marginBottom: 2 }}>• Apabila pihak penyewa tidak memberikan konfirmasi baik lisan maupun tulisan mengenai rencana tanggal pernikahan dan tidak melakukan pembayaran selama 30 hari dari tanggal invoice diterbitkan, maka pihak {brandName || "Swasana"} berhak membatalkan atau memberikan tanggal tersebut ke calon pengantin lain dan dana telah masuk dapat dikembalikan 50% dari nominal booking fee awal.</Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            }
-            return (<View style={s.termRow} key={idx}><Text style={s.termNo}>{idx + 1}.</Text><Text style={s.termText}>{term}</Text></View>);
-          })}
+          {/* Terms — dynamic from venue T&C or hardcoded fallback */}
+          {resolvedTcHtml ? (
+            <View>{parseHtmlToReactPdf(resolvedTcHtml)}</View>
+          ) : (
+            termsList.map((term, idx) => (
+              <View style={s.termRow} key={idx}>
+                <Text style={s.termNo}>{idx + 1}.</Text>
+                <Text style={s.termText}>{term}</Text>
+              </View>
+            ))
+          )}
         </View>
 
         {/* Detail Section */}

@@ -21,6 +21,7 @@ const bookingDetailInclude = {
   snapVenue: true,
   snapPackage: true,
   snapPackageVariant: true,
+  venue: { select: { termAndCondition: true } },
   snapPackageInternalItems: { orderBy: { sortOrder: "asc" as const } },
   snapPackageVendorItems: { orderBy: { sortOrder: "asc" as const } },
   snapBonuses: { include: { orderStatus: { select: { id: true, name: true } } } },

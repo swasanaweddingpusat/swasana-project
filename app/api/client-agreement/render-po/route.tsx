@@ -53,6 +53,7 @@ export async function POST(req: Request) {
         termOfPayments: { orderBy: { sortOrder: "asc" } },
         paymentMethod: true,
         sales: true,
+        venue: { select: { termAndCondition: true } },
       },
     });
 
@@ -86,7 +87,9 @@ export async function POST(req: Request) {
     };
 
     // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
-    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} />;
+    const termAndConditionHtml = booking.venue?.termAndCondition ?? null;
+    // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
+    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />;
 
     const stream = await renderToStream(pdfElement);
 
