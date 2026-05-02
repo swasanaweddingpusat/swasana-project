@@ -21,13 +21,8 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola pengaturan sistem",
   },
   "/dashboard/settings/users": {
-    title: "Users",
-    subtitle: "Kelola data user dan undangan",
-    parent: "/dashboard/settings",
-  },
-  "/dashboard/settings/groups": {
-    title: "Groups",
-    subtitle: "Kelola grup data untuk scope akses",
+    title: "Users & Groups",
+    subtitle: "Kelola data user, undangan, dan grup akses",
     parent: "/dashboard/settings",
   },
   "/dashboard/settings/roles": {
@@ -125,6 +120,10 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/dashboard/events/calendar-events": {
     title: "Calendar Event",
     subtitle: "Lihat jadwal event di kalender",
+  },
+  "/dashboard/my-team": {
+    title: "My Team",
+    subtitle: "Overview kinerja tim dan target penjualan",
   },
 };
 

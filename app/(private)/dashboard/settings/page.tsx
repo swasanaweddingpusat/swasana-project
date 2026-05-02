@@ -3,7 +3,6 @@ import { requirePagePermission } from "@/lib/require-page-permission";
 import { cn } from "@/lib/utils";
 import {
   UsersRound,
-  Users,
   ShieldCheck,
   MapPinHouse,
   Palette,
@@ -35,16 +34,10 @@ const GROUPS: SettingGroup[] = [
     description: "Kelola semua user dan permission di sistem.",
     items: [
       {
-        title: "Users",
-        description: "Kelola data user dan undangan.",
+        title: "Users & Groups",
+        description: "Kelola data user, undangan, dan grup akses.",
         icon: UsersRound,
         href: "/dashboard/settings/users",
-      },
-      {
-        title: "Groups",
-        description: "Kelola grup data untuk scope akses.",
-        icon: Users,
-        href: "/dashboard/settings/groups",
       },
       {
         title: "Roles",
