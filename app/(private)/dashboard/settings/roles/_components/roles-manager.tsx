@@ -22,31 +22,15 @@ import { cn } from "../../../../../../lib/utils";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const MODULE_LABELS: Record<string, string> = {
-  dashboard: "Dashboard", customers: "Customers", booking: "Booking",
-  calendar_event: "Calendar Event", hr: "HR & Payroll",
-  finance_ar: "Accounts Receivable", finance_ap: "Accounts Payable",
-  package: "Package", venue: "Venue", vendor: "Vendor",
-  user_management: "User Management", role_permission: "Role & Permission",
-  venue_management: "Venue Management", brand_management: "Brand Management",
-  payment_methods: "Payment Methods", source_of_information: "Source of Info",
-  settings: "Settings", addons: "Addons", purchase_order: "Purchase Order",
-  attendance: "Attendance",
-};
-
-const ACTION_LABELS: Record<string, string> = {
-  view: "View", create: "Create", edit: "Edit", delete: "Delete",
-  approve: "Approve", approve_finance: "Approve (Finance)",
-  approve_manager: "Approve (Manager)", approve_oprations: "Approve (Ops)",
-  mark_lost: "Mark Lost", restore: "Restore", print: "Print", view_all: "View All",
-};
+const MODULE_LABELS: Record<string, string> = {};
+const ACTION_LABELS: Record<string, string> = {};
 
 const roleColors: Record<string, string> = {
-  "super admin": "bg-gray-900 text-white", manager: "bg-gray-700 text-white",
+  "super-admin": "bg-gray-900 text-white", manager: "bg-gray-700 text-white",
   sales: "bg-gray-500 text-white", finance: "bg-gray-600 text-white",
-  "vendor specialist": "bg-gray-400 text-white", operational: "bg-gray-500 text-white",
-  "direktur sales": "bg-gray-700 text-white", "direktur operational": "bg-gray-700 text-white",
-  "human resource": "bg-gray-600 text-white",
+  "vendor-specialist": "bg-gray-400 text-white", operational: "bg-gray-500 text-white",
+  "direktur-sales": "bg-gray-700 text-white", "direktur-operational": "bg-gray-700 text-white",
+  "human-resource": "bg-gray-600 text-white",
 };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -411,7 +395,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                   <ShieldCheck className={cn('h-3.5', 'w-3.5')} />
                                 </div>
                                 <div className={cn('flex-1', 'min-w-0')}>
-                                  <p className={cn('text-sm', 'font-medium', 'truncate', 'capitalize')}>{role.name}</p>
+                                  <p className={cn('text-sm', 'font-medium', 'truncate')}>{role.name}</p>
                                   {role.description && <p className={cn('text-xs', 'text-gray-400', 'truncate')}>{role.description}</p>}
                                 </div>
                               </button>
@@ -419,7 +403,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                 <button className={cn('p-1', 'hover:bg-gray-200', 'rounded', 'cursor-pointer')} onClick={() => { setEditingRole(role); setEditName(role.name); setEditDesc(role.description ?? ""); }}>
                                   <PenLine className={cn('h-3', 'w-3', 'text-gray-500')} />
                                 </button>
-                                {role.name.toLowerCase() !== "super admin" && (
+                                {role.name !== "super-admin" && (
                                   <button className={cn('p-1', 'hover:bg-red-100', 'rounded', 'cursor-pointer')} onClick={() => setDeletingRole(role)}>
                                     <Trash2 className={cn('h-3', 'w-3', 'text-red-400')} />
                                   </button>
@@ -444,7 +428,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
             <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-gray-100', 'sticky', 'top-0', 'bg-white', 'z-10', 'rounded-t-lg')}>
               <div>
                 <h2 className={cn('text-sm', 'font-semibold', 'text-gray-900')}>
-                  Permissions — <span className="capitalize">{selectedRole?.name ?? "—"}</span>
+                  Permissions — <span>{selectedRole?.name ?? "—"}</span>
                 </h2>
                 {selectedRole?.description && <p className={cn('text-xs', 'text-gray-500', 'mt-0.5')}>{selectedRole.description}</p>}
               </div>

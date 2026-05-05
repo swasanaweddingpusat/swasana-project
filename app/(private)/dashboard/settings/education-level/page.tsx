@@ -5,7 +5,7 @@ import { EducationLevelLoading } from "./_components/loading";
 import { requirePagePermission } from "@/lib/require-page-permission";
 
 export default async function EducationLevelSettingsPage() {
-  await requirePagePermission("settings");
+  await requirePagePermission("settings-education-level");
   return (
     <Suspense fallback={<EducationLevelLoading />}>
       <EducationLevelContent />

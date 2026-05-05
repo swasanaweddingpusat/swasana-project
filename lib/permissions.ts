@@ -17,7 +17,7 @@ export async function isSuperAdmin(roleId: string | null | undefined): Promise<b
     where: { id: roleId },
     select: { name: true },
   });
-  return role?.name.toLowerCase() === "super admin";
+  return role?.name === "super-admin";
 }
 
 export async function hasPermission(

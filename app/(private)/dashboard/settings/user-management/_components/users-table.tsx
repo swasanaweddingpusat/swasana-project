@@ -310,7 +310,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                         <TableCell className={cn('px-2', 'py-2.5')}>
                           {roleName ? (
                             <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getRoleBadgeClass())}>
-                              {roleName.replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                              {roleName}
                             </span>
                           ) : "—"}
                         </TableCell>

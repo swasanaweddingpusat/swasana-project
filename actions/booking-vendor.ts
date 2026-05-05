@@ -6,6 +6,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
+import { canAccessBooking, getProfileDataScope, getBookingIdFromSnapBonus } from "@/lib/access-control";
 
 interface VendorSelection {
   vendorCategoryId: string;
@@ -24,6 +25,11 @@ export async function saveBookingVendors(
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`save-vendors:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     // Only work with non-addons rows that have NO paketData (set by set-vendor-drawer)
@@ -104,6 +110,13 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`update-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
+  const bookingId = await getBookingIdFromSnapBonus(id);
+  if (!bookingId) return { success: false as const, error: "Bonus tidak ditemukan." };
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
   try {
     await db.$transaction([db.snapBonus.update({
       where: { id },
@@ -127,6 +140,11 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`add-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const [item] = await db.$transaction([db.snapBonus.create({
@@ -154,6 +172,13 @@ export async function deleteSnapBonus(id: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`delete-bonus:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
+
+  const bookingId = await getBookingIdFromSnapBonus(id);
+  if (!bookingId) return { success: false as const, error: "Bonus tidak ditemukan." };
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     await db.$transaction([db.snapBonus.delete({ where: { id } })]);

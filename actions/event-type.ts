@@ -12,7 +12,7 @@ const eventTypeSchema = z.object({
 });
 
 export async function createEventType(data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings-event-types", action: "create" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`et-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -33,7 +33,7 @@ export async function createEventType(data: unknown) {
 }
 
 export async function updateEventType(id: string, data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-event-types", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`et-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -53,7 +53,7 @@ export async function updateEventType(id: string, data: unknown) {
 }
 
 export async function deleteEventType(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-event-types", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`et-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

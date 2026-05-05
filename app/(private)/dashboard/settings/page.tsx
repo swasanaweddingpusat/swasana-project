@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { auth } from "@/lib/auth";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { hasPermission, isSuperAdmin } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
   UsersRound,
@@ -20,6 +22,7 @@ interface SettingItem {
   description: string;
   icon: LucideIcon;
   href: string;
+  module: string;
 }
 
 interface SettingGroup {
@@ -38,18 +41,21 @@ const GROUPS: SettingGroup[] = [
         description: "Kelola data user, undangan, dan grup akses.",
         icon: UsersRound,
         href: "/dashboard/settings/users",
+        module: "settings-users",
       },
       {
-        title: "Roles",
+        title: "Roles & Permissions",
         description: "Kelola role dan permission.",
         icon: ShieldCheck,
         href: "/dashboard/settings/roles",
+        module: "settings-role-permission",
       },
       {
         title: "Approval Flow",
         description: "Atur alur persetujuan untuk setiap modul.",
         icon: GitPullRequestArrow,
         href: "/dashboard/settings/approval-flow",
+        module: "settings-approval-flow",
       },
     ],
   },
@@ -62,52 +68,86 @@ const GROUPS: SettingGroup[] = [
         description: "Kelola daftar venue dan alamat.",
         icon: MapPinHouse,
         href: "/dashboard/settings/venues",
+        module: "settings-venues",
       },
       {
         title: "Brand",
         description: "Kelola brand dan pemetaannya ke venue.",
         icon: Palette,
         href: "/dashboard/settings/brands",
+        module: "settings-brands",
       },
       {
         title: "Payment Methods",
         description: "Atur metode pembayaran dan rekening.",
         icon: CreditCard,
         href: "/dashboard/settings/payment-methods",
+        module: "settings-payment-methods",
       },
       {
         title: "Source of Information",
         description: "Sumber informasi customer untuk tracking lead.",
         icon: Info,
         href: "/dashboard/settings/source-of-information",
+        module: "settings-source-of-information",
       },
       {
         title: "Tingkat Pendidikan",
         description: "Kelola daftar tingkat pendidikan karyawan.",
         icon: GraduationCap,
         href: "/dashboard/settings/education-level",
+        module: "settings-education-level",
       },
       {
         title: "Order Status",
         description: "Kelola status order vendor (belum diorder, sudah diajukan, dll).",
         icon: ListOrdered,
         href: "/dashboard/settings/order-status",
+        module: "settings-order-status",
       },
       {
         title: "Event Types",
         description: "Kelola tipe acara (Resepsi, Akad & Resepsi, dll) untuk nomor PO.",
         icon: CalendarCheck,
         href: "/dashboard/settings/event-types",
+        module: "settings-event-types",
       },
     ],
   },
 ];
 
 export default async function SettingsHubPage() {
-  await requirePagePermission("settings");
+  await requirePagePermission([
+    "settings-users", "settings-brands", "settings-venues", "settings-groups",
+    "settings-role-permission", "settings-approval-flow", "settings-payment-methods",
+    "settings-source-of-information", "settings-education-level",
+    "settings-event-types", "settings-order-status",
+  ]);
+
+  const session = await auth();
+  const roleId = session?.user?.roleId ?? null;
+  const isAdmin = await isSuperAdmin(roleId);
+
+  // Filter items per group based on user permission
+  const visibleGroups = (
+    await Promise.all(
+      GROUPS.map(async (group) => {
+        const visibleItems = (
+          await Promise.all(
+            group.items.map(async (item) => {
+              const allowed = isAdmin || await hasPermission(roleId, item.module, "view");
+              return allowed ? item : null;
+            })
+          )
+        ).filter((item): item is SettingItem => item !== null);
+        return visibleItems.length > 0 ? { ...group, items: visibleItems } : null;
+      })
+    )
+  ).filter((group): group is SettingGroup => group !== null);
+
   return (
     <div className={cn('px-6', 'pb-6', 'space-y-8')}>
-      {GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <section key={group.title} className="space-y-3">
           <div>
             <h2 className={cn('text-base', 'font-semibold', 'text-gray-900')}>

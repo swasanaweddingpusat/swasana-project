@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 export async function addPartialPayment(termId: string, data: { amount: number; paidAt: string; notes?: string }) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
@@ -19,6 +20,11 @@ export async function addPartialPayment(termId: string, data: { amount: number; 
       select: { id: true, bookingId: true, name: true, amount: true, partialPayments: { select: { amount: true } } },
     });
     if (!term) return { success: false, error: "Term tidak ditemukan." };
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, term.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
 
     const totalPaid = term.partialPayments.reduce((s, p) => s + p.amount, 0) + data.amount;
     const newStatus = totalPaid >= term.amount ? "paid" : "partial";
@@ -59,6 +65,11 @@ export async function deletePartialPayment(paymentId: string) {
       select: { id: true, amount: true, term: { select: { id: true, bookingId: true, name: true, amount: true, partialPayments: { select: { amount: true } } } } },
     });
     if (!payment) return { success: false, error: "Payment tidak ditemukan." };
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, payment.term.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
 
     const remainingPaid = payment.term.partialPayments.reduce((s, p) => s + p.amount, 0) - payment.amount;
     const newStatus = remainingPaid <= 0 ? "unpaid" : remainingPaid >= payment.term.amount ? "paid" : "partial";

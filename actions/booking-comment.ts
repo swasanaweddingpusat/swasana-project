@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { deleteFromR2 } from "@/lib/r2";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 const contentSchema = z.string().max(2000);
 
@@ -30,6 +31,11 @@ export async function createBookingComment(data: {
   const parsed = contentSchema.safeParse(data.content);
   if (!parsed.success) return { success: false as const, error: "Komentar tidak valid." };
   if (!data.content.trim() && !data.attachments?.length) return { success: false as const, error: "Komentar tidak boleh kosong." };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, data.bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const [comment] = await db.$transaction([db.bookingComment.create({

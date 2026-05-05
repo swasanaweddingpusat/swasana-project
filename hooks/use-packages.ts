@@ -13,6 +13,7 @@ import {
   saveVendorItems,
   saveInternalItems,
   saveVariantPrices,
+  togglePackageAvailable,
 } from "@/actions/package";
 import type { PackagesQueryResult } from "@/lib/queries/packages";
 import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
@@ -54,6 +55,14 @@ export function useDeleteBulkPackages() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ids: string[]) => deleteBulkPackages(ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function useTogglePackageAvailable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => togglePackageAvailable(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }

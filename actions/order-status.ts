@@ -9,7 +9,7 @@ import { requirePermission } from "@/lib/permissions";
 const nameSchema = z.string().min(1, "Nama wajib diisi").max(100);
 
 export async function createOrderStatus(name: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings-order-status", action: "create" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`order-status-create:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
@@ -27,7 +27,7 @@ export async function createOrderStatus(name: string) {
 }
 
 export async function updateOrderStatus(id: string, name: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-order-status", action: "edit" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`order-status-update:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
@@ -45,7 +45,7 @@ export async function updateOrderStatus(id: string, name: string) {
 }
 
 export async function deleteOrderStatus(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-order-status", action: "delete" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`order-status-delete:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 

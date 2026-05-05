@@ -365,7 +365,7 @@ export async function saveVariantPrices(
   categories: { categoryName: string; basePrice: number; sortOrder: number }[],
   margin: number
 ) {
-  const permResult = await requirePermission({ module: "package", action: "set_harga" });
+  const permResult = await requirePermission({ module: "package", action: "set-harga" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`variant-prices:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -388,6 +388,58 @@ export async function saveVariantPrices(
     return { success: true };
   } catch (e) {
     console.error("[saveVariantPrices]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Variant T&C ─────────────────────────────────────────────────────────────
+
+export async function updateVariantTC(variantId: string, termAndCondition: string | null): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const permResult = await requirePermission({ module: "package", action: "term-&-condition" });
+    if (permResult.error) return { success: false, error: permResult.error };
+    const session = permResult.session!;
+    if (!mutationLimiter.check(`variant-tc:${session.user.id}`)) return { success: false, ...rateLimitError() };
+
+    await db.$transaction([
+      db.packageVariant.update({ where: { id: variantId }, data: { termAndCondition } }),
+    ]);
+
+    await logAudit({
+      userId: session.user.id,
+      action: "packages.update_tc",
+      entityType: "package",
+      entityId: variantId,
+      description: `Updated T&C for variant ${variantId}`,
+    });
+    revalidateTag("packages", { expire: 0 });
+    return { success: true };
+  } catch (e) {
+    console.error("[updateVariantTC]", e);
+    return { success: false, error: "Gagal menyimpan T&C" };
+  }
+}
+
+// ─── Toggle Available ─────────────────────────────────────────────────────────
+
+export async function togglePackageAvailable(id: string): Promise<{ success: true; available: boolean } | { success: false; error: string }> {
+  const permResult = await requirePermission({ module: "package", action: "edit" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
+  if (!mutationLimiter.check(`pkg-toggle:${session.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    const pkg = await db.package.findUnique({ where: { id }, select: { available: true } });
+    if (!pkg) return { success: false, error: "Package not found" };
+
+    const [updated] = await db.$transaction([
+      db.package.update({ where: { id }, data: { available: !pkg.available } }),
+    ]);
+
+    revalidateTag("packages", { expire: 0 });
+    return { success: true, available: updated.available };
+  } catch (err) {
+    console.error("[togglePackageAvailable]", err);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

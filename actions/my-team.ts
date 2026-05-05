@@ -7,6 +7,7 @@ import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { setMemberTargetSchema, updateGroupSchema } from "@/lib/validations/user";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 // ─── Update Team Settings ─────────────────────────────────────────────────────
 
@@ -179,6 +180,11 @@ export async function approveBooking(bookingId: string, signature: string) {
   if (!mutationLimiter.check(`booking-approve:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   if (!signature) return { success: false, error: "Tanda tangan wajib diisi." };
+
+  const scope = await getProfileDataScope(session.user.profileId);
+  if (!(await canAccessBooking(session.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const [booking] = await db.$transaction([

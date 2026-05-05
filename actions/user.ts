@@ -19,7 +19,7 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 // ─── Invite User ──────────────────────────────────────────────────────────────
 
 export async function inviteUser(formData: FormData) {
-  const permResult = await requirePermission({ module: "settings", action: "create" });
+  const permResult = await requirePermission({ module: "settings-users", action: "create" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
 
@@ -129,7 +129,7 @@ export async function inviteUser(formData: FormData) {
 // ─── Update User ──────────────────────────────────────────────────────────────
 
 export async function updateUser(data: Record<string, unknown>) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-users", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`user-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -253,7 +253,7 @@ export async function updateUser(data: Record<string, unknown>) {
 // ─── Delete User ──────────────────────────────────────────────────────────────
 
 export async function deleteUser(userId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "delete" });
+  const permResult = await requirePermission({ module: "settings-users", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`user-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -297,7 +297,7 @@ export async function deleteUser(userId: string) {
 // ─── Resend Invitation ────────────────────────────────────────────────────────
 
 export async function resendInvitation(userId: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-users", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`resend-invite:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -362,7 +362,7 @@ export async function bulkUpdateUsers(data: {
   dataScope?: "own" | "group" | "all";
   groupIds?: string[];
 }): Promise<{ success: boolean; error?: string; updated?: number }> {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-users", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`bulk-update-users:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

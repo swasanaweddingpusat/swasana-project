@@ -21,7 +21,7 @@ const upsertFlowSchema = z.object({
 });
 
 export async function upsertApprovalFlow(data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-approval-flow", action: "edit" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`approval-flow-upsert:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
@@ -67,7 +67,7 @@ export async function upsertApprovalFlow(data: unknown) {
 }
 
 export async function deleteApprovalFlow(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-approval-flow", action: "delete" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`approval-flow-delete:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 

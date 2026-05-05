@@ -18,7 +18,7 @@ export function usePermissions() {
   const { data, isLoading } = useQuery({
     queryKey: ["me:permissions"],
     queryFn: fetchPermissions,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000, // 30 seconds
   });
 
   const can = (module: string, action: string): boolean => {

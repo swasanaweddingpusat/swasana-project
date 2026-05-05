@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { session, response } = await requirePermissionForRoute({
-    module: "settings",
+    module: "settings-users",
     action: "view",
   });
   if (response) return response;

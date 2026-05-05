@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 interface TermUpdate {
   id: string;
@@ -35,6 +36,11 @@ export async function updateTermOfPayments(
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`top-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,6 +102,11 @@ export async function addTermOfPayment(bookingId: string, data: { name: string; 
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`top-add:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const maxSort = await db.termOfPayment.findFirst({ where: { bookingId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });

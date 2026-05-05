@@ -60,7 +60,7 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
     setLoading(true);
     fetch(`/api/bookings/${bookingId}/activity-logs`)
       .then((r) => r.json())
-      .then((data) => { if (id === fetchIdRef.current) setLogs(data ?? []); })
+      .then((res) => { if (id === fetchIdRef.current) setLogs(Array.isArray(res) ? res : (res?.data ?? [])); })
       .catch(() => { if (id === fetchIdRef.current) setLogs([]); })
       .finally(() => { if (id === fetchIdRef.current) setLoading(false); });
   }, [open, bookingId]);
@@ -120,7 +120,7 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
                     <p className="text-sm font-medium text-gray-800 mt-1">
                       {log.profile?.fullName ?? "System"}
                       {log.profile?.role?.name && (
-                        <span className="ml-1.5 text-xs text-gray-400 font-normal capitalize">({log.profile.role.name})</span>
+                        <span className="ml-1.5 text-xs text-gray-400 font-normal">({log.profile.role.name})</span>
                       )}
                     </p>
                     {log.description && <p className="text-sm text-gray-600 mt-0.5">{log.description}</p>}

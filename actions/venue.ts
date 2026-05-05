@@ -19,7 +19,7 @@ const venueSchema = z.object({
 const updateVenueSchema = venueSchema.extend({ id: z.string().min(1) });
 
 export async function createVenue(data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings-venues", action: "create" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`venue-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -37,7 +37,7 @@ export async function createVenue(data: unknown) {
 }
 
 export async function updateVenue(data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-venues", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`venue-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -57,7 +57,7 @@ export async function updateVenue(data: unknown) {
 }
 
 export async function deleteVenue(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-venues", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`venue-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -71,23 +71,3 @@ export async function deleteVenue(id: string) {
   }
 }
 
-export async function updateVenueTermCondition(data: { id: string; termAndCondition: string | null }) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
-  if (error) return { success: false as const, error };
-  if (!mutationLimiter.check(`venue-tc:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
-
-  const parsed = z.object({ id: z.string().min(1), termAndCondition: z.string().nullable() }).safeParse(data);
-  if (!parsed.success) return { success: false as const, error: parsed.error.issues[0].message };
-
-  try {
-    await db.$transaction([db.venue.update({
-      where: { id: parsed.data.id },
-      data: { termAndCondition: parsed.data.termAndCondition },
-    })]);
-    revalidateTag("venues", { expire: 0 });
-    return { success: true as const };
-  } catch (e) {
-    console.error("[updateVenueTermCondition]", e);
-    return { success: false as const, error: "Gagal menyimpan Term & Condition." };
-  }
-}

@@ -61,9 +61,23 @@ export function LoginForm({
         })
 
         if (result?.error) {
-          toast.error("Login gagal", {
-            description: "Email atau password salah, atau email belum diverifikasi.",
-          })
+          // Check if account is locked
+          const lockRes = await fetch("/api/auth/check-lockout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const lockData = await lockRes.json() as { locked: boolean; remainingMin?: number };
+
+          if (lockData.locked) {
+            toast.error("Akun terkunci sementara", {
+              description: `Terlalu banyak percobaan gagal. Coba lagi dalam ${lockData.remainingMin ?? 15} menit.`,
+            })
+          } else {
+            toast.error("Login gagal", {
+              description: "Email atau password salah, atau email belum diverifikasi.",
+            })
+          }
         } else {
           toast.success("Login berhasil!", {
             description: "Redirecting to dashboard...",

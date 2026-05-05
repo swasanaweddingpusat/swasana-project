@@ -410,25 +410,19 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                           <Pencil className={cn('mr-2', 'h-4', 'w-4')} /> Edit Catering
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
-                                        {can("booking", "approve_finance") && (
                                         <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.finance}
                                           onClick={() => !approvalCache[`${booking.id}_catering`]?.finance && setVendorApproveModal({ open: true, bookingId: booking.id, role: "finance", roleLabel: "Finance", categoryType: "catering" })}>
                                           {approvalCache[`${booking.id}_catering`]?.finance ? "Finance Approved ✓" : "Approve Finance"}
                                         </DropdownMenuItem>
-                                        )}
-                                        {can("booking", "approve_manager") && (
                                         <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.dirops}
                                           onClick={() => !approvalCache[`${booking.id}_catering`]?.dirops && setVendorApproveModal({ open: true, bookingId: booking.id, role: "dirops", roleLabel: "Direktur Ops", categoryType: "catering" })}>
                                           {approvalCache[`${booking.id}_catering`]?.dirops ? "Direktur Ops Approved ✓" : "Approve Direktur Ops"}
                                         </DropdownMenuItem>
-                                        )}
-                                      {can("booking", "approve_operations") && (
-                                      <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.oprations}
-                                        onClick={() => !approvalCache[`${booking.id}_catering`]?.oprations && setVendorApproveModal({ open: true, bookingId: booking.id, role: "oprations", roleLabel: "Oprations", categoryType: "catering" })}>
-                                        {approvalCache[`${booking.id}_catering`]?.oprations ? "Oprations Approved ✓" : "Approve Oprations"}
-                                      </DropdownMenuItem>
-                                      )}
-                                      {(can("booking", "approve_finance") || can("booking", "approve_manager") || can("booking", "approve_operations")) && <DropdownMenuSeparator />}
+                                        <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.oprations}
+                                          onClick={() => !approvalCache[`${booking.id}_catering`]?.oprations && setVendorApproveModal({ open: true, bookingId: booking.id, role: "oprations", roleLabel: "Oprations", categoryType: "catering" })}>
+                                          {approvalCache[`${booking.id}_catering`]?.oprations ? "Oprations Approved ✓" : "Approve Oprations"}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
                                       {can("booking", "print") && (
                                       <DropdownMenuItem className="cursor-pointer" onClick={async () => {
                                         const t = toast.loading("Membuat PDF Catering...");
@@ -570,13 +564,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                   </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                               )}
-                              {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
+                              {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
                               {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
                                   <SquareX className={cn('mr-2', 'h-4', 'w-4', 'text-red-500')} /> Reject Booking
                                 </DropdownMenuItem>
                               )}
-                              {can("booking", "mark_lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
+                              {can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
                                 <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setLostTarget(booking)}>
                                   <SquareX className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
                                 </DropdownMenuItem>

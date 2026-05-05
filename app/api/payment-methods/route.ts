@@ -3,7 +3,7 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 
 export async function GET(request: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "payment_methods", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "settings-payment-methods", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`pm-list:${session.user.id}`)) return rateLimitResponse();
 

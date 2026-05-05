@@ -4,7 +4,7 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getRoles } from "@/lib/queries/roles";
 
 export async function GET() {
-  const { session, response } = await requirePermissionForRoute({ module: "role_permission", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "settings-role-permission", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`roles-list:${session.user.id}`)) return rateLimitResponse();
 

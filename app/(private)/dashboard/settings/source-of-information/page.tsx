@@ -5,7 +5,7 @@ import { SourceOfInformationLoading } from "./_components/loading";
 import { requirePagePermission } from "@/lib/require-page-permission";
 
 export default async function SourceOfInformationSettingsPage() {
-  await requirePagePermission("source_of_information");
+  await requirePagePermission("settings-source-of-information");
   return (
     <Suspense fallback={<SourceOfInformationLoading />}>
       <SourceOfInformationContent />

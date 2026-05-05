@@ -29,6 +29,7 @@ interface DrawerProps {
   onBack?: () => void;
   backButtonLabel?: string;
   headerActions?: React.ReactNode;
+  childrenClassName?: string;
 }
 
 export function Drawer({
@@ -45,6 +46,7 @@ export function Drawer({
   onBack,
   backButtonLabel = "Back",
   headerActions,
+  childrenClassName,
 }: DrawerProps) {
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose?.(); }}>
@@ -112,7 +114,7 @@ export function Drawer({
           <Stepper currentStep={steps} steps={stepperSteps} />
         )}
 
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        <div className={cn("flex-1 overflow-y-auto", childrenClassName)}>{children}</div>
       </SheetContent>
     </Sheet>
   );

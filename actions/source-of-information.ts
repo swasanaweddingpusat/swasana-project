@@ -9,7 +9,7 @@ import { requirePermission } from "@/lib/permissions";
 const nameSchema = z.string().min(1, "Nama wajib diisi").max(100);
 
 export async function createSourceOfInformation(name: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings-source-of-information", action: "create" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`soi-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -27,7 +27,7 @@ export async function createSourceOfInformation(name: string) {
 }
 
 export async function updateSourceOfInformation(id: string, name: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-source-of-information", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`soi-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -45,7 +45,7 @@ export async function updateSourceOfInformation(id: string, name: string) {
 }
 
 export async function deleteSourceOfInformation(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-source-of-information", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`soi-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

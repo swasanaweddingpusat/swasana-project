@@ -10,6 +10,7 @@ import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/val
 import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -224,7 +225,7 @@ export async function createBooking(data: unknown) {
         where: { id: session!.user.roleId ?? "" },
         select: { name: true, id: true },
       });
-      const isManager = creatorRole?.name.toLowerCase() === "manager" || creatorRole?.name.toLowerCase() === "super admin";
+      const isManager = creatorRole?.name === "manager" || creatorRole?.name === "super-admin";
 
       for (const step of flow.steps) {
         const isAutoApproved =
@@ -300,13 +301,18 @@ export async function updateBooking(data: unknown) {
   // Determine required permission based on status change
   const statusActionMap: Record<string, string> = {
     Rejected: "reject",
-    Lost: "mark_lost",
+    Lost: "mark-lost",
     Pending: "restore",
   };
   const requiredAction = rest.bookingStatus ? (statusActionMap[rest.bookingStatus] ?? "edit") : "edit";
 
   const { session, error } = await requirePermission({ module: "booking", action: requiredAction });
   if (error) return { success: false, error };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const updateData: Record<string, unknown> = {};
@@ -343,8 +349,43 @@ export async function deleteBooking(id: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "delete" });
   if (error) return { success: false, error };
 
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
   try {
-    await db.$transaction([db.booking.delete({ where: { id } })]);
+    // Fetch R2 file keys before deleting records
+    const docs = await db.bookingDocument.findMany({
+      where: { bookingId: id },
+      select: { filePath: true },
+    });
+
+    await db.$transaction([
+      // Cleanup non-FK relations (module + entityId pattern)
+      db.approvalRecordStep.deleteMany({
+        where: { record: { module: "booking", entityId: id } },
+      }),
+      db.approvalRecord.deleteMany({
+        where: { module: "booking", entityId: id },
+      }),
+      db.notification.deleteMany({
+        where: { entityType: "booking", entityId: id },
+      }),
+      db.activityLog.deleteMany({
+        where: { entityType: "booking", entityId: id },
+      }),
+      // Cascade handles the rest (snaps, terms, comments, etc.)
+      db.booking.delete({ where: { id } }),
+    ]);
+
+    // Delete R2 files (outside transaction — non-critical)
+    if (docs.length > 0) {
+      const { deleteFromR2 } = await import("@/lib/r2");
+      await Promise.all(
+        docs.map((d) => deleteFromR2(d.filePath).catch((e) => console.error("[deleteBooking] R2:", e)))
+      );
+    }
 
     await logAudit({
       userId: session!.user.id,
@@ -367,6 +408,11 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
   if (!mutationLimiter.check(`booking-transfer:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   if (!bookingId || !targetSalesId) return { success: false, error: "Parameter tidak valid." };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const booking = await db.booking.findUnique({
@@ -411,6 +457,11 @@ export async function editBooking(data: unknown) {
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   const { id, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, ...rest } = parsed.data;
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
 
   try {
     const booking = await db.booking.findUnique({

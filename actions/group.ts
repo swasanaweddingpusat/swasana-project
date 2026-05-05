@@ -11,7 +11,7 @@ import { headers } from "next/headers";
 // ─── Create Group ─────────────────────────────────────────────────────────────
 
 export async function createGroup(data: unknown) {
-  const permResult = await requirePermission({ module: "settings", action: "create" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "create" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -57,7 +57,7 @@ export async function createGroup(data: unknown) {
 // ─── Update Group ─────────────────────────────────────────────────────────────
 
 export async function updateGroup(data: unknown) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -78,6 +78,7 @@ export async function updateGroup(data: unknown) {
     })]);
 
     revalidateTag("groups", { expire: 0 });
+    revalidateTag("users", { expire: 0 });
 
     const h = await headers();
     await logAudit({
@@ -100,7 +101,7 @@ export async function updateGroup(data: unknown) {
 // ─── Delete Group ─────────────────────────────────────────────────────────────
 
 export async function deleteGroup(groupId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "delete" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -135,7 +136,7 @@ export async function deleteGroup(groupId: string) {
 // ─── Add Member ───────────────────────────────────────────────────────────────
 
 export async function addGroupMember(groupId: string, userId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-member-add:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -157,6 +158,7 @@ export async function addGroupMember(groupId: string, userId: string) {
     });
 
     revalidateTag("groups", { expire: 0 });
+    revalidateTag("users", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[addGroupMember]", e);
@@ -167,7 +169,7 @@ export async function addGroupMember(groupId: string, userId: string) {
 // ─── Remove Member ────────────────────────────────────────────────────────────
 
 export async function removeGroupMember(groupId: string, userId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-member-rm:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -175,6 +177,7 @@ export async function removeGroupMember(groupId: string, userId: string) {
   try {
     await db.$transaction([db.userGroupMember.delete({ where: { groupId_userId: { groupId, userId } } })]);
     revalidateTag("groups", { expire: 0 });
+    revalidateTag("users", { expire: 0 });
     return { success: true };
   } catch (e) {
     console.error("[removeGroupMember]", e);
@@ -185,7 +188,7 @@ export async function removeGroupMember(groupId: string, userId: string) {
 // ─── Reorder Groups ───────────────────────────────────────────────────────────
 
 export async function reorderGroups(orderedIds: string[]) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-reorder:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -205,7 +208,7 @@ export async function reorderGroups(orderedIds: string[]) {
 // ─── Reorder Members ──────────────────────────────────────────────────────────
 
 export async function reorderGroupMembers(groupId: string, orderedUserIds: string[]) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-groups", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`group-member-reorder:${session.user.id}`)) return { success: false, ...rateLimitError() };

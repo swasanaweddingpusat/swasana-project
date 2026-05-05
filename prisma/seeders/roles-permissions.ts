@@ -2,33 +2,38 @@ import { prisma } from "./_client";
 
 // ── Roles ────────────────────────────────────────────────────────────
 const roleData = [
-  { name: "Super Admin", description: "All Access", sortOrder: 1 },
-  { name: "direktur sales", description: "Access to sales data and customer management", sortOrder: 2 },
+  { name: "super-admin", description: "All Access", sortOrder: 1 },
+  { name: "direktur-sales", description: "Access to sales data and customer management", sortOrder: 2 },
   { name: "manager", description: "Full access to all features and user management", sortOrder: 3 },
-  { name: "direktur operational", description: "All Access", sortOrder: 4 },
+  { name: "direktur-operational", description: "All Access", sortOrder: 4 },
   { name: "operational", description: "All Access", sortOrder: 5 },
   { name: "finance", description: "Access to financial data and reports", sortOrder: 6 },
   { name: "sales", description: "Access to sales data and customer management", sortOrder: 7 },
-  { name: "vendor specialist", description: "Manage Data Vendor Specialist", sortOrder: 8 },
-  { name: "human resource", description: "Access to human resource", sortOrder: 9 },
+  { name: "vendor-specialist", description: "Manage Data Vendor Specialist", sortOrder: 8 },
+  { name: "human-resource", description: "Access to human resource", sortOrder: 9 },
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "approve_manager", "approve_finance", "approve_operations", "mark_lost", "restore", "transfer", "reject", "comment"],
-  client_agreement: ["view", "create", "edit"],
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+  approval: ["edit"],
   customers: ["view", "create", "edit", "delete"],
-  finance: ["view", "create", "edit", "delete"],
-  finance_ar: ["view", "create", "edit", "delete"],
-  package: ["view", "create", "edit", "delete", "set_harga"],
-  payment_methods: ["view", "create", "edit", "delete"],
-  role_permission: ["view", "create", "edit", "delete"],
-  settings: ["view", "create", "edit", "delete"],
-  settlement: ["view", "create", "edit", "delete"],
-  source_of_information: ["view", "create", "edit", "delete"],
+  "finance-ar": ["view", "create", "edit", "delete"],
+  package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
   vendor: ["view", "create", "edit", "delete"],
-  approval: ["view", "create", "edit"],
+  // Settings sub-modules
+  "settings-brands": ["view", "create", "edit", "delete"],
+  "settings-venues": ["view", "create", "edit", "delete"],
+  "settings-groups": ["view", "create", "edit", "delete"],
+  "settings-users": ["view", "create", "edit", "delete"],
+  "settings-education-level": ["view", "create", "edit", "delete"],
+  "settings-event-types": ["view", "create", "edit", "delete"],
+  "settings-order-status": ["view", "create", "edit", "delete"],
+  "settings-approval-flow": ["view", "create", "edit", "delete"],
+  "settings-payment-methods": ["view", "create", "edit", "delete"],
+  "settings-role-permission": ["view", "create", "edit", "delete"],
+  "settings-source-of-information": ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -45,77 +50,71 @@ const moduleActions: Record<string, string[]> = {
 // - venue_management: redundant, pake settings
 
 // ── Role → Permission Matrix ─────────────────────────────────────────
-// "Super Admin" gets ALL permissions (handled separately).
+// "super-admin" gets ALL permissions (handled separately).
 const rolePermissionMap: Record<string, Record<string, string[]>> = {
-  "direktur sales": {
-    booking: ["view", "create", "edit", "approve", "approve_manager", "comment", "print"],
+  "direktur-sales": {
+    booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "comment", "print", "client-agreement"],
+    approval: ["edit"],
     customers: ["view", "create", "edit"],
     package: ["view"],
     vendor: ["view"],
-    settings: ["view"],
-    finance: ["view"],
-    finance_ar: ["view"],
-    settlement: ["view"],
-    client_agreement: ["view", "create", "edit"],
-    approval: ["view"],
+    "finance-ar": ["view"],
+    "settings-approval-flow": ["view"],
   },
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "approve_manager", "approve_finance", "approve_operations", "mark_lost", "restore", "transfer", "reject", "comment"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+    approval: ["edit"],
     customers: ["view", "create", "edit", "delete"],
-    package: ["view", "create", "edit", "delete"],
+    package: ["view", "create", "edit", "delete", "term-&-condition"],
     vendor: ["view", "create", "edit", "delete"],
-    settings: ["view", "create", "edit", "delete"],
-    payment_methods: ["view", "create", "edit", "delete"],
-    settlement: ["view", "create", "edit", "delete"],
-    client_agreement: ["view", "create", "edit"],
-    role_permission: ["view", "edit"],
-    finance: ["view"],
-    finance_ar: ["view"],
-    approval: ["view", "create", "edit"],
-    source_of_information: ["view", "create", "edit", "delete"],
+    "finance-ar": ["view"],
+    "settings-brands": ["view", "create", "edit", "delete"],
+    "settings-venues": ["view", "create", "edit", "delete"],
+    "settings-groups": ["view", "create", "edit", "delete"],
+    "settings-users": ["view", "create", "edit", "delete"],
+    "settings-education-level": ["view", "create", "edit", "delete"],
+    "settings-event-types": ["view", "create", "edit", "delete"],
+    "settings-order-status": ["view", "create", "edit", "delete"],
+    "settings-approval-flow": ["view", "create", "edit", "delete"],
+    "settings-payment-methods": ["view", "create", "edit", "delete"],
+    "settings-role-permission": ["view", "edit"],
+    "settings-source-of-information": ["view", "create", "edit", "delete"],
   },
-  "direktur operational": {
-    booking: ["view", "create", "edit", "approve", "approve_operations", "comment", "print"],
+  "direktur-operational": {
+    booking: ["view", "create", "edit", "approve", "comment", "print"],
+    approval: ["edit"],
     customers: ["view"],
     package: ["view"],
     vendor: ["view", "create", "edit"],
-    settings: ["view"],
-    settlement: ["view"],
-    approval: ["view"],
+    "settings-approval-flow": ["view"],
   },
   operational: {
     booking: ["view", "create", "edit", "comment"],
     customers: ["view"],
     package: ["view"],
     vendor: ["view"],
-    settings: ["view"],
   },
   finance: {
-    booking: ["view", "approve_finance", "comment"],
+    booking: ["view", "comment"],
     customers: ["view"],
-    package: ["view", "create", "edit", "delete", "set_harga"],
-    finance: ["view", "create", "edit", "delete"],
-    finance_ar: ["view", "create", "edit", "delete"],
-    payment_methods: ["view", "create", "edit", "delete"],
-    settlement: ["view", "create", "edit", "delete"],
-    client_agreement: ["view"],
+    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
+    "finance-ar": ["view", "create", "edit", "delete"],
+    "settings-payment-methods": ["view", "create", "edit", "delete"],
   },
   sales: {
-    booking: ["view", "create", "edit", "comment"],
+    booking: ["view", "create", "edit", "comment", "client-agreement"],
     customers: ["view", "create", "edit"],
-    package: ["view", "create", "edit"],
+    package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
-    client_agreement: ["view", "create", "edit"],
-    settlement: ["view"],
   },
-  "vendor specialist": {
+  "vendor-specialist": {
     vendor: ["view", "create", "edit", "delete"],
     booking: ["view"],
     package: ["view"],
-    settings: ["view"],
   },
-  "human resource": {
-    settings: ["view"],
+  "human-resource": {
+    "settings-users": ["view"],
+    "settings-education-level": ["view"],
   },
 };
 
@@ -129,12 +128,31 @@ function buildPermissionData(): { module: string; action: string }[] {
 // Modules that were removed — clean up stale permissions from DB
 const REMOVED_MODULES = [
   "attendance", "brand_management", "calendar_event", "catering",
-  "dashboard", "decoration", "finance_ap", "hr", "notification",
-  "user_management", "venue_management",
+  "dashboard", "decoration", "finance", "finance_ap", "finance_ar", "hr", "notification",
+  "user_management", "venue_management", "client_agreement", "settlement",
+  "settings", "payment_methods", "role_permission", "source_of_information",
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────
 export async function seedRolesPermissions(): Promise<void> {
+  // 0. Migrate old role names to new kebab-case format
+  const ROLE_RENAME_MAP: Record<string, string> = {
+    "Super Admin": "super-admin",
+    "direktur sales": "direktur-sales",
+    "direktur operational": "direktur-operational",
+    "vendor specialist": "vendor-specialist",
+    "human resource": "human-resource",
+  };
+  for (const [oldName, newName] of Object.entries(ROLE_RENAME_MAP)) {
+    const existing = await prisma.role.findUnique({ where: { name: oldName } });
+    if (existing) {
+      const newExists = await prisma.role.findUnique({ where: { name: newName } });
+      if (!newExists) {
+        await prisma.role.update({ where: { id: existing.id }, data: { name: newName } });
+      }
+    }
+  }
+
   // 1. Seed roles
   for (const data of roleData) {
     const existing = await prisma.role.findUnique({ where: { name: data.name } });
@@ -159,6 +177,38 @@ export async function seedRolesPermissions(): Promise<void> {
     }
   }
 
+  // 3b. Clean up old casing variants (e.g. "Booking" → "booking", "Finance_ar" → "finance-ar")
+  // First migrate role assignments from old → new permission, then delete old
+  const validModules = new Set(Object.keys(moduleActions));
+  const allPerms = await prisma.permission.findMany({ select: { id: true, module: true, action: true } });
+  for (const perm of allPerms) {
+    if (!validModules.has(perm.module)) {
+      // Try to find the canonical version (lowercase + kebab)
+      const canonical = perm.module.toLowerCase().replace(/_/g, "-");
+      if (validModules.has(canonical)) {
+        // Find the new permission with same canonical module + same action
+        const newPerm = await prisma.permission.findUnique({
+          where: { module_action: { module: canonical, action: perm.action } },
+        });
+        if (newPerm) {
+          // Migrate role assignments: re-assign to new permission
+          const oldAssignments = await prisma.rolePermission.findMany({ where: { permissionId: perm.id } });
+          for (const rp of oldAssignments) {
+            const exists = await prisma.rolePermission.findUnique({
+              where: { roleId_permissionId: { roleId: rp.roleId, permissionId: newPerm.id } },
+            });
+            if (!exists) {
+              await prisma.rolePermission.create({ data: { roleId: rp.roleId, permissionId: newPerm.id } });
+            }
+          }
+        }
+      }
+      // Delete old role assignments + old permission
+      await prisma.rolePermission.deleteMany({ where: { permissionId: perm.id } });
+      await prisma.permission.delete({ where: { id: perm.id } });
+    }
+  }
+
   // 4. Fix legacy typo if present
   const typo = await prisma.permission.findUnique({
     where: { module_action: { module: "booking", action: "approve_oprations" } },
@@ -174,8 +224,27 @@ export async function seedRolesPermissions(): Promise<void> {
     }
   }
 
+  // 4b. Clean up stale actions (old format)
+  const staleActions = [
+    { module: "booking", action: "approve_manager" },
+    { module: "booking", action: "approve_finance" },
+    { module: "booking", action: "approve_operations" },
+    { module: "booking", action: "approve_oprations" },
+    { module: "booking", action: "mark_lost" },
+    { module: "package", action: "set_harga" },
+    { module: "package", action: "term-and-condition" },
+    { module: "package", action: "set-status" },
+  ];
+  for (const { module, action } of staleActions) {
+    const stale = await prisma.permission.findUnique({ where: { module_action: { module, action } } });
+    if (stale) {
+      await prisma.rolePermission.deleteMany({ where: { permissionId: stale.id } });
+      await prisma.permission.delete({ where: { id: stale.id } });
+    }
+  }
+
   // 5. Assign ALL permissions to Super Admin
-  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "Super Admin" } });
+  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "super-admin" } });
   const allPermissions = await prisma.permission.findMany();
   for (const perm of allPermissions) {
     const existing = await prisma.rolePermission.findUnique({

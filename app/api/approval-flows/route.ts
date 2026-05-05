@@ -3,7 +3,7 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getApprovalFlows } from "@/lib/queries/approval-flows";
 
 export async function GET() {
-  const { session, response } = await requirePermissionForRoute({ module: "settings", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "settings-approval-flow", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`approval-flows:${session.user.id}`)) return rateLimitResponse();
 

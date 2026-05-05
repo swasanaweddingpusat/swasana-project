@@ -9,6 +9,7 @@ import type { CateringPaketData } from "@/types/catering";
 import type { POCateringV2, PORow } from "@/types/po-catering";
 import type { Prisma } from "@prisma/client";
 import type { SettlementType } from "@prisma/client";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -68,6 +69,11 @@ export async function saveCateringPaketData(
     });
     if (!item) return { success: false, error: "Vendor item tidak ditemukan." };
 
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, item.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
+
     await db.$transaction([
       db.snapVendorItem.update({
         where: { id: snapVendorItemId },
@@ -106,6 +112,11 @@ export async function savePOCateringData(
       select: { bookingId: true },
     });
     if (!item) return { success: false, error: "Vendor item tidak ditemukan." };
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, item.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
 
     const typed = poData as POCateringV2;
 

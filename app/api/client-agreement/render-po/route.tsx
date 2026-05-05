@@ -53,7 +53,6 @@ export async function POST(req: Request) {
         termOfPayments: { orderBy: { sortOrder: "asc" } },
         paymentMethod: true,
         sales: true,
-        venue: { select: { termAndCondition: true } },
       },
     });
 
@@ -87,7 +86,13 @@ export async function POST(req: Request) {
     };
 
     // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
-    const termAndConditionHtml = booking.venue?.termAndCondition ?? null;
+    let termAndConditionHtml: string | null;
+    if (booking.packageVariantId) {
+      const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
+      termAndConditionHtml = pv?.termAndCondition ?? null;
+    } else {
+      termAndConditionHtml = null;
+    }
     // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
     const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />;
 

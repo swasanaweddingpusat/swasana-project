@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RolesSettingsPage() {
-  await requirePagePermission("role_permission");
+  await requirePagePermission("settings-role-permission");
   return (
     <Suspense fallback={<RolesLoading />}>
       <RolesContent />

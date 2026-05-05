@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import type { DataScope } from "@/types/user";
 import { getCalendarEvents } from "@/lib/queries/calendar-events";
 import { CalendarEventView } from "./_components/calendar-event-view";
+import { requirePagePermission } from "@/lib/require-page-permission";
 
 export const metadata: Metadata = {
   title: "Calendar Event",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CalendarEventsPage() {
+  await requirePagePermission("booking");
   const session = await auth();
   const profileId = session?.user?.profileId ?? undefined;
   let dataScope: DataScope = "own";
