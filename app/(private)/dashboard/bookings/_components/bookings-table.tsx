@@ -911,6 +911,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           userProfileId={user.profileId}
           userRoleId={user.roleId}
           module="booking"
+          readOnly
         />
       )}
 

@@ -5,8 +5,8 @@ const packageInclude = {
   variants: {
     orderBy: { pax: "asc" as const },
     include: {
-      vendorItems: true,
-      internalItems: true,
+      vendorItems: { orderBy: { createdAt: "asc" as const } },
+      internalItems: { orderBy: { createdAt: "asc" as const } },
       categoryPrices: { orderBy: { sortOrder: "asc" as const } },
     },
   },

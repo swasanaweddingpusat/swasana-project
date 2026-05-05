@@ -44,9 +44,10 @@ interface ApprovalDialogProps {
   userRoleId: string | null;
   isSuperAdmin?: boolean;
   module?: string;
+  readOnly?: boolean;
 }
 
-export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId, userRoleId, isSuperAdmin, module = "package" }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, onClose, packageId, packageName, userProfileId, userRoleId, isSuperAdmin, module = "package", readOnly = false }: ApprovalDialogProps) {
   const [record, setRecord] = useState<ApprovalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [signature, setSignature] = useState<string | null>(null);
@@ -139,8 +140,10 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                     <p className={cn('text-sm', 'font-medium')}>
                       Step {step.stepOrder}: {step.approverType === "client" ? `Client — ${packageName}` : step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName}
                     </p>
-                    {step.status === "approved" && step.decidedBy && (
-                      <p className={cn('text-xs', 'text-muted-foreground')}>Disetujui oleh {step.decidedBy.fullName} {step.decidedAt ? `· ${new Date(step.decidedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</p>
+                    {step.status === "approved" && (
+                      <p className={cn('text-xs', 'text-muted-foreground')}>
+                        Disetujui{step.decidedBy ? ` oleh ${step.decidedBy.fullName}` : ""}{step.decidedAt ? ` · ${new Date(step.decidedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
+                      </p>
                     )}
                     {step.status === "rejected" && (
                       <div>
@@ -154,7 +157,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
             </div>
 
             {/* Approve/Reject actions */}
-            {canApprove && !showReject && (
+            {!readOnly && canApprove && !showReject && (
               <div className={cn('space-y-3', 'border-t', 'pt-4')}>
                 <SignaturePad onSignature={setSignature} />
                 <div className={cn('flex', 'gap-2')}>
@@ -168,7 +171,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
               </div>
             )}
 
-            {canApprove && showReject && (
+            {!readOnly && canApprove && showReject && (
               <div className={cn('space-y-3', 'border-t', 'pt-4')}>
                 <Textarea value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} placeholder="Alasan penolakan..." className="text-sm" />
                 <div className={cn('flex', 'gap-2')}>
@@ -182,7 +185,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
               </div>
             )}
 
-            {!canApprove && activeStep && (
+            {!readOnly && !canApprove && activeStep && (
               <p className={cn('text-sm', 'text-muted-foreground', 'text-center', 'py-2')}>Menunggu approval dari {activeStep.approverType === "role" ? activeStep.approverRole?.name : activeStep.approverUser?.fullName}</p>
             )}
           </div>

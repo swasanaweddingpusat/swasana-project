@@ -138,6 +138,8 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
 }
 
 function renderHtmlToPdf(html: string) {
+  let key = 0;
+
   function parseInline(text: string): React.ReactNode[] {
     const nodes: React.ReactNode[] = [];
     const regex = /<(strong|b|em|i|u)>([\s\S]*?)<\/\1>/gi;
@@ -153,29 +155,90 @@ function renderHtmlToPdf(html: string) {
         if (tag === "strong" || tag === "b") st.fontWeight = "bold";
         if (tag === "em" || tag === "i") st.fontStyle = "italic";
         if (tag === "u") st.textDecoration = "underline";
-        nodes.push(<Text key={`${match.index}`} style={st}>{inner}</Text>);
+        nodes.push(<Text key={`i${key++}`} style={st}>{inner}</Text>);
       }
       lastIndex = tempRegex.lastIndex;
     }
     if (lastIndex < text.length) { const p = stripHtml(text.slice(lastIndex)); if (p) nodes.push(p); }
     return nodes.length > 0 ? nodes : [stripHtml(text)];
   }
-  const parts: { raw: string; isBullet: boolean }[] = [];
-  const hasHtml = /<[a-z][\s\S]*>/i.test(html);
-  if (!hasHtml) {
-    html.split(/[\n\r]+/).map((l) => l.trim()).filter(Boolean).forEach((l) => parts.push({ raw: l, isBullet: false }));
-  } else {
-    const listBlocks = html.match(/<[uo]l>[\s\S]*?<\/[uo]l>/gi) || [];
-    const withoutLists = html.replace(/<[uo]l>[\s\S]*?<\/[uo]l>/gi, "");
-    const pMatches = [...withoutLists.matchAll(/<p>([\s\S]*?)<\/p>/gi)];
-    if (pMatches.length > 0) pMatches.forEach((pm) => { const t = stripHtml(pm[1]); if (t) parts.push({ raw: pm[1], isBullet: false }); });
-    for (const block of listBlocks) {
-      const items = [...block.matchAll(/<li>([\s\S]*?)<\/li>/gi)];
-      for (const item of items) { const t = stripHtml(item[1]); if (t) parts.push({ raw: item[1], isBullet: true }); }
+
+  function renderNodes(htmlStr: string, depth: number = 0): React.ReactNode[] {
+    const elements: React.ReactNode[] = [];
+    // Match top-level <ol>, <ul>, <p>, or text between them
+    const blockRegex = /<(ol|ul)>([\s\S]*?)<\/\1>|<p>([\s\S]*?)<\/p>/gi;
+    let lastIdx = 0;
+    let blockMatch;
+
+    while ((blockMatch = blockRegex.exec(htmlStr)) !== null) {
+      // Text before this block
+      if (blockMatch.index > lastIdx) {
+        const before = stripHtml(htmlStr.slice(lastIdx, blockMatch.index));
+        if (before.trim()) {
+          elements.push(<Text key={`t${key++}`} style={{ fontSize: 8, marginBottom: 1 }}>{parseInline(htmlStr.slice(lastIdx, blockMatch.index))}</Text>);
+        }
+      }
+
+      if (blockMatch[1]) {
+        // <ol> or <ul>
+        const listType = blockMatch[1] as "ol" | "ul";
+        const listContent = blockMatch[2];
+        // Parse <li> items (may contain nested lists)
+        const liRegex = /<li>([\s\S]*?)<\/li>/gi;
+        let liMatch;
+        let itemIdx = 0;
+        while ((liMatch = liRegex.exec(listContent)) !== null) {
+          itemIdx++;
+          const liContent = liMatch[1];
+          // Separate text from nested lists
+          const nestedListMatch = liContent.match(/<[ou]l>[\s\S]*<\/[ou]l>/);
+          const textPart = nestedListMatch ? liContent.slice(0, nestedListMatch.index).replace(/<\/?p>/g, "").trim() : liContent.replace(/<\/?p>/g, "").trim();
+          const bullet = listType === "ol" ? `${itemIdx}. ` : "• ";
+          const indent = depth * 12 + 8;
+
+          if (textPart) {
+            elements.push(
+              <View key={`li${key++}`} style={{ flexDirection: "row", marginLeft: indent, marginBottom: 1 }}>
+                <Text style={{ fontSize: 8, width: listType === "ol" ? 16 : 8 }}>{bullet}</Text>
+                <Text style={{ fontSize: 8, flex: 1 }}>{parseInline(textPart)}</Text>
+              </View>
+            );
+          }
+
+          // Render nested list
+          if (nestedListMatch) {
+            const nested = renderNodes(nestedListMatch[0], depth + 1);
+            elements.push(...nested);
+          }
+        }
+      } else if (blockMatch[3] !== undefined) {
+        // <p> block
+        const pContent = blockMatch[3].trim();
+        if (pContent) {
+          elements.push(<Text key={`p${key++}`} style={{ fontSize: 8, marginBottom: 2, fontWeight: /<strong|<b>/i.test(pContent) ? "bold" : "normal" }}>{parseInline(pContent)}</Text>);
+        }
+      }
+
+      lastIdx = blockRegex.lastIndex;
     }
+
+    // Remaining text after last block
+    if (lastIdx < htmlStr.length) {
+      const remaining = stripHtml(htmlStr.slice(lastIdx));
+      if (remaining.trim()) {
+        elements.push(<Text key={`r${key++}`} style={{ fontSize: 8, marginBottom: 1 }}>{parseInline(htmlStr.slice(lastIdx))}</Text>);
+      }
+    }
+
+    return elements;
   }
-  if (parts.length === 0) { const p = stripHtml(html); if (p) parts.push({ raw: p, isBullet: false }); }
-  return (<View style={{ marginLeft: 8 }}>{parts.map((part, i) => (<Text key={i} style={{ fontSize: 8, marginBottom: 1 }}>{part.isBullet ? "• " : ""}{parseInline(part.raw)}</Text>))}</View>);
+
+  // Fallback for plain text (no HTML)
+  if (!/<[a-z][\s\S]*>/i.test(html)) {
+    return (<View>{html.split(/[\n\r]+/).filter(Boolean).map((line, i) => (<Text key={i} style={{ fontSize: 8, marginBottom: 1 }}>{line.trim()}</Text>))}</View>);
+  }
+
+  return <View>{renderNodes(html)}</View>;
 }
 
 // ─── Build Table Rows ─────────────────────────────────────────────────────────

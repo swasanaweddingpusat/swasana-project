@@ -456,8 +456,9 @@ export async function seedPackages() {
       for (let i = 0; i < items.length; i++) {
         await prisma.packageVendorItem.create({ data: { packageVariantId: createdVariant.id, categoryName: items[i].categoryName, itemText: items[i].itemText } });
       }
-      for (const ii of (v.internalItems ?? [])) {
-        await prisma.packageInternalItem.create({ data: { packageVariantId: createdVariant.id, itemName: ii.itemName, itemDescription: ii.itemDescription } });
+      for (let ii = 0; ii < (v.internalItems ?? []).length; ii++) {
+        const item = v.internalItems![ii];
+        await prisma.packageInternalItem.create({ data: { packageVariantId: createdVariant.id, itemName: item.itemName, itemDescription: item.itemDescription } });
       }
       const catPrices = CATEGORY_PRICES[`${pkg.venueCode}:${v.variantName}`] ?? [];
       for (let ci = 0; ci < catPrices.length; ci++) {

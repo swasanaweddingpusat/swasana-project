@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { revalidateTag } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export async function approveStep(stepId: string, signature: string) {
   const permResult = await requirePermission({ module: "approval", action: "edit" });
@@ -63,6 +64,21 @@ export async function approveStep(stepId: string, signature: string) {
           await tx.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } });
         }
       }
+
+      // Sync manager signature to booking.signatures for PO PDF
+      if (step.record.module === "booking") {
+        const booking = await tx.booking.findUnique({ where: { id: step.record.entityId }, select: { signatures: true } });
+        const existingSigs = (booking?.signatures as Record<string, unknown>) ?? {};
+        await tx.booking.update({
+          where: { id: step.record.entityId },
+          data: {
+            signatures: JSON.parse(JSON.stringify({
+              ...existingSigs,
+              manager: { signature, name: session.user.name ?? "", signedAt: new Date().toISOString() },
+            })),
+          },
+        });
+      }
     });
 
     if (!allApprovedAfter) {
@@ -72,6 +88,15 @@ export async function approveStep(stepId: string, signature: string) {
       }
     }
     await notifyCreator(step.record, isSuperAdmin ? `Semua step disetujui oleh ${session.user.name ?? "super-admin"}` : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`, allApprovedAfter ? "approved" : undefined);
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "approval.approved",
+      entityType: step.record.module,
+      entityId: step.record.entityId,
+      description: `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`,
+      changes: { stepId, stepOrder: step.stepOrder, allApproved: allApprovedAfter },
+    });
 
     revalidateTag("approvals", { expire: 0 });
     revalidateTag("packages", { expire: 0 });
@@ -120,6 +145,15 @@ export async function rejectStep(stepId: string, notes: string) {
     });
 
     await notifyCreator(step.record, `Ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`);
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "approval.rejected",
+      entityType: step.record.module,
+      entityId: step.record.entityId,
+      description: `Step ${step.stepOrder} ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`,
+      changes: { stepId, stepOrder: step.stepOrder, notes: notes.trim() },
+    });
 
     revalidateTag("approvals", { expire: 0 });
     revalidateTag("packages", { expire: 0 });
