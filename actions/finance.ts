@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { apiLimiter, rateLimitError } from "@/lib/rate-limit";
 
 export async function fetchARBookings(): Promise<{ success: true; data: ARBookingsResult } | { success: false; error: string }> {
-  const { session, error } = await requirePermission({ module: "finance_ar", action: "view" });
+  const { session, error } = await requirePermission({ module: "finance-ar", action: "view" });
   if (error) return { success: false, error };
   if (!apiLimiter.check(`ar-bookings:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

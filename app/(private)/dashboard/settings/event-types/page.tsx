@@ -5,7 +5,7 @@ import { EventTypeLoading } from "./_components/loading";
 import { requirePagePermission } from "@/lib/require-page-permission";
 
 export default async function EventTypesSettingsPage() {
-  await requirePagePermission("settings");
+  await requirePagePermission("settings-event-types");
   return (
     <Suspense fallback={<EventTypeLoading />}>
       <EventTypesContent />

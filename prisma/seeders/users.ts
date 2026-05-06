@@ -3,7 +3,7 @@ import { ProfileStatus } from "@prisma/client";
 import { prisma } from "./_client";
 
 export async function seedUsers() {
-  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "Super Admin" } });
+  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "super-admin" } });
   const venues = await prisma.venue.findMany({ select: { id: true } });
 
   const existing = await prisma.user.findUnique({ where: { email: "admin@swasana.com" } });

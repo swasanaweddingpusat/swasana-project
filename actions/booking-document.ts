@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { uploadToR2, deleteFromR2 } from "@/lib/r2";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import sharp from "sharp";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -32,6 +33,11 @@ export async function uploadBookingDocument(formData: FormData) {
 
   if (!bookingId || !docName || files.length === 0) {
     return { success: false, error: "Data tidak lengkap." };
+  }
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
   try {
@@ -94,6 +100,11 @@ export async function deleteBookingDocument(docId: string) {
     });
     if (!doc) return { success: false, error: "Dokumen tidak ditemukan." };
 
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, doc.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
+
     await db.$transaction([db.bookingDocument.delete({ where: { id: docId } })]);
     await deleteFromR2(doc.filePath).catch((e) => console.error("[deleteBookingDocument] R2 delete failed:", e));
 
@@ -127,6 +138,15 @@ export async function deleteBookingDocuments(ids: string[]) {
     });
     if (!docs.length) return { success: false, error: "Dokumen tidak ditemukan." };
     type DocItem = typeof docs[number];
+
+    // Ensure user can access ALL bookings referenced by these docs
+    const scope = await getProfileDataScope(session!.user.profileId);
+    const uniqueBookingIds = [...new Set(docs.map((d: DocItem) => d.bookingId))];
+    for (const bId of uniqueBookingIds) {
+      if (!(await canAccessBooking(session!.user.profileId, scope, bId))) {
+        return { success: false, error: "Anda tidak memiliki akses ke salah satu booking." };
+      }
+    }
 
     await db.$transaction([db.bookingDocument.deleteMany({ where: { id: { in: ids } } })]);
     await Promise.all(docs.map((d: DocItem) => deleteFromR2(d.filePath).catch((e: unknown) => console.error("[deleteBookingDocuments] R2:", e))));

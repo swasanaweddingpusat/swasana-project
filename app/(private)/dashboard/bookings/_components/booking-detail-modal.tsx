@@ -38,9 +38,14 @@ function fmtDateTime(d: string | Date | null | undefined): string {
   return format(date, "dd MMM yyyy HH:mm");
 }
 
-function stripHtml(html: string | null | undefined): string {
-  if (!html) return "-";
-  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim() || "-";
+function RichText({ html }: { html: string | null | undefined }) {
+  if (!html || html === "<p></p>") return <span className="text-gray-400">-</span>;
+  return (
+    <div
+      className="prose prose-sm max-w-none text-gray-500 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0 [&_p]:my-0 [&_strong]:text-gray-700"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 
@@ -254,7 +259,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         {booking.snapPackageVendorItems.map((item) => (
                           <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
                             <p className="text-xs text-gray-400">{item.categoryName}</p>
-                            <p className="text-sm truncate font-medium text-gray-900">{item.itemText}</p>
+                            <RichText html={item.itemText} />
                           </div>
                         ))}
                       </div>
@@ -269,7 +274,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         {booking.snapPackageInternalItems.map((item) => (
                           <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
                             <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
-                            {item.itemDescription && <p className="text-xs text-gray-400">{item.itemDescription}</p>}
+                            {item.itemDescription && <RichText html={item.itemDescription} />}
                           </div>
                         ))}
                       </div>
@@ -295,7 +300,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               <TableCell className="px-4 font-medium text-sm text-gray-700">{v.vendorCategoryName}</TableCell>
                               <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
                               <TableCell className="px-4 text-sm">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
-                              <TableCell className="px-4 text-sm text-gray-500">{stripHtml(v.description)}</TableCell>
+                              <TableCell className="px-4 text-sm"><RichText html={v.description} /></TableCell>
                               <TableCell className="px-4 text-sm text-gray-500">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
                             </TableRow>
                           ))}
@@ -309,7 +314,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               <TableCell className="px-4 font-medium text-sm text-gray-700">Complimentary</TableCell>
                               <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>
                               <TableCell className="px-4 text-sm">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
-                              <TableCell className="px-4 text-sm text-gray-500">{stripHtml(b.description)}</TableCell>
+                              <TableCell className="px-4 text-sm"><RichText html={b.description} /></TableCell>
                               <TableCell className="px-4 text-sm text-gray-500">{b.orderStatus?.name ?? "-"}</TableCell>
                             </TableRow>
                           ))}

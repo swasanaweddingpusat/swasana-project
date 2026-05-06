@@ -129,7 +129,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, brands, o
                 <SelectContent>
                   {roles.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
-                      <span className="capitalize">{r.name}</span>
+                      <span>{r.name}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>

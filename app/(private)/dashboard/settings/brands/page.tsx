@@ -6,7 +6,7 @@ import { requirePagePermission } from "@/lib/require-page-permission";
 import { cn } from "../../../../../lib/utils";
 
 export default async function BrandsSettingsPage() {
-  await requirePagePermission("brand_management");
+  await requirePagePermission("settings-brands");
   return (
     <div className={cn('px-6', 'pb-4')}>
       <Suspense fallback={<BrandsLoading />}>

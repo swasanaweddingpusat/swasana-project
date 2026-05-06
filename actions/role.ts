@@ -8,7 +8,7 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 
 export async function createRole(formData: FormData) {
-  const permResult = await requirePermission({ module: "settings", action: "create" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "create" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`role-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -47,7 +47,7 @@ export async function createRole(formData: FormData) {
 }
 
 export async function updateRole(formData: FormData) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`role-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -88,7 +88,7 @@ export async function updateRole(formData: FormData) {
 }
 
 export async function deleteRole(roleId: string) {
-  const permResult = await requirePermission({ module: "settings", action: "delete" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`role-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -100,7 +100,7 @@ export async function deleteRole(roleId: string) {
       return { success: false, error: "Role tidak ditemukan" };
     }
 
-    if (role.name.toLowerCase() === "super admin") {
+    if (role.name === "super-admin") {
       return { success: false, error: "Role Super Admin tidak dapat dihapus" };
     }
 
@@ -122,7 +122,7 @@ export async function deleteRole(roleId: string) {
 }
 
 export async function reorderRoles(orderedIds: string[]) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`role-reorder:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -140,7 +140,7 @@ export async function reorderRoles(orderedIds: string[]) {
 }
 
 export async function renameModule(oldModule: string, newModule: string) {
-  const permResult = await requirePermission({ module: "role_permission", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`module-rename:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -159,7 +159,7 @@ export async function renameModule(oldModule: string, newModule: string) {
 }
 
 export async function updatePermission(permissionId: string, action: string) {
-  const permResult = await requirePermission({ module: "role_permission", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`perm-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -178,7 +178,7 @@ export async function updatePermission(permissionId: string, action: string) {
 }
 
 export async function reorderModules(moduleOrder: string[]) {
-  const permResult = await requirePermission({ module: "role_permission", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`module-reorder:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -196,7 +196,7 @@ export async function reorderModules(moduleOrder: string[]) {
 }
 
 export async function deletePermission(permissionId: string) {
-  const permResult = await requirePermission({ module: "role_permission", action: "delete" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`perm-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -212,7 +212,7 @@ export async function deletePermission(permissionId: string) {
 }
 
 export async function deleteModulePermissions(module: string) {
-  const permResult = await requirePermission({ module: "role_permission", action: "delete" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`module-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -228,7 +228,7 @@ export async function deleteModulePermissions(module: string) {
 }
 
 export async function createPermission(module: string, action: string) {
-  const permResult = await requirePermission({ module: "role_permission", action: "create" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "create" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`perm-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -237,7 +237,7 @@ export async function createPermission(module: string, action: string) {
     const permission = await db.$transaction(async (tx) => {
       const perm = await tx.permission.create({ data: { module, action } });
       // Auto-assign to Super Admin
-      const superAdmin = await tx.role.findFirst({ where: { name: { equals: "Super Admin", mode: "insensitive" } } });
+      const superAdmin = await tx.role.findFirst({ where: { name: "super-admin" } });
       if (superAdmin) {
         await tx.rolePermission.create({ data: { roleId: superAdmin.id, permissionId: perm.id } });
       }
@@ -255,7 +255,7 @@ export async function updateRolePermissions(
   roleId: string,
   permissionIds: string[]
 ) {
-  const permResult = await requirePermission({ module: "settings", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-role-permission", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`role-perm:${session.user.id}`)) return { success: false, ...rateLimitError() };

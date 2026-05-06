@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export async function getRoles() {
   "use cache";
   cacheTag("roles");
-  cacheLife("hours");
+  cacheLife("minutes");
 
   return db.role.findMany({
     include: {

@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
 import type { SettlementType, SettlementStatus } from "@prisma/client";
+import { canAccessBooking, getProfileDataScope, getBookingIdFromSettlement } from "@/lib/access-control";
 
 export async function createSettlement(input: {
   snapVendorItemId: string;
@@ -15,7 +16,7 @@ export async function createSettlement(input: {
   targetBookingId?: string;
   notes?: string;
 }): Promise<{ success: boolean; error?: string; data?: { id: string } }> {
-  const { session, error } = await requirePermission({ module: "settlement", action: "create" });
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`settlement-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -32,6 +33,11 @@ export async function createSettlement(input: {
       select: { bookingId: true },
     });
     if (!item) return { success: false, error: "Vendor item tidak ditemukan." };
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, item.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
 
     const settlement = await db.$transaction([
       db.bookingPaymentSettlement.create({
@@ -70,7 +76,7 @@ export async function updateSettlementStatus(
   status: SettlementStatus,
   settledAt?: Date
 ): Promise<{ success: boolean; error?: string }> {
-  const { session, error } = await requirePermission({ module: "settlement", action: "edit" });
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`settlement-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -80,6 +86,11 @@ export async function updateSettlementStatus(
       select: { bookingId: true },
     });
     if (!existing) return { success: false, error: "Settlement tidak ditemukan." };
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, existing.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
 
     await db.$transaction([
       db.bookingPaymentSettlement.update({
@@ -110,7 +121,7 @@ export async function updateSettlementStatus(
 export async function deleteSettlement(
   settlementId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { session, error } = await requirePermission({ module: "settlement", action: "delete" });
+  const { session, error } = await requirePermission({ module: "booking", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`settlement-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -122,6 +133,11 @@ export async function deleteSettlement(
     if (!existing) return { success: false, error: "Settlement tidak ditemukan." };
     if (existing.status === "completed") {
       return { success: false, error: "Settlement yang sudah completed tidak bisa dihapus." };
+    }
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, existing.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
     }
 
     await db.$transaction([

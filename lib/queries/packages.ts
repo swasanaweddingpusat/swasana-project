@@ -31,8 +31,9 @@ export async function getPackages(venueId?: string, page = 1, limit = 10) {
 }
 
 export async function getPackagesForBooking(venueId?: string) {
-  return db.package.findMany({
+  const packages = await db.package.findMany({
     where: {
+      available: true,
       approvalStatus: "approved",
       ...(venueId ? { venueId } : {}),
     },
@@ -45,6 +46,13 @@ export async function getPackagesForBooking(venueId?: string) {
       },
     },
   });
+
+  // Filter: only packages with at least 1 variant that has total price > 0
+  return packages.filter((pkg) =>
+    pkg.variants.some((v) =>
+      (v.categoryPrices ?? []).reduce((sum, c) => sum + Number(c.basePrice), 0) > 0
+    )
+  );
 }
 
 export async function getApprovalRecord(module: string, entityId: string) {

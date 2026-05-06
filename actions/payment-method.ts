@@ -14,7 +14,7 @@ const schema = z.object({
 });
 
 export async function createPaymentMethod(data: unknown) {
-  const permResult = await requirePermission({ module: "payment_methods", action: "create" });
+  const permResult = await requirePermission({ module: "settings-payment-methods", action: "create" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`pm-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -33,7 +33,7 @@ export async function createPaymentMethod(data: unknown) {
 }
 
 export async function updatePaymentMethod(id: string, data: unknown) {
-  const permResult = await requirePermission({ module: "payment_methods", action: "edit" });
+  const permResult = await requirePermission({ module: "settings-payment-methods", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`pm-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
@@ -52,7 +52,7 @@ export async function updatePaymentMethod(id: string, data: unknown) {
 }
 
 export async function deletePaymentMethod(id: string) {
-  const permResult = await requirePermission({ module: "payment_methods", action: "delete" });
+  const permResult = await requirePermission({ module: "settings-payment-methods", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`pm-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };

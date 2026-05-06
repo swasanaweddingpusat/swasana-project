@@ -55,6 +55,20 @@ export interface NavItem {
   hidden?: boolean;
 }
 
+export const SETTINGS_MODULES = [
+  "settings-brands",
+  "settings-venues",
+  "settings-groups",
+  "settings-users",
+  "settings-education-level",
+  "settings-event-types",
+  "settings-order-status",
+  "settings-approval-flow",
+  "settings-payment-methods",
+  "settings-role-permission",
+  "settings-source-of-information",
+] as const;
+
 export const navItems: NavItem[] = [
   {
     name: "Dashboard",
@@ -89,37 +103,37 @@ export const navItems: NavItem[] = [
     name: "Finance",
     href: "/dashboard/finance",
     icon: NotebookPen,
-    permission: { module: "finance", action: "view" },
+    permission: { module: "finance-ar", action: "view" },
     submenu: [
       {
         name: "Overview",
         href: "/dashboard/finance",
         icon: PieChart,
-        permission: { module: "finance", action: "view" },
+        permission: { module: "finance-ar", action: "view" },
       },
       {
         name: "Accounts Receivable",
         href: "/dashboard/finance/accounts-receivable",
         icon: BanknoteArrowDown,
-        permission: { module: "finance", action: "view" },
+        permission: { module: "finance-ar", action: "view" },
       },
       {
         name: "Accounts Payable",
         href: "/dashboard/finance/accounts-payable",
         icon: BanknoteArrowUp,
-        permission: { module: "finance", action: "view" },
+        permission: { module: "finance-ar", action: "view" },
         submenu: [
           {
             name: "Rekening Vendor",
             href: "/dashboard/finance/accounts-payable/rekening-vendor",
             icon: Building2,
-            permission: { module: "finance", action: "view" },
+            permission: { module: "finance-ar", action: "view" },
           },
           {
             name: "Rekening Venue",
             href: "/dashboard/finance/accounts-payable/rekening-venue",
             icon: Landmark,
-            permission: { module: "finance", action: "view" },
+            permission: { module: "finance-ar", action: "view" },
           },
         ],
       },
@@ -183,6 +197,6 @@ export const navItems: NavItem[] = [
     name: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
-    permission: { module: "settings", action: "view" },
+    // No permission here — visibility handled in sidebar-nav via SETTINGS_MODULES
   },
 ];

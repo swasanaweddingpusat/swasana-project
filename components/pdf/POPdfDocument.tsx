@@ -184,7 +184,6 @@ interface TableRow { no: string; desc: string; descBold?: boolean; total: string
 
 function buildTableRows(booking: POPdfBooking): TableRow[] {
   const venueName = booking.snapVenue?.venueName ?? "";
-  const venueFacilities = booking.snapVenue?.description ?? "";
   const packageName = booking.snapPackage?.packageName ?? "";
   const pax = booking.snapPackageVariant?.pax ?? "";
   const price = booking.snapPackageVariant ? fmtRp(booking.snapPackageVariant.price) : "";
@@ -194,8 +193,6 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
 
   const rows: TableRow[] = [];
   rows.push({ no: "1", desc: `${venueName} ${packageName} for ${pax} people include: `, total: price });
-  rows.push({ no: "", desc: "A. Ballroom Facilities", descBold: true, total: "" });
-  rows.push({ no: "", desc: venueFacilities, total: "" });
   notes.forEach((note) => rows.push({ no: "", desc: note, total: "" }));
 
   const benefitItems = internalItems.filter((i) => i.itemName.toLowerCase().includes("benefit"));
@@ -270,9 +267,27 @@ function getTerms(booking: POPdfBooking): string[] {
 
 // ─── Variable Replacement ─────────────────────────────────────────────────────
 
+function terbilang(n: number): string {
+  const satuan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+  if (n < 12) return satuan[n];
+  if (n < 20) return satuan[n - 10] + " Belas";
+  if (n < 100) return satuan[Math.floor(n / 10)] + " Puluh" + (n % 10 ? " " + satuan[n % 10] : "");
+  if (n < 200) return "Seratus" + (n % 100 ? " " + terbilang(n % 100) : "");
+  if (n < 1000) return satuan[Math.floor(n / 100)] + " Ratus" + (n % 100 ? " " + terbilang(n % 100) : "");
+  if (n < 2000) return "Seribu" + (n % 1000 ? " " + terbilang(n % 1000) : "");
+  if (n < 1000000) return terbilang(Math.floor(n / 1000)) + " Ribu" + (n % 1000 ? " " + terbilang(n % 1000) : "");
+  if (n < 1000000000) return terbilang(Math.floor(n / 1000000)) + " Juta" + (n % 1000000 ? " " + terbilang(n % 1000000) : "");
+  return terbilang(Math.floor(n / 1000000000)) + " Miliar" + (n % 1000000000 ? " " + terbilang(n % 1000000000) : "");
+}
+
+function fmtRpTerbilang(amount: number): string {
+  return `Rp ${Number(amount).toLocaleString("id-ID")},-  (${terbilang(amount)} Rupiah)`;
+}
+
 function replaceVariables(html: string, booking: POPdfBooking): string {
   const vars: Record<string, string> = {
-    venue: booking.snapVenue?.venueName ?? "",
+    venue: booking.snapVenue?.brandName ?? "",
+    venue_location: booking.snapVenue?.venueName ?? "",
     customer_name: booking.snapCustomer?.name ?? "",
     booking_date: new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     po_number: booking.poNumber ?? "",
@@ -287,16 +302,15 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
     brand_name: booking.snapVenue?.brandName ?? "",
   };
 
-  // Replace {term_of_payment} with rendered list
+  // Replace {term_of_payment} with formatted list: "Nama sebesar Rp X,- (Terbilang)"
   if (html.includes("{term_of_payment}")) {
     const topHtml = booking.termOfPayments.map((t) => {
       const due = t.dueDate ? ` — jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : "";
-      return `<li>${t.name} sebesar ${fmtRp(t.amount)}${due}</li>`;
+      return `<li>${t.name} sebesar ${fmtRpTerbilang(t.amount)}${due}</li>`;
     }).join("");
     html = html.replace(/\{term_of_payment\}/g, `<ul>${topHtml}</ul>`);
   }
 
-  // Replace simple variables
   for (const [key, value] of Object.entries(vars)) {
     html = html.replace(new RegExp(`\\{${key}\\}`, "g"), value);
   }

@@ -9,7 +9,7 @@ import { loginSchema } from "@/lib/validations/auth";
 // Dummy hash ensures bcrypt always runs — timing-attack defense
 const DUMMY_HASH = "$2b$12$aaaaaaaaaaaaaaaaaaaaaOaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const LOCKOUT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 async function isAccountLocked(email: string): Promise<boolean> {
@@ -57,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Check account lockout via ActivityLog (no Redis needed)
         if (await isAccountLocked(email)) {
+          console.error(`[authorize] Account LOCKED for ${email} — too many failed attempts`);
           await logAudit({
             action: "auth.login_blocked",
             result: "failure",
@@ -85,15 +86,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.profile?.status === "active";
 
         if (!isValid) {
-          await logAudit({
-            action: "auth.login_failed",
-            result: "failure",
-            entityType: "auth",
-            entityId: email,
-            description: "Login gagal — kredensial salah atau akun tidak aktif",
-            ipAddress: ip,
-            userAgent: ua,
-          });
+          // Debug: identify exact failure reason
+          const reasons: string[] = [];
+          if (!user) reasons.push("user not found");
+          else {
+            if (!isValidPassword) reasons.push("password mismatch");
+            if (!user.profile?.isEmailVerified) reasons.push("email not verified");
+            if (user.profile?.status !== "active") reasons.push(`status: ${user.profile?.status}`);
+            if (user.profile?.mustChangePassword) reasons.push("mustChangePassword=true");
+          }
+          console.error(`[authorize] Login failed for ${email}: ${reasons.join(", ")}`);
+
+          // Specific check for mustChangePassword — user verified but hasn't set password
+          if (user && isValidPassword && user.profile?.isEmailVerified && user.profile?.mustChangePassword) {
+            await logAudit({
+              action: "auth.login_failed",
+              result: "failure",
+              entityType: "auth",
+              entityId: email,
+              description: "Login gagal — user belum set password",
+              ipAddress: ip,
+              userAgent: ua,
+            });
+          } else {
+            await logAudit({
+              action: "auth.login_failed",
+              result: "failure",
+              entityType: "auth",
+              entityId: email,
+              description: "Login gagal — kredensial salah atau akun tidak aktif",
+              ipAddress: ip,
+              userAgent: ua,
+            });
+          }
           return null;
         }
 

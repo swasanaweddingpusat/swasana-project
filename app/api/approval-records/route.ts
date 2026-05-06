@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       const record = await getApprovalRecord(moduleName, entityId);
       return Response.json(record);
     }
-    const records = await getApprovalRecordsByModule(moduleName);
+    const records = await getApprovalRecordsByModule(moduleName, 1, 500);
     return Response.json(records);
   } catch {
     return Response.json({ error: "Failed to fetch" }, { status: 500 });

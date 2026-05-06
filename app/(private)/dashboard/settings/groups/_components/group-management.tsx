@@ -281,7 +281,7 @@ export function GroupManagement({ initialGroups, users }: GroupManagementProps) 
                                                       <span className={cn('font-medium', 'text-gray-900')}>{member.profile.fullName ?? member.profile.email}</span>
                                                     </div>
                                                   </td>
-                                                  <td className={cn('px-4', 'py-2.5', 'text-gray-500', 'capitalize')}>{member.profile.role?.name ?? "—"}</td>
+                                                  <td className={cn('px-4', 'py-2.5', 'text-gray-500')}>{member.profile.role?.name ?? "—"}</td>
                                                   <td className={cn('px-4', 'py-2.5')}>
                                                     <button
                                                       type="button"

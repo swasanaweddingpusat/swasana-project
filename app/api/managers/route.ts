@@ -4,7 +4,7 @@ import { getManagerProfiles } from "@/lib/queries/users";
 
 export async function GET() {
   const { session, response } = await requirePermissionForRoute({
-    module: "settings",
+    module: "settings-users",
     action: "view",
   });
   if (response) return response;

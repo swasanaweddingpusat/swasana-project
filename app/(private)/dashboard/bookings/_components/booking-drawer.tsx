@@ -137,14 +137,27 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => fetchJson<CustomerOption[]>("/api/customers"), staleTime: 5 * 60_000 });
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(customerSearch), 300);
+    return () => clearTimeout(t);
+  }, [customerSearch]);
+
+  const { data: customersResult } = useQuery({
+    queryKey: ["customers", debouncedSearch],
+    queryFn: () => fetchJson<{ data: CustomerOption[] }>(`/api/customers?search=${encodeURIComponent(debouncedSearch)}`),
+    enabled: debouncedSearch.length >= 1,
+    staleTime: 30_000,
+  });
+  const customers = customersResult?.data ?? [];
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
   const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
 
   const [selectedVenueId, setSelectedVenueId] = useState("");
-  const { data: packages = [] } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
+  const { data: packages = [], isLoading: packagesLoading } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const selectedPackage = packages.find((p) => p.id === selectedPackageId);
@@ -352,6 +365,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       value={customerName}
                       onChange={(val) => {
                         setCustomerName(val);
+                        setCustomerSearch(val);
                         form.setValue("customerId", "");
                       }}
                       onSelect={(opt) => {
@@ -473,7 +487,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={selectedVenueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!selectedVenueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -718,7 +732,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             <FileText className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
                             <span className={cn('flex-1', 'truncate')}>{t.paymentEvidence ? t.paymentEvidence.name : "Upload bukti pembayaran"}</span>
                             {t.paymentEvidence && (
-                              <button type="button" className={cn('shrink-0', 'hover:text-destructive')} onClick={() => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x))}>
+                              <button type="button" className={cn('shrink-0', 'hover:text-destructive', 'z-10', 'relative')} onClick={() => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x))}>
                                 <X className={cn('h-3', 'w-3')} />
                               </button>
                             )}

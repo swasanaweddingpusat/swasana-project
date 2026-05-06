@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export async function getPermissions() {
   "use cache";
   cacheTag("permissions");
-  cacheLife("hours");
+  cacheLife("minutes");
 
   return db.permission.findMany({
     orderBy: [{ moduleSortOrder: "asc" }, { module: "asc" }, { action: "asc" }],

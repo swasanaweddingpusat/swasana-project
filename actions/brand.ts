@@ -12,7 +12,7 @@ const brandSchema = z.object({
 });
 
 export async function createBrand(data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings-brands", action: "create" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`brand-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -30,7 +30,7 @@ export async function createBrand(data: unknown) {
 }
 
 export async function updateBrand(data: unknown) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-brands", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`brand-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -51,7 +51,7 @@ export async function updateBrand(data: unknown) {
 }
 
 export async function deleteBrand(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-brands", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`brand-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

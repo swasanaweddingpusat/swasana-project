@@ -397,7 +397,7 @@ export function InviteDrawer({
                 <SelectContent>
                   {roles.map((role) => (
                     <SelectItem key={role.id} value={role.id}>
-                      <span className="capitalize">{role.name}</span>
+                      <span>{role.name}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>

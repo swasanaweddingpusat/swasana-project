@@ -9,7 +9,7 @@ import { requirePermission } from "@/lib/permissions";
 const nameSchema = z.string().min(1, "Nama wajib diisi").max(100);
 
 export async function createEducationLevel(name: string, order: number) {
-  const { session, error } = await requirePermission({ module: "settings", action: "create" });
+  const { session, error } = await requirePermission({ module: "settings-education-level", action: "create" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`edu-level-create:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
@@ -27,7 +27,7 @@ export async function createEducationLevel(name: string, order: number) {
 }
 
 export async function updateEducationLevel(id: string, name: string, order: number) {
-  const { session, error } = await requirePermission({ module: "settings", action: "edit" });
+  const { session, error } = await requirePermission({ module: "settings-education-level", action: "edit" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`edu-level-update:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 
@@ -45,7 +45,7 @@ export async function updateEducationLevel(id: string, name: string, order: numb
 }
 
 export async function deleteEducationLevel(id: string) {
-  const { session, error } = await requirePermission({ module: "settings", action: "delete" });
+  const { session, error } = await requirePermission({ module: "settings-education-level", action: "delete" });
   if (error) return { success: false as const, error };
   if (!mutationLimiter.check(`edu-level-delete:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
 

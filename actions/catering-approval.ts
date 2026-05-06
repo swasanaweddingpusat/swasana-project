@@ -4,14 +4,15 @@ import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 type ApprovalRole = "finance" | "dirops" | "oprations";
 type CategoryType = "catering" | "decoration";
 
 const rolePermissionMap: Record<ApprovalRole, string> = {
-  finance: "approve_finance",
-  dirops: "approve_manager",
-  oprations: "approve_operations",
+  finance: "approve",
+  dirops: "approve",
+  oprations: "approve",
 };
 
 export async function approveCategoryPO(
@@ -31,6 +32,11 @@ export async function approveCategoryPO(
       select: { signatures: true },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
+
+    const scope = await getProfileDataScope(session!.user.profileId);
+    if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
 
     const existing = (booking.signatures as Record<string, unknown>) ?? {};
     const categoryApprovals = (existing[categoryType] as Record<string, unknown>) ?? {};

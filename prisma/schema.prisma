@@ -265,7 +265,6 @@ model Venue {
   code            String            @default("KODE")
   brandId         String?
   isActive        Boolean           @default(true)
-  termAndCondition String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
@@ -394,6 +393,7 @@ model PackageVariant {
   pax            Int
   margin         Float                         @default(0)
   available      Boolean                       @default(true)
+  termAndCondition String?
   createdAt      DateTime                      @default(now())
   updatedAt      DateTime                      @updatedAt
   package        Package                       @relation(fields: [packageId], references: [id], onDelete: Cascade)

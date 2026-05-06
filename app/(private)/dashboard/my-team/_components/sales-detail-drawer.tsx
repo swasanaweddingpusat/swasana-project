@@ -114,11 +114,10 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 mt-0.5 rounded-full flex items-center justify-center cursor-pointer"
+            className="shrink-0 mt-0.5 h-8 w-8 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20"
             aria-label="Close"
-            style={{ background: "#FFD6D6", width: 32, height: 32 }}
           >
-            <X size={18} className="text-[#E80606]" />
+            <X size={18} className="text-destructive" />
           </button>
         </div>
 

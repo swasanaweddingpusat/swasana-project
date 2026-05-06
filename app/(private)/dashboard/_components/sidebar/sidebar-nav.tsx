@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Skeleton } from "@/components/ui/skeleton";
-import { navItems, type NavItem, type SubMenuItem } from "./sidebar-config";
+import { navItems, SETTINGS_MODULES, type NavItem, type SubMenuItem } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
 import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "../../../../../lib/utils";
@@ -30,6 +30,12 @@ function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
 function filterNavItems(items: NavItem[], can: CanFn): NavItem[] {
   return items.flatMap((item) => {
     if (item.hidden) return [];
+    // Settings: visible jika punya view di minimal 1 sub-module settings
+    if (item.href === "/dashboard/settings") {
+      const hasSettingsAccess = SETTINGS_MODULES.some((mod) => can(mod, "view"));
+      if (!hasSettingsAccess) return [];
+      return [item];
+    }
     if (item.permission && !can(item.permission.module, item.permission.action)) return [];
     if (item.submenu) {
       const filtered = filterSubMenus(item.submenu, can);

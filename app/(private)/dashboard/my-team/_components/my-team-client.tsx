@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -8,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -76,6 +76,25 @@ export function MyTeamClient({ group, initialPerformance, availableProfiles, cur
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const periodLabel = `${MONTHS[filterMonth]} ${filterYear}`;
 
+  // Fetch performance data — refetches when period changes
+  const { startDate, endDate } = useMemo(() => {
+    const s = new Date(filterYear, filterMonth, 1);
+    const e = new Date(filterYear, filterMonth + 1, 0, 23, 59, 59);
+    return { startDate: s.toISOString(), endDate: e.toISOString() };
+  }, [filterMonth, filterYear]);
+
+  const { data: performance = initialPerformance } = useQuery<MyTeamPerformanceItem[]>({
+    queryKey: ["my-team-performance", group.id, startDate, endDate],
+    queryFn: async () => {
+      const params = new URLSearchParams({ groupId: group.id, startDate, endDate });
+      const res = await fetch(`/api/my-team/performance?${params}`);
+      if (!res.ok) return initialPerformance;
+      return res.json();
+    },
+    initialData: initialPerformance,
+    staleTime: 60_000,
+  });
+
   // Team settings drawer
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [teamName, setTeamName] = useState(group.name);
@@ -100,7 +119,7 @@ export function MyTeamClient({ group, initialPerformance, availableProfiles, cur
 
   // Build member rows — merge group.members + performance
   const memberRows = group.members.map((m) => {
-    const perf = initialPerformance.find((p) => p.profileId === m.userId);
+    const perf = performance.find((p) => p.profileId === m.userId);
     return {
       profileId: m.userId,
       name: m.profile.fullName ?? m.userId,
@@ -270,7 +289,7 @@ export function MyTeamClient({ group, initialPerformance, availableProfiles, cur
                     <TableCell className="px-6 py-3">
                       <div className="flex items-center justify-center">
                         {isTop ? (
-                          <Crown className="h-5 w-5 text-amber-500 fill-amber-400" />
+                          <Crown className="h-5 w-5 text-foreground" />
                         ) : (
                           <span className={cn(
                             "text-sm font-semibold w-6 h-6 rounded-full flex items-center justify-center",
@@ -286,7 +305,7 @@ export function MyTeamClient({ group, initialPerformance, availableProfiles, cur
                         <div>
                           <span className={cn("text-sm font-medium", isTop && "font-semibold")}>{member.name}</span>
                           {isTop && (
-                            <span className="ml-2 text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Top Performer</span>
+                            <span className="ml-2 text-[10px] font-semibold text-primary-foreground bg-primary px-1.5 py-0.5 rounded-full">Top Performer</span>
                           )}
                           {member.pendingApproval > 0 && (
                             <span className="ml-2 text-[10px] font-medium text-destructive bg-destructive/10 px-1.5 py-0.5 rounded-full">

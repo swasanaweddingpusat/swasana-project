@@ -5,7 +5,7 @@ import type { UserFilters } from "@/types/user";
 
 export async function GET(request: Request) {
   const { session, response } = await requirePermissionForRoute({
-    module: "settings",
+    module: "settings-users",
     action: "view",
   });
   if (response) return response;

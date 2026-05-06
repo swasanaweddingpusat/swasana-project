@@ -35,7 +35,7 @@ export async function approveStep(stepId: string, signature: string) {
     const allSteps = await db.approvalRecordStep.findMany({ where: { recordId: step.recordId }, orderBy: { stepOrder: "asc" } });
 
     // Super Admin: approve all pending non-client steps at once
-    const superAdminRole = await db.role.findUnique({ where: { name: "Super Admin" }, select: { id: true } });
+    const superAdminRole = await db.role.findUnique({ where: { name: "super-admin" }, select: { id: true } });
     const isSuperAdmin = !!(superAdminRole && session.user.roleId === superAdminRole.id);
 
     const stepsToApprove = isSuperAdmin
@@ -71,7 +71,7 @@ export async function approveStep(stepId: string, signature: string) {
         await notifyApprover(nextStep, step.record.module, step.record.entityId);
       }
     }
-    await notifyCreator(step.record, isSuperAdmin ? `Semua step disetujui oleh ${session.user.name ?? "Super Admin"}` : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`, allApprovedAfter ? "approved" : undefined);
+    await notifyCreator(step.record, isSuperAdmin ? `Semua step disetujui oleh ${session.user.name ?? "super-admin"}` : `Step ${step.stepOrder} disetujui oleh ${session.user.name ?? "approver"}`, allApprovedAfter ? "approved" : undefined);
 
     revalidateTag("approvals", { expire: 0 });
     revalidateTag("packages", { expire: 0 });
@@ -140,7 +140,7 @@ async function checkApprover(
   roleId: string | null
 ): Promise<boolean> {
   // Super Admin can approve any step
-  const superAdminRole = await db.role.findUnique({ where: { name: "Super Admin" }, select: { id: true } });
+  const superAdminRole = await db.role.findUnique({ where: { name: "super-admin" }, select: { id: true } });
   if (superAdminRole && roleId === superAdminRole.id) return true;
 
   if (step.approverType === "client") return false;

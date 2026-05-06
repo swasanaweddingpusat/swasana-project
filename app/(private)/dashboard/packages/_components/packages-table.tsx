@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Settings2, ClipboardCheck, RefreshCw } from "lucide-react";
+import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Settings2, ClipboardCheck, RefreshCw, FileText } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
-import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals } from "@/hooks/use-packages";
+import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable } from "@/hooks/use-packages";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { toast } from "sonner";
 import SearchBar from "@/components/shared/search-bar";
@@ -23,6 +23,7 @@ import { DetailModal } from "./detail-modal";
 import { DrawerFinance } from "./drawer-finance";
 import { ApprovalDialog } from "./approval-dialog";
 import { ApproveModal } from "./approve-modal";
+import { VariantTCDrawer } from "./variant-tc-drawer";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 const formatCurrency = (amount: number) =>
@@ -54,6 +55,7 @@ export function PackagesTable() {
   const bulkDeleteMutation = useDeleteBulkPackages();
   const { canCreate, can, isAdmin } = usePermissions();
   const qc = useQueryClient();
+  const toggleAvailableMutation = useTogglePackageAvailable();
   const [refreshing, setRefreshing] = useState(false);
 
   async function handleRefresh() {
@@ -77,6 +79,8 @@ export function PackagesTable() {
   const [approvalPkg, setApprovalPkg] = useState<PackageQueryItem | null>(null);
   const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; packageName: string } | null>(null);
   const { user } = useCurrentUser();
+  const [tcDrawerOpen, setTcDrawerOpen] = useState(false);
+  const [tcPkg, setTcPkg] = useState<PackageQueryItem | null>(null);
   const { data: approvals = [] } = usePackageApprovals();
 
   // Map approvals by entityId for quick lookup
@@ -248,12 +252,29 @@ export function PackagesTable() {
                     <TableCell>{pkg.variants?.length ?? 0}</TableCell>
                     <TableCell>{priceRange(pkg)}</TableCell>
                     <TableCell>
-                      <span className={cn(
-                        "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-                        pkg.available ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                      )}>
-                        {pkg.available ? "Available" : "Unavailable"}
-                      </span>
+                      {can("package", "set-status") ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await toggleAvailableMutation.mutateAsync(pkg.id);
+                            if (!res.success) toast.error(res.error);
+                          }}
+                          disabled={toggleAvailableMutation.isPending}
+                          className={cn(
+                            "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-70 transition-opacity",
+                            pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                          )}
+                        >
+                          {pkg.available ? "Available" : "Unavailable"}
+                        </button>
+                      ) : (
+                        <span className={cn(
+                          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
+                          pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                        )}>
+                          {pkg.available ? "Available" : "Unavailable"}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <button
@@ -283,7 +304,18 @@ export function PackagesTable() {
                             <TooltipContent>Lihat Detail</TooltipContent>
                           </Tooltip>
                         )}
-                        {can("package", "set_harga") && (
+                        {can("package", "term-and-condition") && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                              onClick={() => { setTcPkg(pkg); setTcDrawerOpen(true); }}
+                            >
+                              <FileText className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                            </TooltipTrigger>
+                            <TooltipContent>Term & Condition</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {can("package", "set-harga") && (
                           <Tooltip>
                             <TooltipTrigger
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
@@ -425,7 +457,7 @@ export function PackagesTable() {
           packageName={approvalPkg.packageName}
           userProfileId={user.profileId}
           userRoleId={user.roleId}
-          isSuperAdmin={user.roleName?.toLowerCase() === "super admin"}
+          isSuperAdmin={user.roleName === "super-admin"}
         />
       )}
 
@@ -438,6 +470,12 @@ export function PackagesTable() {
           packageName={approveModal.packageName}
         />
       )}
+
+      <VariantTCDrawer
+        open={tcDrawerOpen}
+        onClose={() => { setTcDrawerOpen(false); setTcPkg(null); }}
+        pkg={tcPkg}
+      />
 
       {/* Delete Confirm */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
