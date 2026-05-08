@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
@@ -74,39 +74,42 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
   const [formData, setFormData] = useState(initialFormData);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [, startTransition] = useTransition();
 
   const isPending = isEdit ? updateUser.isPending : inviteUser.isPending;
 
   useEffect(() => {
     if (!open) return;
-    if (editUser?.profile) {
-      const p = editUser.profile;
-      setFormData({
-        email: editUser.email,
-        fullName: p.fullName ?? "",
-        nickName: p.nickName ?? "",
-        phoneNumber: p.phoneNumber ?? "",
-        placeOfBirth: p.placeOfBirth ?? "",
-        dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().slice(0, 10) : "",
-        ktpAddress: p.ktpAddress ?? "",
-        currentAddress: p.currentAddress ?? "",
-        motherName: p.motherName ?? "",
-        maritalStatus: p.maritalStatus ?? "",
-        numberOfChildren: p.numberOfChildren?.toString() ?? "",
-        lastEducation: p.lastEducation ?? "",
-        emergencyContactName: p.emergencyContactName ?? "",
-        emergencyContactRel: p.emergencyContactRel ?? "",
-        emergencyContactPhone: p.emergencyContactPhone ?? "",
-        roleId: p.role?.id ?? "",
-        managerId: p.managerId ?? "",
-        dataScope: (p.dataScope as DataScope) ?? "own",
-      });
-      setSelectedGroupIds(p.dataGroupMemberships?.map((m) => m.group.id) ?? []);
-    } else {
-      setFormData(initialFormData);
-      setSelectedGroupIds([]);
-    }
-    setErrors({});
+    startTransition(() => {
+      if (editUser?.profile) {
+        const p = editUser.profile;
+        setFormData({
+          email: editUser.email,
+          fullName: p.fullName ?? "",
+          nickName: p.nickName ?? "",
+          phoneNumber: p.phoneNumber ?? "",
+          placeOfBirth: p.placeOfBirth ?? "",
+          dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().slice(0, 10) : "",
+          ktpAddress: p.ktpAddress ?? "",
+          currentAddress: p.currentAddress ?? "",
+          motherName: p.motherName ?? "",
+          maritalStatus: p.maritalStatus ?? "",
+          numberOfChildren: p.numberOfChildren?.toString() ?? "",
+          lastEducation: p.lastEducation ?? "",
+          emergencyContactName: p.emergencyContactName ?? "",
+          emergencyContactRel: p.emergencyContactRel ?? "",
+          emergencyContactPhone: p.emergencyContactPhone ?? "",
+          roleId: p.role?.id ?? "",
+          managerId: p.managerId ?? "",
+          dataScope: (p.dataScope as DataScope) ?? "own",
+        });
+        setSelectedGroupIds(p.dataGroupMemberships?.map((m) => m.group.id) ?? []);
+      } else {
+        setFormData(initialFormData);
+        setSelectedGroupIds([]);
+      }
+      setErrors({});
+    });
   }, [open, editUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearError = (field: string) => {
