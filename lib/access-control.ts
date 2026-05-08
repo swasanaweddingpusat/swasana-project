@@ -24,14 +24,18 @@ export async function canAccessBooking(
     return booking.salesId === profileId;
   }
 
-  // group scope — check if salesId is in subordinates of profileId
+  // group scope — check if salesId is in same group as profileId
   if (booking.salesId === profileId) return true;
-  const subordinates = await db.userVenueAccess.findMany({
-    where: { managerId: profileId },
-    select: { userId: true },
+  const myGroups = await db.userGroupMember.findMany({
+    where: { userId: profileId },
+    select: { groupId: true },
   });
-  const subordinateIds = new Set(subordinates.map((s) => s.userId));
-  return subordinateIds.has(booking.salesId);
+  if (myGroups.length === 0) return false;
+  const groupIds = myGroups.map((g) => g.groupId);
+  const groupMember = await db.userGroupMember.findFirst({
+    where: { groupId: { in: groupIds }, userId: booking.salesId },
+  });
+  return !!groupMember;
 }
 
 // ─── Helpers: resolve bookingId from related entities ────────────────────────

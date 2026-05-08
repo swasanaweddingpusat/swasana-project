@@ -30,14 +30,18 @@ async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
   if (!profileId || !dataScope || dataScope === "all") return {};
   if (dataScope === "own") return { salesId: profileId };
 
-  const subordinateAccess = await db.userVenueAccess.findMany({
-    where: { managerId: profileId },
+  const myGroups = await db.userGroupMember.findMany({
+    where: { userId: profileId },
+    select: { groupId: true },
+  });
+  if (myGroups.length === 0) return { salesId: profileId };
+  const groupIds = myGroups.map((g) => g.groupId);
+  const members = await db.userGroupMember.findMany({
+    where: { groupId: { in: groupIds } },
     select: { userId: true },
   });
-  const subordinateIds = [...new Set(subordinateAccess.map((a) => a.userId))];
-  if (subordinateIds.length === 0) return { salesId: profileId };
-
-  return { salesId: { in: [...subordinateIds, profileId] } };
+  const memberIds = [...new Set(members.map((m) => m.userId))];
+  return { salesId: { in: memberIds } };
 }
 
 export type CalendarEventsResult = Awaited<ReturnType<typeof getCalendarEvents>>;

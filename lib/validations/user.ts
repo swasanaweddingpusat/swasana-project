@@ -6,11 +6,8 @@ export const inviteUserSchema = z.object({
   email: z.string().email("Email tidak valid"),
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   roleId: z.string().min(1, "Role wajib dipilih"),
-  venueIds: z.array(z.string()).min(1, "Minimal satu venue harus dipilih"),
-  venueScopes: z.record(z.string(), z.enum(["individual", "general"])).optional(),
-  venueManagers: z.record(z.string(), z.string()).optional(),
+  managerId: z.string().optional(),
   dataScope: z.enum(["own", "group", "all"]).default("own"),
-  groupIds: z.array(z.string()).optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -21,9 +18,7 @@ export const updateUserSchema = z.object({
   nickName: z.string().optional(),
   phoneNumber: z.string().optional(),
   roleId: z.string().optional(),
-  venueIds: z.array(z.string()).optional(),
-  venueScopes: z.record(z.string(), z.enum(["individual", "general"])).optional(),
-  venueManagers: z.record(z.string(), z.string()).optional(),
+  managerId: z.string().optional(),
   status: z.enum(["active", "inactive", "suspended"]).optional(),
   dataScope: z.enum(["own", "group", "all"]).optional(),
 

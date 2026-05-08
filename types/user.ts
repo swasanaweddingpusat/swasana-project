@@ -1,6 +1,5 @@
 export type ProfileStatus = "active" | "inactive" | "suspended";
 export type DataScope = "own" | "group" | "all";
-export type VenueAccessScope = "general" | "individual";
 
 // ─── Core Profile ─────────────────────────────────────────────────────────────
 
@@ -41,17 +40,11 @@ export interface UserProfile {
 
 // ─── User with relations ──────────────────────────────────────────────────────
 
-export interface UserVenueAccess {
-  id: string;
-  scope: VenueAccessScope;
-  venue: { id: string; name: string };
-}
-
 export interface UserGroupMembership {
   group: { id: string; name: string };
 }
 
-export interface UserWithVenues {
+export interface UserWithProfile {
   id: string;
   email: string;
   name?: string | null;
@@ -59,7 +52,6 @@ export interface UserWithVenues {
   updatedAt: string;
   profile: (UserProfile & {
     role?: { id: string; name: string } | null;
-    userVenueAccess: UserVenueAccess[];
     dataGroupMemberships: UserGroupMembership[];
   }) | null;
 }
@@ -70,7 +62,7 @@ export interface InviteUserInput {
   email: string;
   fullName: string;
   roleId: string;
-  venueIds: string[];
+  managerId?: string;
   dataScope?: DataScope;
 }
 
@@ -80,7 +72,7 @@ export interface UpdateUserInput {
   nickName?: string;
   phoneNumber?: string;
   roleId?: string;
-  venueIds?: string[];
+  managerId?: string;
   status?: ProfileStatus;
   dataScope?: DataScope;
 
@@ -150,7 +142,6 @@ export interface UserFilters {
   search?: string;
   roleId?: string;
   status?: ProfileStatus | "pending";
-  venueId?: string;
   dataScope?: DataScope;
   page?: number;
   limit?: number;

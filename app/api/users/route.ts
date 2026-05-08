@@ -19,7 +19,6 @@ export async function GET(request: Request) {
       search: searchParams.get("search") ?? undefined,
       roleId: searchParams.get("roleId") ?? undefined,
       status: (searchParams.get("status") as UserFilters["status"]) ?? undefined,
-      venueId: searchParams.get("venueId") ?? undefined,
       dataScope: (searchParams.get("dataScope") as UserFilters["dataScope"]) ?? undefined,
       page: searchParams.has("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.has("limit") ? Number(searchParams.get("limit")) : 20,

@@ -102,6 +102,7 @@ model Profile {
 
   // Access control
   roleId    String?
+  managerId String?
   dataScope DataScope     @default(own)
   status    ProfileStatus @default(active)
 
@@ -120,8 +121,8 @@ model Profile {
   activityLogs            ActivityLog[]
   role                    Role?                      @relation(fields: [roleId], references: [id], onDelete: SetNull)
   user                    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userVenueAccess         UserVenueAccess[]
-  managedVenueAccess      UserVenueAccess[]          @relation("VenueAccessManager")
+  manager                 Profile?                   @relation("ProfileManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates            Profile[]                  @relation("ProfileManager")
   dataGroupMemberships    UserGroupMember[]
   ledGroups               UserGroup[]                @relation("GroupLeader")
   bookingsAsSales         Booking[]                  @relation("BookingSales")
@@ -141,6 +142,7 @@ model Profile {
   userTargetsSet           UserTarget[]               @relation("UserTargetsSetBy")
 
   @@index([roleId])
+  @@index([managerId])
   @@index([dataScope])
   @@map("profiles")
 }
@@ -268,31 +270,12 @@ model Venue {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  userVenueAccess UserVenueAccess[]
   packages        Package[]
   paymentMethods  PaymentMethod[]
   bookings        Booking[]
 
   @@index([brandId])
   @@map("venues")
-}
-
-model UserVenueAccess {
-  id        String           @id @default(uuid())
-  userId    String
-  venueId   String
-  managerId String?
-  scope     VenueAccessScope @default(individual)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  profile   Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  venue     Venue            @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  manager   Profile?         @relation("VenueAccessManager", fields: [managerId], references: [id], onDelete: SetNull)
-
-  @@unique([userId, venueId])
-  @@index([userId])
-  @@index([managerId])
-  @@map("user_venue_access")
 }
 
 // ─── Audit Logging ───────────────────────────────────────────────────────────
@@ -520,13 +503,6 @@ enum DataScope {
   group
   all
 }
-
-enum VenueAccessScope {
-  general
-  individual
-}
-
-// ─── Bookings ────────────────────────────────────────────────────────────────
 
 model Booking {
   id                    String          @id @default(uuid())

@@ -1063,7 +1063,17 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
     });
   }, [bookingId]);
 
-  React.useEffect(() => { generate(); }, [generate]);
+  React.useEffect(() => {
+    startTransition(async () => {
+      const res = await fetch(`/api/bookings/${bookingId}`);
+      if (!res.ok) return;
+      const data = await res.json() as { clientAgreement?: { token: string; accessCode: string; status: string } | null };
+      if (data.clientAgreement) {
+        setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId]);
 
   return (
     <AlertDialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -1073,9 +1083,14 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
           <AlertDialogDescription>{customerName}</AlertDialogDescription>
         </AlertDialogHeader>
 
-        {isPending || !agreement ? (
+        {isPending ? (
           <div className={cn('flex', 'items-center', 'justify-center', 'py-8', 'gap-2', 'text-sm', 'text-muted-foreground')}>
-            <RefreshCw className={cn('h-4', 'w-4', 'animate-spin')} /> Generating...
+            <RefreshCw className={cn('h-4', 'w-4', 'animate-spin')} /> Loading...
+          </div>
+        ) : !agreement ? (
+          <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-8', 'gap-3', 'text-center')}>
+            <p className={cn('text-sm', 'text-muted-foreground')}>Belum ada link agreement untuk booking ini.</p>
+            <Button size="sm" onClick={generate} disabled={isPending}>Generate Link</Button>
           </div>
         ) : (
           <div className={cn('space-y-3', 'py-1')}>
@@ -1103,11 +1118,11 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         <AlertDialogFooter>
           {agreement?.status === "Signed" ? (
             <p className={cn('text-xs', 'text-muted-foreground', 'mr-auto')}>✓ Sudah ditandatangani</p>
-          ) : (
+          ) : agreement ? (
             <Button variant="outline" size="default" disabled={isPending} onClick={generate}>
               <RefreshCw className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Regenerate
             </Button>
-          )}
+          ) : null}
           <AlertDialogCancel onClick={onClose}>Tutup</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>

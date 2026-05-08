@@ -56,13 +56,17 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
   useEffect(() => {
     if (!open || !bookingId) return;
     const id = ++fetchIdRef.current;
-
-    setLoading(true);
-    fetch(`/api/bookings/${bookingId}/activity-logs`)
-      .then((r) => r.json())
-      .then((res) => { if (id === fetchIdRef.current) setLogs(Array.isArray(res) ? res : (res?.data ?? [])); })
-      .catch(() => { if (id === fetchIdRef.current) setLogs([]); })
-      .finally(() => { if (id === fetchIdRef.current) setLoading(false); });
+    void (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}/activity-logs`).then((r) => r.json());
+        if (id === fetchIdRef.current) setLogs(Array.isArray(res) ? res : (res?.data ?? []));
+      } catch {
+        if (id === fetchIdRef.current) setLogs([]);
+      } finally {
+        if (id === fetchIdRef.current) setLoading(false);
+      }
+    })();
   }, [open, bookingId]);
 
   const formatValue = (field: string, value: unknown): string => {

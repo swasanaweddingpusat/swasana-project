@@ -82,15 +82,6 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
   const selectedVariant = variants.find((v) => v.id === selectedVariantId);
   const initialTC = (selectedVariant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
 
-  // Auto-select first variant & sync editor when drawer opens or pkg changes
-  useEffect(() => {
-    if (!open || variants.length === 0) return;
-    const first = variants[0];
-    setSelectedVariantId(first.id);
-    const tc = (first as { termAndCondition?: string | null }).termAndCondition ?? "";
-    editor?.commands.setContent(tc);
-  }, [open, pkg]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -111,6 +102,15 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
       },
     },
   });
+
+  // Auto-select first variant & sync editor when drawer opens or pkg changes
+  useEffect(() => {
+    if (!open || variants.length === 0) return;
+    const first = variants[0];
+    setSelectedVariantId(first.id); // eslint-disable-line react-hooks/set-state-in-effect
+    const tc = (first as { termAndCondition?: string | null }).termAndCondition ?? "";
+    editor?.commands.setContent(tc);
+  }, [open, pkg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insertVariable = useCallback(
     (key: string) => {

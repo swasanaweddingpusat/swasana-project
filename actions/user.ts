@@ -31,9 +31,7 @@ export async function inviteUser(formData: FormData) {
     email: formData.get("email") as string,
     fullName: formData.get("fullName") as string,
     roleId: formData.get("roleId") as string,
-    venueIds: JSON.parse(formData.get("venueIds") as string),
-    venueScopes: JSON.parse((formData.get("venueScopes") as string) || "{}"),
-    venueManagers: JSON.parse((formData.get("venueManagers") as string) || "{}"),
+    managerId: (formData.get("managerId") as string) || undefined,
     dataScope: (formData.get("dataScope") as string) || "own",
   };
 
@@ -42,7 +40,7 @@ export async function inviteUser(formData: FormData) {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const { email, fullName, roleId, venueIds, venueScopes, venueManagers, dataScope } = parsed.data;
+  const { email, fullName, roleId, managerId, dataScope } = parsed.data;
 
   try {
     // Check if user already exists
@@ -69,6 +67,7 @@ export async function inviteUser(formData: FormData) {
           email,
           fullName,
           roleId,
+          managerId: managerId ?? null,
           dataScope,
           isEmailVerified: false,
           mustChangePassword: true,
@@ -79,17 +78,6 @@ export async function inviteUser(formData: FormData) {
       await tx.emailVerificationToken.create({
         data: { profileId: p.id, token, expiresAt },
       });
-
-      for (const venueId of venueIds) {
-        await tx.userVenueAccess.create({
-          data: {
-            userId: p.id,
-            venueId,
-            scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
-            managerId: venueManagers?.[venueId] ?? null,
-          },
-        });
-      }
 
       return { profile: p };
     });
@@ -140,7 +128,7 @@ export async function updateUser(data: Record<string, unknown>) {
   }
 
   const {
-    userId, fullName, nickName, phoneNumber, roleId, venueIds, venueScopes, venueManagers, status, dataScope,
+    userId, fullName, nickName, phoneNumber, roleId, managerId, status, dataScope,
     placeOfBirth, dateOfBirth, ktpAddress, currentAddress, motherName,
     maritalStatus, numberOfChildren, lastEducation,
     emergencyContactName, emergencyContactRel, emergencyContactPhone,
@@ -150,56 +138,6 @@ export async function updateUser(data: Record<string, unknown>) {
     const profile = await db.profile.findUnique({ where: { id: userId } });
     if (!profile) return { success: false, error: "Pengguna tidak ditemukan." };
 
-    // Diff venues (reads outside the transaction)
-    const venueOps: ReturnType<typeof db.userVenueAccess.delete>[] = [];
-    if (venueIds !== undefined) {
-      const existing = await db.userVenueAccess.findMany({
-        where: { userId },
-        select: { venueId: true, scope: true },
-      });
-      const existingMap = new Map(existing.map((e) => [e.venueId, e.scope]));
-      const nextSet = new Set(venueIds);
-
-      const toDelete = existing.filter((e) => !nextSet.has(e.venueId));
-      const toCreate = venueIds.filter((id) => !existingMap.has(id));
-      const toUpdate = venueIds.filter((id) => {
-        const cur = existingMap.get(id);
-        const nxt = (venueScopes?.[id] ?? "individual") as "individual" | "general";
-        return cur !== undefined && cur !== nxt;
-      });
-
-      for (const e of toDelete) {
-        venueOps.push(
-          db.userVenueAccess.delete({
-            where: { userId_venueId: { userId, venueId: e.venueId } },
-          })
-        );
-      }
-      for (const venueId of toCreate) {
-        venueOps.push(
-          db.userVenueAccess.create({
-            data: {
-              userId,
-              venueId,
-              scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
-              managerId: venueManagers?.[venueId] ?? null,
-            },
-          }) as ReturnType<typeof db.userVenueAccess.delete>
-        );
-      }
-      for (const venueId of toUpdate) {
-        venueOps.push(
-          db.userVenueAccess.update({
-            where: { userId_venueId: { userId, venueId } },
-            data: {
-              scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general",
-              managerId: venueManagers?.[venueId] ?? null,
-            },
-          }) as ReturnType<typeof db.userVenueAccess.delete>
-        );
-      }
-    }
-
     await db.$transaction([
       db.profile.update({
         where: { id: userId },
@@ -208,6 +146,7 @@ export async function updateUser(data: Record<string, unknown>) {
           ...(nickName !== undefined && { nickName }),
           ...(phoneNumber !== undefined && { phoneNumber }),
           ...(roleId !== undefined && { roleId }),
+          ...(managerId !== undefined && { managerId: managerId || null }),
           ...(status !== undefined && { status }),
           ...(dataScope !== undefined && { dataScope }),
           ...(placeOfBirth !== undefined && { placeOfBirth }),
@@ -226,7 +165,6 @@ export async function updateUser(data: Record<string, unknown>) {
       ...(fullName !== undefined
         ? [db.user.update({ where: { id: profile.userId }, data: { name: fullName } })]
         : []),
-      ...venueOps,
     ]);
 
     revalidateTag("users", { expire: 0 });
@@ -264,9 +202,7 @@ export async function deleteUser(userId: string) {
       return { success: false, error: "Pengguna tidak ditemukan." };
     }
 
-    // All deletes in FK order within a single transaction
     await db.$transaction([
-      db.userVenueAccess.deleteMany({ where: { userId } }),
       db.emailVerificationToken.deleteMany({ where: { profileId: userId } }),
       db.passwordResetToken.deleteMany({ where: { userId } }),
       db.activityLog.deleteMany({ where: { userId } }),
@@ -356,9 +292,6 @@ export async function resendInvitation(userId: string) {
 export async function bulkUpdateUsers(data: {
   userIds: string[];
   roleId?: string;
-  venueIds?: string[];
-  venueScopes?: Record<string, "individual" | "general">;
-  venueManagers?: Record<string, string>;
   dataScope?: "own" | "group" | "all";
   groupIds?: string[];
 }): Promise<{ success: boolean; error?: string; updated?: number }> {
@@ -366,46 +299,26 @@ export async function bulkUpdateUsers(data: {
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`bulk-update-users:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const { userIds, roleId, venueIds, venueScopes, venueManagers, dataScope, groupIds } = data;
+  const { userIds, roleId, dataScope, groupIds } = data;
   if (!userIds.length) return { success: false, error: "Tidak ada user yang dipilih." };
 
   try {
-    // userIds = auth user IDs → fetch profile IDs
     const profiles = await db.profile.findMany({
       where: { userId: { in: userIds } },
       select: { id: true, userId: true },
     });
-    const profileIdMap = new Map(profiles.map((p) => [p.userId, p.id]));
 
-    // Build profile update ops (where: { userId } = auth user ID)
-    const profileOps = userIds.map((userId) =>
-      db.profile.update({
-        where: { userId },
-        data: {
-          ...(roleId && { roleId }),
-          ...(dataScope && { dataScope }),
-        },
-      })
+    await db.$transaction(
+      userIds.map((userId) =>
+        db.profile.update({
+          where: { userId },
+          data: {
+            ...(roleId && { roleId }),
+            ...(dataScope && { dataScope }),
+          },
+        })
+      )
     );
-
-    // Profile updates in transaction
-    await db.$transaction(profileOps);
-
-    // Venue replace ops — sequential per user (outside transaction to avoid timeout)
-    if (venueIds?.length) {
-      for (const authUserId of userIds) {
-        const profileId = profileIdMap.get(authUserId);
-        if (!profileId) continue;
-        await db.userVenueAccess.deleteMany({ where: { userId: profileId } });
-        await db.$transaction(
-          venueIds.map((venueId) =>
-            db.userVenueAccess.create({
-              data: { userId: profileId, venueId, scope: (venueScopes?.[venueId] ?? "individual") as "individual" | "general", managerId: venueManagers?.[venueId] ?? null },
-            })
-          )
-        );
-      }
-    }
 
     // Group member replace — delete all existing then create new
     if (groupIds?.length) {
@@ -424,7 +337,7 @@ export async function bulkUpdateUsers(data: {
       action: "bulk_update_users",
       entityType: "user",
       entityId: userIds.join(","),
-      changes: { roleId, venueIds, dataScope, groupIds, count: userIds.length },
+      changes: { roleId, dataScope, groupIds, count: userIds.length },
       description: `Bulk updated ${userIds.length} users`,
     });
 

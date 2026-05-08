@@ -9,17 +9,9 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const groupId = searchParams.get("groupId");
-  const startDate = searchParams.get("startDate");
-  const endDate = searchParams.get("endDate");
 
-  if (!groupId || !startDate || !endDate) {
-    return Response.json({ error: "Missing params" }, { status: 400 });
-  }
+  if (!groupId) return Response.json({ error: "Missing groupId" }, { status: 400 });
 
-  const performance = await getMyTeamPerformance(groupId, {
-    startDate: new Date(startDate),
-    endDate: new Date(endDate),
-  });
-
+  const performance = await getMyTeamPerformance(groupId);
   return Response.json(performance);
 }

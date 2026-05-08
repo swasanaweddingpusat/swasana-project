@@ -27,10 +27,6 @@ export async function seedUsers() {
     },
   });
 
-  for (const v of venues) {
-    await prisma.userVenueAccess.create({ data: { userId: adminProfile.id, venueId: v.id, scope: "general" } });
-  }
-
   console.log("✅ Admin user seeded: admin@swasana.com / Admin@1234");
 }
 
