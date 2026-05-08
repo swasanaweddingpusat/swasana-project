@@ -35,6 +35,9 @@ jobs:
       - name: Run Prisma migrations (production)
         run: npx prisma migrate deploy
 
+      - name: Build
+        run: npm run build
+
       - name: Deploy to Vercel (production)
         run: |
           npx vercel deploy --prod \
