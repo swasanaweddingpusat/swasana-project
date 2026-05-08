@@ -107,7 +107,7 @@ export async function createBooking(data: unknown) {
           id: bookingId,
           bookingDate: new Date(input.bookingDate),
           salesId: session!.user.profileId!,
-          managerId: await resolveManagerId(session!.user.profileId!, input.venueId),
+          managerId: await resolveManagerId(session!.user.profileId!),
           customerId,
           venueId: input.venueId,
           packageId: input.packageId,

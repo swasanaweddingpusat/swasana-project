@@ -6,7 +6,6 @@ export async function fetchUsers(filters: UserFilters = {}): Promise<UsersQueryR
   if (filters.search) params.set("search", filters.search);
   if (filters.roleId) params.set("roleId", filters.roleId);
   if (filters.status) params.set("status", filters.status);
-  if (filters.venueId) params.set("venueId", filters.venueId);
   if (filters.page) params.set("page", String(filters.page));
   if (filters.limit) params.set("limit", String(filters.limit));
 

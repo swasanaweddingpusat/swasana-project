@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { getUsers } from "@/lib/queries/users";
 import { getRoles } from "@/lib/queries/roles";
-import { getBrands } from "@/lib/queries/venues";
 import { getGroups } from "@/lib/queries/groups";
 import { UsersAndGroups } from "../user-management/_components/users-and-groups";
 import { UsersLoading } from "../user-management/_components/loading";
@@ -22,11 +21,10 @@ export default async function UsersSettingsPage() {
 
 async function UsersContent() {
   await connection();
-  const [users, roles, brands, groups] = await Promise.all([
+  const [users, roles, groups] = await Promise.all([
     getUsers(),
     getRoles(),
-    getBrands(),
     getGroups(),
   ]);
-  return <UsersAndGroups users={users} roles={roles} brands={brands} groups={groups} />;
+  return <UsersAndGroups users={users} roles={roles} groups={groups} />;
 }

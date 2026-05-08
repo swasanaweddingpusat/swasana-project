@@ -30,12 +30,8 @@ export default async function MyTeamPage() {
     );
   }
 
-  const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
   const [performance, availableProfiles] = await Promise.all([
-    getMyTeamPerformance(group.id, { startDate, endDate }),
+    getMyTeamPerformance(group.id),
     getAvailableSalesProfiles(group.members.map((m) => m.userId)),
   ]);
 

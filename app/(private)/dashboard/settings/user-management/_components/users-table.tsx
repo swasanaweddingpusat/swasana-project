@@ -24,7 +24,6 @@ import { useUsers, useDeleteUser } from "@/hooks/use-users";
 import { resendInvitation } from "@/actions/user";
 import type { UsersQueryResult, UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
-import type { BrandsQueryResult } from "@/lib/queries/venues";
 import type { UserFilters } from "@/types/user";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -45,30 +44,26 @@ const getStatusBadgeClass = (verified: boolean) =>
 interface UsersTableProps {
   initialData: UsersQueryResult;
   roles: RolesQueryResult;
-  brands: BrandsQueryResult;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
+export function UsersTable({ initialData, roles }: UsersTableProps) {
   const [page, setPage] = useState(1);
   const [roleFilter, setRoleFilterRaw] = useState("");
   const [statusFilter, setStatusFilterRaw] = useState("");
-  const [venueFilter, setVenueFilterRaw] = useState("");
   const [searchQuery, setSearchQueryRaw] = useState("");
 
   const rowsPerPage = 10;
 
   const setRoleFilter = (v: string) => { setRoleFilterRaw(v); setPage(1); };
   const setStatusFilter = (v: string) => { setStatusFilterRaw(v); setPage(1); };
-  const setVenueFilter = (v: string) => { setVenueFilterRaw(v); setPage(1); };
   const setSearchQuery = (v: string) => { setSearchQueryRaw(v); setPage(1); };
 
   const filters: UserFilters = {
     search: searchQuery || undefined,
     roleId: roleFilter || undefined,
     status: (statusFilter || undefined) as UserFilters["status"],
-    venueId: venueFilter || undefined,
     page,
     limit: rowsPerPage,
   };
@@ -93,17 +88,8 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
 
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
 
-  // Unique venues dari data yang ada (untuk filter dropdown)
-  const allVenues = useMemo(() => {
-    const map = new Map<string, string>();
-    users.forEach(u => u.profile?.userVenueAccess?.forEach(v => {
-      if (!map.has(v.venue.id)) map.set(v.venue.id, v.venue.name);
-    }));
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [users]);
-
-  const hasFilters = !!(roleFilter || statusFilter || venueFilter);
-  const clearFilters = () => { setRoleFilter(""); setStatusFilter(""); setVenueFilter(""); };
+  const hasFilters = !!(roleFilter || statusFilter);
+  const clearFilters = () => { setRoleFilter(""); setStatusFilter(""); };
 
   const paginatedUsers = users; // sudah dipaginasi server-side
 
@@ -221,12 +207,6 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                     <SelectItem value="pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={venueFilter} onValueChange={setVenueFilter}>
-                  <SelectTrigger className={cn('h-8', 'w-36', 'text-xs', 'border-border', 'bg-secondary')}><SelectValue placeholder="Venue" /></SelectTrigger>
-                  <SelectContent>
-                    {allVenues.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
                 <Button
                   variant="outline"
                   size="sm"
@@ -270,7 +250,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Nama</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Email</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Role</TableHead>
-                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Assigned Venues</TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Data Access</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Created Date</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Status</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs', 'text-right')}></TableHead>
@@ -280,7 +260,7 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                   {paginatedUsers.map((user, index) => {
                     const roleName = user.profile?.role?.name ?? "";
                     const isVerified = user.profile?.isEmailVerified ?? false;
-                    const venues = user.profile?.userVenueAccess ?? [];
+                    const dataScope = user.profile?.dataScope ?? "own";
                     const rowNumber = (page - 1) * rowsPerPage + index + 1;
                     const createdDate = user.createdAt
                       ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
@@ -315,18 +295,9 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
                           ) : "—"}
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2.5')}>
-                          {venues.length > 0 ? (
-                            <div className={cn('flex', 'items-center', 'gap-1', 'flex-wrap')}>
-                              <span className={cn('px-2', 'py-0.5', 'rounded-full', 'text-[11px]', 'font-medium', 'bg-secondary', 'text-secondary-foreground', 'truncate', 'max-w-32')}>
-                                {venues[0].venue.name}
-                              </span>
-                              {venues.length > 1 && (
-                                <span className={cn('px-1.5', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium', 'bg-muted', 'text-muted-foreground')}>
-                                  +{venues.length - 1} more
-                                </span>
-                              )}
-                            </div>
-                          ) : "—"}
+                          <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-secondary-foreground')}>
+                            {dataScope}
+                          </span>
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2.5', 'text-xs', 'text-muted-foreground')}>{createdDate}</TableCell>
                         <TableCell className={cn('px-2', 'py-2.5')}>
@@ -412,12 +383,11 @@ export function UsersTable({ initialData, roles, brands }: UsersTableProps) {
         onClose={() => setBulkEditOpen(false)}
         selectedUserIds={Array.from(selectedUsers)}
         roles={roles}
-        brands={brands}
         onSuccess={() => { setSelectedUsers(new Set()); refetch(); }}
       />
 
       {/* Drawer */}
-      <InviteDrawer open={drawerOpen} onOpenChange={setDrawerOpen} roles={roles} brands={brands} editUser={editUser} />
+      <InviteDrawer open={drawerOpen} onOpenChange={setDrawerOpen} roles={roles} editUser={editUser} />
     </div>
   );
 }

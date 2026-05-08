@@ -36,10 +36,6 @@ export async function seedTestUsers() {
       },
     });
 
-    for (const v of venues) {
-      await prisma.userVenueAccess.create({ data: { userId: profile.id, venueId: v.id, scope: "general" } });
-    }
-
     console.log(`✅ ${u.name} seeded: ${u.email} / ${u.password}`);
   }
 }

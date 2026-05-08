@@ -5,14 +5,12 @@ import { UsersTable } from "./users-table";
 import { GroupManagement } from "../../groups/_components/group-management";
 import type { UsersQueryResult } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
-import type { BrandsQueryResult } from "@/lib/queries/venues";
 import type { GroupsQueryResult } from "@/lib/queries/groups";
 import { cn } from "@/lib/utils";
 
 interface UsersAndGroupsProps {
   users: UsersQueryResult;
   roles: RolesQueryResult;
-  brands: BrandsQueryResult;
   groups: GroupsQueryResult;
 }
 
@@ -23,7 +21,7 @@ const tabs = [
 
 type TabId = (typeof tabs)[number]["id"];
 
-export function UsersAndGroups({ users, roles, brands, groups }: UsersAndGroupsProps) {
+export function UsersAndGroups({ users, roles, groups }: UsersAndGroupsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("users");
 
   return (
@@ -46,7 +44,7 @@ export function UsersAndGroups({ users, roles, brands, groups }: UsersAndGroupsP
         ))}
       </div>
       {activeTab === "users" && (
-        <UsersTable initialData={users} roles={roles} brands={brands} />
+        <UsersTable initialData={users} roles={roles} />
       )}
       {activeTab === "groups" && (
         <GroupManagement initialGroups={groups} users={users} />

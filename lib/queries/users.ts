@@ -11,6 +11,7 @@ const PROFILE_SELECT = {
   status: true,
   dataScope: true,
   roleId: true,
+  managerId: true,
   isEmailVerified: true,
   mustChangePassword: true,
   lastLoginAt: true,
@@ -32,14 +33,6 @@ const PROFILE_SELECT = {
   emergencyContactPhone: true,
   // Relations
   role: { select: { id: true, name: true } },
-  userVenueAccess: {
-    select: {
-      id: true,
-      scope: true,
-      managerId: true,
-      venue: { select: { id: true, name: true } },
-    },
-  },
   dataGroupMemberships: {
     select: {
       group: { select: { id: true, name: true } },
@@ -52,7 +45,7 @@ export async function getUsers(filters: UserFilters = {}) {
   cacheTag("users");
   cacheLife("minutes");
 
-  const { search, roleId, status, venueId, dataScope, page = 1, limit = 20 } = filters;
+  const { search, roleId, status, dataScope, page = 1, limit = 20 } = filters;
 
   const where = {
     profile: {
@@ -63,7 +56,6 @@ export async function getUsers(filters: UserFilters = {}) {
         : status
         ? { status: status as "active" | "inactive" | "suspended" }
         : {}),
-      ...(venueId && { userVenueAccess: { some: { venueId } } }),
     },
     ...(search && {
       OR: [
