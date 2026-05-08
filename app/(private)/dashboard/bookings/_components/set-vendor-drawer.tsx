@@ -91,10 +91,10 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
 
   useEffect(() => {
     if (!open || !booking) return;
-    setLoadingDetail(true);
-    fetch(`/api/bookings/${booking.id}`)
-      .then((r) => r.json())
-      .then((data) => {
+    void (async () => {
+      setLoadingDetail(true);
+      try {
+        const data = await fetch(`/api/bookings/${booking.id}`).then((r) => r.json());
         const items = data?.snapVendorItems ?? [];
         const sel: Record<string, VendorState> = {};
         for (const item of items) {
@@ -114,9 +114,12 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
           edits[b.id] = { nominal: b.nominal ? String(b.nominal) : "", description: b.description ?? "", orderStatusId: b.orderStatusId ?? "" };
         }
         setBonusEdits(edits);
+      } catch {
+        setSelected({}); setComplimentary([]);
+      } finally {
         setLoadingDetail(false);
-      })
-      .catch(() => { setSelected({}); setComplimentary([]); setLoadingDetail(false); });
+      }
+    })();
   }, [open, booking]);
 
   function updateField(catId: string, field: keyof VendorState, value: string) {

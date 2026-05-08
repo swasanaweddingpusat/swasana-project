@@ -392,8 +392,6 @@ export function MyTeamClient({ group, initialPerformance, availableProfiles, cur
         memberAvatarUrl={sorted.find((m) => m.profileId === detailMemberId)?.avatarUrl ?? null}
         memberTarget={sorted.find((m) => m.profileId === detailMemberId)?.target ?? 0}
         memberActual={sorted.find((m) => m.profileId === detailMemberId)?.actual ?? 0}
-        filterMonth={filterMonth}
-        filterYear={filterYear}
         onClose={() => setDetailMemberId(null)}
       />
 

@@ -25,8 +25,6 @@ interface Props {
   memberAvatarUrl: string | null;
   memberTarget: number;
   memberActual: number;
-  filterMonth: number;
-  filterYear: number;
   onClose: () => void;
 }
 
@@ -48,7 +46,7 @@ const STATUS_DOT: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, memberTarget, memberActual, filterMonth, filterYear, onClose }: Props) {
+export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, memberTarget, memberActual, onClose }: Props) {
   const [bookings, setBookings] = useState<SalesBookingItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [approveTarget, setApproveTarget] = useState<string | null>(null);
@@ -57,20 +55,20 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
 
   useEffect(() => {
     if (!memberId) return;
-    setLoading(true);
-    const startDate = new Date(filterYear, filterMonth, 1);
-    const endDate = new Date(filterYear, filterMonth + 1, 0, 23, 59, 59);
-    const params = new URLSearchParams({
-      salesId: memberId,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-    });
-    fetch(`/api/sales-bookings?${params}`)
-      .then((r) => r.json())
-      .then((data: SalesBookingItem[]) => setBookings(data))
-      .catch((e: unknown) => { console.error("[SalesDetailModal]", e); })
-      .finally(() => setLoading(false));
-  }, [memberId, filterMonth, filterYear]);
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      try {
+        const data: SalesBookingItem[] = await fetch(`/api/sales-bookings?salesId=${memberId}`).then((r) => r.json());
+        if (!cancelled) setBookings(data);
+      } catch (e: unknown) {
+        console.error("[SalesDetailModal]", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [memberId]);
 
   if (!memberId) return null;
 
