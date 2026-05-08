@@ -318,46 +318,6 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
             )}
           </div>
 
-          {/* Personal Data — edit only */}
-          {isEdit && (
-            <div className="space-y-3 pt-2 border-t border-border">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Data Pribadi</p>
-              {[
-                { field: "nickName" as const, label: "Nama Panggilan" },
-                { field: "phoneNumber" as const, label: "No. HP" },
-                { field: "placeOfBirth" as const, label: "Tempat Lahir" },
-                { field: "ktpAddress" as const, label: "Alamat KTP" },
-                { field: "currentAddress" as const, label: "Alamat Sekarang" },
-                { field: "motherName" as const, label: "Nama Ibu" },
-                { field: "maritalStatus" as const, label: "Status Pernikahan" },
-                { field: "lastEducation" as const, label: "Pendidikan Terakhir" },
-              ].map(({ field, label }) => (
-                <div key={field}>
-                  <Label className="text-sm font-medium text-gray-700">{label}</Label>
-                  <Input className={inputClass} value={formData[field]} onChange={(e) => handleInput(field, e.target.value)} />
-                </div>
-              ))}
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Tanggal Lahir</Label>
-                <Input type="date" className={inputClass} value={formData.dateOfBirth} onChange={(e) => handleInput("dateOfBirth", e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Jumlah Anak</Label>
-                <Input type="number" min={0} className={inputClass} value={formData.numberOfChildren} onChange={(e) => handleInput("numberOfChildren", e.target.value)} />
-              </div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-1">Kontak Darurat</p>
-              {[
-                { field: "emergencyContactName" as const, label: "Nama" },
-                { field: "emergencyContactRel" as const, label: "Hubungan" },
-                { field: "emergencyContactPhone" as const, label: "No. HP" },
-              ].map(({ field, label }) => (
-                <div key={field}>
-                  <Label className="text-sm font-medium text-gray-700">{label}</Label>
-                  <Input className={inputClass} value={formData[field]} onChange={(e) => handleInput(field, e.target.value)} />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Footer */}
