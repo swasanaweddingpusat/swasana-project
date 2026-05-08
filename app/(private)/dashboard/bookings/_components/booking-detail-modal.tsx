@@ -251,36 +251,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               {/* ═══ TAB: Vendor Details ═══ */}
               {activeTab === "vendor" && (
                 <div className="space-y-6">
-                  {/* Package vendor items */}
-                  {booking.snapPackageVendorItems.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Paket Vendor Items</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
-                        {booking.snapPackageVendorItems.map((item) => (
-                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
-                            <p className="text-xs text-gray-400">{item.categoryName}</p>
-                            <RichText html={item.itemText} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Internal items */}
-                  {booking.snapPackageInternalItems.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Internal Items</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
-                        {booking.snapPackageInternalItems.map((item) => (
-                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
-                            <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
-                            {item.itemDescription && <RichText html={item.itemDescription} />}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Vendor + Bonus unified table */}
                   {(booking.snapVendorItems.length > 0 || booking.snapBonuses.length > 0) && (
                     <div className="rounded-md border overflow-x-auto">
@@ -323,8 +293,38 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     </div>
                   )}
 
+                  {/* Internal items */}
+                  {booking.snapPackageInternalItems.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Internal Items</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
+                        {booking.snapPackageInternalItems.map((item) => (
+                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
+                            <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                            {item.itemDescription && <RichText html={item.itemDescription} />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Package vendor items */}
+                  {booking.snapPackageVendorItems.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Paket Vendor Items</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
+                        {booking.snapPackageVendorItems.map((item) => (
+                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
+                            <p className="text-xs text-gray-400">{item.categoryName}</p>
+                            <RichText html={item.itemText} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Empty state */}
-                  {booking.snapPackageInternalItems.length === 0 && booking.snapPackageVendorItems.length === 0 && booking.snapVendorItems.length === 0 && booking.snapBonuses.length === 0 && (
+                  {booking.snapVendorItems.length === 0 && booking.snapBonuses.length === 0 && booking.snapPackageInternalItems.length === 0 && booking.snapPackageVendorItems.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <FileText className="h-10 w-10 text-gray-300 mb-3" />
                       <p className="text-sm text-gray-500">Belum ada data vendor.</p>

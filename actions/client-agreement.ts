@@ -35,7 +35,7 @@ export async function generateAgreementToken(bookingId: string) {
     const existing = await db.clientAgreement.findUnique({ where: { bookingId } });
 
     if (existing?.status === "Signed") {
-      return { success: false as const, error: "Agreement sudah ditandatangani, tidak bisa di-regenerate." };
+      return { success: true as const, agreement: existing, alreadySigned: true as const };
     }
 
     const [agreement] = await db.$transaction([db.clientAgreement.upsert({

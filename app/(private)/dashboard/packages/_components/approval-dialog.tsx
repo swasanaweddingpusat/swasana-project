@@ -139,8 +139,11 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                     <p className={cn('text-sm', 'font-medium')}>
                       Step {step.stepOrder}: {step.approverType === "client" ? `Client — ${packageName}` : step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName}
                     </p>
-                    {step.status === "approved" && step.decidedBy && (
-                      <p className={cn('text-xs', 'text-muted-foreground')}>Disetujui oleh {step.decidedBy.fullName} {step.decidedAt ? `· ${new Date(step.decidedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</p>
+                    {step.status === "approved" && (step.decidedBy || step.approverType === "client") && (
+                      <p className={cn('text-xs', 'text-muted-foreground')}>
+                        {step.approverType === "client" ? "Ditandatangani oleh client" : `Disetujui oleh ${step.decidedBy?.fullName}`}
+                        {step.decidedAt ? ` · ${new Date(step.decidedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
+                      </p>
                     )}
                     {step.status === "rejected" && (
                       <div>
