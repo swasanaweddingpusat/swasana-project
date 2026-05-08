@@ -289,7 +289,7 @@ export function MyTeamClient({ group, initialPerformance, availableProfiles, cur
                     <TableCell className="px-6 py-3">
                       <div className="flex items-center justify-center">
                         {isTop ? (
-                          <Crown className="h-5 w-5 text-foreground" />
+                          <Crown className="h-5 w-5 text-yellow-400" />
                         ) : (
                           <span className={cn(
                             "text-sm font-semibold w-6 h-6 rounded-full flex items-center justify-center",

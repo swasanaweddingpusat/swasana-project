@@ -9,19 +9,9 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const salesId = searchParams.get("salesId");
-  const startDate = searchParams.get("startDate");
-  const endDate = searchParams.get("endDate");
 
-  if (!salesId || !startDate || !endDate) {
-    return new Response(JSON.stringify({ error: "Missing params" }), { status: 400 });
-  }
+  if (!salesId) return Response.json({ error: "Missing salesId" }, { status: 400 });
 
-  const bookings = await getSalesBookings(salesId, {
-    startDate: new Date(startDate),
-    endDate: new Date(endDate),
-  });
-
-  return new Response(JSON.stringify(bookings), {
-    headers: { "content-type": "application/json" },
-  });
+  const bookings = await getSalesBookings(salesId);
+  return Response.json(bookings);
 }
