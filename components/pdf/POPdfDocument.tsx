@@ -106,33 +106,114 @@ function parseRichText(text: string, baseFontWeight: string = "normal") {
 }
 
 function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): React.ReactNode {
-  const elements: React.ReactNode[] = [];
   let k = 0;
-  const hasLists = /<[ou]l>/.test(html);
-  if (hasLists) {
-    const listRegex = /<(ul|ol)>([\s\S]*?)<\/\1>/g;
-    let lastIdx = 0;
-    let listMatch;
-    while ((listMatch = listRegex.exec(html)) !== null) {
-      if (listMatch.index > lastIdx) {
-        const before = html.slice(lastIdx, listMatch.index).replace(/<\/?p>/g, "").trim();
-        if (before) elements.push(<Text key={k++} style={{ fontSize: 8, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(before)}</Text>);
+
+  function renderList(listHtml: string, type: "ol" | "ul", depth: number, startNum: number = 1): React.ReactNode[] {
+    const nodes: React.ReactNode[] = [];
+    // Use a stack-based approach to find top-level <li> items
+    const items: string[] = [];
+    let remaining = listHtml;
+    while (remaining.length > 0) {
+      const liStart = remaining.indexOf("<li>");
+      if (liStart === -1) break;
+      let level = 1;
+      let pos = liStart + 4;
+      while (level > 0 && pos < remaining.length) {
+        const nextOpen = remaining.indexOf("<li>", pos);
+        const nextClose = remaining.indexOf("</li>", pos);
+        if (nextClose === -1) break;
+        if (nextOpen !== -1 && nextOpen < nextClose) { level++; pos = nextOpen + 4; }
+        else { level--; if (level === 0) { items.push(remaining.slice(liStart + 4, nextClose)); remaining = remaining.slice(nextClose + 5); } else { pos = nextClose + 5; } }
       }
-      const listType = listMatch[1];
-      const items = listMatch[2].match(/<li>([\s\S]*?)<\/li>/g) || [];
-      items.forEach((item, idx) => {
-        const itemText = item.replace(/<\/?li>/g, "").replace(/<\/?p>/g, "").trim();
-        const bullet = listType === "ol" ? `${idx + 1}. ` : "• ";
-        elements.push(<View key={k++} style={{ flexDirection: "row", marginLeft: 8, marginBottom: 1 }}><Text style={{ fontSize: 8, width: listType === "ol" ? 14 : 8 }}>{bullet}</Text><Text style={{ fontSize: 8, flex: 1 }}>{parseInlineHtml(itemText)}</Text></View>);
-      });
-      lastIdx = listRegex.lastIndex;
+      if (level > 0) break;
     }
-    if (lastIdx < html.length) {
-      const after = html.slice(lastIdx).replace(/<\/?p>/g, "").trim();
-      if (after) elements.push(<Text key={k++} style={{ fontSize: 8, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(after)}</Text>);
+
+    items.forEach((itemContent, idx) => {
+      // Check for nested <ul> or <ol>
+      const nestedListMatch = itemContent.match(/<(ul|ol)(?:\s[^>]*)?>([\s\S]*)<\/\1>/i);
+      let mainText = itemContent;
+      let nestedNodes: React.ReactNode[] = [];
+
+      if (nestedListMatch) {
+        mainText = itemContent.slice(0, nestedListMatch.index).replace(/<\/?p>/g, "").trim();
+        const nestedStartMatch = nestedListMatch[0].match(/start="(\d+)"/);
+        const nestedStart = nestedStartMatch ? parseInt(nestedStartMatch[1]) : 1;
+        nestedNodes = renderList(nestedListMatch[2], nestedListMatch[1] as "ol" | "ul", depth + 1, nestedStart);
+      } else {
+        mainText = mainText.replace(/<\/?p>/g, "").trim();
+      }
+
+      const bullet = type === "ol" ? `${idx + startNum}. ` : "• ";
+      const indent = depth * 16;
+
+      if (mainText) {
+        nodes.push(
+          <View key={k++} style={{ flexDirection: "row", marginLeft: indent, marginBottom: 1 }}>
+            <Text style={{ fontSize: 8, width: type === "ol" ? 14 : 8 }}>{bullet}</Text>
+            <Text style={{ fontSize: 8, flex: 1 }}>{parseInlineHtml(mainText)}</Text>
+          </View>
+        );
+      }
+
+      if (nestedNodes.length > 0) {
+        nodes.push(<View key={k++} style={{ marginLeft: indent }}>{nestedNodes}</View>);
+      }
+    });
+
+    return nodes;
+  }
+
+  const elements: React.ReactNode[] = [];
+  const hasLists = /<[ou]l[\s>]/.test(html);
+
+  if (hasLists) {
+    // Split by top-level lists (support <ol start="N"> attributes)
+    const segments: { type: "text" | "list"; content: string; listType?: "ol" | "ul"; start?: number }[] = [];
+    let temp = html;
+    while (temp.length > 0) {
+      const olMatch = temp.match(/<ol(\s[^>]*)?>/) ;
+      const ulIdx = temp.indexOf("<ul>");
+      const olIdx = olMatch ? temp.indexOf(olMatch[0]) : -1;
+      let nextIdx = -1;
+      let tag: "ol" | "ul" = "ol";
+      let startNum = 1;
+      let openTagLen = 4; // "<ol>" or "<ul>"
+      if (olIdx === -1 && ulIdx === -1) { if (temp.trim()) segments.push({ type: "text", content: temp }); break; }
+      if (olIdx === -1) { nextIdx = ulIdx; tag = "ul"; openTagLen = 4; }
+      else if (ulIdx === -1) { nextIdx = olIdx; tag = "ol"; openTagLen = olMatch![0].length; const sm = olMatch![1]?.match(/start="(\d+)"/); if (sm) startNum = parseInt(sm[1]); }
+      else if (olIdx < ulIdx) { nextIdx = olIdx; tag = "ol"; openTagLen = olMatch![0].length; const sm = olMatch![1]?.match(/start="(\d+)"/); if (sm) startNum = parseInt(sm[1]); }
+      else { nextIdx = ulIdx; tag = "ul"; openTagLen = 4; }
+
+      if (nextIdx > 0) segments.push({ type: "text", content: temp.slice(0, nextIdx) });
+
+      // Find matching close tag (balanced)
+      const closeTag = `</${tag}>`;
+      let level = 1;
+      let pos = nextIdx + openTagLen;
+      while (level > 0 && pos < temp.length) {
+        const openTagSimple = `<${tag}`;
+        const nOpenIdx = temp.indexOf(openTagSimple, pos);
+        const nClose = temp.indexOf(closeTag, pos);
+        if (nClose === -1) break;
+        if (nOpenIdx !== -1 && nOpenIdx < nClose) { level++; pos = nOpenIdx + openTagSimple.length + 1; }
+        else { level--; pos = nClose + closeTag.length; }
+      }
+      const listContent = temp.slice(nextIdx + openTagLen, pos - closeTag.length);
+      segments.push({ type: "list", content: listContent, listType: tag, start: startNum });
+      temp = temp.slice(pos);
+    }
+
+    for (const seg of segments) {
+      if (seg.type === "text") {
+        const clean = seg.content.replace(/<\/?p>/g, "").trim();
+        if (clean) elements.push(<Text key={k++} style={{ fontSize: 8, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(clean)}</Text>);
+      } else {
+        elements.push(<View key={k++}>{renderList(seg.content, seg.listType!, 0, seg.start ?? 1)}</View>);
+      }
     }
     return <>{elements}</>;
   }
+
   const blocks = html.replace(/^<p>|<\/p>$/g, "").split(/<\/p>\s*<p>|<br\s*\/?>/).filter(Boolean);
   return (<Text style={{ fontSize: 8, fontWeight: baseFontWeight as "normal" | "bold" }}>{blocks.map((block, i) => { const c = block.replace(/<\/?p>/g, "").trim(); if (!c) return null; return (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>); })}</Text>);
 }
@@ -305,10 +386,47 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
   // Replace {term_of_payment} with formatted list: "Nama sebesar Rp X,- (Terbilang)"
   if (html.includes("{term_of_payment}")) {
     const topHtml = booking.termOfPayments.map((t) => {
-      const due = t.dueDate ? ` — jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : "";
+      const due = t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : "";
       return `<li>${t.name} sebesar ${fmtRpTerbilang(t.amount)}${due}</li>`;
     }).join("");
-    html = html.replace(/\{term_of_payment\}/g, `<ul>${topHtml}</ul>`);
+    // Try to nest term_of_payment inside the preceding <li> (e.g. "Jadwal Pembayaran")
+    // Pattern: <li><p>Jadwal Pembayaran</p></li></ol><p>{term_of_payment}</p><ol...>
+    // Target: <li><p>Jadwal Pembayaran</p><ul>...</ul></li></ol><ol start="2"...>
+    const topUl = `<ul>${topHtml}</ul>`;
+    const tpIdx = html.indexOf("{term_of_payment}");
+    if (tpIdx !== -1) {
+      // Find the </li></ol> before {term_of_payment}
+      const before = html.slice(0, tpIdx);
+      const lastLiClose = before.lastIndexOf("</li>");
+      if (lastLiClose !== -1) {
+        // Insert <ul>...</ul> before </li>
+        html = html.slice(0, lastLiClose) + topUl + html.slice(lastLiClose);
+        // Remove the {term_of_payment} placeholder (now shifted)
+        html = html.replace(/(<p>)?\{term_of_payment\}(<\/p>)?/, "");
+      } else {
+        html = html.replace(/(<p>)?\{term_of_payment\}(<\/p>)?/, topUl);
+      }
+    }
+
+    // Continue numbering: the <ol> containing "Jadwal Pembayaran" has 1 item,
+    // the next <ol> (Metode Pembayaran, etc.) should start from 2
+    // Find two consecutive <ol>...</ol> blocks separated by any content
+    const olBlocks = [...html.matchAll(/<ol(?:\s[^>]*)?>[\s\S]*?<\/ol>/g)];
+    if (olBlocks.length >= 2) {
+      // Find the ol that contains the term_of_payment ul (the "Jadwal Pembayaran" ol)
+      const topUlStr = `<ul>${topHtml}</ul>`;
+      const jadwalOlIdx = olBlocks.findIndex((m) => m[0].includes(topUlStr));
+      if (jadwalOlIdx !== -1 && jadwalOlIdx + 1 < olBlocks.length) {
+        const jadwalOl = olBlocks[jadwalOlIdx];
+        const jadwalItemCount = (jadwalOl[0].match(/<li>/g) || []).length;
+        const nextOl = olBlocks[jadwalOlIdx + 1];
+        // Only set start if it doesn't already have one
+        if (nextOl[0].startsWith("<ol>")) {
+          const absIdx = nextOl.index!;
+          html = html.slice(0, absIdx) + `<ol start="${jadwalItemCount + 1}">` + html.slice(absIdx + 4);
+        }
+      }
+    }
   }
 
   for (const [key, value] of Object.entries(vars)) {

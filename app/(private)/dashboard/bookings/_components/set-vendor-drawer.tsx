@@ -70,7 +70,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
 
   const { data: vendorCats = [] } = useQuery<{ id: string; name: string; vendors: { id: string; name: string }[] }[]>({
     queryKey: ["vendors-for-bonus"],
-    queryFn: () => fetch("/api/vendors").then((r) => r.json()),
+    queryFn: async () => { const res = await fetch("/api/vendors"); const json = await res.json(); return Array.isArray(json) ? json : json.data ?? []; },
     staleTime: 5 * 60 * 1000,
   });
   const allVendors = vendorCats.flatMap((c) => c.vendors.map((v) => ({ id: v.id, name: v.name, categoryId: c.id })));

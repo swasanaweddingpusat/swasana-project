@@ -184,10 +184,10 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       .finally(() => setAvailLoading(false));
   }, [selectedVenueId, visibleMonth, selectedPackageId, selectedVariantId]);
 
-  function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
     const a = availability[key];
-    if (!a) return "available";
+    if (!a) return null;
     const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
     if (count === 0) return "unavailable";
     if (count === 3) return "available";
