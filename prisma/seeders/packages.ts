@@ -1,4 +1,5 @@
 import { prisma } from "./_client";
+import { seedBrandsVenues } from "./brands-venues";
 
 export async function seedPackages() {
   // Truncate approval data for packages & bookings (steps cascade from records)
@@ -14,9 +15,24 @@ export async function seedPackages() {
   await prisma.booking.deleteMany({});
   console.log("🗑️  All bookings deleted");
 
+  // Delete related notifications & activity logs
+  await prisma.notification.deleteMany({ where: { entityType: "booking" } });
+  await prisma.activityLog.deleteMany({ where: { entityType: "booking" } });
+  await prisma.notification.deleteMany({ where: { entityType: "package" } });
+  await prisma.activityLog.deleteMany({ where: { entityType: "package" } });
+  console.log("🗑️  Related notifications & activity logs deleted");
+
   // Delete all packages (cascade: variants, vendorItems, internalItems)
   await prisma.package.deleteMany({});
   console.log("🗑️  All packages deleted");
+
+  // Delete all venues + brands and re-seed fresh
+  await prisma.paymentMethod.deleteMany({ where: { venueId: { not: null } } });
+  await prisma.venue.deleteMany({});
+  await prisma.brand.deleteMany({});
+  console.log("🗑️  All venues & brands deleted");
+
+  await seedBrandsVenues();
 
   const venues = await prisma.venue.findMany({ select: { id: true, code: true, name: true } });
   const venueByCode = Object.fromEntries(venues.map((v) => [v.code, v.id]));

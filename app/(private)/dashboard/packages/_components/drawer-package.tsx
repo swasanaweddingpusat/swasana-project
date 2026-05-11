@@ -659,12 +659,16 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                           {variants.length > 1 && (
                             <div className={cn("flex", "items-center", "gap-2", "pb-1")}>
                               <Copy className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
-                              <span className={cn("text-xs", "text-gray-500", "shrink-0")}>Duplikat dari</span>
-                              {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
-                                <Button key={srcIdx} variant="outline" size="sm" className={cn("text-xs", "h-7", "cursor-pointer")} onClick={() => duplicateVendorItems(variantIdx, srcIdx)}>
-                                  {v.variantName}
-                                </Button>
-                              ) : null)}
+                              <Select onValueChange={(val) => duplicateVendorItems(variantIdx, parseInt(val))}>
+                                <SelectTrigger className={cn("h-7", "text-xs", "flex-1", "border-gray-300")}>
+                                  <SelectValue placeholder="Copy dari..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
+                                    <SelectItem key={srcIdx} value={String(srcIdx)}>{v.variantName || `Varian ${srcIdx + 1}`}</SelectItem>
+                                  ) : null)}
+                                </SelectContent>
+                              </Select>
                             </div>
                           )}
                             <SortableContext items={(vendorItems[variantIdx] ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
@@ -746,12 +750,16 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                           {variants.length > 1 && (
                             <div className={cn("flex", "items-center", "gap-2", "pb-1")}>
                               <Copy className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
-                              <span className={cn("text-xs", "text-gray-500", "shrink-0")}>Duplikat dari</span>
-                              {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
-                                <Button key={srcIdx} variant="outline" size="sm" className={cn("text-xs", "h-7", "cursor-pointer")} onClick={() => duplicateInternalItems(variantIdx, srcIdx)}>
-                                  {v.variantName}
-                                </Button>
-                              ) : null)}
+                              <Select onValueChange={(val) => duplicateInternalItems(variantIdx, parseInt(val))}>
+                                <SelectTrigger className={cn("h-7", "text-xs", "flex-1", "border-gray-300")}>
+                                  <SelectValue placeholder="Copy dari..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
+                                    <SelectItem key={srcIdx} value={String(srcIdx)}>{v.variantName || `Varian ${srcIdx + 1}`}</SelectItem>
+                                  ) : null)}
+                                </SelectContent>
+                              </Select>
                             </div>
                           )}
                             <SortableContext items={(internalItems[variantIdx] ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
