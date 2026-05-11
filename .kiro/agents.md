@@ -43,6 +43,7 @@ If the answer to any of these reveals a cascade, handle ALL affected files in th
 - ❌ `findMany()` without pagination
 - ❌ Skipping rate limiting on any endpoint
 - ❌ Leaving unused imports or variables
+- ❌ `db:push` on branches that will be merged — use migrations
 
 ### Always Required
 - ✅ Read the file before editing it
@@ -53,8 +54,51 @@ If the answer to any of these reveals a cascade, handle ALL affected files in th
 - ✅ `logAudit()` for sensitive actions
 - ✅ Explicit return types on exported functions
 - ✅ `@/` alias for imports (relative only within same feature folder)
+- ✅ Migration file for every schema change
 
-## 5. Steering Files — Read Order
+## 5. Prisma Migration Rules (NON-NEGOTIABLE)
+
+### Schema Change = Migration File
+Setiap kali `prisma/schema.prisma` berubah:
+1. Generate migration: `npx prisma migrate dev --name <nama_deskriptif>`
+2. Nama deskriptif: `add_<field>_to_<table>`, `create_<table>`, `remove_<column>_from_<table>`
+3. Migration HARUS idempotent:
+   - `CREATE TABLE IF NOT EXISTS`
+   - `ALTER TABLE ADD COLUMN IF NOT EXISTS`
+   - `CREATE INDEX IF NOT EXISTS`
+   - `DROP CONSTRAINT IF EXISTS` sebelum `ADD CONSTRAINT`
+4. DROP TYPE/TABLE → hapus dependency (column/FK) DULU
+5. Migration file HARUS di-commit bareng schema change
+6. Setelah migration: `npx prisma validate`
+7. Kalo DB gak available: bikin manual di `prisma/migrations/<timestamp>_<name>/migration.sql`
+
+### Seeder Data via Migration (PREFERRED)
+Data yang WAJIB ada di semua environment (roles, permissions, reference data):
+1. Masukkan `INSERT` statements langsung di migration file
+2. Pattern: `INSERT INTO ... ON CONFLICT DO NOTHING` atau `INSERT INTO ... WHERE NOT EXISTS (...)`
+3. Ini memastikan data ter-apply SEKALI saat `prisma migrate deploy`
+4. Seeder files (`prisma/seeders/`) tetap buat:
+   - Dev-only data (test users, sample bookings)
+   - Complex logic (hash password, etc.)
+5. Permission/role baru → migration baru yang INSERT data
+
+## 6. CI/CD Pipeline
+
+### Workflow Structure
+```
+.github/workflows/
+├── ci.yml              → PR validation (generate → lint → typecheck → build)
+├── cd-staging.yml      → Push main: migrate → build → deploy
+└── cd-production.yml   → Push live: migrate → build → deploy (concurrency locked)
+```
+
+### Deploy Flow
+- Push ke `main` → auto migrate staging DB → build → deploy staging
+- Push ke `live` → auto migrate prod DB → build → deploy prod
+- Migration failure = deploy blocked (separate jobs)
+- `prisma generate` explicit di setiap job
+
+## 7. Steering Files — Read Order
 
 Before starting any task, check these files in `.kiro/steering/`:
 
@@ -65,9 +109,7 @@ Before starting any task, check these files in `.kiro/steering/`:
 | `logging-rules.md` | No console.log, audit logging patterns |
 | `breadcrumb-architecture.md` | Breadcrumb implementation decisions |
 
-Also read `AGENTS.md` at project root — it contains the same rules for Claude-based agents.
-
-## 6. When You're Stuck
+## 8. When You're Stuck
 
 - **Build fails?** Read the actual error. Don't guess fixes — trace the error to its source.
 - **Same approach failed twice?** Stop. Diagnose the root cause. Try a fundamentally different approach.

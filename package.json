@@ -24,6 +24,7 @@
     "db:seed:groups": "tsx prisma/seeders/groups.ts",
     "db:seed:order-statuses": "tsx prisma/seeders/order-statuses.ts",
     "db:seed:approval-flows": "tsx prisma/seeders/approval-flows.ts",
+    "db:seed:event-types": "tsx prisma/seeders/event-types.ts",
     "db:truncate:bookings": "tsx prisma/seeders/truncate-bookings.ts",
     "db:seed:roles": "tsx prisma/seeders/roles-permissions.ts",
     "db:studio": "prisma studio",
