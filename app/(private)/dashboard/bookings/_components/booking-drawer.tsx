@@ -51,7 +51,6 @@ function getVariantPrice(v: PackageData["variants"][number]) {
   return base + Math.round(base * ((v.margin ?? 0) / 100));
 }
 
-const DAY = 24 * 60 * 60 * 1000;
 
 function toLocalISO(date: Date): string {
   const y = date.getFullYear();
@@ -292,7 +291,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   // Recalc term dates when event date changes
   useEffect(() => {
     if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
-  }, [wBookingDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wBookingDate]);  
 
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi terlebih dahulu."); return; }

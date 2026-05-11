@@ -9,7 +9,7 @@ const TEST_USERS = [
 ];
 
 export async function seedTestUsers() {
-  const venues = await prisma.venue.findMany({ select: { id: true } });
+  const _venues = await prisma.venue.findMany({ select: { id: true } });
 
   for (const u of TEST_USERS) {
     const existing = await prisma.user.findUnique({ where: { email: u.email } });
@@ -23,7 +23,7 @@ export async function seedTestUsers() {
       data: { email: u.email, name: u.name, password: hashedPassword, emailVerified: new Date() },
     });
 
-    const profile = await prisma.profile.create({
+    const _profile = await prisma.profile.create({
       data: {
         userId: user.id,
         email: user.email,

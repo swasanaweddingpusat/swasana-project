@@ -297,7 +297,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
     } else toast.error(res.error ?? "Failed");
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const handleDeletePermission = async (permId: string, _mod: string, _action: string) => {
     const res = await deletePermMut.mutateAsync(permId);
     if (res.success) {

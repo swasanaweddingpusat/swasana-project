@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { CalendarIcon, FileText, Trash2, X } from "lucide-react";
+import { CalendarIcon, Trash2, X } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
@@ -163,7 +163,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setTerms(bTerms.length > 0 ? bTerms : [{ name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0 }]);
     // Variant price
     setSelectedVariantPrice(Number(booking.snapPackageVariant?.price ?? 0));
-  }, [open, booking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, booking]);  
 
   // Init detail fields
   useEffect(() => {
@@ -218,7 +218,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Recalc term dates when event date changes
   useEffect(() => {
     if (bookingDate) setTerms((prev) => recalcTermDates(prev, bookingDate));
-  }, [bookingDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bookingDate]);  
 
   // Price helpers
   const getBasePrice = () => selectedVariantPrice;

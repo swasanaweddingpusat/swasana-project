@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       discountAmount: booking.discountAmount,
     };
 
-    // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
+     
     let termAndConditionHtml: string | null;
     if (booking.packageVariantId) {
       const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
     } else {
       termAndConditionHtml = null;
     }
-    // eslint-disable-next-line react-hooks/error-boundaries -- server-side PDF render, not client React
+     
     const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />;
 
     const stream = await renderToStream(pdfElement);

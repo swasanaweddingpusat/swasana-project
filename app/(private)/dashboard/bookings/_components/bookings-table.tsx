@@ -1082,7 +1082,7 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [bookingId]);
 
   return (

@@ -6,7 +6,7 @@ import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { MultiSelect } from "@/components/shared/multi-select";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Save, Plus, Trash2 } from "lucide-react";

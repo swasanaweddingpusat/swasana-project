@@ -14,7 +14,7 @@ export async function getUnreadCount(userId: string): Promise<number> {
   });
 }
 
-export async function markAsRead(notificationId: string, userId: string): Promise<void> {
+export async function markAsRead(notificationId: string, _userId: string): Promise<void> {
   await db.notification.update({
     where: { id: notificationId },
     data: { isRead: true },

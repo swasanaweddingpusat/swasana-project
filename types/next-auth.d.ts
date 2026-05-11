@@ -1,5 +1,5 @@
 import { DefaultSession, DefaultUser } from "next-auth";
-import { JWT } from "next-auth/jwt";
+import type { JWT } from "next-auth/jwt"; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 type ProfileStatus = "active" | "inactive" | "suspended";
 
