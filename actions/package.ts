@@ -60,8 +60,10 @@ export async function createPackage(data: unknown) {
 
         for (let i = 0; i < flow.steps.length; i++) {
           const step = flow.steps[i];
-          const shouldAutoApprove = creatorStepIdx >= 0 && i <= creatorStepIdx;
-          const isCreatorStep = i === creatorStepIdx;
+          // If creator's role is in the flow, auto-approve up to their level
+          // If creator's role is NOT in the flow, auto-approve step 1 only
+          const shouldAutoApprove = creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
+          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
 
           await tx.approvalRecordStep.create({
             data: {
@@ -149,7 +151,10 @@ export async function updatePackage(id: string, data: unknown) {
 
         for (let i = 0; i < flow.steps.length; i++) {
           const step = flow.steps[i];
-          const shouldAutoApprove = creatorStepIdx >= 0 && i <= creatorStepIdx;
+          // If creator's role is in the flow, auto-approve up to their level
+          // If creator's role is NOT in the flow, auto-approve step 1 only
+          const shouldAutoApprove = creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
+          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
           await tx.approvalRecordStep.create({
             data: {
               recordId, stepOrder: step.sortOrder, approverType: step.approverType,
@@ -157,7 +162,7 @@ export async function updatePackage(id: string, data: unknown) {
               status: shouldAutoApprove ? "approved" : "pending",
               decidedById: shouldAutoApprove ? session.user.profileId : null,
               decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: i === creatorStepIdx ? (signature ?? null) : null,
+              signature: isCreatorStep ? (signature ?? null) : null,
             },
           });
         }

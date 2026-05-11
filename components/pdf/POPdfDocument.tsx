@@ -386,8 +386,8 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POP
           )}
         </View>
 
-        {/* Detail Section */}
-        <View break>
+        {/* Detail Section — only force page break when there's substantial content */}
+        <View break={booking.snapPackageInternalItems.length > 0 || booking.snapPackageVendorItems.length > 0}>
           {/* Mini Form */}
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
             <View style={{ flexDirection: "column", gap: 4 }}>
@@ -476,6 +476,10 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POP
               <View style={s.paymentRow}>
                 <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}</Text></View>
                 <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8 }}>{(() => { const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
+              </View>
+              <View style={s.paymentRow}>
+                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Sisa Bayar</Text></View>
+                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text></View>
               </View>
             </View>
           </View>

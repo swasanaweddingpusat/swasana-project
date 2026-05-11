@@ -188,8 +188,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   useEffect(() => {
     if (!venueId) { setAvailability({}); return; }
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
-    fetch(`/api/venues/${venueId}/availability?month=${month}`).then((r) => r.json()).then(setAvailability).catch(() => setAvailability({}));
-  }, [venueId, visibleMonth]);
+    const bookingId = booking?.id ?? "";
+    const params = new URLSearchParams({ month, exclude: bookingId });
+    if (packageId) params.set("packageId", packageId);
+    if (variantId) params.set("variantId", variantId);
+    fetch(`/api/venues/${venueId}/availability?${params}`).then((r) => r.json()).then(setAvailability).catch(() => setAvailability({}));
+  }, [venueId, visibleMonth, booking?.id, packageId, variantId]);
 
   function getAvailableSessions(dateStr: string): string[] {
     const a = availability[dateStr];
@@ -199,6 +203,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (a.evening) sessions.push("evening");
     if (a.fullday && a.morning && a.evening) sessions.push("fullday");
     return sessions;
+  }
+
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
+    const key = format(d, "yyyy-MM-dd");
+    const a = availability[key];
+    if (!a) return "available";
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
   }
 
   // Recalc term dates when event date changes
@@ -222,6 +236,17 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // Detect significant changes
   const hasSignificantChange = venueId !== originalVenueId || packageId !== originalPackageId || variantId !== originalVariantId;
+  const hasAnyChange = !booking ? false : (
+    hasSignificantChange ||
+    customerName !== (booking.snapCustomer?.name ?? "") ||
+    JSON.stringify(contactNumbers) !== (() => { try { const arr = JSON.parse(booking.snapCustomer?.mobileNumber ?? ""); return JSON.stringify(Array.isArray(arr) ? arr : []); } catch { return "[]"; } })() ||
+    (bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : "") !== (booking.bookingDate ? format(new Date(booking.bookingDate), "yyyy-MM-dd") : "") ||
+    weddingSession !== (booking.weddingSession ?? "") ||
+    weddingType !== (booking.weddingType ?? "") ||
+    sourceOfInformationId !== (booking.sourceOfInformationId ?? "") ||
+    paymentMethodId !== (booking.paymentMethodId ?? "") ||
+    signingLocation !== (booking.signingLocation ?? "")
+  );
   const totalSteps = hasSignificantChange ? 3 : 1;
 
   // Validation
@@ -238,7 +263,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   const mut = useMutation({
     mutationFn: (data: Parameters<typeof editBooking>[0]) => editBooking(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["bookings"] }); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); },
   });
 
   async function handleSubmit() {
@@ -268,7 +293,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     onOpenChange(false);
   }
 
-  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (hasSignificantChange && currentStep === 2 && !isStep2Complete) || (hasSignificantChange && currentStep === 3 && !isStep3Complete) || mut.isPending;
+  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (currentStep === 1 && !hasSignificantChange && !hasAnyChange) || (hasSignificantChange && currentStep === 2 && !isStep2Complete) || (hasSignificantChange && currentStep === 3 && !isStep3Complete) || mut.isPending;
 
   const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
 
@@ -323,7 +348,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Popover>
                   <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-gray-400")}><CalendarIcon className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromDate={new Date(new Date().setHours(0, 0, 0, 0))} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} />
+                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => !!venueId && getDateStatus(d) === "unavailable"} modifiers={{ available: (d) => !!venueId && getDateStatus(d) === "available", partial: (d) => !!venueId && getDateStatus(d) === "partial", unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable" }} modifiersClassNames={{ available: "day-available", partial: "day-partial", unavailable: "day-unavailable" }} />
                   </PopoverContent>
                 </Popover>
               </div>

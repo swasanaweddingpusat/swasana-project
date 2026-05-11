@@ -174,12 +174,15 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (!selectedVenueId) { setAvailability({}); return; }
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
-    fetch(`/api/venues/${selectedVenueId}/availability?month=${month}`)
+    const params = new URLSearchParams({ month });
+    if (selectedPackageId) params.set("packageId", selectedPackageId);
+    if (wVariantId) params.set("variantId", wVariantId);
+    fetch(`/api/venues/${selectedVenueId}/availability?${params}`)
       .then((r) => r.json())
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [selectedVenueId, visibleMonth]);
+  }, [selectedVenueId, visibleMonth, selectedPackageId, wVariantId]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
     const key = format(d, "yyyy-MM-dd");
@@ -526,11 +529,9 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             captionLayout="dropdown"
                             selected={field.value ? new Date(field.value) : undefined}
                             onSelect={(date) => { field.onChange(date ? date.toISOString() : ""); form.setValue("weddingSession", null); }}
-                            disabled={(d) => {
-                              if (d < new Date(new Date().setHours(0, 0, 0, 0))) return true;
-                              return getDateStatus(d) === "unavailable";
-                            }}
-                            fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                            disabled={(d) => getDateStatus(d) === "unavailable"}
+                            fromYear={new Date().getFullYear() - 10}
+                            toYear={new Date().getFullYear() + 5}
                             defaultMonth={field.value ? new Date(field.value) : new Date()}
                             onMonthChange={setVisibleMonth}
                             modifiers={{

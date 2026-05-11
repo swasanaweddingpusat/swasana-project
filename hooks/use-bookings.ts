@@ -50,7 +50,10 @@ export function useCreateBooking() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: BookingInput) => createBooking(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+    },
   });
 }
 
@@ -58,7 +61,10 @@ export function useUpdateBooking() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateBookingInput) => updateBooking(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+    },
   });
 }
 

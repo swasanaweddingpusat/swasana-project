@@ -83,7 +83,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
     setSubmitting(false);
     if (!res.success) { toast.error(res.error); return; }
     toast.success("Berhasil disetujui");
-    qc.invalidateQueries({ queryKey: ["packages"] });
+    await qc.refetchQueries({ queryKey: ["packages"] });
     onClose();
   }
 
@@ -94,7 +94,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
     setSubmitting(false);
     if (!res.success) { toast.error(res.error); return; }
     toast.success("Package ditolak");
-    qc.invalidateQueries({ queryKey: ["packages"] });
+    await qc.refetchQueries({ queryKey: ["packages"] });
     onClose();
   }
 
@@ -123,9 +123,24 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
               </div>
             </div>
 
-            {/* Steps timeline */}
+            {/* Steps timeline — only show latest round */}
             <div className="space-y-2">
-              {record.steps.map((step) => (
+              {(() => {
+                const steps = record.steps;
+                if (steps.length === 0) return [];
+                // Each approval round appends N steps (same as flow template).
+                // Detect round size: find the first step whose approverType+approverRoleId
+                // matches step[0] (indicating a new round started).
+                const firstStep = steps[0];
+                let roundSize = steps.length;
+                for (let i = 1; i < steps.length; i++) {
+                  if (steps[i].approverType === firstStep.approverType && steps[i].approverRoleId === firstStep.approverRoleId && steps[i].approverUserId === firstStep.approverUserId) {
+                    roundSize = i;
+                    break;
+                  }
+                }
+                return steps.slice(-roundSize);
+              })().map((step) => (
                 <div key={step.id} className={cn("flex items-center gap-3 p-3 rounded-lg border", step.status === "approved" && "bg-muted/50", step.status === "rejected" && "bg-destructive/5 border-destructive/20")}>
                   <div className={cn(
                     "flex items-center justify-center h-7 w-7 rounded-full shrink-0",
