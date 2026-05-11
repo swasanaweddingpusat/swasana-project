@@ -19,11 +19,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const start = startOfMonth(base);
     const end = endOfMonth(base);
 
+    const excludeId = searchParams.get("exclude"); // booking ID to exclude (for edit mode)
+    const packageId = searchParams.get("packageId");
+    const variantId = searchParams.get("variantId");
+
     const bookings = await db.booking.findMany({
       where: {
         venueId: id,
         bookingDate: { gte: start, lte: end },
         bookingStatus: { notIn: ["Canceled", "Lost"] },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+        ...(packageId ? { packageId } : {}),
+        ...(variantId ? { packageVariantId: variantId } : {}),
       },
       select: { bookingDate: true, weddingSession: true },
     });

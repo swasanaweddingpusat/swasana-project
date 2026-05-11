@@ -169,9 +169,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }
 
   function fetchRevisions(bookingId: string) {
-    if (revisionCache[bookingId]) return;
-    fetch(`/api/bookings/${bookingId}/revisions`).then((r) => r.json()).then((data) => {
-      if (Array.isArray(data)) setRevisionCache((p) => ({ ...p, [bookingId]: data }));
+    fetch(`/api/bookings/${bookingId}/revisions`).then((r) => r.json()).then((res) => {
+      const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setRevisionCache((p) => ({ ...p, [bookingId]: items }));
     }).catch(() => {});
   }
 
@@ -379,7 +379,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           )}
 
                           {/* Agreement modal trigger — hidden on mobile */}
-                          {can("client_agreement", "create") && booking.clientAgreement?.status !== "Signed" && (
+                          {can("booking", "client-agreement") && booking.clientAgreement?.status !== "Signed" && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
                               <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
@@ -475,7 +475,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           {/* Booking Approval dropdown */}
                           {approvalMap.has(booking.id) && (() => {
                             const record = approvalMap.get(booking.id)!;
-                            const steps = record.steps;
+                            const allSteps = record.steps;
+                            // Show only latest round: detect round size from first repeated approver pattern
+                            const firstStep = allSteps[0];
+                            let roundSize = allSteps.length;
+                            for (let i = 1; i < allSteps.length; i++) {
+                              if (allSteps[i].approverType === firstStep?.approverType && allSteps[i].approverRoleId === firstStep?.approverRoleId && allSteps[i].approverUserId === firstStep?.approverUserId) {
+                                roundSize = i;
+                                break;
+                              }
+                            }
+                            const steps = allSteps.slice(-roundSize);
                             const nonClientSteps = steps.filter((s) => s.approverType !== "client");
                             if (nonClientSteps.every((s) => s.status === "approved")) return null;
                             return (
@@ -1072,7 +1082,7 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [bookingId]);
 
   return (

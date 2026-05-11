@@ -67,7 +67,7 @@ const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", 
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function MyTeamClient({ group, initialPerformance, availableProfiles, currentProfileId }: Props) {
+export function MyTeamClient({ group, initialPerformance, availableProfiles, currentProfileId: _currentProfileId }: Props) {
   const [isPending, startTransition] = useTransition();
 
   // Period filter

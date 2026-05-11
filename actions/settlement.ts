@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
 import type { SettlementType, SettlementStatus } from "@prisma/client";
-import { canAccessBooking, getProfileDataScope, getBookingIdFromSettlement } from "@/lib/access-control";
+import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 export async function createSettlement(input: {
   snapVendorItemId: string;

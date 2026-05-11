@@ -13,7 +13,7 @@ import { Drawer } from "@/components/shared/drawer";
 import { CalendarIcon, ChevronDown, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateTermOfPayments } from "@/actions/term-of-payment";
-import { addPartialPayment, deletePartialPayment } from "@/actions/partial-payment";
+import { deletePartialPayment } from "@/actions/partial-payment";
 import { useQueryClient } from "@tanstack/react-query";
 
 const PAYMENT_STATUS = ["paid", "partial", "unpaid"] as const;
@@ -68,7 +68,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
   const [partialPayments, setPartialPayments] = useState<Record<string, PartialPayment[]>>({});
   const [expandedTerms, setExpandedTerms] = useState<Set<string>>(new Set());
-  const [uploading, setUploading] = useState<string | null>(null);
+  const [_uploading, setUploading] = useState<string | null>(null);
 
   // Discount state
   const [discountName, setDiscountName] = useState(initialDiscountName ?? "Discount");

@@ -4,7 +4,7 @@ import { prisma } from "./_client";
 
 export async function seedUsers() {
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "super-admin" } });
-  const venues = await prisma.venue.findMany({ select: { id: true } });
+  const _venues = await prisma.venue.findMany({ select: { id: true } });
 
   const existing = await prisma.user.findUnique({ where: { email: "admin@swasana.com" } });
   if (existing) { console.log("⏭️  Admin user already exists, skipping"); return; }
@@ -14,7 +14,7 @@ export async function seedUsers() {
     data: { email: "admin@swasana.com", name: "Administrator", password: hashedPassword, emailVerified: new Date() },
   });
 
-  const adminProfile = await prisma.profile.create({
+  const _adminProfile = await prisma.profile.create({
     data: {
       userId: adminUser.id,
       email: adminUser.email,
