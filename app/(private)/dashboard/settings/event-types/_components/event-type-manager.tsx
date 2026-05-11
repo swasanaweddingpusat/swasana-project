@@ -90,7 +90,7 @@ export function EventTypeManager({ initialData }: Props) {
                 <h2 className={cn("text-base", "font-bold")}>Event Types</h2>
                 <span className={cn("text-sm", "text-muted-foreground")}>({items.length})</span>
               </div>
-              {(can("settings", "create") || isAdmin) && (
+              {(can("settings-event-types", "create") || isAdmin) && (
                 <Button onClick={handleOpenAdd} className={cn("bg-gray-900", "hover:bg-gray-800", "text-white", "cursor-pointer")}>
                   <Plus className={cn("w-4", "h-4", "mr-2")} /> Tambah
                 </Button>
@@ -127,12 +127,12 @@ export function EventTypeManager({ initialData }: Props) {
                       </TableCell>
                       <TableCell>
                         <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
-                          {(can("settings", "edit") || isAdmin) && (
+                          {(can("settings-event-types", "edit") || isAdmin) && (
                             <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
                               <PenLine className={cn("w-4", "h-4", "text-muted-foreground")} />
                             </button>
                           )}
-                          {(can("settings", "delete") || isAdmin) && (
+                          {(can("settings-event-types", "delete") || isAdmin) && (
                             <button onClick={() => setDeleteTarget(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
                               <Trash2 className={cn("w-4", "h-4", "text-red-500")} />
                             </button>

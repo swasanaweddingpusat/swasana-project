@@ -164,7 +164,7 @@ export async function createBooking(data: unknown) {
       const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
       ops.push(
         db.snapPackageVariant.create({
-          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
+          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, termAndCondition: variant.termAndCondition ?? null },
         })
       );
       if (variant.internalItems.length > 0) {
@@ -570,8 +570,8 @@ export async function editBooking(data: unknown) {
         ops.push(
           db.snapPackageVariant.upsert({
             where: { bookingId: id },
-            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
-            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice },
+            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, termAndCondition: variant.termAndCondition ?? null },
+            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, termAndCondition: variant.termAndCondition ?? null },
           })
         );
 

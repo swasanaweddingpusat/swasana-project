@@ -367,7 +367,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className={cn('px-1', 'py-2', 'whitespace-nowrap')} onClick={(e) => e.stopPropagation()}>
                         <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
                           {/* Set Vendor Bawaan — hidden on mobile */}
-                          {can("booking", "edit") && (
+                          {/* Set Vendor Bawaan — HIDDEN temporarily */}
+                          {false && can("booking", "edit") && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
                               <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
@@ -446,7 +447,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               </Tooltip>
                             </TooltipProvider>
 
-                              {/* Decoration */}
+                              {/* Decoration — HIDDEN temporarily */}
+                              {false && (
                               <TooltipProvider delay={200}>
                                 <Tooltip>
                                   <TooltipTrigger render={<span />}>
@@ -457,6 +459,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                   <TooltipContent side="top"><p className="text-xs">Dekorasi PO</p></TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
+                              )}
                             </div>
                           )}
 
@@ -544,18 +547,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 <Pencil className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
                               </DropdownMenuItem>
                               )}
-                              {can("booking", "transfer") && (
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
-                                <ArrowLeftRight className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
-                              </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
-                                <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-                                <WalletMinimal className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
-                              </DropdownMenuItem>
-
                               {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
                                 <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
                                   <DropdownMenuSubTrigger className="cursor-pointer">
@@ -573,6 +564,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                     ))}
                                   </DropdownMenuSubContent>
                                 </DropdownMenuSub>
+                              )}
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
+                                <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
+                                <WalletMinimal className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
+                              </DropdownMenuItem>
+                              {can("booking", "transfer") && (
+                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
+                                <ArrowLeftRight className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
+                              </DropdownMenuItem>
                               )}
                               {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
                               {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (

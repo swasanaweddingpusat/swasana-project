@@ -65,12 +65,12 @@ export async function POST(req: Request) {
       customerName = ((snap.snapCustomer as Record<string, unknown> | null)?.name as string ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (revision.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = new Date(snap.bookingDate as string).toISOString().split("T")[0];
-      const bookingForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { packageVariantId: true } });
-      if (bookingForTc?.packageVariantId) {
+      const bookingForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { snapPackageVariant: { select: { termAndCondition: true } }, packageVariantId: true } });
+      termAndConditionHtml = bookingForTc?.snapPackageVariant?.termAndCondition ?? null;
+      // Fallback to live variant T&C if snapshot doesn't have it (old bookings)
+      if (!termAndConditionHtml && bookingForTc?.packageVariantId) {
         const pv = await db.packageVariant.findUnique({ where: { id: bookingForTc.packageVariantId }, select: { termAndCondition: true } });
         termAndConditionHtml = pv?.termAndCondition ?? null;
-      } else {
-        termAndConditionHtml = null;
       }
     } else {
       // Render from live booking data (backward compatible)
@@ -118,11 +118,11 @@ export async function POST(req: Request) {
       customerName = (booking.snapCustomer?.name ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (booking.snapVenue?.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = booking.bookingDate.toISOString().split("T")[0];
-      if (booking.packageVariantId) {
+      termAndConditionHtml = booking.snapPackageVariant?.termAndCondition ?? null;
+      // Fallback to live variant T&C if snapshot doesn't have it (old bookings)
+      if (!termAndConditionHtml && booking.packageVariantId) {
         const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
         termAndConditionHtml = pv?.termAndCondition ?? null;
-      } else {
-        termAndConditionHtml = null;
       }
     }
 

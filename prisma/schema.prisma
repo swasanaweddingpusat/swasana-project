@@ -658,6 +658,7 @@ model SnapPackageVariant {
   variantName String
   pax         Int
   price       Int
+  termAndCondition String?
   createdAt   DateTime @default(now())
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 

@@ -179,7 +179,7 @@ export default function PaymentMethodsPage() {
                 searchPlaceholder="Cari venue..."
                 className="w-50"
               />
-              {(can("payment_methods", "create") || isAdmin) && (
+              {(can("settings-payment-methods", "create") || isAdmin) && (
                 <Button onClick={openAdd}>
                   <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Payment Method
                 </Button>
@@ -215,12 +215,12 @@ export default function PaymentMethodsPage() {
                     <TableCell>{item.bankRecipient}</TableCell>
                     <TableCell>
                       <div className={cn('flex', 'gap-1', 'justify-end')}>
-                        {(can("payment_methods", "edit") || isAdmin) && (
+                        {(can("settings-payment-methods", "edit") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)}>
                             <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                           </button>
                         )}
-                        {(can("payment_methods", "delete") || isAdmin) && (
+                        {(can("settings-payment-methods", "delete") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
                             <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
                           </button>

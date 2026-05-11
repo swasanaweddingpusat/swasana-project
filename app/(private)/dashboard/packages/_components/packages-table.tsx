@@ -81,7 +81,7 @@ export function PackagesTable() {
   const { user } = useCurrentUser();
   const [tcDrawerOpen, setTcDrawerOpen] = useState(false);
   const [tcPkg, setTcPkg] = useState<PackageQueryItem | null>(null);
-  const { data: approvals = [] } = usePackageApprovals();
+  const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals();
 
   // Map approvals by entityId for quick lookup
   const approvalMap = useMemo(() => {
@@ -180,7 +180,7 @@ export function PackagesTable() {
     setDrawerOpen(true);
   };
 
-  if (isLoading) return <SkeletonTable />;
+  if (isLoading || approvalsLoading) return <SkeletonTable />;
 
   return (
     <>
@@ -304,7 +304,7 @@ export function PackagesTable() {
                             <TooltipContent>Lihat Detail</TooltipContent>
                           </Tooltip>
                         )}
-                        {can("package", "term-and-condition") && (
+                        {can("package", "term-&-condition") && (
                           <Tooltip>
                             <TooltipTrigger
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
