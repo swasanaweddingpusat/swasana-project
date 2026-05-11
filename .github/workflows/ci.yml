@@ -1,0 +1,49 @@
+name: CI
+
+# Continuous Integration — validates code quality on every PR.
+# No DB, no deploy, no secrets. Pure static checks + build sanity.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - live
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate (lint + typecheck + build)
+    runs-on: ubuntu-latest
+
+    env:
+      # Dummy URL — Prisma generate & Next build don't need a real DB.
+      # Ensures `env("DATABASE_URL")` in schema.prisma resolves.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
