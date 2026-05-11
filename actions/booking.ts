@@ -220,19 +220,20 @@ export async function createBooking(data: unknown) {
         },
       });
 
-      // Determine creator's role
-      const creatorRole = await db.role.findUnique({
-        where: { id: session!.user.roleId ?? "" },
-        select: { name: true, id: true },
-      });
-      const isManager = creatorRole?.name === "manager" || creatorRole?.name === "super-admin";
+      // Determine creator's position in approval flow (same logic as package)
+      const creatorRoleId = session!.user.roleId;
+      const creatorStepIdx = flow.steps.findIndex(
+        (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
+      );
 
-      for (const step of flow.steps) {
-        const isAutoApproved =
-          // Step 1 (sales) — auto-approve if creator is sales or higher
-          (step.sortOrder === 1 && step.approverType === "role") ||
-          // Step 2 (manager) — auto-approve if creator is manager
-          (step.sortOrder === 2 && step.approverType === "role" && isManager);
+      for (let i = 0; i < flow.steps.length; i++) {
+        const step = flow.steps[i];
+        // Auto-approve up to creator's level in the flow
+        // If creator's role is NOT in the flow, auto-approve step 1 only
+        const shouldAutoApprove = step.approverType !== "client" && (
+          creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
+        );
+        const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
 
         await db.approvalRecordStep.create({
           data: {
@@ -241,10 +242,10 @@ export async function createBooking(data: unknown) {
             approverType: step.approverType,
             approverRoleId: step.approverRoleId,
             approverUserId: step.approverUserId,
-            status: isAutoApproved ? "approved" : "pending",
-            decidedById: isAutoApproved ? session!.user.profileId! : null,
-            decidedAt: isAutoApproved ? new Date() : null,
-            signature: isAutoApproved && step.sortOrder === 1 ? (input.signatureSales ?? null) : null,
+            status: shouldAutoApprove ? "approved" : "pending",
+            decidedById: shouldAutoApprove ? session!.user.profileId! : null,
+            decidedAt: shouldAutoApprove ? new Date() : null,
+            signature: isCreatorStep ? (input.signatureSales ?? null) : null,
           },
         });
       }
