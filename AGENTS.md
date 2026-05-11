@@ -439,22 +439,85 @@ Required fields: `userId`, `action` (e.g., `user.invited`), `result` (`success`/
 
 ## 5. Permission Module Naming
 
-Permission `(module, action)` tuples used across the app — keep consistent:
+Permission `(module, action)` tuples — kebab-case format:
 
 | Module | Actions |
 |---|---|
-| `settings` | `view`, `create`, `update`, `delete` (users, groups, venues, brands, source-of-info) |
-| `customers` | `view`, `create`, `update`, `delete`, `read` |
+| `booking` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `reject`, `comment`, `client-agreement` |
+| `approval` | `edit` |
+| `customers` | `view`, `create`, `edit`, `delete` |
+| `finance-ar` | `view`, `create`, `edit`, `delete` |
+| `package` | `view`, `create`, `edit`, `delete`, `set-harga`, `term-&-condition`, `set-status` |
 | `vendor` | `view`, `create`, `edit`, `delete` |
-| `package` | `view`, `create`, `edit`, `delete` |
-| `payment_methods` | `view`, `create`, `edit`, `delete` |
-| `role_permission` | `view`, `create`, `edit`, `delete` |
-
-**Note inconsistency:** some modules use `update` (settings, customers) vs `edit` (vendor, package, payment_methods, role_permission). Pick ONE per module and stick with it. Don't mix `update` and `edit` within the same module.
+| `settings-brands` | `view`, `create`, `edit`, `delete` |
+| `settings-venues` | `view`, `create`, `edit`, `delete` |
+| `settings-groups` | `view`, `create`, `edit`, `delete` |
+| `settings-users` | `view`, `create`, `edit`, `delete` |
+| `settings-education-level` | `view`, `create`, `edit`, `delete` |
+| `settings-event-types` | `view`, `create`, `edit`, `delete` |
+| `settings-order-status` | `view`, `create`, `edit`, `delete` |
+| `settings-approval-flow` | `view`, `create`, `edit`, `delete` |
+| `settings-payment-methods` | `view`, `create`, `edit`, `delete` |
+| `settings-role-permission` | `view`, `create`, `edit`, `delete` |
+| `settings-source-of-information` | `view`, `create`, `edit`, `delete` |
 
 ---
 
-## 6. Code Conventions
+## 6. Prisma Migration Rules (NON-NEGOTIABLE)
+
+### Schema Change = Migration File
+Every change to `prisma/schema.prisma` MUST have a corresponding migration file:
+
+1. Generate: `npx prisma migrate dev --name <descriptive_name>`
+2. Naming: `add_<field>_to_<table>`, `create_<table>`, `remove_<column>_from_<table>`
+3. Migration MUST be idempotent:
+   - `CREATE TABLE IF NOT EXISTS`
+   - `ALTER TABLE ADD COLUMN IF NOT EXISTS`
+   - `CREATE INDEX IF NOT EXISTS`
+   - `DROP CONSTRAINT IF EXISTS` before `ADD CONSTRAINT`
+4. DROP TYPE/TABLE → remove dependencies (columns/FKs) FIRST
+5. Migration file committed together with schema change
+6. After migration: `npx prisma validate`
+7. If DB unavailable: create manually at `prisma/migrations/<timestamp>_<name>/migration.sql`
+8. NEVER use `db:push` on branches that will be merged
+
+### Seeder Data via Migration (PREFERRED)
+Data required in all environments (roles, permissions, reference data):
+1. Put `INSERT` statements directly in migration SQL
+2. Pattern: `INSERT INTO ... ON CONFLICT DO NOTHING`
+3. Applied once via `prisma migrate deploy` — no manual seeder run needed
+4. Seeder files (`prisma/seeders/`) only for:
+   - Dev-only data (test users, sample bookings)
+   - Complex logic requiring runtime (bcrypt hash, etc.)
+
+---
+
+## 7. CI/CD Pipeline
+
+### Workflow Structure
+```
+.github/workflows/
+├── ci.yml              → PR validation (generate → lint → typecheck → build)
+├── cd-staging.yml      → Push main: migrate → build → deploy
+└── cd-production.yml   → Push live: migrate → build → deploy (concurrency locked)
+```
+
+### Deploy Flow
+- Push to `main` → auto migrate staging DB → build → deploy staging
+- Push to `live` → auto migrate prod DB → build → deploy prod
+- Migration failure = deploy blocked (separate jobs)
+- `prisma generate` explicit in every job
+- No lint/typecheck in CD (already validated in CI)
+
+### Branch Strategy
+- `main` = staging
+- `live` = production
+- Feature branches: `feat/<name>`, `fix/<name>`
+- PR required to merge into `main` or `live`
+
+---
+
+## 8. Code Conventions
 
 - **Server actions** start with `"use server"`, return `{ success, data? }` or `{ success: false, error }` — never throw to client.
 - **Zod schemas** in `lib/validations/<domain>.ts`. Reuse between client form and server action.
@@ -468,7 +531,7 @@ Permission `(module, action)` tuples used across the app — keep consistent:
 
 ---
 
-## 7. Common pitfalls (DO NOT do these)
+## 9. Common pitfalls (DO NOT do these)
 
 - ❌ Creating `middleware.ts` — it's `proxy.ts` in Next.js 16.
 - ❌ `cookies()` / `headers()` without `await`.
@@ -479,6 +542,8 @@ Permission `(module, action)` tuples used across the app — keep consistent:
 - ❌ `bcrypt.hash` rounds > 12 on serverless — risks Vercel 10s timeout.
 - ❌ Returning emails, IDs, or enumerable data on auth error paths.
 - ❌ `db.$transaction` with `async` callback on Neon HTTP — use array form.
+- ❌ `db:push` on branches that will be merged — always use `prisma migrate dev`.
+- ❌ Schema change without migration file committed together.
 - ❌ Seeding secrets via plain env. Use `AUTH_SECRET` generated with `openssl rand -base64 32`.
 - ❌ Skipping `profile.status` check at login or in AuthGate.
 - ❌ Secret comparison with `!==` — use `crypto.timingSafeEqual` for admin webhook auth.
@@ -487,7 +552,7 @@ Permission `(module, action)` tuples used across the app — keep consistent:
 
 ---
 
-## 8. Checklist — before marking any auth/permission task done
+## 10. Checklist — before marking any auth/permission task done
 
 - [ ] Rate limiter called first in the handler (tier: auth / mutation / api)
 - [ ] Zod validation on input
@@ -505,7 +570,7 @@ Permission `(module, action)` tuples used across the app — keep consistent:
 
 ---
 
-## 9. Env vars (required)
+## 11. Env vars (required)
 
 ```
 DATABASE_URL=                    # Neon postgres
@@ -528,7 +593,7 @@ Secrets never land in git. `.env` is gitignored; `.env.example` ships placeholde
 
 ---
 
-## 10. Design System — Monochrome (STRICT)
+## 12. Design System — Monochrome (STRICT)
 
 swasana-project = strict monochrome. Semua warna grayscale (oklch chroma 0).
 
@@ -560,7 +625,7 @@ swasana-project = strict monochrome. Semua warna grayscale (oklch chroma 0).
 
 ---
 
-## 11. Tailwind v4 Syntax (STRICT)
+## 13. Tailwind v4 Syntax (STRICT)
 
 - `data-[attr]:class` → `data-attr:class`
   - `data-[disabled]:opacity-50` → `data-disabled:opacity-50`
@@ -573,7 +638,7 @@ swasana-project = strict monochrome. Semua warna grayscale (oklch chroma 0).
 
 ---
 
-## 12. ESLint Rules (STRICT)
+## 14. ESLint Rules (STRICT)
 
 - ❌ DILARANG ternary sebagai statement: `condition ? a() : b()` → ESLint error
 - ✅ Side-effect → WAJIB pake `if/else`: `if (condition) { a() } else { b() }`
