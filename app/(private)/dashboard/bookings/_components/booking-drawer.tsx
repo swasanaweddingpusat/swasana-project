@@ -168,6 +168,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
   const [availLoading, setAvailLoading] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
+  const [selectedVariantId, setSelectedVariantId] = useState("");
 
   useEffect(() => {
     if (!selectedVenueId) { setAvailability({}); return; }
@@ -175,13 +176,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const params = new URLSearchParams({ month });
     if (selectedPackageId) params.set("packageId", selectedPackageId);
-    if (wVariantId) params.set("variantId", wVariantId);
+    if (selectedVariantId) params.set("variantId", selectedVariantId);
     fetch(`/api/venues/${selectedVenueId}/availability?${params}`)
       .then((r) => r.json())
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [selectedVenueId, visibleMonth, selectedPackageId, wVariantId]);
+  }, [selectedVenueId, visibleMonth, selectedPackageId, selectedVariantId]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" {
     const key = format(d, "yyyy-MM-dd");
@@ -480,7 +481,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Venue *</FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantPrice(0); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantId(""); setSelectedVariantPrice(0); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -489,7 +490,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantId(""); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -499,7 +500,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <FormField control={form.control} name="packageVariantId" render={({ field }) => (
                       <FormItem>
                         <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Tipe Paket *</FormLabel>
-                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
+                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); setSelectedVariantId(id); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
                         <FormMessage />
                       </FormItem>
                     )} />
