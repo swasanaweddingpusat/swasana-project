@@ -277,19 +277,22 @@ export function PackagesTable() {
                       )}
                     </TableCell>
                     <TableCell>
+                      {pkg.approvalStatus !== "approved" ? (
                       <button
                         type="button"
                         onClick={() => setApprovalPkg(pkg)}
                         className={cn(
                           "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                          pkg.approvalStatus === "approved" && "bg-primary text-primary-foreground",
                           pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
                           pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
                           pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
                         )}
                       >
-                        {pkg.approvalStatus === "approved" ? "Approved" : pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
+                        {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
                       </button>
+                      ) : (
+                        <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground")}>Approved</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
@@ -328,6 +331,7 @@ export function PackagesTable() {
                         )}
                         {approvalMap.has(pkg.id) && (() => {
                           const record = approvalMap.get(pkg.id)!;
+                          if (record.status === "approved" || pkg.approvalStatus === "approved") return null;
                           const steps = record.steps;
                           return (
                             <DropdownMenu>

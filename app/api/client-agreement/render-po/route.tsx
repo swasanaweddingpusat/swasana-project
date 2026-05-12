@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       termOfPayments: booking.termOfPayments,
       paymentMethod: booking.paymentMethod,
       sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
-      signatures: booking.signatures as Record<string, unknown> | null,
+      signatures: null, // Client-facing PO doesn't show internal signatures
       createdAt: booking.createdAt,
       discountName: booking.discountName,
       discountAmount: booking.discountAmount,

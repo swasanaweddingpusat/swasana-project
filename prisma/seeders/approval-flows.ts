@@ -19,6 +19,24 @@ const FLOWS = [
       { sortOrder: 3, approverType: "client" as const },
     ],
   },
+  {
+    module: "catering",
+    name: "Approval Catering PO",
+    steps: [
+      { sortOrder: 1, roleName: "finance" },
+      { sortOrder: 2, roleName: "direktur-operational" },
+      { sortOrder: 3, roleName: "operational" },
+    ],
+  },
+  {
+    module: "decoration",
+    name: "Approval Decoration PO",
+    steps: [
+      { sortOrder: 1, roleName: "finance" },
+      { sortOrder: 2, roleName: "direktur-operational" },
+      { sortOrder: 3, roleName: "operational" },
+    ],
+  },
 ];
 
 export async function seedApprovalFlows(reset = false) {

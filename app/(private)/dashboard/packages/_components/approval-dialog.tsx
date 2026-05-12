@@ -98,6 +98,35 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
     onClose();
   }
 
+  async function handleResetStep(stepId: string) {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/approval-records/reset-step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast.error(e.error ?? "Gagal reset"); setSubmitting(false); return; }
+      toast.success("Step berhasil di-reset");
+      await qc.refetchQueries({ queryKey: ["packages"] });
+      await qc.refetchQueries({ queryKey: ["booking-approvals"] });
+      fetchRecord();
+    } catch { toast.error("Gagal reset step"); }
+    setSubmitting(false);
+  }
+
+  async function handleRegenerateLink() {
+    setSubmitting(true);
+    try {
+      const { generateAgreementToken } = await import("@/actions/client-agreement");
+      const result = await generateAgreementToken(packageId);
+      if (!result.success) { toast.error(result.error); setSubmitting(false); return; }
+      toast.success("Link agreement berhasil di-regenerate");
+      fetchRecord();
+    } catch { toast.error("Gagal regenerate link"); }
+    setSubmitting(false);
+  }
+
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-md">
@@ -167,6 +196,16 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                       </div>
                     )}
                   </div>
+                  {isSuperAdmin && step.approverType === "client" && step.status === "approved" && (
+                    <button type="button" onClick={() => handleResetStep(step.id)} disabled={submitting} className={cn('text-xs', 'text-muted-foreground', 'hover:text-destructive', 'underline', 'shrink-0')}>
+                      Reset
+                    </button>
+                  )}
+                  {isSuperAdmin && step.approverType === "client" && step.status === "pending" && (
+                    <button type="button" onClick={() => handleRegenerateLink()} disabled={submitting} className={cn('text-xs', 'text-muted-foreground', 'hover:text-foreground', 'underline', 'shrink-0')}>
+                      Re-generate Link
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

@@ -61,7 +61,22 @@ export async function POST(req: Request) {
         vendorName={cateringItem.vendorName}
         poData={poData}
         logoBase64={logoBase64}
-        signatures={booking.signatures as Record<string, Record<string, Record<string, string>>> | null}
+        signatures={await (async () => {
+          const record = await db.approvalRecord.findUnique({
+            where: { module_entityId: { module: "catering", entityId: bookingId } },
+            include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, decidedBy: { select: { fullName: true } } } } },
+          });
+          if (!record) return null;
+          const roleMap: Record<string, string> = { "finance": "finance", "direktur-operational": "dirops", "operational": "oprations" };
+          const catering: Record<string, Record<string, string>> = {};
+          for (const step of record.steps) {
+            if (step.status === "approved" && step.approverRole?.name) {
+              const key = roleMap[step.approverRole.name];
+              if (key) catering[key] = { signature: step.signature ?? "", name: step.decidedBy?.fullName ?? "" };
+            }
+          }
+          return { catering } as Record<string, Record<string, Record<string, string>>>;
+        })()}
       />
     );
 

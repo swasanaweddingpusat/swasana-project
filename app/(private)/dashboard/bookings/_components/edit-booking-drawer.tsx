@@ -366,7 +366,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Select value={weddingType} onValueChange={setWeddingType}>
                   <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="resepsi">Resepsi</SelectItem><SelectItem value="akad">Akad & Resepsi</SelectItem><SelectItem value="wedding">Pemberkatan Resepsi</SelectItem><SelectItem value="engagement">Teapai</SelectItem><SelectItem value="other">Venue Only</SelectItem>
+                    <SelectItem value="R">Resepsi</SelectItem><SelectItem value="AR">Akad & Resepsi</SelectItem><SelectItem value="TR">Teapai & Resepsi</SelectItem><SelectItem value="PR">Pemberkatan Resepsi</SelectItem><SelectItem value="VO">Venue Only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -457,7 +457,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               </div>
               <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-1">
                 <p className="text-xs font-semibold text-orange-700">⚠️ Perhatian</p>
-                <p className="text-xs text-orange-600">Menyimpan perubahan ini akan mereset seluruh approval. Manager dan Client harus menandatangani ulang booking ini.</p>
+                <p className="text-xs text-orange-600">Menyimpan perubahan ini akan mereset seluruh approval. Manager dan Client harus menandatangani ulang PO ini.</p>
               </div>
             </div>
           )}
