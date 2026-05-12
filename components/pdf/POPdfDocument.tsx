@@ -20,7 +20,7 @@ export interface POPdfBooking {
   termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
-  signatures: Record<string, unknown> | null;
+  signatures: { sales?: { signature: string; name: string }; manager?: { signature: string; name: string }; client?: { signature: string; name: string } } | null;
   createdAt?: Date;
   discountName?: string | null;
   discountAmount?: number;
@@ -461,7 +461,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POP
   const brandName = booking.snapVenue?.brandName ?? "";
   const venueName = booking.snapVenue?.venueName ?? "";
   const varSnap = booking.snapPackageVariant;
-  const sigs = booking.signatures as Record<string, Record<string, string>> | null;
+  const sigs = booking.signatures;
   const createdAt = booking.createdAt ?? new Date();
 
   return (
@@ -644,11 +644,11 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POP
               <View style={s.signBox}>
                 {sigs?.manager?.signature ? (
                   /* eslint-disable-next-line jsx-a11y/alt-text */
-                  <Image src={sigs.manager.signature as string} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  <Image src={sigs.manager.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
                 ) : (
                   <View style={{ width: 100, height: 50, marginBottom: 4 }} />
                 )}
-                <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
+                <Text style={s.signerName}>({sigs?.manager?.name ?? ""})</Text>
                 <Text style={s.signatureLabel}>Head of Marketing</Text>
               </View>
             </View>

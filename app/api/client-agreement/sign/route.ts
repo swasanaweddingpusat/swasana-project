@@ -32,31 +32,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
-    const booking = await db.booking.findUnique({
-      where: { id: agreement.bookingId },
-      select: { signatures: true },
-    });
-
-    const existingSignatures = (booking?.signatures as Record<string, unknown>) ?? {};
-
     await db.$transaction([
       db.clientAgreement.update({
         where: { token },
         data: { status: "Signed", signedAt: new Date() },
-      }),
-      db.booking.update({
-        where: { id: agreement.bookingId },
-        data: {
-          signatures: {
-            ...existingSignatures,
-            client: {
-              name: signerName ?? "",
-              role: "client",
-              signature: signatureData,
-              signatureDate: new Date().toISOString(),
-            },
-          },
-        },
       }),
     ]);
 

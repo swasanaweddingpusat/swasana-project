@@ -39,7 +39,6 @@ export async function createBookingRevision(
     weddingSession: booking.weddingSession,
     weddingType: booking.weddingType,
     signingLocation: booking.signingLocation,
-    signatures: booking.signatures,
     snapCustomer: booking.snapCustomer,
     snapVenue: booking.snapVenue,
     snapPackage: booking.snapPackage,

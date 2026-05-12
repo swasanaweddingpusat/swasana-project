@@ -64,29 +64,6 @@ export async function approveStep(stepId: string, signature: string) {
           await tx.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } });
         }
       }
-
-      // Write signature to booking.signatures JSON for PO PDF rendering
-      if (step.record.module === "booking" && signature) {
-        const booking = await tx.booking.findUnique({ where: { id: step.record.entityId }, select: { signatures: true } });
-        const existing = (booking?.signatures as Record<string, unknown>) ?? {};
-        const roleName = step.approverRoleId
-          ? (await tx.role.findUnique({ where: { id: step.approverRoleId }, select: { name: true } }))?.name
-          : null;
-
-        // Determine signature key based on role
-        const sigKey = roleName === "manager" ? "manager" : roleName === "finance" ? "finance" : null;
-        if (sigKey) {
-          await tx.booking.update({
-            where: { id: step.record.entityId },
-            data: {
-              signatures: JSON.parse(JSON.stringify({
-                ...existing,
-                [sigKey]: { signature, name: session.user.name ?? "", signedAt: new Date().toISOString() },
-              })),
-            },
-          });
-        }
-      }
     });
 
     if (!allApprovedAfter) {

@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         termOfPayments: (snap.termOfPayments ?? []) as POPdfBooking["termOfPayments"],
         paymentMethod: snap.paymentMethod as POPdfBooking["paymentMethod"],
         sales: snap.sales as POPdfBooking["sales"],
-        signatures: snap.signatures as Record<string, unknown> | null,
+        signatures: null, // Will be populated from ApprovalRecordStep below
         createdAt: revision.createdAt,
         discountName: snap.discountName as string | null,
         discountAmount: Number(snap.discountAmount) || 0,
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
         termOfPayments: booking.termOfPayments,
         paymentMethod: booking.paymentMethod,
         sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
-        signatures: booking.signatures as Record<string, unknown> | null,
+        signatures: null, // Will be populated from ApprovalRecordStep below
         createdAt: booking.createdAt,
         discountName: booking.discountName,
         discountAmount: booking.discountAmount,
@@ -127,6 +127,25 @@ export async function POST(req: Request) {
     }
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
+
+    // Fetch signatures from ApprovalRecordStep (latest round)
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: bookingId } },
+      include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, decidedBy: { select: { fullName: true } } } } },
+    });
+    if (approvalRecord) {
+      const steps = approvalRecord.steps;
+      const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
+      const latestRound = steps.slice(-roundSize);
+      const salesStep = latestRound.find((s) => s.approverType === "role" && s.approverRole?.name === "sales" && s.signature);
+      const managerStep = latestRound.find((s) => s.approverType === "role" && s.approverRole?.name === "manager" && s.signature);
+      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature);
+      pdfBooking.signatures = {
+        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "" } } : {}),
+        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),
+        ...(clientStep ? { client: { signature: clientStep.signature!, name: clientStep.decidedBy?.fullName ?? "" } } : {}),
+      };
+    }
 
     const logoBase64 = await loadLogoBase64("swasana-logo.png");
 

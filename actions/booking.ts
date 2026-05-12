@@ -120,9 +120,6 @@ export async function createBooking(data: unknown) {
           discountName: input.specialBonusName ?? null,
           discountAmount: input.specialBonusAmount ?? 0,
           poNumber,
-          signatures: input.signatureSales
-            ? { sales: { signature: input.signatureSales, signedAt: new Date().toISOString() } }
-            : undefined,
         },
       }),
       db.snapCustomer.create({
@@ -467,7 +464,7 @@ export async function editBooking(data: unknown) {
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, signatures: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
+      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
@@ -498,7 +495,6 @@ export async function editBooking(data: unknown) {
           signingLocation: rest.signingLocation ?? null,
           discountName: rest.specialBonusName ?? null,
           discountAmount: rest.specialBonusAmount ?? 0,
-          ...(rest.signatureSales ? { signatures: JSON.parse(JSON.stringify({ ...((booking.signatures as Record<string, unknown>) ?? {}), sales: { signature: rest.signatureSales, signedAt: new Date().toISOString() } })) } : {}),
         },
       }),
       // Update customer snapshot
