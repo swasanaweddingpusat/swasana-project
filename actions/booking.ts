@@ -467,7 +467,7 @@ export async function editBooking(data: unknown) {
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
+      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, signatures: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
@@ -498,7 +498,7 @@ export async function editBooking(data: unknown) {
           signingLocation: rest.signingLocation ?? null,
           discountName: rest.specialBonusName ?? null,
           discountAmount: rest.specialBonusAmount ?? 0,
-          ...(rest.signatureSales ? { signatures: { sales: { signature: rest.signatureSales, signedAt: new Date().toISOString() } } } : {}),
+          ...(rest.signatureSales ? { signatures: JSON.parse(JSON.stringify({ ...((booking.signatures as Record<string, unknown>) ?? {}), sales: { signature: rest.signatureSales, signedAt: new Date().toISOString() } })) } : {}),
         },
       }),
       // Update customer snapshot
@@ -633,10 +633,18 @@ export async function editBooking(data: unknown) {
       });
 
       if (flow) {
+        const creatorRoleId = session!.user.roleId;
+        const creatorStepIdx = flow.steps.findIndex(
+          (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
+        );
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const newStepOps: any[] = flow.steps.map((flowStep, i) => {
           const stepOrder = maxStepOrder + 1 + i;
-          const isSalesStep = i === 0 && flowStep.approverType !== "client";
+          const shouldAutoApprove = flowStep.approverType !== "client" && (
+            creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
+          );
+          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
           return db.approvalRecordStep.create({
             data: {
               recordId: approvalRecord.id,
@@ -644,10 +652,10 @@ export async function editBooking(data: unknown) {
               approverType: flowStep.approverType,
               approverRoleId: flowStep.approverRoleId,
               approverUserId: flowStep.approverUserId,
-              status: isSalesStep ? "approved" : "pending",
-              decidedById: isSalesStep ? session!.user.profileId : null,
-              decidedAt: isSalesStep ? new Date() : null,
-              signature: isSalesStep ? (rest.signatureSales ?? null) : null,
+              status: shouldAutoApprove ? "approved" : "pending",
+              decidedById: shouldAutoApprove ? session!.user.profileId : null,
+              decidedAt: shouldAutoApprove ? new Date() : null,
+              signature: isCreatorStep ? (rest.signatureSales ?? null) : null,
             },
           });
         });
@@ -659,10 +667,12 @@ export async function editBooking(data: unknown) {
         ]);
       }
 
-      // Reset client agreement so client can sign again
+      // Reset client agreement — invalidate old link, generate new token
+      const newToken = crypto.randomUUID();
+      const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       await db.clientAgreement.updateMany({
         where: { bookingId: id },
-        data: { status: "Pending", signedAt: null, viewedAt: null },
+        data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
       });
     }
     } // end if venueChanged || packageChanged || variantChanged

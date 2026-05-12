@@ -269,7 +269,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   const pax = booking.snapPackageVariant?.pax ?? "";
   const price = booking.snapPackageVariant ? fmtRp(booking.snapPackageVariant.price) : "";
   const notes = booking.snapPackage?.notes ? booking.snapPackage.notes.split("\n").filter(Boolean) : [];
-  const internalItems = booking.snapPackageInternalItems;
+  const internalItems = [...booking.snapPackageInternalItems].sort((a, b) => a.sortOrder - b.sortOrder);
   const packageVendorItems = [...booking.snapPackageVendorItems].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const rows: TableRow[] = [];
@@ -287,28 +287,34 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
     });
   }
 
+  // Merge non-benefit internal items + vendor items, sort by sortOrder
+  type MergedItem = { type: "internal"; itemName: string; itemDescription: string; sortOrder: number } | { type: "vendor"; categoryName: string; itemText: string; sortOrder: number };
+  const mergedItems: MergedItem[] = [
+    ...nonBenefitItems.map((i) => ({ type: "internal" as const, itemName: i.itemName, itemDescription: i.itemDescription, sortOrder: i.sortOrder })),
+    ...packageVendorItems.map((i) => ({ type: "vendor" as const, categoryName: i.categoryName, itemText: i.itemText, sortOrder: i.sortOrder })),
+  ].sort((a, b) => a.sortOrder - b.sortOrder);
+
   let alphaCounter = 0;
-  nonBenefitItems.forEach((item) => {
+  mergedItems.forEach((item) => {
     const letter = String.fromCharCode(66 + alphaCounter);
     alphaCounter++;
-    rows.push({ no: "", desc: `${letter}. ${item.itemName} `, descBold: true, total: "" });
-    rows.push({ no: "", desc: item.itemDescription, total: "" });
-    rows.push({ no: "", desc: "", total: "", isSpacer: true });
+    if (item.type === "internal") {
+      rows.push({ no: "", desc: `${letter}. ${item.itemName} `, descBold: true, total: "" });
+      rows.push({ no: "", desc: item.itemDescription, total: "" });
+      rows.push({ no: "", desc: "", total: "", isSpacer: true });
+    } else {
+      rows.push({ no: "", desc: `${letter}. ${item.categoryName}`, descBold: true, total: "" });
+      if (item.itemText.trim()) {
+        if (item.itemText.includes("<")) {
+          rows.push({ no: "", desc: item.itemText, total: "" });
+        } else {
+          item.itemText.split("\n").filter(Boolean).forEach((line) => rows.push({ no: "", desc: `   ${line}`, total: "" }));
+        }
+      }
+      rows.push({ no: "", desc: "", total: "", isSpacer: true });
+    }
   });
 
-  packageVendorItems.forEach((item) => {
-    const letter = String.fromCharCode(66 + alphaCounter);
-    alphaCounter++;
-    rows.push({ no: "", desc: `${letter}. ${item.categoryName}`, descBold: true, total: "" });
-    if (item.itemText.trim()) {
-      if (item.itemText.includes("<")) {
-        rows.push({ no: "", desc: item.itemText, total: "" });
-      } else {
-        item.itemText.split(";").map((t) => t.trim()).filter(Boolean).forEach((sub) => rows.push({ no: "", desc: sub, total: "" }));
-      }
-    }
-    rows.push({ no: "", desc: "", total: "", isSpacer: true });
-  });
 
   return rows;
 }
@@ -389,41 +395,45 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
       const due = t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : "";
       return `<li>${t.name} sebesar ${fmtRpTerbilang(t.amount)}${due}</li>`;
     }).join("");
-    // Try to nest term_of_payment inside the preceding <li> (e.g. "Jadwal Pembayaran")
-    // Pattern: <li><p>Jadwal Pembayaran</p></li></ol><p>{term_of_payment}</p><ol...>
-    // Target: <li><p>Jadwal Pembayaran</p><ul>...</ul></li></ol><ol start="2"...>
-    const topUl = `<ul>${topHtml}</ul>`;
+
+    // Check if {term_of_payment} is already inside a <ul> or <li> (seeder format)
     const tpIdx = html.indexOf("{term_of_payment}");
-    if (tpIdx !== -1) {
-      // Find the </li></ol> before {term_of_payment}
-      const before = html.slice(0, tpIdx);
-      const lastLiClose = before.lastIndexOf("</li>");
+    const before = html.slice(Math.max(0, tpIdx - 5), tpIdx);
+    const isInsideUl = before.includes("<ul>") || before.includes("<li>");
+
+    if (isInsideUl) {
+      // Seeder format: <ul>{term_of_payment}</ul> inside <li> — just replace with list items
+      html = html.replace(/\{term_of_payment\}/g, topHtml);
+    } else {
+      // Editor format: <p>{term_of_payment}</p> standalone between two <ol> blocks
+      // Nest into preceding <li> and fix numbering
+      const topUl = `<ul>${topHtml}</ul>`;
+      const beforeTp = html.slice(0, tpIdx);
+      const lastLiClose = beforeTp.lastIndexOf("</li>");
       if (lastLiClose !== -1) {
-        // Insert <ul>...</ul> before </li>
         html = html.slice(0, lastLiClose) + topUl + html.slice(lastLiClose);
-        // Remove the {term_of_payment} placeholder (now shifted)
         html = html.replace(/(<p>)?\{term_of_payment\}(<\/p>)?/, "");
       } else {
         html = html.replace(/(<p>)?\{term_of_payment\}(<\/p>)?/, topUl);
       }
-    }
 
-    // Continue numbering: the <ol> containing "Jadwal Pembayaran" has 1 item,
-    // the next <ol> (Metode Pembayaran, etc.) should start from 2
-    // Find two consecutive <ol>...</ol> blocks separated by any content
-    const olBlocks = [...html.matchAll(/<ol(?:\s[^>]*)?>[\s\S]*?<\/ol>/g)];
-    if (olBlocks.length >= 2) {
-      // Find the ol that contains the term_of_payment ul (the "Jadwal Pembayaran" ol)
-      const topUlStr = `<ul>${topHtml}</ul>`;
-      const jadwalOlIdx = olBlocks.findIndex((m) => m[0].includes(topUlStr));
-      if (jadwalOlIdx !== -1 && jadwalOlIdx + 1 < olBlocks.length) {
-        const jadwalOl = olBlocks[jadwalOlIdx];
-        const jadwalItemCount = (jadwalOl[0].match(/<li>/g) || []).length;
-        const nextOl = olBlocks[jadwalOlIdx + 1];
-        // Only set start if it doesn't already have one
-        if (nextOl[0].startsWith("<ol>")) {
-          const absIdx = nextOl.index!;
-          html = html.slice(0, absIdx) + `<ol start="${jadwalItemCount + 1}">` + html.slice(absIdx + 4);
+      // Fix numbering for next <ol> after the inserted content
+      const topUlIdx = html.indexOf(topUl);
+      if (topUlIdx !== -1) {
+        const beforeBlock = html.slice(0, topUlIdx);
+        const lastOlClose = beforeBlock.lastIndexOf("</ol>");
+        if (lastOlClose !== -1) {
+          const lastOlOpen = beforeBlock.lastIndexOf("<ol", lastOlClose);
+          if (lastOlOpen !== -1) {
+            const olBlock = beforeBlock.slice(lastOlOpen, lastOlClose + 5);
+            const itemCount = (olBlock.match(/<li>/g) || []).length;
+            const afterBlock = html.slice(topUlIdx);
+            const nextOlIdx = afterBlock.indexOf("<ol>");
+            if (nextOlIdx !== -1) {
+              const absIdx = topUlIdx + nextOlIdx;
+              html = html.slice(0, absIdx) + `<ol start="${itemCount + 1}">` + html.slice(absIdx + 4);
+            }
+          }
         }
       }
     }

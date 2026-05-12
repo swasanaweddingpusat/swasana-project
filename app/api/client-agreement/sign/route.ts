@@ -72,14 +72,10 @@ export async function POST(req: Request) {
       );
 
       if (clientStep) {
-        // Check all previous steps are approved
-        const prevSteps = approvalRecord.steps.filter((s) => s.stepOrder < clientStep.stepOrder);
-        const allPrevApproved = prevSteps.every((s) => s.status === "approved");
-
-        if (allPrevApproved) {
-          const isLastStep = !approvalRecord.steps.some(
-            (s) => s.stepOrder > clientStep.stepOrder && s.status === "pending"
-          );
+        // Client can sign regardless of manager approval status
+        const allOtherApproved = approvalRecord.steps
+          .filter((s) => s.id !== clientStep.id)
+          .every((s) => s.status === "approved");
 
           await db.$transaction([
             db.approvalRecordStep.update({
@@ -90,7 +86,7 @@ export async function POST(req: Request) {
                 decidedAt: new Date(),
               },
             }),
-            ...(isLastStep
+            ...(allOtherApproved
               ? [
                   db.approvalRecord.update({
                     where: { id: approvalRecord.id },
@@ -103,7 +99,6 @@ export async function POST(req: Request) {
                 ]
               : []),
           ]);
-        }
       }
     }
 

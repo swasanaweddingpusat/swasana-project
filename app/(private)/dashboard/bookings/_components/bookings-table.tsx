@@ -380,7 +380,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           )}
 
                           {/* Agreement modal trigger — hidden on mobile */}
-                          {can("booking", "client-agreement") && booking.clientAgreement?.status !== "Signed" && (
+                          {can("booking", "client-agreement") && (booking.clientAgreement?.status !== "Signed" || (approvalMap.get(booking.id)?.steps.some((s) => s.approverType === "client" && s.status === "pending"))) && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
                               <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
@@ -1063,6 +1063,7 @@ interface AgreementModalProps {
 
 function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProps) {
   const [agreement, setAgreement] = React.useState<{ token: string; accessCode: string; status?: string } | null>(null);
+  const [bookingStatus, setBookingStatus] = React.useState<string>("");
   const [isPending, startTransition] = React.useTransition();
 
   const agreementUrl = agreement ? `${window.location.origin}/client-agreement?token=${agreement.token}` : null;
@@ -1079,8 +1080,10 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
     startTransition(async () => {
       const res = await fetch(`/api/bookings/${bookingId}`);
       if (!res.ok) return;
-      const data = await res.json() as { clientAgreement?: { token: string; accessCode: string; status: string } | null };
-      if (data.clientAgreement) {
+      const data = await res.json() as { bookingStatus?: string; clientAgreement?: { token: string; accessCode: string; status: string } | null };
+      if (data.bookingStatus) setBookingStatus(data.bookingStatus);
+      // Only show existing agreement if booking is Confirmed or agreement is genuinely pending/sent
+      if (data.clientAgreement && (data.bookingStatus === "Confirmed" || data.clientAgreement.status !== "Signed")) {
         setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
       }
     });
@@ -1106,6 +1109,11 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
           </div>
         ) : (
           <div className={cn('space-y-3', 'py-1')}>
+            {agreement.status === "Pending" && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-2.5">
+                <p className="text-xs text-orange-700 font-medium">⚠️ Booking telah diubah. Silakan regenerate link agar client dapat menandatangani ulang PO terbaru.</p>
+              </div>
+            )}
             <div className="space-y-1">
               <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Link Agreement</p>
               <div className={cn('flex', 'items-center', 'gap-2', 'overflow-hidden')}>
@@ -1128,7 +1136,7 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         )}
 
         <AlertDialogFooter>
-          {agreement?.status === "Signed" ? (
+          {agreement?.status === "Signed" && bookingStatus === "Confirmed" ? (
             <p className={cn('text-xs', 'text-muted-foreground', 'mr-auto')}>✓ Sudah ditandatangani</p>
           ) : agreement ? (
             <Button variant="outline" size="default" disabled={isPending} onClick={generate}>
