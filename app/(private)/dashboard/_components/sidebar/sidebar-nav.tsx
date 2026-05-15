@@ -27,13 +27,16 @@ function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
   });
 }
 
-function filterNavItems(items: NavItem[], can: CanFn): NavItem[] {
+function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): NavItem[] {
   return items.flatMap((item) => {
     if (item.hidden) return [];
-    // Settings: visible jika punya view di minimal 1 sub-module settings
     if (item.href === "/dashboard/settings") {
       const hasSettingsAccess = SETTINGS_MODULES.some((mod) => can(mod, "view"));
       if (!hasSettingsAccess) return [];
+      return [item];
+    }
+    if (item.href === "/dashboard/my-team") {
+      if (!can("my-team", "view") && !isGroupMember) return [];
       return [item];
     }
     if (item.permission && !can(item.permission.module, item.permission.action)) return [];
@@ -47,10 +50,8 @@ function filterNavItems(items: NavItem[], can: CanFn): NavItem[] {
 }
 
 export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
-  const { can, isLoading } = usePermissions();
-  // While permissions are loading, show all items (no filtering)
-  // Once loaded, filter based on actual permissions
-  const visibleItems = isLoading ? [] : filterNavItems(navItems, can);
+  const { can, isLoading, isGroupMember } = usePermissions();
+  const visibleItems = isLoading ? [] : filterNavItems(navItems, can, isGroupMember);
 
   return (
     <>
