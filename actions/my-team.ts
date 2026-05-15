@@ -12,10 +12,9 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 // ─── Update Team Settings ─────────────────────────────────────────────────────
 
 export async function updateMyTeamSettings(data: unknown) {
-  const permResult = await requirePermission({ module: "booking", action: "view" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`my-team-settings:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "my-team", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`my-team-settings:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updateGroupSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -25,7 +24,7 @@ export async function updateMyTeamSettings(data: unknown) {
   // Pastikan user adalah leader dari group ini
   const group = await db.userGroup.findUnique({ where: { id }, select: { leaderId: true, name: true } });
   if (!group) return { success: false, error: "Tim tidak ditemukan." };
-  if (group.leaderId !== session.user.profileId) return { success: false, error: "Tidak memiliki akses." };
+  if (group.leaderId !== session!.user.profileId) return { success: false, error: "Tidak memiliki akses." };
 
   try {
     const [updated] = await db.$transaction([
@@ -43,7 +42,7 @@ export async function updateMyTeamSettings(data: unknown) {
 
     const h = await headers();
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "my-team.settings_updated",
       entityType: "group",
       entityId: id,
@@ -62,14 +61,13 @@ export async function updateMyTeamSettings(data: unknown) {
 // ─── Add Member ───────────────────────────────────────────────────────────────
 
 export async function addMyTeamMember(groupId: string, profileId: string) {
-  const permResult = await requirePermission({ module: "booking", action: "view" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`my-team-add:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "my-team", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`my-team-add:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const group = await db.userGroup.findUnique({ where: { id: groupId }, select: { leaderId: true } });
   if (!group) return { success: false, error: "Tim tidak ditemukan." };
-  if (group.leaderId !== session.user.profileId) return { success: false, error: "Tidak memiliki akses." };
+  if (group.leaderId !== session!.user.profileId) return { success: false, error: "Tidak memiliki akses." };
 
   try {
     await db.$transaction(async (tx) => {
@@ -95,14 +93,13 @@ export async function addMyTeamMember(groupId: string, profileId: string) {
 // ─── Remove Member ────────────────────────────────────────────────────────────
 
 export async function removeMyTeamMember(groupId: string, profileId: string) {
-  const permResult = await requirePermission({ module: "booking", action: "view" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`my-team-rm:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "my-team", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`my-team-rm:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const group = await db.userGroup.findUnique({ where: { id: groupId }, select: { leaderId: true } });
   if (!group) return { success: false, error: "Tim tidak ditemukan." };
-  if (group.leaderId !== session.user.profileId) return { success: false, error: "Tidak memiliki akses." };
+  if (group.leaderId !== session!.user.profileId) return { success: false, error: "Tidak memiliki akses." };
 
   try {
     await db.$transaction([
@@ -123,10 +120,9 @@ export async function removeMyTeamMember(groupId: string, profileId: string) {
 // ─── Set Member Target ────────────────────────────────────────────────────────
 
 export async function setMemberTarget(data: unknown) {
-  const permResult = await requirePermission({ module: "booking", action: "view" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`my-team-target:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "my-team", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`my-team-target:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = setMemberTargetSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -135,7 +131,7 @@ export async function setMemberTarget(data: unknown) {
 
   const group = await db.userGroup.findUnique({ where: { id: groupId }, select: { leaderId: true } });
   if (!group) return { success: false, error: "Tim tidak ditemukan." };
-  if (group.leaderId !== session.user.profileId) return { success: false, error: "Tidak memiliki akses." };
+  if (group.leaderId !== session!.user.profileId) return { success: false, error: "Tidak memiliki akses." };
 
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -158,7 +154,7 @@ export async function setMemberTarget(data: unknown) {
           amount: BigInt(amount),
           startDate: start,
           endDate: end,
-          setById: session.user.profileId,
+          setById: session!.user.profileId,
         },
       });
     });
