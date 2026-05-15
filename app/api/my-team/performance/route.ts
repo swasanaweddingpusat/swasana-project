@@ -3,7 +3,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
+  const { session, response } = await requirePermissionForRoute({ module: "my-team", action: "view" });
   if (response) return response;
   if (!apiLimiter.check(`my-team-perf:${session.user.id}`)) return rateLimitResponse();
 
