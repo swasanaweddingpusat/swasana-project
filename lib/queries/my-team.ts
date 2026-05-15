@@ -145,9 +145,85 @@ export async function getAvailableSalesProfiles(excludeIds: string[]) {
   });
 }
 
+/** Fetch all groups — for users with my-team:view-all permission */
+export async function getAllGroups() {
+  "use cache";
+  cacheTag("my-team", "groups");
+  cacheLife("minutes");
+
+  return db.userGroup.findMany({
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      leaderId: true,
+      leader: { select: { fullName: true, avatarUrl: true } },
+      _count: { select: { members: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+}
+
+/** Fetch groups where profileId is leader OR member */
+export async function getUserGroups(profileId: string) {
+  "use cache";
+  cacheTag("my-team", "groups");
+  cacheLife("minutes");
+
+  return db.userGroup.findMany({
+    where: {
+      OR: [
+        { leaderId: profileId },
+        { members: { some: { userId: profileId } } },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      leaderId: true,
+      leader: { select: { fullName: true, avatarUrl: true } },
+      _count: { select: { members: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+}
+
+/** Fetch a single group by ID with full member list (for detail page) */
+export async function getGroupDetail(groupId: string) {
+  "use cache";
+  cacheTag("my-team", "groups");
+  cacheLife("minutes");
+
+  return db.userGroup.findUnique({
+    where: { id: groupId },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      leaderId: true,
+      members: {
+        select: {
+          userId: true,
+          profile: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+  });
+}
+
 // ─── Return types ─────────────────────────────────────────────────────────────
 
 export type MyTeamGroup = Awaited<ReturnType<typeof getMyTeamGroup>>;
 export type MyTeamPerformanceItem = Awaited<ReturnType<typeof getMyTeamPerformance>>[number];
 export type SalesBookingItem = Awaited<ReturnType<typeof getSalesBookings>>[number];
 export type AvailableSalesProfile = Awaited<ReturnType<typeof getAvailableSalesProfiles>>[number];
+export type GroupCard = Awaited<ReturnType<typeof getAllGroups>>[number];
+export type GroupDetail = Awaited<ReturnType<typeof getGroupDetail>>;
