@@ -97,7 +97,7 @@ export const navItems: NavItem[] = [
     name: "My Team",
     href: "/dashboard/my-team",
     icon: Users,
-    permission: { module: "booking", action: "view" },
+    permission: { module: "my-team", action: "view" },
   },
   {
     name: "Finance",
