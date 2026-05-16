@@ -125,6 +125,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "My Team",
     subtitle: "Overview kinerja tim dan target penjualan",
   },
+  "/dashboard/my-team/[groupId]": {
+    title: "Detail Tim",
+    subtitle: "Kinerja dan target penjualan tim",
+    parent: "/dashboard/my-team",
+  },
 };
 
 export interface Breadcrumb {

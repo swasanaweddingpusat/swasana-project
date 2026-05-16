@@ -5,6 +5,7 @@ import type { PermissionMatrix } from "@/types/user";
 
 interface PermissionsResponse {
   isAdmin: boolean;
+  isGroupMember: boolean;
   permissions: PermissionMatrix;
 }
 
@@ -18,7 +19,7 @@ export function usePermissions() {
   const { data, isLoading } = useQuery({
     queryKey: ["me:permissions"],
     queryFn: fetchPermissions,
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 30 * 1000,
   });
 
   const can = (module: string, action: string): boolean => {
@@ -30,6 +31,7 @@ export function usePermissions() {
   return {
     isLoading,
     isAdmin: data?.isAdmin ?? false,
+    isGroupMember: data?.isGroupMember ?? false,
     can,
     canView: (module: string) => can(module, "view"),
     canCreate: (module: string) => can(module, "create"),

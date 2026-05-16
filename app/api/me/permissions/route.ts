@@ -12,9 +12,24 @@ export async function GET() {
   if (!apiLimiter.check(`me-permissions:${session.user.id}`)) return rateLimitResponse();
 
   const roleId = session.user.roleId;
-  if (!roleId) return Response.json({ isAdmin: false, permissions: {} });
+  const profileId = session.user.profileId;
 
-  const isAdmin = await isSuperAdmin(roleId);
+  const isAdmin = roleId ? await isSuperAdmin(roleId) : false;
+
+  // Check if user is leader or member of any group
+  const isGroupMember = profileId
+    ? !!(await db.userGroup.findFirst({
+        where: {
+          OR: [
+            { leaderId: profileId },
+            { members: { some: { userId: profileId } } },
+          ],
+        },
+        select: { id: true },
+      }))
+    : false;
+
+  if (!roleId) return Response.json({ isAdmin: false, isGroupMember, permissions: {} });
 
   if (isAdmin) {
     const allPermissions = await db.permission.findMany();
@@ -23,7 +38,7 @@ export async function GET() {
       if (!matrix[p.module]) matrix[p.module] = {};
       matrix[p.module][p.action] = true;
     }
-    return Response.json({ isAdmin: true, permissions: matrix });
+    return Response.json({ isAdmin: true, isGroupMember, permissions: matrix });
   }
 
   const rolePermissions = await db.rolePermission.findMany({
@@ -38,5 +53,5 @@ export async function GET() {
     matrix[module][action] = true;
   }
 
-  return Response.json({ isAdmin: false, permissions: matrix });
+  return Response.json({ isAdmin: false, isGroupMember, permissions: matrix });
 }
