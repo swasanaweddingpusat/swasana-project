@@ -39,8 +39,7 @@ function ClientAgreementContent() {
       if (!res.ok) { toast.error(data.error ?? "Gagal validasi"); return; }
       setBooking(data.booking);
       if (data.alreadySigned) { setStep("done"); return; }
-      const sigs = data.booking?.signatures as Record<string, unknown> | null;
-      if (sigs?.client) { setStep("done"); return; }
+      if (data.agreement?.status === "Signed") { setStep("done"); return; }
       setStep("sign");
       generatePdf();
     } catch {

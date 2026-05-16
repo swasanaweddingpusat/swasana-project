@@ -13,7 +13,7 @@ export const updatePackageSchema = createPackageSchema.partial();
 export const createVariantSchema = z.object({
   packageId: z.string().min(1),
   variantName: z.string().min(1, "Nama variant wajib diisi"),
-  pax: z.number().int().positive("PAX harus lebih dari 0"),
+  pax: z.number().int().min(0).default(0),
   available: z.boolean().default(true),
 });
 

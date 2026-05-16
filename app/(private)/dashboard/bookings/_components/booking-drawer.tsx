@@ -578,11 +578,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
                         <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="resepsi">Resepsi</SelectItem>
-                          <SelectItem value="akad">Akad & Resepsi</SelectItem>
-                          <SelectItem value="wedding">Pemberkatan Resepsi</SelectItem>
-                          <SelectItem value="engagement">Teapai</SelectItem>
-                          <SelectItem value="other">Venue Only</SelectItem>
+                          <SelectItem value="R">Resepsi</SelectItem>
+                          <SelectItem value="AR">Akad & Resepsi</SelectItem>
+                          <SelectItem value="TR">Teapai & Resepsi</SelectItem>
+                          <SelectItem value="PR">Pemberkatan Resepsi</SelectItem>
+                          <SelectItem value="VO">Venue Only</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

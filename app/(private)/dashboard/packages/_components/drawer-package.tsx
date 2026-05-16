@@ -339,7 +339,6 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
     for (let i = 0; i < variants.length; i++) {
       const v = variants[i];
       if (!v.variantName.trim()) newErrors[`variant_${i}_variantName`] = "Nama varian wajib diisi";
-      if (!v.pax || v.pax <= 0) newErrors[`variant_${i}_pax`] = "PAX harus > 0";
     }
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
@@ -351,7 +350,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
 
-  const isStep1Invalid = !packageName.trim() || variants.length === 0 || variants.some((v) => !v.variantName.trim() || !v.pax || v.pax <= 0);
+  const isStep1Invalid = !packageName.trim() || variants.length === 0 || variants.some((v) => !v.variantName.trim());
   const isNextDisabled = submitting || (currentStep === 1 && isStep1Invalid);
 
   function handleNext() {
@@ -585,16 +584,15 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                     {errors[`variant_${idx}_variantName`] && <p className={cn('mt-1', 'text-xs', 'text-red-500')}>{errors[`variant_${idx}_variantName`]}</p>}
                                   </div>
                                   <div>
-                                    <Label className={cn('text-xs', 'font-medium', 'text-gray-600')}>PAX *</Label>
+                                    <Label className={cn('text-xs', 'font-medium', 'text-gray-600')}>PAX</Label>
                                     <Input
                                       type="number"
-                                      placeholder="100"
+                                      placeholder="0"
                                       value={variant.pax || ""}
                                       onChange={(e) => updateVariantField(idx, "pax", parseInt(e.target.value) || 0)}
-                                      className={cn("mt-1 text-sm", errors[`variant_${idx}_pax`] && "border-red-500")}
-                                      min={1}
+                                      className={cn("mt-1 text-sm")}
+                                      min={0}
                                     />
-                                    {errors[`variant_${idx}_pax`] && <p className={cn('mt-1', 'text-xs', 'text-red-500')}>{errors[`variant_${idx}_pax`]}</p>}
                                   </div>
                                 </div>
                                 <div className={cn('grid', 'grid-cols-2', 'gap-3')}>

@@ -32,31 +32,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
-    const booking = await db.booking.findUnique({
-      where: { id: agreement.bookingId },
-      select: { signatures: true },
-    });
-
-    const existingSignatures = (booking?.signatures as Record<string, unknown>) ?? {};
-
     await db.$transaction([
       db.clientAgreement.update({
         where: { token },
         data: { status: "Signed", signedAt: new Date() },
-      }),
-      db.booking.update({
-        where: { id: agreement.bookingId },
-        data: {
-          signatures: {
-            ...existingSignatures,
-            client: {
-              name: signerName ?? "",
-              role: "client",
-              signature: signatureData,
-              signatureDate: new Date().toISOString(),
-            },
-          },
-        },
       }),
     ]);
 
@@ -72,14 +51,10 @@ export async function POST(req: Request) {
       );
 
       if (clientStep) {
-        // Check all previous steps are approved
-        const prevSteps = approvalRecord.steps.filter((s) => s.stepOrder < clientStep.stepOrder);
-        const allPrevApproved = prevSteps.every((s) => s.status === "approved");
-
-        if (allPrevApproved) {
-          const isLastStep = !approvalRecord.steps.some(
-            (s) => s.stepOrder > clientStep.stepOrder && s.status === "pending"
-          );
+        // Client can sign regardless of manager approval status
+        const allOtherApproved = approvalRecord.steps
+          .filter((s) => s.id !== clientStep.id)
+          .every((s) => s.status === "approved");
 
           await db.$transaction([
             db.approvalRecordStep.update({
@@ -90,7 +65,7 @@ export async function POST(req: Request) {
                 decidedAt: new Date(),
               },
             }),
-            ...(isLastStep
+            ...(allOtherApproved
               ? [
                   db.approvalRecord.update({
                     where: { id: approvalRecord.id },
@@ -103,7 +78,6 @@ export async function POST(req: Request) {
                 ]
               : []),
           ]);
-        }
       }
     }
 

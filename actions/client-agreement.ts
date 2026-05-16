@@ -32,12 +32,6 @@ export async function generateAgreementToken(bookingId: string) {
   const expiresAt = getExpiresAt();
 
   try {
-    const existing = await db.clientAgreement.findUnique({ where: { bookingId } });
-
-    if (existing?.status === "Signed") {
-      return { success: true as const, agreement: existing, alreadySigned: true as const };
-    }
-
     const [agreement] = await db.$transaction([db.clientAgreement.upsert({
       where: { bookingId },
       update: { token, accessCode, expiresAt, status: "Pending", sentAt: null, viewedAt: null, signedAt: null },
