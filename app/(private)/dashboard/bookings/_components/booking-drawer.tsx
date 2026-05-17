@@ -832,9 +832,9 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               {isTakeout ? 'Takeout' : 'Included'}
                             </span>
                             <Switch
-                              checked={isTakeout}
+                              checked={!isTakeout}
                               onCheckedChange={(v) =>
-                                setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }))
+                                setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: !v }))
                               }
                             />
                           </div>
@@ -847,18 +847,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <div className={cn('flex', 'justify-between', 'text-sm')}>
                       <span className="text-muted-foreground">Harga setelah takeout</span>
                       <span className="font-semibold">Rp{fmtRp(step2Price)}</span>
-                    </div>
-                    <div className={cn('flex', 'justify-between', 'text-xs', 'text-muted-foreground')}>
-                      <span>Margin {margin}%</span>
-                      <span>
-                        Base: Rp
-                        {fmtRp(
-                          visibleCategories.reduce(
-                            (s, c) => s + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
-                            hiddenCategoriesBase,
-                          ),
-                        )}
-                      </span>
                     </div>
                   </div>
                 </div>
