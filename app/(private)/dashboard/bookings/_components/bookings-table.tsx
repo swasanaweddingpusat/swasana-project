@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import SignatureCanvas from "react-signature-canvas";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,27 +10,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, Store, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, CircleFadingPlus, FileUp, Palette, MessageSquare, ClipboardCheck, WalletMinimal } from "lucide-react";
+import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, FileUp, MessageSquare, ClipboardCheck, WalletMinimal } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
-import { approveCategoryPO } from "@/actions/catering-approval";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
 import { EditTopDrawer } from "./edit-top-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
-import { SetVendorDrawer } from "./set-vendor-drawer";
-import { Skeleton } from "@/components/ui/skeleton";
-import { CateringSelectionDrawer } from "./catering-selection-drawer";
-import { DecorationSelectionDrawer } from "./decoration-selection-drawer";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { PermissionGate } from "@/components/shared/permission-gate";
-import { Drawer } from "@/components/shared/drawer";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -123,15 +116,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [transferSalesId, setTransferSalesId] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
-  const [vendorApproveModal, setVendorApproveModal] = useState<{ open: boolean; bookingId: string; role: "finance" | "dirops" | "oprations"; roleLabel: string; categoryType: "catering" | "decoration" }>({ open: false, bookingId: "", role: "finance", roleLabel: "", categoryType: "catering" });
-  const [hasVendorSigned, setHasVendorSigned] = useState(false);
-  const [isApprovingVendor, setIsApprovingVendor] = useState(false);
-  const sigVendorRef = useRef<SignatureCanvas>(null);
-  const [approvalCache, setApprovalCache] = useState<Record<string, Record<string, unknown>>>({});
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
-  const [vendorTarget, setVendorTarget] = useState<BookingListItem | null>(null);
-  const [cateringTarget, setCateringTarget] = useState<string | null>(null);
-  const [decorationTarget, setDecorationTarget] = useState<string | null>(null);
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; variantName: string | null; createdAt: string }[]>>({});
@@ -366,18 +351,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       {/* Action */}
                       <TableCell className={cn('px-1', 'py-2', 'whitespace-nowrap')} onClick={(e) => e.stopPropagation()}>
                         <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
-                          {/* Set Vendor Bawaan — moved to Vendor Specialist */}
-                          {false && can("booking", "edit") && (
-                          <TooltipProvider delay={200}>
-                            <Tooltip>
-                              <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }} />}>
-                                <Store className={cn('h-4', 'w-4')} />
-                              </TooltipTrigger>
-                              <TooltipContent side="top"><p className="text-xs">Set Vendor Bawaan</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          )}
-
                           {/* Agreement modal trigger — hidden on mobile */}
                           {can("booking", "client-agreement") && (booking.clientAgreement?.status !== "Signed" || (approvalMap.get(booking.id)?.steps.some((s) => s.approverType === "client" && s.status === "pending"))) && (
                           <TooltipProvider delay={200}>
@@ -388,78 +361,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          )}
-
-                          {/* Catering + Decoration — moved to Vendor Specialist */}
-                          {false && booking.bookingStatus === "Confirmed" && (
-                            <div className={cn('hidden', 'sm:contents')}>
-                              {/* Catering */}
-                              <TooltipProvider delay={200}>
-                                <Tooltip>
-                                  <TooltipTrigger render={<span />}>
-                                    <DropdownMenu onOpenChange={(open) => {
-                                      if (open) fetch(`/api/bookings/${booking.id}/catering-approval?category=catering`).then((r) => r.json()).then((d) => setApprovalCache((p) => ({ ...p, [`${booking.id}_catering`]: d }))).catch(() => {});
-                                    }}>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                          <CircleFadingPlus className={cn('h-4', 'w-4')} />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                        <DropdownMenuItem className="cursor-pointer" onClick={() => setCateringTarget(booking.id)}>
-                                          <Pencil className={cn('mr-2', 'h-4', 'w-4')} /> Edit Catering
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.finance}
-                                          onClick={() => !approvalCache[`${booking.id}_catering`]?.finance && setVendorApproveModal({ open: true, bookingId: booking.id, role: "finance", roleLabel: "Finance", categoryType: "catering" })}>
-                                          {approvalCache[`${booking.id}_catering`]?.finance ? "Finance Approved ✓" : "Approve Finance"}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.dirops}
-                                          onClick={() => !approvalCache[`${booking.id}_catering`]?.dirops && setVendorApproveModal({ open: true, bookingId: booking.id, role: "dirops", roleLabel: "Direktur Ops", categoryType: "catering" })}>
-                                          {approvalCache[`${booking.id}_catering`]?.dirops ? "Direktur Ops Approved ✓" : "Approve Direktur Ops"}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="cursor-pointer" disabled={!!approvalCache[`${booking.id}_catering`]?.oprations}
-                                          onClick={() => !approvalCache[`${booking.id}_catering`]?.oprations && setVendorApproveModal({ open: true, bookingId: booking.id, role: "oprations", roleLabel: "Oprations", categoryType: "catering" })}>
-                                          {approvalCache[`${booking.id}_catering`]?.oprations ? "Oprations Approved ✓" : "Approve Oprations"}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                      {can("booking", "print") && (
-                                      <DropdownMenuItem className="cursor-pointer" onClick={async () => {
-                                        const t = toast.loading("Membuat PDF Catering...");
-                                        try {
-                                          const res = await fetch("/api/render-catering-po", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId: booking.id }) });
-                                          if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed"); }
-                                          const blob = await res.blob();
-                                          const url = URL.createObjectURL(blob);
-                                          toast.success("PDF siap!", { id: t });
-                                          window.open(url, "_blank");
-                                          setTimeout(() => URL.revokeObjectURL(url), 10000);
-                                        } catch (e) { toast.error(e instanceof Error ? e.message : "Gagal membuat PDF", { id: t }); }
-                                      }}>
-                                        <Printer className={cn('mr-2', 'h-4', 'w-4')} /> Cetak PO Catering
-                                      </DropdownMenuItem>
-                                      )}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </TooltipTrigger>
-                                <TooltipContent side="top"><p className="text-xs">Catering PO</p></TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                              {/* Decoration — HIDDEN temporarily */}
-                              {false && (
-                              <TooltipProvider delay={200}>
-                                <Tooltip>
-                                  <TooltipTrigger render={<span />}>
-                                    <Button variant="ghost" size="icon" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setDecorationTarget(booking.id); }}>
-                                      <Palette className={cn('h-4', 'w-4')} />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top"><p className="text-xs">Dekorasi PO</p></TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              )}
-                            </div>
                           )}
 
                           {/* Comment button */}
@@ -849,21 +750,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         bookingId={detailTarget}
       />
 
-      <SetVendorDrawer
-        open={!!vendorTarget}
-        onClose={() => setVendorTarget(null)}
-        booking={vendorTarget}
-        onSaved={() => refetch()}
-      />
-
-      {cateringTarget && (
-        <CateringDrawerWrapper bookingId={cateringTarget} onClose={() => setCateringTarget(null)} onUpdated={() => refetch()} />
-      )}
-
-      {decorationTarget && (
-        <DecorationDrawerWrapper bookingId={decorationTarget} onClose={() => setDecorationTarget(null)} onUpdated={() => refetch()} />
-      )}
-
       {agreementModal && (
         <AgreementModal
           bookingId={agreementModal.bookingId}
@@ -940,116 +826,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-      {/* Vendor PO Approval Modal */}
-      {vendorApproveModal.open && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
-          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
-            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
-              <div>
-                <h2 className={cn('text-lg', 'font-bold')}>Approve {vendorApproveModal.roleLabel} — {vendorApproveModal.categoryType === "catering" ? "Catering" : "Dekorasi"}</h2>
-                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>Tanda tangan {vendorApproveModal.roleLabel} diperlukan.</p>
-              </div>
-              <button type="button" className={cn('rounded-full', 'bg-red-100', 'hover:bg-red-200', 'p-1.5', 'shrink-0')}
-                onClick={() => { setVendorApproveModal((p) => ({ ...p, open: false })); sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>
-                <X className={cn('h-5', 'w-5', 'text-red-500')} />
-              </button>
-            </div>
-            <div className="mb-4">
-              <label className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Tanda Tangan {vendorApproveModal.roleLabel}</label>
-              <div className={cn('border-2', 'border-dashed', 'border-gray-300', 'rounded-xl', 'overflow-hidden', 'bg-gray-50')}>
-                <SignatureCanvas ref={sigVendorRef} penColor="black"
-                  canvasProps={{ className: "w-full", style: { width: "100%", height: 180, touchAction: "none" } }}
-                  onEnd={() => setHasVendorSigned(true)} />
-              </div>
-              <button type="button" className={cn('mt-1.5', 'text-xs', 'text-red-500', 'hover:text-red-700', 'underline')}
-                onClick={() => { sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>Hapus tanda tangan</button>
-            </div>
-            <div className={cn('flex', 'gap-3')}>
-              <button type="button" disabled={!hasVendorSigned || isApprovingVendor}
-                className={cn('flex-1', 'bg-black', 'text-white', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-gray-900', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
-                onClick={async () => {
-                  if (!hasVendorSigned || sigVendorRef.current?.isEmpty()) { toast.error("Tanda tangan harus diisi"); return; }
-                  setIsApprovingVendor(true);
-                  const sig = sigVendorRef.current!.toDataURL("image/png");
-                  const r = await approveCategoryPO(vendorApproveModal.bookingId, vendorApproveModal.categoryType, vendorApproveModal.role, sig);
-                  if (!r.success) toast.error(r.error);
-                  else {
-                    toast.success(`Approval ${vendorApproveModal.roleLabel} berhasil`);
-                    setApprovalCache((p) => ({
-                      ...p,
-                      [`${vendorApproveModal.bookingId}_${vendorApproveModal.categoryType}`]: {
-                        ...(p[`${vendorApproveModal.bookingId}_${vendorApproveModal.categoryType}`] ?? {}),
-                        [vendorApproveModal.role]: { signature: sig },
-                      },
-                    }));
-                  }
-                  setIsApprovingVendor(false);
-                  setVendorApproveModal((p) => ({ ...p, open: false }));
-                  sigVendorRef.current?.clear();
-                  setHasVendorSigned(false);
-                }}>
-                {isApprovingVendor ? "Menyetujui..." : "Setujui"}
-              </button>
-              <button type="button" className={cn('flex-1', 'border', 'border-gray-300', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-gray-100', 'transition')}
-                onClick={() => { setVendorApproveModal((p) => ({ ...p, open: false })); sigVendorRef.current?.clear(); setHasVendorSigned(false); }}>
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
-}
-
-function CateringDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: string; onClose: () => void; onUpdated: () => void }) {
-  const [booking, setBooking] = useState<import("@/lib/queries/bookings").BookingDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  React.useEffect(() => {
-    setLoading(true);
-    fetch(`/api/bookings/${bookingId}`)
-      .then((r) => r.json())
-      .then(setBooking)
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
-  }, [bookingId]);
-
-  if (loading || !booking) {
-    return (
-      <Drawer isOpen onClose={onClose} title="Catering" maxWidth="sm:max-w-full">
-        <div className={cn('p-4', 'space-y-2')}>
-          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className={cn('h-8', 'w-full')} />)}
-        </div>
-      </Drawer>
-    );
-  }
-
-  return <CateringSelectionDrawer isOpen onClose={onClose} booking={booking} onUpdated={onUpdated} />;
-}
-
-function DecorationDrawerWrapper({ bookingId, onClose, onUpdated }: { bookingId: string; onClose: () => void; onUpdated: () => void }) {
-  const [booking, setBooking] = useState<import("@/lib/queries/bookings").BookingDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  React.useEffect(() => {
-    setLoading(true);
-    fetch(`/api/bookings/${bookingId}`)
-      .then((r) => r.json())
-      .then(setBooking)
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
-  }, [bookingId]);
-
-  if (loading || !booking) {
-    return (
-      <Drawer isOpen onClose={onClose} title="Dekorasi">
-        <div className={cn('flex', 'items-center', 'justify-center', 'h-full')}><p className={cn('text-sm', 'text-gray-400')}>Memuat...</p></div>
-      </Drawer>
-    );
-  }
-
-  return <DecorationSelectionDrawer isOpen onClose={onClose} booking={booking} onUpdated={onUpdated} />;
 }
 
 /* ─── AgreementModal ──────────────────────────────────────────────────────── */
