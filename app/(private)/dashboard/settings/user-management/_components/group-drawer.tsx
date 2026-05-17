@@ -35,7 +35,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { X, UserPlus } from "lucide-react";
 import { createGroupSchema, updateGroupSchema } from "@/lib/validations/user";
-import { createGroup, updateGroup, addGroupMember, removeGroupMember } from "@/actions/group";
+import { createGroup, updateGroup, addGroupMember, removeGroupMember } from "@/actions/groups";
 import type { GroupQueryItem } from "@/lib/queries/groups";
 import type { UsersQueryResult } from "@/lib/queries/users";
 import type { z } from "zod";
