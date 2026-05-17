@@ -121,14 +121,14 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Calendar Event",
     subtitle: "Lihat jadwal event di kalender",
   },
-  "/dashboard/my-team": {
-    title: "My Team",
-    subtitle: "Overview kinerja tim dan target penjualan",
+  "/dashboard/groups": {
+    title: "Groups",
+    subtitle: "Kelola tim dan pantau kinerja penjualan",
   },
-  "/dashboard/my-team/[groupId]": {
-    title: "Detail Tim",
+  "/dashboard/groups/[groupId]": {
+    title: "Detail Group",
     subtitle: "Kinerja dan target penjualan tim",
-    parent: "/dashboard/my-team",
+    parent: "/dashboard/groups",
   },
 };
 

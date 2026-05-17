@@ -35,8 +35,8 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
       if (!hasSettingsAccess) return [];
       return [item];
     }
-    if (item.href === "/dashboard/my-team") {
-      if (!can("my-team", "view") && !isGroupMember) return [];
+    if (item.href === "/dashboard/groups") {
+      if (!can("groups", "view") && !isGroupMember) return [];
       return [item];
     }
     if (item.permission && !can(item.permission.module, item.permission.action)) return [];

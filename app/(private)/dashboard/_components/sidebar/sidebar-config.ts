@@ -58,7 +58,6 @@ export interface NavItem {
 export const SETTINGS_MODULES = [
   "settings-brands",
   "settings-venues",
-  "settings-groups",
   "settings-users",
   "settings-education-level",
   "settings-event-types",
@@ -94,10 +93,10 @@ export const navItems: NavItem[] = [
     permission: { module: "booking", action: "view" },
   },
   {
-    name: "My Team",
-    href: "/dashboard/my-team",
+    name: "Groups",
+    href: "/dashboard/groups",
     icon: Users,
-    permission: { module: "my-team", action: "view" },
+    permission: { module: "groups", action: "view" },
   },
   {
     name: "Finance",

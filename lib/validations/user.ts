@@ -76,6 +76,11 @@ export const setMemberTargetSchema = z.object({
   endDate: z.string().min(1, "Tanggal selesai wajib diisi"),
 });
 
+export const updateGroupLeaderSchema = z.object({
+  groupId: z.string().min(1),
+  leaderId: z.string().min(1),
+});
+
 // ─── Inferred types ───────────────────────────────────────────────────────────
 
 export type InviteUserInput = z.infer<typeof inviteUserSchema>;
@@ -85,3 +90,4 @@ export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
 export type SetMemberTargetInput = z.infer<typeof setMemberTargetSchema>;
+export type UpdateGroupLeaderInput = z.infer<typeof updateGroupLeaderSchema>;
