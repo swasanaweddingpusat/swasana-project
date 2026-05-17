@@ -366,8 +366,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       {/* Action */}
                       <TableCell className={cn('px-1', 'py-2', 'whitespace-nowrap')} onClick={(e) => e.stopPropagation()}>
                         <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
-                          {/* Set Vendor Bawaan — hidden on mobile */}
-                          {/* Set Vendor Bawaan — HIDDEN temporarily */}
+                          {/* Set Vendor Bawaan — moved to Vendor Specialist */}
                           {false && can("booking", "edit") && (
                           <TooltipProvider delay={200}>
                             <Tooltip>
@@ -391,8 +390,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           </TooltipProvider>
                           )}
 
-                          {/* Catering + Decoration — only for Confirmed bookings, hidden on mobile */}
-                          {booking.bookingStatus === "Confirmed" && (
+                          {/* Catering + Decoration — moved to Vendor Specialist */}
+                          {false && booking.bookingStatus === "Confirmed" && (
                             <div className={cn('hidden', 'sm:contents')}>
                               {/* Catering */}
                               <TooltipProvider delay={200}>
