@@ -497,7 +497,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 booking.snapPackageCategoryPrices &&
                                 booking.snapPackageCategoryPrices.length > 0 && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
-                                  Edit Package Prices
+                                  Edit Set Harga
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "transfer") && (
