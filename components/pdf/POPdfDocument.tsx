@@ -15,6 +15,7 @@ export interface POPdfBooking {
   snapPackageVariant: { variantName: string; pax: number; price: number } | null;
   snapPackageInternalItems: { id: string; itemName: string; itemDescription: string; sortOrder: number }[];
   snapPackageVendorItems: { id: string; categoryName: string; itemText: string; sortOrder: number }[];
+  snapPackageCategoryPrices?: { categoryName: string; basePrice: number; isTakeout: boolean }[];
   snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: number; qty: number; unit?: string | null; totalPrice: number; isAddons: boolean }[];
   snapBonuses: { id: string; vendorName: string; description?: string | null; qty: number }[];
   termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
@@ -261,7 +262,7 @@ function renderHtmlToPdf(html: string) {
 
 // ─── Build Table Rows ─────────────────────────────────────────────────────────
 
-interface TableRow { no: string; desc: string; descBold?: boolean; total: string; isSpacer?: boolean }
+interface TableRow { no: string; desc: string; descBold?: boolean; total: string; isSpacer?: boolean; isTakeout?: boolean }
 
 function buildTableRows(booking: POPdfBooking): TableRow[] {
   const venueName = booking.snapVenue?.venueName ?? "";
@@ -272,6 +273,9 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   const notes = booking.snapPackage?.notes ? booking.snapPackage.notes.split("\n").filter(Boolean) : [];
   const internalItems = [...booking.snapPackageInternalItems].sort((a, b) => a.sortOrder - b.sortOrder);
   const packageVendorItems = [...booking.snapPackageVendorItems].sort((a, b) => a.sortOrder - b.sortOrder);
+  const takeoutSet = new Set(
+    (booking.snapPackageCategoryPrices ?? []).filter((c) => c.isTakeout).map((c) => c.categoryName.toUpperCase()),
+  );
 
   const rows: TableRow[] = [];
   rows.push({ no: "1", desc: `${venueName} ${packageName}${variantName ? ` - ${variantName}` : ""} for ${pax} people include: `, total: price });
@@ -304,12 +308,13 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
       rows.push({ no: "", desc: item.itemDescription, total: "" });
       rows.push({ no: "", desc: "", total: "", isSpacer: true });
     } else {
-      rows.push({ no: "", desc: `${letter}. ${item.categoryName}`, descBold: true, total: "" });
+      const catTakeout = takeoutSet.has(item.categoryName.toUpperCase());
+      rows.push({ no: "", desc: `${letter}. ${item.categoryName}${catTakeout ? " (TAKEOUT)" : ""}`, descBold: true, total: "", isTakeout: catTakeout });
       if (item.itemText.trim()) {
         if (item.itemText.includes("<")) {
-          rows.push({ no: "", desc: item.itemText, total: "" });
+          rows.push({ no: "", desc: item.itemText, total: "", isTakeout: catTakeout });
         } else {
-          item.itemText.split("\n").filter(Boolean).forEach((line) => rows.push({ no: "", desc: `   ${line}`, total: "" }));
+          item.itemText.split("\n").filter(Boolean).forEach((line) => rows.push({ no: "", desc: `   ${line}`, total: "", isTakeout: catTakeout }));
         }
       }
       rows.push({ no: "", desc: "", total: "", isSpacer: true });
@@ -568,7 +573,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                           {row.desc.includes("<ul>") || row.desc.includes("<ol>") ? (
                             <View style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000" }}>{parseRichText(row.desc)}</View>
                           ) : (
-                            <Text style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 8 }}>{row.descBold ? row.desc : parseRichText(row.desc)}</Text>
+                            <Text style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 8, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc)}</Text>
                           )}
                           <Text style={{ width: "21.74%", padding: 4, fontSize: 8 }}>{row.total}</Text>
                         </View>
