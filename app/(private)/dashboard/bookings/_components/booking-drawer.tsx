@@ -345,7 +345,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   const isStep2Complete =
     visibleCategories.length === 0 ||
-    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
+    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? true));
 
   const allPaidTermsHaveEvidence = terms
     .filter(t => (t.paymentStatus ?? "unpaid") === "paid")
@@ -422,7 +422,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         basePrice: c.basePrice,
         sortOrder: c.sortOrder,
         isShow: c.isShow,
-        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
+        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? true) : false,
       })),
     };
     const result = await createMut.mutateAsync(payload);
@@ -810,7 +810,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   )}
                   <div className="space-y-2">
                     {visibleCategories.map((cat) => {
-                      const isTakeout = categoryToggles[cat.categoryName] ?? false;
+                      const isTakeout = categoryToggles[cat.categoryName] ?? true;
                       return (
                         <div
                           key={cat.categoryName}
@@ -847,18 +847,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <div className={cn('flex', 'justify-between', 'text-sm')}>
                       <span className="text-muted-foreground">Harga setelah takeout</span>
                       <span className="font-semibold">Rp{fmtRp(step2Price)}</span>
-                    </div>
-                    <div className={cn('flex', 'justify-between', 'text-xs', 'text-muted-foreground')}>
-                      <span>Margin {margin}%</span>
-                      <span>
-                        Base: Rp
-                        {fmtRp(
-                          visibleCategories.reduce(
-                            (s, c) => s + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
-                            hiddenCategoriesBase,
-                          ),
-                        )}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -1044,7 +1032,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     control={form.control}
                     name="withMaterai"
                     render={({ field }) => (
-                      <FormItem className="rounded-lg border p-3 space-y-2">
+                      <FormItem className="rounded-lg border p-3 space-y-2 hidden">
                         <div className="flex flex-row items-center justify-between gap-3">
                           <FormLabel className="text-sm font-medium">E-Meterai <span className="font-normal text-muted-foreground">(opsional)</span></FormLabel>
                           <FormControl>
