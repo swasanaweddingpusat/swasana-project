@@ -11,7 +11,7 @@ const ROWS_PER_PAGE = 10;
 
 export default function AccountsReceivablePage() {
   const { data: arResult, isLoading } = useAR();
-  const bookings = arResult?.data ?? [];
+  const bookings = useMemo(() => arResult?.data ?? [], [arResult?.data]);
   const [filters, setFilters] = useState<ARFilters>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [detailBooking, setDetailBooking] = useState<ARBooking | null>(null);

@@ -67,7 +67,7 @@ export function VendorSpecialistTable({
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: result = initialData, refetch, isFetching } = useBookings(
+  const { data: result = initialData, refetch } = useBookings(
     { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined },
     initialData,
   );
@@ -294,12 +294,13 @@ function CateringDrawerWrapper({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
     fetch(`/api/bookings/${bookingId}`)
       .then((r) => r.json())
-      .then((d: BookingDetail) => setBooking(d))
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
+      .then((d: BookingDetail) => { if (!cancelled) setBooking(d); })
+      .catch(() => { if (!cancelled) setBooking(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [bookingId]);
 
   if (loading || !booking) {
@@ -337,12 +338,13 @@ function DecorationDrawerWrapper({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
     fetch(`/api/bookings/${bookingId}`)
       .then((r) => r.json())
-      .then((d: BookingDetail) => setBooking(d))
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
+      .then((d: BookingDetail) => { if (!cancelled) setBooking(d); })
+      .catch(() => { if (!cancelled) setBooking(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [bookingId]);
 
   if (loading || !booking) {

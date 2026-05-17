@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,13 +66,13 @@ function fmtRp(n: number) {
 }
 
 function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!file.type.startsWith("image/")) { setUrl(null); return; }
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
+  const url = useMemo(() => {
+    if (!file.type.startsWith("image/")) return null;
+    return URL.createObjectURL(file);
   }, [file]);
+  useEffect(() => {
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [url]);
   if (!url) return null;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
@@ -319,7 +319,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
   };
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wVariantId, wSourceOfInformationId, wPaymentMethodId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "packageVariantId", "sourceOfInformationId", "paymentMethodId"]);
   const isBitrixSource = sourceOptions.find((o) => o.id === wSourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && (variants.length === 0 || wVariantId) && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()));
