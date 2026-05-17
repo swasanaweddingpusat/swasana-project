@@ -58,11 +58,9 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
       )}
 
       <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 text-xs font-normal">
-            <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-            {filters.dateRange?.from ? format(new Date(filters.dateRange.from), "dd MMM") : "From"}
-          </Button>
+        <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-normal hover:bg-accent">
+          <CalendarIcon className="h-3.5 w-3.5" />
+          {filters.dateRange?.from ? format(new Date(filters.dateRange.from), "dd MMM") : "From"}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar mode="single"
@@ -73,11 +71,9 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
       </Popover>
 
       <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 text-xs font-normal">
-            <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-            {filters.dateRange?.to ? format(new Date(filters.dateRange.to), "dd MMM") : "To"}
-          </Button>
+        <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-normal hover:bg-accent">
+          <CalendarIcon className="h-3.5 w-3.5" />
+          {filters.dateRange?.to ? format(new Date(filters.dateRange.to), "dd MMM") : "To"}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar mode="single"

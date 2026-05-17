@@ -21,8 +21,8 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola pengaturan sistem",
   },
   "/dashboard/settings/users": {
-    title: "Users & Groups",
-    subtitle: "Kelola data user, undangan, dan grup akses",
+    title: "Users",
+    subtitle: "Kelola data user, undangan, dan akses",
     parent: "/dashboard/settings",
   },
   "/dashboard/settings/roles": {
@@ -129,6 +129,10 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Detail Group",
     subtitle: "Kinerja dan target penjualan tim",
     parent: "/dashboard/groups",
+  },
+  "/dashboard/vendor-specialist": {
+    title: "Vendor Specialist",
+    subtitle: "Kelola set vendor, catering, dan dekorasi per booking",
   },
 };
 

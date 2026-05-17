@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 10));
   const search = searchParams.get("search") ?? "";
+  const venueId = searchParams.get("venueId") ?? undefined;
 
   const profileId = session.user.profileId ?? undefined;
   let dataScope: DataScope = "own";
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const result = await getBookings(profileId, dataScope, { page, pageSize, search });
+  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId });
   return new Response(
     JSON.stringify(result, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
     { headers: { "content-type": "application/json" } },

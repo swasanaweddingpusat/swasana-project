@@ -1,7 +1,7 @@
 import { prisma } from "./_client";
 
 export async function seedReferenceData() {
-  const sourceNames = ["Instagram", "Facebook", "TikTok", "Google", "Referral", "Walk-in", "Website", "WhatsApp", "Event/Pameran", "Lainnya"];
+  const sourceNames = ["Bitrix", "Instagram", "Facebook", "TikTok", "Google", "Referral", "Walk-in", "Website", "WhatsApp", "Event/Pameran"];
   for (const name of sourceNames) {
     const existing = await prisma.sourceOfInformation.findUnique({ where: { name } });
     if (!existing) await prisma.sourceOfInformation.create({ data: { name } });

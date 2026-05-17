@@ -21,6 +21,7 @@ import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
 import { EditTopDrawer } from "./edit-top-drawer";
+import { EditPackagePricesDrawer } from "./edit-package-prices-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
@@ -89,6 +90,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [venueFilter, setVenueFilter] = useState("");
+
+  const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["venues-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/venues");
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setCurrentPage(1); }, 400);
@@ -96,7 +109,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined },
     initialData,
   );
   const bookings = result.data;
@@ -122,6 +135,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; variantName: string | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
+  const [pkgPricesTarget, setPkgPricesTarget] = useState<BookingListItem | null>(null);
 
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
@@ -192,6 +206,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn('pl-9', 'w-full', 'sm:w-55')} />
               </div>
+              <SearchableSelect
+                options={[{ id: "", name: "Semua Venue" }, ...venues.map((v) => ({ id: v.id, name: v.name }))]}
+                value={venueFilter}
+                onChange={(val) => { setVenueFilter(val); setCurrentPage(1); }}
+                placeholder="Filter venue..."
+                searchPlaceholder="Cari venue..."
+                className="w-40"
+              />
               <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
                 <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               </Button>
@@ -471,6 +493,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
                                 <WalletMinimal className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
                               </DropdownMenuItem>
+                              {can("booking", "edit") &&
+                                booking.snapPackageCategoryPrices &&
+                                booking.snapPackageCategoryPrices.length > 0 && (
+                                <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
+                                  Edit Package Prices
+                                </DropdownMenuItem>
+                              )}
                               {can("booking", "transfer") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
                                 <ArrowLeftRight className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
@@ -795,6 +824,24 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           packagePrice={Number(topTarget.snapPackageVariant?.price ?? 0)}
           discountName={topTarget.discountName ?? null}
           discountAmount={topTarget.discountAmount ?? 0}
+        />
+      )}
+
+      {pkgPricesTarget && (
+        <EditPackagePricesDrawer
+          isOpen={!!pkgPricesTarget}
+          onClose={() => setPkgPricesTarget(null)}
+          bookingId={pkgPricesTarget.id}
+          customerName={pkgPricesTarget.snapCustomer?.name ?? ""}
+          initialCategories={(pkgPricesTarget.snapPackageCategoryPrices ?? []).map((c) => ({
+            id: c.id,
+            categoryName: c.categoryName,
+            basePrice: Number(c.basePrice),
+            sortOrder: c.sortOrder,
+            isShow: c.isShow,
+            isTakeout: c.isTakeout,
+          }))}
+          margin={pkgPricesTarget.snapPackageVariant?.margin ?? 0}
         />
       )}
 

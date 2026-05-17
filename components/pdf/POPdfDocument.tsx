@@ -266,6 +266,7 @@ interface TableRow { no: string; desc: string; descBold?: boolean; total: string
 function buildTableRows(booking: POPdfBooking): TableRow[] {
   const venueName = booking.snapVenue?.venueName ?? "";
   const packageName = booking.snapPackage?.packageName ?? "";
+  const variantName = booking.snapPackageVariant?.variantName ?? "";
   const pax = booking.snapPackageVariant?.pax ?? "";
   const price = booking.snapPackageVariant ? fmtRp(booking.snapPackageVariant.price) : "";
   const notes = booking.snapPackage?.notes ? booking.snapPackage.notes.split("\n").filter(Boolean) : [];
@@ -273,7 +274,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   const packageVendorItems = [...booking.snapPackageVendorItems].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const rows: TableRow[] = [];
-  rows.push({ no: "1", desc: `${venueName} ${packageName} for ${pax} people include: `, total: price });
+  rows.push({ no: "1", desc: `${venueName} ${packageName}${variantName ? ` - ${variantName}` : ""} for ${pax} people include: `, total: price });
   notes.forEach((note) => rows.push({ no: "", desc: note, total: "" }));
 
   const benefitItems = internalItems.filter((i) => i.itemName.toLowerCase().includes("benefit"));
@@ -513,20 +514,29 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               </View>
             ))
           )}
-        </View>
 
-        {/* Detail Section — only force page break when there's substantial content */}
-        <View break={booking.snapPackageInternalItems.length > 0 || booking.snapPackageVendorItems.length > 0}>
+          {/* Detail Section — same View as T&C to eliminate boundary gap */}
           {/* Mini Form */}
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-            <View style={{ flexDirection: "column", gap: 4 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 40, marginBottom: 16 }}>
+            <View style={{ flexDirection: "column", gap: 4, flex: 1, paddingRight: 12 }}>
               <Text style={{ fontSize: 9 }}>Nama : {booking.snapCustomer?.name ?? "_____________________"}</Text>
-              <Text style={{ fontSize: 9 }}>No. Telp : {booking.snapCustomer?.mobileNumber ?? "_____________________"}</Text>
+              <Text style={{ fontSize: 9 }}>
+                {"No. Telp : "}
+                {(() => {
+                  const raw = booking.snapCustomer?.mobileNumber;
+                  if (!raw) return "_____________________";
+                  try {
+                    const arr = JSON.parse(raw) as { name?: string; number: string }[];
+                    if (Array.isArray(arr)) return arr.map((e) => (e.name ? `${e.number} (${e.name})` : e.number)).join(", ");
+                  } catch { /* not JSON */ }
+                  return raw;
+                })()}
+              </Text>
               <Text style={{ fontSize: 9 }}>No.KTP : {booking.snapCustomer?.nikNumber ?? "_____________________"}</Text>
               <Text style={{ fontSize: 9 }}>Alamat : {booking.snapCustomer?.ktpAddress ?? "_____________________"}</Text>
             </View>
             <View style={{ flexDirection: "column", gap: 4 }}>
-              <Text style={{ fontSize: 9 }}>Acara : {booking.weddingType ? booking.weddingType.replace(/\b\w/g, (c) => c.toUpperCase()) : "Wedding Reception"}</Text>
+              <Text style={{ fontSize: 9 }}>Acara : {(() => { const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" }; return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception"; })()}</Text>
               <Text style={{ fontSize: 9 }}>Hari/Tanggal : {new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
               <Text style={{ fontSize: 9 }}>Jam : {booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "_____________________"}</Text>
               <Text style={{ fontSize: 9 }}>Tempat : {venueName}</Text>
@@ -618,57 +628,54 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             <Text style={{ fontSize: 8, marginLeft: 20, marginBottom: 10 }}>
               Demikian Surat Purchase Order ini dibuat oleh pihak penyewa dan penyelenggara dengan keadaan sehat, tanpa paksaan dari pihak manapun. Serta mempunyai kekuatan mengikat satu dengan lainnya. Apabila dikemudian hari salah satu pihak melanggar sesuai dengan ketentuan diatas, maka perjanjian ini menjadi bukti yang sah dan sempurna di mata hukum.
             </Text>
-            <Text style={{ fontSize: 8, marginTop: 10, marginLeft: 20 }}>
+            <Text style={{ fontSize: 8, fontWeight: "bold", marginTop: 10, marginLeft: 20 }}>
               {booking.signingLocation ?? "_______________"}, {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}
             </Text>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 60, marginBottom: 10 }}>
-              {/* Kolom kiri — E-Meterai QR */}
-              {ematerai ? (
-                <View style={{ width: "35%", alignItems: "center" }}>
+            <View style={{ flexDirection: "row", marginTop: 60, marginBottom: 10 }}>
+              {/* E-Meterai QR — hanya jika ada */}
+              {ematerai && (
+                <View style={{ flex: 1, alignItems: "center" }}>
                   {/* eslint-disable-next-line jsx-a11y/alt-text */}
                   <Image
                     src={ematerai.qrBase64.startsWith("data:") ? ematerai.qrBase64 : `data:image/png;base64,${ematerai.qrBase64}`}
-                    style={{ width: 80, height: 80, marginBottom: 4 }}
+                    style={{ width: 70, height: 70, marginBottom: 4 }}
                   />
                   <Text style={{ fontSize: 6, textAlign: "center", color: "#333" }}>E-Meterai</Text>
                   <Text style={{ fontSize: 5, textAlign: "center", color: "#555" }}>{ematerai.sn}</Text>
                 </View>
-              ) : (
-                <View style={{ width: "35%" }} />
               )}
-
-              {/* Kolom kanan — Signatures */}
-              <View style={{ width: "65%", flexDirection: "row", justifyContent: "space-around" }}>
-                <View style={s.signBox}>
-                  {sigs?.client?.signature ? (
-                    // eslint-disable-next-line jsx-a11y/alt-text
-                    <Image src={sigs.client.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                  ) : (
-                    <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                  )}
-                  <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
-                  <Text style={s.signatureLabel}>Client</Text>
-                </View>
-                <View style={s.signBox}>
-                  {sigs?.sales?.signature ? (
-                    // eslint-disable-next-line jsx-a11y/alt-text
-                    <Image src={sigs.sales.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                  ) : (
-                    <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                  )}
-                  <Text style={s.signerName}>({sigs?.sales?.name ?? booking.sales?.fullName ?? ""})</Text>
-                  <Text style={s.signatureLabel}>Event Specialist</Text>
-                </View>
-                <View style={s.signBox}>
-                  {sigs?.manager?.signature ? (
-                    // eslint-disable-next-line jsx-a11y/alt-text
-                    <Image src={sigs.manager.signature as string} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                  ) : (
-                    <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                  )}
-                  <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
-                  <Text style={s.signatureLabel}>Head of Marketing</Text>
-                </View>
+              {/* Client */}
+              <View style={{ flex: 1, alignItems: "center" }}>
+                {sigs?.client?.signature ? (
+                  // eslint-disable-next-line jsx-a11y/alt-text
+                  <Image src={sigs.client.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                ) : (
+                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                )}
+                <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
+                <Text style={s.signatureLabel}>Client</Text>
+              </View>
+              {/* Event Specialist */}
+              <View style={{ flex: 1, alignItems: "center" }}>
+                {sigs?.sales?.signature ? (
+                  // eslint-disable-next-line jsx-a11y/alt-text
+                  <Image src={sigs.sales.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                ) : (
+                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                )}
+                <Text style={s.signerName}>({sigs?.sales?.name ?? booking.sales?.fullName ?? ""})</Text>
+                <Text style={s.signatureLabel}>Event Specialist</Text>
+              </View>
+              {/* Head of Marketing */}
+              <View style={{ flex: 1, alignItems: "center" }}>
+                {sigs?.manager?.signature ? (
+                  // eslint-disable-next-line jsx-a11y/alt-text
+                  <Image src={sigs.manager.signature as string} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                ) : (
+                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                )}
+                <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
+                <Text style={s.signatureLabel}>Head of Marketing</Text>
               </View>
             </View>
           </View>

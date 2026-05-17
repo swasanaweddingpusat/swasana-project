@@ -138,9 +138,10 @@ export async function POST(req: Request) {
       const steps = approvalRecord.steps;
       const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
       const latestRound = steps.slice(-roundSize);
-      const salesStep = latestRound.find((s) => s.approverType === "role" && s.approverRole?.name === "sales" && s.signature);
-      const managerStep = latestRound.find((s) => s.approverType === "role" && s.approverRole?.name === "manager" && s.signature);
-      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature);
+      const roleStepsWithSig = latestRound.filter((s) => s.approverType === "role" && s.signature).sort((a, b) => a.stepOrder - b.stepOrder);
+      const salesStep = roleStepsWithSig[0] ?? null;
+      const managerStep = roleStepsWithSig[1] ?? null;
+      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
       pdfBooking.signatures = {
         ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "" } } : {}),
         ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),

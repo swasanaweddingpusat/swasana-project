@@ -2,12 +2,13 @@ import { db } from "@/lib/db";
 import type { ARBooking, ARInvoiceStatus, ARPartialPayment, ARTermin, ARTerminStatus } from "@/types/finance";
 
 function deriveTerminStatus(
-  status: "unpaid" | "paid" | "partial",
+  status: "unpaid" | "paid" | "partial" | "refund",
   dueDate: Date,
   now: Date
 ): ARTerminStatus {
   if (status === "paid") return "paid";
   if (status === "partial") return "partial";
+  if (status === "refund") return "paid";
   return dueDate < now ? "overdue" : "not_due_yet";
 }
 

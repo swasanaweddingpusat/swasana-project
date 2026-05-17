@@ -395,6 +395,7 @@ model PackageVariantCategoryPrice {
   categoryName     String
   basePrice        Int            @default(0)
   sortOrder        Int            @default(0)
+  isShow           Boolean        @default(true)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
@@ -545,9 +546,10 @@ model Booking {
   snapPackageVariant SnapPackageVariant?
 
   // Snapshot relations (1:many)
-  snapPackageInternalItems SnapPackageInternalItem[]
-  snapPackageVendorItems   SnapPackageVendorItem[]
-  snapBonuses              SnapBonus[]
+  snapPackageInternalItems  SnapPackageInternalItem[]
+  snapPackageVendorItems    SnapPackageVendorItem[]
+  snapPackageCategoryPrices SnapPackageCategoryPrice[]
+  snapBonuses               SnapBonus[]
   snapVendorItems          SnapVendorItem[]
 
   // Live relations
@@ -650,15 +652,16 @@ model SnapPackage {
 }
 
 model SnapPackageVariant {
-  id          String   @id @default(uuid())
-  bookingId   String   @unique
-  variantId   String
-  variantName String
-  pax         Int
-  price       Int
+  id               String   @id @default(uuid())
+  bookingId        String   @unique
+  variantId        String
+  variantName      String
+  pax              Int
+  price            Int
+  margin           Float    @default(0)
   termAndCondition String?
-  createdAt   DateTime @default(now())
-  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("snap_package_variants")
 }
@@ -689,6 +692,22 @@ model SnapPackageVendorItem {
 
   @@index([bookingId])
   @@map("snap_package_vendor_items")
+}
+
+model SnapPackageCategoryPrice {
+  id           String   @id @default(uuid())
+  bookingId    String
+  categoryName String
+  basePrice    Int      @default(0)
+  sortOrder    Int      @default(0)
+  isShow       Boolean  @default(true)
+  isTakeout    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("snap_package_category_prices")
 }
 
 model SnapBonus {
@@ -885,6 +904,7 @@ enum TermOfPaymentStatus {
   unpaid
   paid
   partial
+  refund
 }
 
 enum SettlementType {

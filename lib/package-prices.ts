@@ -1,0 +1,85 @@
+﻿export interface CategorySnap {
+  id?: string;
+  categoryName: string;
+  basePrice: number;
+  sortOrder: number;
+  isShow: boolean;
+  isTakeout: boolean;
+}
+
+export interface TermSnap {
+  id: string;
+  name: string;
+  amount: number;
+  paymentStatus: string;
+}
+
+export interface AdjustedTerm {
+  id: string;
+  newAmount: number;
+}
+
+export interface RefundTerm {
+  name: string;
+  amount: number;
+  paymentStatus: "refund";
+}
+
+/**
+ * Calculate final price from category snapshots + margin.
+ * Only non-takeout categories contribute to baseTotal.
+ * Hidden categories (isShow = false) are never takeout, so always included.
+ */
+export function calcFinalPrice(categories: CategorySnap[], margin: number): number {
+  const baseTotal = categories
+    .filter((c) => !c.isTakeout)
+    .reduce((sum, c) => sum + c.basePrice, 0);
+  return baseTotal + Math.round(baseTotal * (margin / 100));
+}
+
+/**
+ * Adjust term of payments when price decreases.
+ *
+ * Case 1: totalUnpaid >= reduction
+ *   Distribute reduction proportionally across unpaid/partial terms.
+ *
+ * Case 2: totalUnpaid < reduction (overpayment)
+ *   Zero out all unpaid/partial terms, insert a refund term for the remainder.
+ *
+ * Returns { adjustedTerms, refundTerm } where refundTerm is null in Case 1.
+ */
+export function adjustTermsForPriceReduction(
+  terms: TermSnap[],
+  oldPrice: number,
+  newPrice: number,
+): { adjustedTerms: AdjustedTerm[]; refundTerm: RefundTerm | null } {
+  const reduction = oldPrice - newPrice;
+  if (reduction <= 0) return { adjustedTerms: [], refundTerm: null };
+
+  const unpaidTerms = terms.filter(
+    (t) => t.paymentStatus === "unpaid" || t.paymentStatus === "partial",
+  );
+  const totalUnpaid = unpaidTerms.reduce((s, t) => s + t.amount, 0);
+
+  if (totalUnpaid >= reduction) {
+    // Case 1: proportional reduction
+    const adjustedTerms: AdjustedTerm[] = unpaidTerms.map((t) => ({
+      id: t.id,
+      newAmount: t.amount - Math.round((reduction * t.amount) / totalUnpaid),
+    }));
+    return { adjustedTerms, refundTerm: null };
+  } else {
+    // Case 2: zero out all unpaid + create refund term
+    const adjustedTerms: AdjustedTerm[] = unpaidTerms.map((t) => ({
+      id: t.id,
+      newAmount: 0,
+    }));
+    const overpayment = reduction - totalUnpaid;
+    const refundTerm: RefundTerm = {
+      name: "Refund Takeout",
+      amount: overpayment,
+      paymentStatus: "refund",
+    };
+    return { adjustedTerms, refundTerm };
+  }
+}

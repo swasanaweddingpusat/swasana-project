@@ -37,8 +37,8 @@ const GROUPS: SettingGroup[] = [
     description: "Kelola semua user dan permission di sistem.",
     items: [
       {
-        title: "Users & Groups",
-        description: "Kelola data user, undangan, dan grup akses.",
+        title: "Users",
+        description: "Kelola data user, undangan, dan akses.",
         icon: UsersRound,
         href: "/dashboard/settings/users",
         module: "settings-users",
@@ -118,7 +118,7 @@ const GROUPS: SettingGroup[] = [
 
 export default async function SettingsHubPage() {
   await requirePagePermission([
-    "settings-users", "settings-brands", "settings-venues", "settings-groups",
+    "settings-users", "settings-brands", "settings-venues",
     "settings-role-permission", "settings-approval-flow", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",

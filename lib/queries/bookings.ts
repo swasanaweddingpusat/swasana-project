@@ -5,13 +5,24 @@ const bookingListInclude = {
   snapCustomer: { select: { name: true, mobileNumber: true } },
   snapVenue: { select: { venueName: true, brandCode: true } },
   snapPackage: { select: { packageName: true } },
-  snapPackageVariant: { select: { variantName: true, pax: true, price: true } },
+  snapPackageVariant: { select: { variantName: true, pax: true, price: true, margin: true } },
   sales: { select: { id: true, fullName: true } },
   manager: { select: { id: true, fullName: true } },
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
   clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
   termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, paymentEvidence: true, notes: true, partialPayments: { orderBy: { paidAt: "asc" as const }, select: { id: true, amount: true, paidAt: true, evidence: true, notes: true } } } },
+  snapPackageCategoryPrices: {
+    select: {
+      id: true,
+      categoryName: true,
+      basePrice: true,
+      sortOrder: true,
+      isShow: true,
+      isTakeout: true,
+    },
+    orderBy: { sortOrder: "asc" as const },
+  },
 } as const;
 
 const bookingDetailInclude = {
@@ -20,7 +31,18 @@ const bookingDetailInclude = {
   customer: { select: { bitrixId: true } },
   snapVenue: true,
   snapPackage: true,
-  snapPackageVariant: true,
+  snapPackageVariant: {
+    select: {
+      id: true,
+      bookingId: true,
+      variantId: true,
+      variantName: true,
+      pax: true,
+      price: true,
+      termAndCondition: true,
+      createdAt: true,
+    },
+  },
   venue: { select: { id: true } },
   snapPackageInternalItems: { orderBy: { sortOrder: "asc" as const } },
   snapPackageVendorItems: { orderBy: { sortOrder: "asc" as const } },
@@ -57,11 +79,12 @@ export interface PaginatedBookings {
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
-  const where: Prisma.BookingWhereInput = { ...scopeFilter, ...searchFilter };
+  const venueFilter: Prisma.BookingWhereInput = options?.venueId ? { venueId: options.venueId } : {};
+  const where: Prisma.BookingWhereInput = { ...scopeFilter, ...searchFilter, ...venueFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
@@ -117,10 +140,27 @@ async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
 }
 
 export async function getBookingById(id: string) {
-  return db.booking.findUnique({
-    where: { id },
-    include: bookingDetailInclude,
-  });
+  const [booking, approvalRecord] = await Promise.all([
+    db.booking.findUnique({
+      where: { id },
+      include: bookingDetailInclude,
+    }),
+    db.approvalRecord.findFirst({
+      where: { module: "booking", entityId: id },
+      include: {
+        steps: {
+          where: { approverType: "client" },
+          select: { signature: true, status: true, decidedAt: true },
+        },
+      },
+    }),
+  ]);
+
+  if (!booking) return null;
+
+  const clientSignature = approvalRecord?.steps[0]?.signature ?? null;
+
+  return { ...booking, clientSignature };
 }
 
 export type BookingsResult = PaginatedBookings;

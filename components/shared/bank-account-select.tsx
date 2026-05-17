@@ -24,9 +24,10 @@ interface Props {
   className?: string;
   minDropdownWidth?: number;
   venueId?: string;
+  disableAdd?: boolean;
 }
 
-export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekening...", disabled, className, minDropdownWidth = 320, venueId }: Props) {
+export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekening...", disabled, className, minDropdownWidth = 320, venueId, disableAdd = false }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -38,8 +39,15 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
   const [pos, setPos] = React.useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
 
   const { data: paymentMethods = [] } = useQuery<PaymentMethod[]>({
-    queryKey: ["payment-methods"],
-    queryFn: async () => { const r = await fetch("/api/payment-methods"); if (!r.ok) return []; const d = await r.json(); return Array.isArray(d) ? d : []; },
+    queryKey: ["payment-methods", venueId ?? "all"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "100" });
+      if (venueId) params.set("venueId", venueId);
+      const r = await fetch(`/api/payment-methods?${params}`);
+      if (!r.ok) return [];
+      const d = await r.json();
+      return Array.isArray(d.data) ? d.data : [];
+    },
     staleTime: 5 * 60 * 1000,
   });
 
@@ -128,15 +136,17 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
               </div>
             ))}
           </div>
-          <div className="border-t p-1">
-            <button
-              type="button"
-              className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent text-muted-foreground"
-              onClick={() => setShowAdd(true)}
-            >
-              <Plus className="h-3.5 w-3.5" /> Tambah rekening baru
-            </button>
-          </div>
+          {!disableAdd && (
+            <div className="border-t p-1">
+              <button
+                type="button"
+                className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent text-muted-foreground"
+                onClick={() => setShowAdd(true)}
+              >
+                <Plus className="h-3.5 w-3.5" /> Tambah rekening baru
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <div className="p-3 space-y-2">

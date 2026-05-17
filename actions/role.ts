@@ -261,14 +261,20 @@ export async function updateRolePermissions(
   if (!mutationLimiter.check(`role-perm:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    await db.$transaction([
-      db.rolePermission.deleteMany({ where: { roleId } }),
-      ...permissionIds.map((permissionId) =>
-        db.rolePermission.create({ data: { roleId, permissionId } })
-      ),
-    ]);
+    if (permissionIds.length === 0) {
+      await db.rolePermission.deleteMany({ where: { roleId } });
+    } else {
+      await db.$transaction([
+        db.rolePermission.deleteMany({ where: { roleId } }),
+        db.$executeRaw`
+          INSERT INTO "role_permissions" ("id", "roleId", "permissionId")
+          SELECT gen_random_uuid(), ${roleId}, pid
+          FROM unnest(${permissionIds}::text[]) AS pid
+        `,
+      ]);
+    }
 
-    revalidateTag("roles", { expire: 0 });
+    revalidateTag("roles", "max");
     await logAudit({
       action: "permission.changed",
       entityType: "role",

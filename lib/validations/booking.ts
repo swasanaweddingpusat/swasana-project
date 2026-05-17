@@ -26,11 +26,19 @@ export const bookingSchema = z.object({
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
   })).optional().default([]),
+  categoryToggles: z.array(z.object({
+    categoryName: z.string().min(1),
+    basePrice: z.coerce.number().int().min(0),
+    sortOrder: z.coerce.number().int().default(0),
+    isShow: z.boolean().default(true),
+    isTakeout: z.boolean().default(false),
+  })).optional().default([]),
   termOfPayments: z.array(z.object({
     name: z.string().min(1),
     amount: z.coerce.number().min(0),
     dueDate: z.string().min(1),
     sortOrder: z.coerce.number().int().default(0),
+    paymentStatus: z.enum(["unpaid", "paid", "partial", "refund"]).default("unpaid"),
   })).optional().default([]),
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
@@ -75,6 +83,13 @@ export const editBookingSchema = z.object({
     description: z.string().optional().nullable(),
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
+  })).optional().default([]),
+  categoryToggles: z.array(z.object({
+    categoryName: z.string().min(1),
+    basePrice: z.coerce.number().int().min(0),
+    sortOrder: z.coerce.number().int().default(0),
+    isShow: z.boolean().default(true),
+    isTakeout: z.boolean().default(false),
   })).optional().default([]),
   termOfPayments: z.array(z.object({
     id: z.string().optional(),

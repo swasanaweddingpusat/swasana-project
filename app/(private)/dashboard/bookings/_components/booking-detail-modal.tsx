@@ -575,6 +575,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
   const [agreement, setAgreement] = useState(booking.clientAgreement);
   const [isPending, startTransition] = useTransition();
+  const clientSignature = booking.clientSignature ?? null;
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const agreementUrl = agreement ? `${baseUrl}/client-agreement?token=${agreement.token}` : null;
@@ -628,6 +629,19 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
             {agreement.viewedAt && <p>Dilihat: {fmtDateTime(agreement.viewedAt)}</p>}
             {agreement.signedAt && <p>Ditandatangani: {fmtDateTime(agreement.signedAt)}</p>}
           </div>
+          {agreement.status === "Signed" && clientSignature && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">Tanda Tangan Client</p>
+              <div className="border rounded-lg p-2 bg-white w-fit">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={clientSignature}
+                  alt="Tanda tangan client"
+                  className="max-h-24 max-w-48 object-contain"
+                />
+              </div>
+            </div>
+          )}
           <div className="flex gap-2 pt-1">
             {agreement.status === "Pending" && (
               <Button variant="outline" size="sm" onClick={() => {

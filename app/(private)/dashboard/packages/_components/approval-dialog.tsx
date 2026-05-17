@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Check, X, Clock, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ApprovalStep {
   id: string;
@@ -45,6 +46,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
   const [record, setRecord] = useState<ApprovalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const qc = useQueryClient();
 
   const fetchRecord = useCallback(async () => {
     setLoading(true);
@@ -56,7 +58,6 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
   }, [module, packageId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) fetchRecord();
   }, [open, fetchRecord]);
 
@@ -73,7 +74,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast.error(e.error ?? "Gagal reset"); setSubmitting(false); return; }
       toast.success("Step berhasil di-reset");
       await qc.refetchQueries({ queryKey: ["packages"] });
-      await qc.refetchQueries({ queryKey: ["booking-approvals"] });
+      await qc.refetchQueries({ queryKey: ["package-approvals"] });
       fetchRecord();
     } catch { toast.error("Gagal reset step"); }
     setSubmitting(false);

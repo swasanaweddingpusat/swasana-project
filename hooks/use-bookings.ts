@@ -9,6 +9,7 @@ interface BookingsParams {
   page: number;
   pageSize: number;
   search: string;
+  venueId?: string;
 }
 
 async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
@@ -16,6 +17,7 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
     page: String(params.page),
     pageSize: String(params.pageSize),
     ...(params.search ? { search: params.search } : {}),
+    ...(params.venueId ? { venueId: params.venueId } : {}),
   });
   const res = await fetch(`/api/bookings?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch bookings");
@@ -23,12 +25,13 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
 }
 
 export function useBookings(params: BookingsParams, initialData?: BookingsResult) {
+  const isDefaultQuery = params.page === 1 && !params.search && !params.venueId;
   return useQuery({
-    queryKey: ["bookings", params.page, params.pageSize, params.search],
+    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId],
     queryFn: () => fetchBookings(params),
-    initialData,
+    initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });

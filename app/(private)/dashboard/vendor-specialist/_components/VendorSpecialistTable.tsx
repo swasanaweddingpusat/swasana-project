@@ -16,6 +16,8 @@ import {
   Search, ArrowLeft, ArrowRight, Store, UtensilsCrossed, Palette, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Drawer } from "@/components/shared/drawer";
 import { useBookings } from "@/hooks/use-bookings";
 import { SetVendorDrawer } from "./SetVendorDrawer";
@@ -44,6 +46,18 @@ export function VendorSpecialistTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [venueFilter, setVenueFilter] = useState("");
+
+  const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["venues-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/venues");
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -54,7 +68,7 @@ export function VendorSpecialistTable({
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined },
     initialData,
   );
   const bookings = result.data;
@@ -83,6 +97,14 @@ export function VendorSpecialistTable({
                 <Search className={cn("absolute", "left-3", "top-1/2", "-translate-y-1/2", "h-4", "w-4", "text-muted-foreground")} />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn("pl-9", "w-full", "sm:w-55")} />
               </div>
+              <SearchableSelect
+                options={[{ id: "", name: "Semua Venue" }, ...venues.map((v) => ({ id: v.id, name: v.name }))]}
+                value={venueFilter}
+                onChange={(val) => { setVenueFilter(val); setCurrentPage(1); }}
+                placeholder="Filter venue..."
+                searchPlaceholder="Cari venue..."
+                className="w-40"
+              />
             </div>
           </div>
 
