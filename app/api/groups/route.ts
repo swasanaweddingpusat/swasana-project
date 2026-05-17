@@ -4,7 +4,7 @@ import { getGroups } from "@/lib/queries/groups";
 
 export async function GET() {
   const { session, response } = await requirePermissionForRoute({
-    module: "settings-groups",
+    module: "groups",
     action: "view",
   });
   if (response) return response;
