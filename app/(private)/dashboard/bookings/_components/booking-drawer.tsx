@@ -345,7 +345,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   const isStep2Complete =
     visibleCategories.length === 0 ||
-    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
+    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? true));
 
   const allPaidTermsHaveEvidence = terms
     .filter(t => (t.paymentStatus ?? "unpaid") === "paid")
@@ -422,7 +422,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         basePrice: c.basePrice,
         sortOrder: c.sortOrder,
         isShow: c.isShow,
-        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
+        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? true) : false,
       })),
     };
     const result = await createMut.mutateAsync(payload);
@@ -810,7 +810,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   )}
                   <div className="space-y-2">
                     {visibleCategories.map((cat) => {
-                      const isTakeout = categoryToggles[cat.categoryName] ?? false;
+                      const isTakeout = categoryToggles[cat.categoryName] ?? true;
                       return (
                         <div
                           key={cat.categoryName}
