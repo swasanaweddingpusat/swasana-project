@@ -34,6 +34,7 @@ export const bookingSchema = z.object({
   })).optional().default([]),
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
+  withMaterai: z.boolean().default(false),
 });
 
 export const updateBookingSchema = z.object({

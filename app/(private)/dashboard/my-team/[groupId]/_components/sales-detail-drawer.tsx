@@ -4,13 +4,12 @@ import { useState, useTransition, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
-import { SignaturePad } from "@/components/shared/signature-pad";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { X, Check, Printer } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { approveBooking } from "@/actions/my-team";
@@ -50,7 +49,6 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
   const [bookings, setBookings] = useState<SalesBookingItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [approveTarget, setApproveTarget] = useState<string | null>(null);
-  const [signature, setSignature] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -75,14 +73,13 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
   const pct = memberTarget > 0 ? Math.round((memberActual / memberTarget) * 100) : 0;
 
   function handleApprove() {
-    if (!approveTarget || !signature) return;
+    if (!approveTarget) return;
     startTransition(async () => {
-      const res = await approveBooking(approveTarget, signature);
+      const res = await approveBooking(approveTarget);
       if (res.success) {
-        setBookings((prev) => prev.map((b) => b.id === approveTarget ? { ...b, managerApprovedAt: new Date() } : b));
+        setBookings((prev) => prev.filter((b) => b.id !== approveTarget));
         toast.success("Booking disetujui");
         setApproveTarget(null);
-        setSignature(null);
       } else {
         toast.error(res.error ?? "Terjadi kesalahan");
       }
@@ -137,14 +134,13 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
                   <TableHead className="px-2 py-2 text-xs font-semibold text-muted-foreground hidden sm:table-cell sticky top-0 bg-secondary z-[5]">Package</TableHead>
                   <TableHead className="px-2 py-2 text-xs font-semibold text-muted-foreground hidden sm:table-cell sticky top-0 bg-secondary z-[5]">Event Date</TableHead>
                   <TableHead className="px-2 py-2 text-xs font-semibold text-muted-foreground text-right sticky top-0 bg-secondary z-[5]">Amount</TableHead>
-                  <TableHead className="px-2 py-2 text-xs font-semibold text-muted-foreground text-center sticky top-0 bg-secondary z-[5]">Approval</TableHead>
                   <TableHead className="px-4 sm:px-8 py-2 text-xs font-semibold text-muted-foreground text-right sticky top-0 bg-secondary z-[5]">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {bookings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-sm text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
                       Tidak ada booking pada periode ini
                     </TableCell>
                   </TableRow>
@@ -200,24 +196,10 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
                       <span className="text-xs font-semibold">{formatRp(b.snapPackageVariant?.price ?? 0)}</span>
                     </TableCell>
 
-                    <TableCell className="px-2 py-2.5 text-center">
-                      {b.managerApprovedAt ? (
-                        <Badge variant="default" className="text-[10px]">Approved</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-[10px]">Pending</Badge>
-                      )}
-                    </TableCell>
-
                     <TableCell className="px-4 sm:px-8 py-2.5 text-right">
-                      {b.managerApprovedAt ? (
-                        <Button size="xs" variant="ghost" className="gap-1 text-[10px]" onClick={() => toast.info("Fitur cetak PO segera hadir")}>
-                          <Printer className="h-3 w-3" /> Cetak PO
-                        </Button>
-                      ) : (
-                        <Button size="xs" variant="outline" className="gap-1 text-[10px]" onClick={() => { setApproveTarget(b.id); setSignature(null); }}>
-                          <Check className="h-3 w-3" /> Approve
-                        </Button>
-                      )}
+                      <Button size="xs" variant="outline" className="gap-1 text-[10px]" onClick={() => { setApproveTarget(b.id); }}>
+                        <Check className="h-3 w-3" /> Approve
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -227,17 +209,14 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
         </div>
       </div>
 
-      {/* Signature Approval Dialog */}
-      <Dialog open={!!approveTarget} onOpenChange={(open) => { if (!open) { setApproveTarget(null); setSignature(null); } }}>
+      {/* Approval Confirmation Dialog */}
+      <Dialog open={!!approveTarget} onOpenChange={(open) => { if (!open) { setApproveTarget(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogTitle>Approve Booking</DialogTitle>
-          <p className="text-sm text-muted-foreground">Tanda tangan untuk menyetujui booking ini.</p>
-          <div className="mt-3">
-            <SignaturePad onSignature={setSignature} label="Tanda Tangan Manager" />
-          </div>
+          <p className="text-sm text-muted-foreground">Konfirmasi persetujuan booking ini.</p>
           <div className="flex gap-2 mt-4">
-            <Button variant="outline" className="flex-1" onClick={() => { setApproveTarget(null); setSignature(null); }}>Batal</Button>
-            <Button className="flex-1 gap-1.5" disabled={!signature || isPending} onClick={handleApprove}>
+            <Button variant="outline" className="flex-1" onClick={() => { setApproveTarget(null); }}>Batal</Button>
+            <Button className="flex-1 gap-1.5" disabled={isPending} onClick={handleApprove}>
               <Check className="h-3.5 w-3.5" /> Approve
             </Button>
           </div>

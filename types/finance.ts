@@ -32,14 +32,21 @@ export type FinanceTabType = "receivable" | "payable";
 
 // ─── AR Types ────────────────────────────────────────────────────────────────
 
-export type ARInvoiceStatus = "paid" | "partial" | "unpaid" | "unissued" | "generated";
-export type ARTerminStatus = "paid" | "partial" | "unpaid" | "pending" | "overdue" | "not_due_yet";
+export type ARInvoiceStatus = "paid" | "partial" | "unpaid" | "unissued";
+export type ARTerminStatus = "paid" | "partial" | "unpaid" | "overdue" | "not_due_yet";
 
 export interface ARFilters {
-  status?: ARInvoiceStatus;
+  status?: ARTerminStatus;
   venue?: string;
   salesPic?: string;
-  dateRange?: { from: string; to: string };
+  dateRange?: { from?: string; to?: string };
+}
+
+export interface ARPartialPayment {
+  id: string;
+  amount: number;
+  paidAt: string;
+  notes: string | null;
 }
 
 export interface ARTermin {
@@ -47,23 +54,31 @@ export interface ARTermin {
   name: string;
   dueDate: string;
   amount: number;
+  remaining: number;
   status: ARTerminStatus;
   noInvoice: string;
-  statusInvoice: ARInvoiceStatus | "unissued";
+  statusInvoice: ARInvoiceStatus;
   agingDays: number | null;
   catatan: string;
+  partialPayments: ARPartialPayment[];
 }
 
 export interface ARBooking {
   id: string;
   noPo: string;
   customerEvent: string;
+  customerEmail: string;
+  customerPhone: string;
   customerDate: string;
   namaEvent: string;
+  brandName: string | null;
+  venueId: string;
+  salesId: string;
+  salesPicName: string;
+  packageName: string | null;
   totalPrice: number;
   outstanding: number;
   jatuhTempo: string;
   statusTermin: ARTerminStatus;
   termins: ARTermin[];
 }
-

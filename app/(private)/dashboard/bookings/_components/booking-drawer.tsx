@@ -18,6 +18,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { cn } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
@@ -217,6 +218,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
       specialBonusName: null, specialBonusAmount: null,
       signingLocation: null, signatureSales: null,
+      withMaterai: false,
     },
   });
 
@@ -787,6 +789,26 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Lokasi Tanda Tangan *</FormLabel>
                     <Input placeholder="Contoh: Jakarta, Bandung, Surabaya..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} />
                   </div>
+                  <FormField
+                    control={form.control}
+                    name="withMaterai"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-sm">E-Meterai</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Bubuhkan e-meterai pada dokumen PO booking ini
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value ?? false}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Tanda Tangan Sales *</FormLabel>
                     <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-gray-50", !signatureSales ? "border-red-300" : "border-gray-300")}>

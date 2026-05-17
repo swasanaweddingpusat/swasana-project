@@ -452,9 +452,10 @@ interface POPdfDocumentProps {
   booking: POPdfBooking;
   logoBase64?: string | null;
   termAndConditionHtml?: string | null;
+  ematerai?: { sn: string; qrBase64: string } | null;
 }
 
-export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POPdfDocumentProps) {
+export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, ematerai }: POPdfDocumentProps) {
   const tableRows = buildTableRows(booking);
   const termsList = getTerms(booking);
   const resolvedTcHtml = termAndConditionHtml ? replaceVariables(termAndConditionHtml, booking) : null;
@@ -620,36 +621,54 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml }: POP
             <Text style={{ fontSize: 8, marginTop: 10, marginLeft: 20 }}>
               {booking.signingLocation ?? "_______________"}, {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}
             </Text>
-            <View style={s.signatureSection}>
-              <View style={s.signBox}>
-                {sigs?.client?.signature ? (
-                  /* eslint-disable-next-line jsx-a11y/alt-text */
-                  <Image src={sigs.client.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                ) : (
-                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                )}
-                <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
-                <Text style={s.signatureLabel}>Client</Text>
-              </View>
-              <View style={s.signBox}>
-                {sigs?.sales?.signature ? (
-                  /* eslint-disable-next-line jsx-a11y/alt-text */
-                  <Image src={sigs.sales.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                ) : (
-                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                )}
-                <Text style={s.signerName}>({sigs?.sales?.name ?? booking.sales?.fullName ?? ""})</Text>
-                <Text style={s.signatureLabel}>Event Specialist</Text>
-              </View>
-              <View style={s.signBox}>
-                {sigs?.manager?.signature ? (
-                  /* eslint-disable-next-line jsx-a11y/alt-text */
-                  <Image src={sigs.manager.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                ) : (
-                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                )}
-                <Text style={s.signerName}>({sigs?.manager?.name ?? ""})</Text>
-                <Text style={s.signatureLabel}>Head of Marketing</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 60, marginBottom: 10 }}>
+              {/* Kolom kiri — E-Meterai QR */}
+              {ematerai ? (
+                <View style={{ width: "35%", alignItems: "center" }}>
+                  {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                  <Image
+                    src={ematerai.qrBase64.startsWith("data:") ? ematerai.qrBase64 : `data:image/png;base64,${ematerai.qrBase64}`}
+                    style={{ width: 80, height: 80, marginBottom: 4 }}
+                  />
+                  <Text style={{ fontSize: 6, textAlign: "center", color: "#333" }}>E-Meterai</Text>
+                  <Text style={{ fontSize: 5, textAlign: "center", color: "#555" }}>{ematerai.sn}</Text>
+                </View>
+              ) : (
+                <View style={{ width: "35%" }} />
+              )}
+
+              {/* Kolom kanan — Signatures */}
+              <View style={{ width: "65%", flexDirection: "row", justifyContent: "space-around" }}>
+                <View style={s.signBox}>
+                  {sigs?.client?.signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image src={sigs.client.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  ) : (
+                    <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  )}
+                  <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
+                  <Text style={s.signatureLabel}>Client</Text>
+                </View>
+                <View style={s.signBox}>
+                  {sigs?.sales?.signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image src={sigs.sales.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  ) : (
+                    <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  )}
+                  <Text style={s.signerName}>({sigs?.sales?.name ?? booking.sales?.fullName ?? ""})</Text>
+                  <Text style={s.signatureLabel}>Event Specialist</Text>
+                </View>
+                <View style={s.signBox}>
+                  {sigs?.manager?.signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image src={sigs.manager.signature as string} style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  ) : (
+                    <View style={{ width: 100, height: 50, marginBottom: 4 }} />
+                  )}
+                  <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
+                  <Text style={s.signatureLabel}>Head of Marketing</Text>
+                </View>
               </View>
             </View>
           </View>

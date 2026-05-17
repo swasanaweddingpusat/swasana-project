@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ArrowDown,
   Eye,
   CreditCard,
@@ -14,7 +15,6 @@ import {
   Minus,
   FileDown,
   FilePlus,
-  Share2,
   ClipboardList,
 } from "lucide-react";
 import {
@@ -76,37 +76,30 @@ function getTerminBadge(status: ARTerminStatus): BadgeConfig {
   const map: Record<ARTerminStatus, BadgeConfig> = {
     paid: {
       label: "Lunas",
-      bg: "bg-emerald-50",
-      border: "border-emerald-200",
-      text: "text-emerald-700",
+      bg: "bg-primary",
+      border: "border-primary",
+      text: "text-primary-foreground",
       Icon: Check,
     },
     partial: {
       label: "Partial",
-      bg: "bg-amber-50",
-      border: "border-amber-200",
-      text: "text-amber-700",
-      Icon: RefreshCw,
-    },
-    pending: {
-      label: "Termin",
-      bg: "bg-amber-50",
-      border: "border-amber-200",
-      text: "text-amber-700",
+      bg: "bg-secondary",
+      border: "border-border",
+      text: "text-foreground",
       Icon: RefreshCw,
     },
     overdue: {
       label: "Aging",
-      bg: "bg-red-50",
-      border: "border-red-200",
-      text: "text-red-700",
+      bg: "bg-destructive/10",
+      border: "border-destructive/20",
+      text: "text-destructive",
       Icon: Ban,
     },
     unpaid: {
       label: "Unpaid",
-      bg: "bg-red-50",
-      border: "border-red-200",
-      text: "text-red-700",
+      bg: "bg-destructive/10",
+      border: "border-destructive/20",
+      text: "text-destructive",
       Icon: Ban,
     },
     not_due_yet: {
@@ -120,29 +113,27 @@ function getTerminBadge(status: ARTerminStatus): BadgeConfig {
   return map[status];
 }
 
-function getInvoiceBadge(
-  status: ARInvoiceStatus | "unissued" | "generated"
-): BadgeConfig {
-  const map: Record<string, BadgeConfig> = {
+function getInvoiceBadge(status: ARInvoiceStatus): BadgeConfig {
+  const map: Record<ARInvoiceStatus, BadgeConfig> = {
     paid: {
       label: "Paid",
-      bg: "bg-emerald-50",
-      border: "border-emerald-200",
-      text: "text-emerald-700",
+      bg: "bg-primary",
+      border: "border-primary",
+      text: "text-primary-foreground",
       Icon: Check,
     },
     partial: {
       label: "Partial",
-      bg: "bg-amber-50",
-      border: "border-amber-200",
-      text: "text-amber-700",
+      bg: "bg-secondary",
+      border: "border-border",
+      text: "text-foreground",
       Icon: RefreshCw,
     },
     unpaid: {
       label: "Unpaid",
-      bg: "bg-red-50",
-      border: "border-red-200",
-      text: "text-red-700",
+      bg: "bg-destructive/10",
+      border: "border-destructive/20",
+      text: "text-destructive",
       Icon: Ban,
     },
     unissued: {
@@ -151,13 +142,6 @@ function getInvoiceBadge(
       border: "border-border",
       text: "text-muted-foreground",
       Icon: ClipboardList,
-    },
-    generated: {
-      label: "Generated",
-      bg: "bg-blue-50",
-      border: "border-blue-200",
-      text: "text-blue-700",
-      Icon: Share2,
     },
   };
   return map[status] ?? map.unissued;
@@ -216,7 +200,6 @@ export function ARTable({
           <TableHeader>
             <TableRow className="bg-secondary hover:bg-secondary">
               {[
-                "NO PO",
                 "Customer Event",
                 "Nama Event",
                 "Total Price",
@@ -234,7 +217,7 @@ export function ARTable({
           <TableBody>
             {Array.from({ length: 6 }).map((_, i) => (
               <TableRow key={i} className="h-18">
-                {Array.from({ length: 8 }).map((_, j) => (
+                {Array.from({ length: 7 }).map((_, j) => (
                   <TableCell key={j}>
                     <Skeleton className="h-4 w-full" />
                   </TableCell>
@@ -253,13 +236,10 @@ export function ARTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-secondary hover:bg-secondary">
-              <TableHead className="h-11 w-45.5 min-w-45.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
+              <TableHead className="h-11 min-w-44 px-6 py-3 text-xs font-semibold text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
-                  NO PO <ArrowDown className="size-3" />
+                  Customer Event <ArrowDown className="size-3" />
                 </span>
-              </TableHead>
-              <TableHead className="h-11 w-40 min-w-40 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Customer Event
               </TableHead>
               <TableHead className="h-11 w-37.75 min-w-37.75 px-6 py-3 text-xs font-semibold text-muted-foreground">
                 Nama Event
@@ -285,7 +265,7 @@ export function ARTable({
             {bookings.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={7}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   Tidak ada data piutang.
@@ -308,7 +288,6 @@ export function ARTable({
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 border-t px-6 pb-4 pt-3">
-          {/* Previous */}
           <div className="flex flex-1 items-center">
             <Button
               variant="outline"
@@ -322,7 +301,6 @@ export function ARTable({
             </Button>
           </div>
 
-          {/* Page numbers */}
           <div className="flex items-center gap-0.5">
             {genPages(currentPage, totalPages).map((p, i) =>
               p === "..." ? (
@@ -349,7 +327,6 @@ export function ARTable({
             )}
           </div>
 
-          {/* Next */}
           <div className="flex flex-1 items-center justify-end">
             <Button
               variant="outline"
@@ -386,18 +363,26 @@ function BookingRow({
   return (
     <>
       <TableRow
-        className="h-18 cursor-pointer bg-[#fdfdfd] hover:bg-secondary/50"
+        className="h-18 cursor-pointer bg-background hover:bg-secondary/50"
         onClick={onToggle}
       >
-        <TableCell className="px-6 py-4 text-sm font-normal text-foreground">
-          {booking.noPo}
-        </TableCell>
         <TableCell className="px-6 py-4">
-          <div className="text-sm font-medium text-foreground">
-            {booking.customerEvent}
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {fmtDate(booking.customerDate)}
+          <div className="flex items-start gap-2">
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 mt-0.5 text-muted-foreground transition-transform duration-200",
+                isExpanded && "rotate-180"
+              )}
+            />
+            <div>
+              <div className="text-sm font-medium text-foreground">
+                {booking.customerEvent}
+              </div>
+              <div className="text-xs text-muted-foreground">{booking.noPo}</div>
+              <div className="text-xs text-muted-foreground">
+                {fmtDate(booking.customerDate)}
+              </div>
+            </div>
           </div>
         </TableCell>
         <TableCell className="px-6 py-4 text-sm text-foreground">
@@ -445,7 +430,7 @@ function BookingRow({
 
       {isExpanded && booking.termins.length > 0 && (
         <TableRow className="bg-secondary/30 hover:bg-secondary/30">
-          <TableCell colSpan={8} className="p-0">
+          <TableCell colSpan={7} className="p-0">
             <div>
               <Table>
                 <TableHeader>
@@ -500,7 +485,7 @@ function TerminRow({ termin }: { termin: ARTermin }) {
   const invoiceBadge = getInvoiceBadge(termin.statusInvoice);
 
   return (
-    <TableRow className="h-18 bg-white hover:bg-secondary/30">
+    <TableRow className="h-18 bg-background hover:bg-secondary/30">
       <TableCell className="px-6 py-4 text-sm text-foreground">
         {termin.name}
       </TableCell>
@@ -535,7 +520,6 @@ function TerminRow({ termin }: { termin: ARTermin }) {
 /* ─── Termin Actions (context-aware) ───────────────────────────────────────── */
 
 function TerminActions({ termin }: { termin: ARTermin }) {
-  // Paid termin: eye (view) + file-download (download receipt)
   if (termin.status === "paid") {
     return (
       <div className="flex items-center gap-0.5">
@@ -555,7 +539,6 @@ function TerminActions({ termin }: { termin: ARTermin }) {
     );
   }
 
-  // Overdue / aging: credit-card (pay) + bell (reminder)
   if (termin.status === "overdue") {
     return (
       <div className="flex items-center gap-0.5">
@@ -575,7 +558,6 @@ function TerminActions({ termin }: { termin: ARTermin }) {
     );
   }
 
-  // Pending / partial with unissued invoice: file-plus (create invoice) + bell
   if (termin.statusInvoice === "unissued") {
     return (
       <div className="flex items-center gap-0.5">
@@ -595,24 +577,14 @@ function TerminActions({ termin }: { termin: ARTermin }) {
     );
   }
 
-  // Generated invoice: credit-card (record payment)
-  if (
-    termin.statusInvoice === "generated" ||
-    termin.status === "pending" ||
-    termin.status === "partial"
-  ) {
-    return (
-      <div className="flex items-center gap-0.5">
-        <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Payment"
-        >
-          <CreditCard className="size-4" />
-        </button>
-      </div>
-    );
-  }
-
-  // Not due yet with no invoice: empty
-  return null;
+  return (
+    <div className="flex items-center gap-0.5">
+      <button
+        className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+        title="Payment"
+      >
+        <CreditCard className="size-4" />
+      </button>
+    </div>
+  );
 }

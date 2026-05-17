@@ -129,6 +129,7 @@ export async function POST(req: Request) {
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
     // Fetch signatures from ApprovalRecordStep (latest round)
+    let emateraiData: { sn: string; qrBase64: string } | null = null;
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: bookingId } },
       include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, decidedBy: { select: { fullName: true } } } } },
@@ -145,12 +146,16 @@ export async function POST(req: Request) {
         ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),
         ...(clientStep ? { client: { signature: clientStep.signature!, name: clientStep.decidedBy?.fullName ?? "" } } : {}),
       };
+      emateraiData =
+        approvalRecord.emateraiSn && approvalRecord.emateraiQrBase64
+          ? { sn: approvalRecord.emateraiSn, qrBase64: approvalRecord.emateraiQrBase64 }
+          : null;
     }
 
     const logoBase64 = await loadLogoBase64("swasana-logo.png");
 
     const stream = await renderToStream(
-      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />
+      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} ematerai={emateraiData} />
     );
 
     return new NextResponse(stream as unknown as ReadableStream, {

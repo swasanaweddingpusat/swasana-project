@@ -515,11 +515,9 @@ model Booking {
   rejectionNotes        String?
   lostReason            String?
   signingLocation       String?
-  signatures            Json?
+  withMaterai           Boolean         @default(false)
   discountName          String?
   discountAmount        Int             @default(0)
-  managerApprovedAt     DateTime?
-  managerSignature      String?
   salesId               String
   managerId             String?
   customerId            String
@@ -980,6 +978,8 @@ model ApprovalRecord {
   entityId    String
   status      String               @default("pending")
   signature   String?
+  emateraiSn        String?
+  emateraiQrBase64  String?
   createdById String
   updatedById String?
   createdAt   DateTime             @default(now())

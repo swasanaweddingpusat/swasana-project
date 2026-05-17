@@ -588,9 +588,6 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
     });
   };
 
-  const signatures = booking.signatures as Record<string, unknown> | null;
-  const clientSig = signatures?.client as Record<string, unknown> | null;
-
   return (
     <div className="border border-gray-200 rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -631,13 +628,6 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
             {agreement.viewedAt && <p>Dilihat: {fmtDateTime(agreement.viewedAt)}</p>}
             {agreement.signedAt && <p>Ditandatangani: {fmtDateTime(agreement.signedAt)}</p>}
           </div>
-          {typeof clientSig?.signature === "string" && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground font-medium">Tanda Tangan Client</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={clientSig.signature} alt="Client signature" className="h-20 border rounded bg-white p-1" />
-            </div>
-          )}
           <div className="flex gap-2 pt-1">
             {agreement.status === "Pending" && (
               <Button variant="outline" size="sm" onClick={() => {

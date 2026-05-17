@@ -17,9 +17,27 @@ export default function AccountsReceivablePage() {
   const [detailBooking, setDetailBooking] = useState<ARBooking | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const venues = useMemo(() => {
+    const seen = new Map<string, string>();
+    bookings.forEach((b) => {
+      if (b.venueId && b.namaEvent !== "-") seen.set(b.venueId, b.namaEvent);
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [bookings]);
+
+  const salesPics = useMemo(() => {
+    const seen = new Map<string, string>();
+    bookings.forEach((b) => {
+      if (b.salesId && b.salesPicName !== "-") seen.set(b.salesId, b.salesPicName);
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [bookings]);
+
   const filtered = useMemo(() => {
     return bookings.filter((b) => {
       if (filters.status && b.statusTermin !== filters.status) return false;
+      if (filters.venue && b.venueId !== filters.venue) return false;
+      if (filters.salesPic && b.salesId !== filters.salesPic) return false;
       if (filters.dateRange?.from && b.customerDate < filters.dateRange.from) return false;
       if (filters.dateRange?.to && b.customerDate > filters.dateRange.to) return false;
       return true;
@@ -32,13 +50,15 @@ export default function AccountsReceivablePage() {
   return (
     <div className="flex flex-col gap-4 py-6 px-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-base font-bold text-[#1D1D1D]">Accounts Receivable</h1>
+        <h1 className="text-base font-bold text-foreground">Accounts Receivable</h1>
         <span className="text-xs text-muted-foreground">{filtered.length} booking</span>
       </div>
 
       <ARFilterBar
         filters={filters}
         onFiltersChange={(f) => { setFilters(f); setCurrentPage(1); }}
+        venues={venues}
+        salesPics={salesPics}
       />
 
       <ARTable

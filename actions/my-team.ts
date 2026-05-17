@@ -169,13 +169,11 @@ export async function setMemberTarget(data: unknown) {
 
 // ─── Approve Booking ──────────────────────────────────────────────────────────
 
-export async function approveBooking(bookingId: string, signature: string) {
+export async function approveBooking(bookingId: string) {
   const permResult = await requirePermission({ module: "booking", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`booking-approve:${session.user.id}`)) return { success: false, ...rateLimitError() };
-
-  if (!signature) return { success: false, error: "Tanda tangan wajib diisi." };
 
   const scope = await getProfileDataScope(session.user.profileId);
   if (!(await canAccessBooking(session.user.profileId, scope, bookingId))) {
@@ -188,8 +186,6 @@ export async function approveBooking(bookingId: string, signature: string) {
         where: { id: bookingId },
         data: {
           managerId: session.user.profileId,
-          managerApprovedAt: new Date(),
-          managerSignature: signature,
         },
       }),
     ]);

@@ -11,6 +11,7 @@ import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { generateEmaterai } from "@/lib/peruri";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -62,6 +63,8 @@ export async function createBooking(data: unknown) {
 
     if (!customerId) return { success: false, error: "Customer wajib diisi." };
 
+    let emateraiResult: { sn: string; qrBase64: string } | null = null;
+
     const [customer, venue, pkg, variant] = await Promise.all([
       db.customer.findUniqueOrThrow({ where: { id: customerId } }),
       db.venue.findUniqueOrThrow({ where: { id: input.venueId }, include: { brand: true } }),
@@ -99,6 +102,10 @@ export async function createBooking(data: unknown) {
       );
     }
 
+    if (input.withMaterai) {
+      emateraiResult = await generateEmaterai(poNumber, new Date(input.bookingDate));
+    }
+
     // Build array-form transaction
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ops: any[] = [
@@ -119,6 +126,7 @@ export async function createBooking(data: unknown) {
           signingLocation: input.signingLocation ?? null,
           discountName: input.specialBonusName ?? null,
           discountAmount: input.specialBonusAmount ?? 0,
+          withMaterai: input.withMaterai ?? false,
           poNumber,
         },
       }),
@@ -214,6 +222,8 @@ export async function createBooking(data: unknown) {
           entityId: bookingId,
           status: "pending",
           createdById: session!.user.profileId!,
+          emateraiSn: emateraiResult?.sn ?? null,
+          emateraiQrBase64: emateraiResult?.qrBase64 ?? null,
         },
       });
 
@@ -253,7 +263,7 @@ export async function createBooking(data: unknown) {
       action: "created",
       entityType: "booking",
       entityId: bookingId,
-      changes: { customerId, venueId: input.venueId, packageId: input.packageId },
+      changes: { customerId, venueId: input.venueId, packageId: input.packageId, withMaterai: input.withMaterai ?? false },
       description: `Created booking for ${customer.name}`,
     });
 

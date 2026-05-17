@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { DataScope } from "@/types/user";
 import { requirePagePermission } from "@/lib/require-page-permission";
+import { cn } from "../../../../lib/utils";
 
 export const metadata: Metadata = {
   title: "Bookings",
@@ -23,7 +24,7 @@ export default async function BookingsPage() {
 
   const [bookings, salesProfiles] = await Promise.all([getBookings(profileId, dataScope), getSalesProfiles()]);
   return (
-    <div className="flex flex-col mb-6 px-2">
+    <div className={cn('flex', 'flex-col', 'mb-6', 'px-2')}>
       <BookingsTable initialData={bookings} salesProfiles={salesProfiles} />
     </div>
   );

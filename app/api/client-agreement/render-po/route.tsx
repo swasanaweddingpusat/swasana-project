@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       discountAmount: booking.discountAmount,
     };
 
-     
+
     let termAndConditionHtml: string | null;
     if (booking.packageVariantId) {
       const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
@@ -93,8 +93,20 @@ export async function POST(req: Request) {
     } else {
       termAndConditionHtml = null;
     }
-     
-    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />;
+
+    let emateraiData: { sn: string; qrBase64: string } | null = null;
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: booking.id } },
+      select: { emateraiSn: true, emateraiQrBase64: true },
+    });
+    if (approvalRecord) {
+      emateraiData =
+        approvalRecord.emateraiSn && approvalRecord.emateraiQrBase64
+          ? { sn: approvalRecord.emateraiSn, qrBase64: approvalRecord.emateraiQrBase64 }
+          : null;
+    }
+
+    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} ematerai={emateraiData} />;
 
     const stream = await renderToStream(pdfElement);
 

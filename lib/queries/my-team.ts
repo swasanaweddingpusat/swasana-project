@@ -73,7 +73,6 @@ export async function getMyTeamPerformance(groupId: string) {
     select: {
       salesId: true,
       bookingStatus: true,
-      managerApprovedAt: true,
       snapPackageVariant: { select: { price: true } },
     },
   });
@@ -82,7 +81,7 @@ export async function getMyTeamPerformance(groupId: string) {
     const memberBookings = bookingRevenues.filter((b) => b.salesId === profileId);
     const confirmed = memberBookings.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
     const pending = memberBookings.filter((b) => b.bookingStatus === BookingStatus.Pending);
-    const pendingApproval = pending.filter((b) => !b.managerApprovedAt);
+    const pendingApproval = pending;
 
     const actual = confirmed.reduce((sum, b) => sum + (b.snapPackageVariant?.price ?? 0), 0);
     const target = targets.find((t) => t.profileId === profileId);
@@ -115,8 +114,6 @@ export async function getSalesBookings(salesId: string) {
       bookingStatus: true,
       poNumber: true,
       weddingSession: true,
-      managerApprovedAt: true,
-      managerSignature: true,
       bookingDate: true,
       snapCustomer: { select: { name: true, mobileNumber: true } },
       snapVenue: { select: { venueName: true } },
