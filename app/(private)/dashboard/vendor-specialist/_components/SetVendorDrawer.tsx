@@ -185,7 +185,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
         <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50">
+              <TableRow className="bg-muted">
                 <TableHead className="px-4 w-45">Kategori</TableHead>
                 <TableHead className="px-4 min-w-55">Nama Vendor</TableHead>
                 <TableHead className="px-4 w-45">Nominal</TableHead>
@@ -210,7 +210,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
         <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50">
+              <TableRow className="bg-muted">
                 <TableHead className="px-4 w-45">Kategori</TableHead>
                 <TableHead className="px-4 min-w-55">Nama Vendor</TableHead>
                 <TableHead className="px-4 w-45">Nominal</TableHead>
@@ -224,7 +224,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                 const state = selected[cat.id] ?? { vendorId: "", nominal: "", description: "", orderStatusId: "" };
                 return (
                   <TableRow key={cat.id}>
-                    <TableCell className="px-4 font-medium text-sm text-gray-700 align-middle">{cat.name}</TableCell>
+                    <TableCell className="px-4 font-medium text-sm text-foreground align-middle">{cat.name}</TableCell>
                     <TableCell className="px-4 align-middle">
                       {state.vendorId ? (
                         <div className="flex items-center justify-between bg-muted rounded-md px-3 py-2 gap-2">
@@ -247,7 +247,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                     </TableCell>
                     <TableCell className="px-4 align-middle">
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
                         <Input
                           className="pl-8 text-sm"
                           placeholder="0"
@@ -280,8 +280,8 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
               })}
 
               {/* Separator + add bonus button */}
-              <TableRow className="bg-gray-50">
-                <TableCell colSpan={4} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <TableRow className="bg-muted">
+                <TableCell colSpan={4} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Complimentary / Bonus
                 </TableCell>
                 <TableCell className="px-4 py-2 text-right">
@@ -306,7 +306,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                 const e = bonusEdits[b.id] ?? { nominal: "", description: "", orderStatusId: "" };
                 return (
                   <TableRow key={b.id}>
-                    <TableCell className="px-4 font-medium text-sm text-gray-700 align-middle">Complimentary</TableCell>
+                    <TableCell className="px-4 font-medium text-sm text-foreground align-middle">Complimentary</TableCell>
                     <TableCell className="px-4 align-middle">
                       {b.vendorId ? (
                         <div className="flex items-center justify-between bg-muted rounded-md px-3 py-2 gap-2">
@@ -333,7 +333,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                     </TableCell>
                     <TableCell className="px-4 align-middle">
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
                         <Input className="pl-8 text-sm" placeholder="0"
                           value={fmtRp(e.nominal)}
                           onChange={(ev) => setBonusEdits((p) => ({ ...p, [b.id]: { ...e, nominal: ev.target.value.replace(/\D/g, "") } }))}
@@ -360,7 +360,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                           searchPlaceholder="Cari atau tambah status..."
                           emptyText="Tidak ada status"
                         />
-                        <Button variant="ghost" size="icon-sm" className="text-red-500 hover:text-red-700 shrink-0"
+                        <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive shrink-0"
                           onClick={async () => {
                             const result = await deleteSnapBonus(b.id);
                             if (result.success) {

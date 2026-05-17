@@ -73,14 +73,14 @@ export function VendorSpecialistTable({
           {/* Header */}
           <div className={cn("flex", "flex-col", "sm:flex-row", "sm:items-center", "justify-between", "px-4", "sm:px-6", "pb-4", "gap-3")}>
             <div className={cn("flex", "items-center", "gap-3")}>
-              <h2 className={cn("text-base", "font-bold", "text-[#1D1D1D]")}>Vendor Specialist</h2>
-              <span className={cn("text-gray-700", "text-sm", "rounded-full", "border", "border-gray-200", "bg-gray-50", "px-3", "py-1")}>
+              <h2 className={cn("text-base", "font-bold", "text-foreground")}>Vendor Specialist</h2>
+              <span className={cn("text-foreground", "text-sm", "rounded-full", "border", "border-border", "bg-muted", "px-3", "py-1")}>
                 {totalBookings} Bookings
               </span>
             </div>
             <div className={cn("flex", "flex-wrap", "items-center", "gap-2")}>
               <div className={cn("relative", "flex-1", "sm:flex-none")}>
-                <Search className={cn("absolute", "left-3", "top-1/2", "-translate-y-1/2", "h-4", "w-4", "text-gray-400")} />
+                <Search className={cn("absolute", "left-3", "top-1/2", "-translate-y-1/2", "h-4", "w-4", "text-muted-foreground")} />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn("pl-9", "w-full", "sm:w-55")} />
               </div>
             </div>
@@ -88,29 +88,29 @@ export function VendorSpecialistTable({
 
           {/* Table */}
           {bookings.length === 0 ? (
-            <div className={cn("flex", "flex-col", "items-center", "justify-center", "py-16", "text-gray-400")}>
+            <div className={cn("flex", "flex-col", "items-center", "justify-center", "py-16", "text-muted-foreground")}>
               <CalendarDays className={cn("h-10", "w-10", "mb-3", "opacity-40")} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
             </div>
           ) : (
             <div className={cn("w-full", "overflow-x-auto")}>
               <Table className={cn("w-full", "text-sm")}>
-                <TableHeader className="bg-[#F9FAFB]">
+                <TableHeader className="bg-muted">
                   <TableRow>
-                    <TableHead className={cn("px-2", "py-2", "text-[#475467]", "text-center", "w-[3%]", "hidden", "sm:table-cell")}>No</TableHead>
-                    <TableHead className={cn("px-2", "py-2", "text-[#475467]")}>Customer</TableHead>
-                    <TableHead className={cn("px-2", "py-2", "text-[#475467]", "hidden", "sm:table-cell", "w-[15%]")}>Venue & PO</TableHead>
-                    <TableHead className={cn("px-2", "py-2", "text-[#475467]", "hidden", "sm:table-cell", "w-[14%]")}>Package</TableHead>
-                    <TableHead className={cn("px-2", "py-2", "text-[#475467]", "hidden", "sm:table-cell", "w-[10%]")}>Event Date</TableHead>
-                    <TableHead className={cn("px-2", "py-2", "text-[#475467]", "hidden", "sm:table-cell", "w-[8%]")}>Approval</TableHead>
-                    <TableHead className={cn("px-1", "py-2", "text-[#475467]", "text-right", "pr-5", "w-[15%]")}>Action</TableHead>
+                    <TableHead className={cn("px-2", "py-2", "text-muted-foreground", "text-center", "w-[3%]", "hidden", "sm:table-cell")}>No</TableHead>
+                    <TableHead className={cn("px-2", "py-2", "text-muted-foreground")}>Customer</TableHead>
+                    <TableHead className={cn("px-2", "py-2", "text-muted-foreground", "hidden", "sm:table-cell", "w-[15%]")}>Venue & PO</TableHead>
+                    <TableHead className={cn("px-2", "py-2", "text-muted-foreground", "hidden", "sm:table-cell", "w-[14%]")}>Package</TableHead>
+                    <TableHead className={cn("px-2", "py-2", "text-muted-foreground", "hidden", "sm:table-cell", "w-[10%]")}>Event Date</TableHead>
+                    <TableHead className={cn("px-2", "py-2", "text-muted-foreground", "hidden", "sm:table-cell", "w-[8%]")}>Approval</TableHead>
+                    <TableHead className={cn("px-1", "py-2", "text-muted-foreground", "text-right", "pr-5", "w-[15%]")}>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bookings.map((booking: BookingListItem, idx: number) => (
                     <TableRow
                       key={booking.id}
-                      className={cn("hover:bg-gray-50", "cursor-pointer")}
+                      className={cn("hover:bg-muted", "cursor-pointer")}
                       onClick={() => setDetailTarget(booking.id)}
                     >
                       <TableCell className={cn("px-2", "py-2", "text-center", "hidden", "sm:table-cell")}>
@@ -119,22 +119,22 @@ export function VendorSpecialistTable({
 
                       <TableCell className={cn("px-2", "py-2")}>
                         <div className="overflow-hidden max-w-0 min-w-full">
-                          <p className={cn("text-sm", "font-medium", "text-gray-900", "truncate")}>{booking.snapCustomer?.name ?? "—"}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">{booking.snapCustomer?.mobileNumber ?? ""}</p>
-                          <p className={cn("text-xs", "text-gray-500", "mt-0.5", "sm:hidden")}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
+                          <p className={cn("text-sm", "font-medium", "text-foreground", "truncate")}>{booking.snapCustomer?.name ?? "—"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{booking.snapCustomer?.mobileNumber ?? ""}</p>
+                          <p className={cn("text-xs", "text-muted-foreground", "mt-0.5", "sm:hidden")}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
                         </div>
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>
                         <p className="text-sm">{booking.snapVenue?.venueName ?? "—"}</p>
                         {booking.poNumber && (
-                          <p className="text-xs text-gray-400 font-mono">{booking.poNumber}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{booking.poNumber}</p>
                         )}
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>
                         <p className="text-sm">{booking.snapPackage?.packageName ?? "—"}</p>
-                        <p className="text-xs text-gray-400">{booking.snapPackageVariant?.variantName ?? ""}</p>
+                        <p className="text-xs text-muted-foreground">{booking.snapPackageVariant?.variantName ?? ""}</p>
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell", "whitespace-nowrap", "text-sm")}>
@@ -211,7 +211,7 @@ export function VendorSpecialistTable({
           {/* Pagination */}
           {totalPages > 1 && (
             <div className={cn("flex", "items-center", "justify-between", "px-4", "sm:px-6", "py-3", "border-t", "border-border")}>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, totalBookings)} dari {totalBookings}
               </p>
               <div className="flex gap-1">

@@ -27,7 +27,6 @@ import {
   BarChart3,
   CirclePile,
   Settings,
-  Wrench,
 
   type LucideIcon,
 } from "lucide-react";
@@ -95,7 +94,7 @@ export const navItems: NavItem[] = [
   {
     name: "Vendor Specialist",
     href: "/dashboard/vendor-specialist",
-    icon: Wrench,
+    icon: CirclePile,
     permission: { module: "vendor-specialist", action: "view" },
   },
   {
