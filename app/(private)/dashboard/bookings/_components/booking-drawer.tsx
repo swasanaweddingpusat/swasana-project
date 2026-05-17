@@ -832,9 +832,9 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               {isTakeout ? 'Takeout' : 'Included'}
                             </span>
                             <Switch
-                              checked={!isTakeout}
+                              checked={isTakeout}
                               onCheckedChange={(v) =>
-                                setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: !v }))
+                                setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }))
                               }
                             />
                           </div>
