@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,13 +66,17 @@ function fmtRp(n: number) {
 }
 
 function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
-  const url = useMemo(() => {
-    if (!file.type.startsWith("image/")) return null;
-    return URL.createObjectURL(file);
-  }, [file]);
-  useEffect(() => {
-    return () => { if (url) URL.revokeObjectURL(url); };
-  }, [url]);
+  const [prev, setPrev] = useState(file);
+  const [url, setUrl] = useState<string | null>(() => file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+
+  if (prev !== file) {
+    if (url) URL.revokeObjectURL(url);
+    setUrl(file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+    setPrev(file);
+  }
+
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
   if (!url) return null;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
@@ -345,7 +349,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   const isStep2Complete =
     visibleCategories.length === 0 ||
-    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? true));
+    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
   const allPaidTermsHaveEvidence = terms
     .filter(t => (t.paymentStatus ?? "unpaid") === "paid")
@@ -422,7 +426,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         basePrice: c.basePrice,
         sortOrder: c.sortOrder,
         isShow: c.isShow,
-        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? true) : false,
+        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
       })),
     };
     const result = await createMut.mutateAsync(payload);
@@ -810,27 +814,20 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   )}
                   <div className="space-y-2">
                     {visibleCategories.map((cat) => {
-                      const isTakeout = categoryToggles[cat.categoryName] ?? true;
+                      const isTakeout = categoryToggles[cat.categoryName] ?? false;
                       return (
                         <div
                           key={cat.categoryName}
-                          className={cn('flex', 'items-center', 'justify-between', 'rounded-lg', 'border', 'p-3')}
+                          className={cn('flex', 'items-center', 'justify-between', 'rounded-lg', 'border', 'p-3', isTakeout && 'border-destructive/30 bg-destructive/5')}
                         >
                           <div>
-                            <p className="text-sm font-medium">{cat.categoryName}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className={cn('text-sm font-medium', isTakeout && 'line-through text-muted-foreground')}>{cat.categoryName}</p>
+                            <p className={cn('text-xs text-muted-foreground', isTakeout && 'line-through')}>
                               Rp{fmtRp(cat.basePrice)}
                             </p>
                           </div>
                           <div className={cn('flex', 'items-center', 'gap-2')}>
-                            <span
-                              className={cn(
-                                'text-xs',
-                                isTakeout ? 'text-destructive' : 'text-muted-foreground',
-                              )}
-                            >
-                              {isTakeout ? 'Takeout' : 'Included'}
-                            </span>
+                            <span className={cn('text-xs', isTakeout ? 'text-destructive font-medium' : 'text-muted-foreground')}>Takeout</span>
                             <Switch
                               checked={isTakeout}
                               onCheckedChange={(v) =>

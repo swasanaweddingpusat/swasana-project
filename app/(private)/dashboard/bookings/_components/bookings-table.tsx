@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, FileUp, MessageSquare, ClipboardCheck, WalletMinimal } from "lucide-react";
+import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, FileUp, MessageSquare, ClipboardCheck, WalletMinimal, Settings2 } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
@@ -497,7 +497,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 booking.snapPackageCategoryPrices &&
                                 booking.snapPackageCategoryPrices.length > 0 && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
-                                  Edit Package Prices
+                                  <Settings2 className={cn('mr-2', 'h-4', 'w-4')} /> Edit Set Harga
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "transfer") && (

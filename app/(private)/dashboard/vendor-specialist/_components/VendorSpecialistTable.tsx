@@ -16,6 +16,7 @@ import {
   Search, ArrowLeft, ArrowRight, Store, UtensilsCrossed, Palette, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Drawer } from "@/components/shared/drawer";
@@ -26,15 +27,39 @@ import { DecorationSelectionDrawer } from "./DecorationSelectionDrawer";
 import { BookingDetailModal } from "@/app/(private)/dashboard/bookings/_components/booking-detail-modal";
 import type { BookingsResult, BookingListItem, BookingDetail } from "@/lib/queries/bookings";
 
-// Monochrome-only status styling — no hardcoded color classes
-const STATUS_CLASSES: Record<string, string> = {
-  Confirmed: "text-foreground border-border",
-  Uploaded:  "text-foreground border-border",
-  Pending:   "text-muted-foreground border-border",
-  Rejected:  "text-destructive border-destructive/30",
-  Canceled:  "text-muted-foreground border-border",
-  Lost:      "text-muted-foreground border-border",
+const STATUS_DOT: Record<string, string> = {
+  Confirmed: "bg-green-500",
+  Uploaded: "bg-blue-500",
+  Pending: "bg-orange-400",
+  Rejected: "bg-destructive",
+  Canceled: "bg-muted-foreground",
+  Lost: "bg-muted-foreground",
 };
+
+const STATUS_TEXT: Record<string, string> = {
+  Confirmed: "text-green-600 border-border",
+  Uploaded: "text-blue-600 border-border",
+  Pending: "text-orange-500 border-border",
+  Rejected: "text-destructive border-destructive/30",
+  Canceled: "text-muted-foreground border-border",
+  Lost: "text-muted-foreground border-border",
+};
+
+const SESSION_STYLE: Record<string, string> = {
+  morning: "bg-muted text-amber-600",
+  evening: "bg-muted text-indigo-600",
+  fullday: "bg-muted text-emerald-600",
+};
+
+const SESSION_LABEL: Record<string, string> = {
+  morning: "Pagi",
+  evening: "Malam",
+  fullday: "Fullday",
+};
+
+function fmtRp(n: unknown): string {
+  return `Rp ${new Intl.NumberFormat("id-ID").format(Number(n))}`;
+}
 
 const ROWS_PER_PAGE = 10;
 
@@ -74,6 +99,18 @@ export function VendorSpecialistTable({
   const bookings = result.data;
   const totalBookings = result.total;
   const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
+
+  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; status: string }[] }[]>({
+    queryKey: ["booking-approvals"],
+    queryFn: async () => {
+      const res = await fetch("/api/approval-records?module=booking");
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.data ?? json;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
 
   const [detailTarget, setDetailTarget]         = useState<string | null>(null);
   const [vendorTarget, setVendorTarget]         = useState<BookingListItem | null>(null);
@@ -142,21 +179,74 @@ export function VendorSpecialistTable({
                       <TableCell className={cn("px-2", "py-2")}>
                         <div className="overflow-hidden max-w-0 min-w-full">
                           <p className={cn("text-sm", "font-medium", "text-foreground", "truncate")}>{booking.snapCustomer?.name ?? "—"}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{booking.snapCustomer?.mobileNumber ?? ""}</p>
+                          <Tooltip>
+                            <TooltipTrigger className="block truncate w-full text-left text-xs text-muted-foreground mt-0.5">
+                              {(() => {
+                                const raw = booking.snapCustomer?.mobileNumber ?? "";
+                                try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
+                                return raw;
+                              })()}
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="start" className="max-w-72">
+                              <ul className="space-y-1">
+                                {(() => {
+                                  const raw = booking.snapCustomer?.mobileNumber ?? "";
+                                  let nums: { name?: string; number: string }[] = [];
+                                  try { const arr = JSON.parse(raw); if (Array.isArray(arr)) nums = arr; } catch { nums = raw.split(/[,\n]+/).map((s: string) => ({ number: s.trim() })).filter((e) => e.number); }
+                                  return nums.map((e, i) => <li key={i} className="text-sm">{e.name ? <><span className="text-muted-foreground">{e.name}:</span> {e.number}</> : e.number}</li>);
+                                })()}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
                           <p className={cn("text-xs", "text-muted-foreground", "mt-0.5", "sm:hidden")}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
+                          <div className={cn("flex", "flex-wrap", "items-center", "gap-1", "mt-1")}>
+                            <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
+                              <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
+                              {booking.bookingStatus}
+                            </span>
+                            <span className={cn("inline-flex", "items-center", "px-1.5", "py-0.5", "rounded-full", "border", "border-border", "bg-muted", "text-muted-foreground", "text-[10px]", "font-medium")}>
+                              {booking.paymentMethod?.bankName ?? "N/A"}
+                            </span>
+                            {booking.weddingSession && (
+                              <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-muted text-muted-foreground")}>
+                                {SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}
+                              </span>
+                            )}
+                            {booking.sourceOfInformation?.name && (
+                              <span className={cn("inline-flex", "items-center", "px-1.5", "py-0.5", "rounded-full", "text-[10px]", "font-medium", "bg-muted", "text-muted-foreground")}>
+                                {booking.sourceOfInformation.name}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>
-                        <p className="text-sm">{booking.snapVenue?.venueName ?? "—"}</p>
-                        {booking.poNumber && (
-                          <p className="text-xs text-muted-foreground font-mono">{booking.poNumber}</p>
-                        )}
+                        <div className="leading-tight">
+                          <span className={cn("block", "truncate", "text-sm", "font-medium")}>{booking.snapVenue?.venueName ?? "—"}</span>
+                          {booking.poNumber ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
+                              className={cn("inline-flex", "items-center", "max-w-full", "px-1.5", "py-0.5", "rounded", "bg-muted", "text-[10px]", "font-mono", "text-muted-foreground", "hover:bg-accent", "transition-colors", "cursor-pointer", "truncate", "mt-0.5")}
+                            >
+                              <span className="truncate">{booking.poNumber}</span>
+                            </button>
+                          ) : (
+                            <span className={cn("text-muted-foreground", "text-[10px]", "block", "mt-0.5")}>No PO</span>
+                          )}
+                        </div>
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>
-                        <p className="text-sm">{booking.snapPackage?.packageName ?? "—"}</p>
-                        <p className="text-xs text-muted-foreground">{booking.snapPackageVariant?.variantName ?? ""}</p>
+                        <div className="leading-tight">
+                          <span className={cn("truncate", "block")}>{booking.snapPackage?.packageName ?? "—"}</span>
+                          {booking.snapPackageVariant && (
+                            <>
+                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackageVariant.variantName}</span>
+                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackageVariant.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackageVariant.price) - (booking.discountAmount ?? 0)))}</span>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell", "whitespace-nowrap", "text-sm")}>
@@ -164,12 +254,22 @@ export function VendorSpecialistTable({
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>
-                        <span className={cn(
-                          "text-xs font-medium border rounded-full px-2 py-0.5",
-                          STATUS_CLASSES[booking.bookingStatus] ?? "text-muted-foreground border-border",
-                        )}>
-                          {booking.bookingStatus}
-                        </span>
+                        {(() => {
+                          const record = approvalMap.get(booking.id);
+                          if (!record) return <span className={cn("text-xs", "text-muted-foreground")}>—</span>;
+                          return (
+                            <span
+                              className={cn(
+                                "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
+                                record.status === "approved" && "bg-primary text-primary-foreground",
+                                record.status === "pending" && "bg-muted text-muted-foreground",
+                                record.status === "rejected" && "bg-destructive/10 text-destructive",
+                              )}
+                            >
+                              {record.status === "approved" ? "Approved" : record.status === "pending" ? "Pending" : "Rejected"}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
 
                       <TableCell className={cn("px-1", "py-2", "text-right", "pr-3")} onClick={(e) => e.stopPropagation()}>
