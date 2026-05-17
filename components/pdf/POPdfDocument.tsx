@@ -39,9 +39,9 @@ const s = StyleSheet.create({
   sectionTitle: { fontSize: 9, fontWeight: "bold", marginVertical: 8 },
   poNumber: { fontSize: 8, fontWeight: "bold", marginBottom: 8, textAlign: "right" },
   divider: { borderBottomWidth: 1, borderBottomColor: "#000", marginVertical: 8 },
-  termRow: { flexDirection: "row", marginBottom: 2, alignItems: "flex-start" },
-  termNo: { width: 18, fontWeight: "bold", textAlign: "right", marginRight: 4 },
-  termText: { fontSize: 8, flex: 1, textAlign: "justify" },
+  termRow: { flexDirection: "row", marginBottom: 10, alignItems: "flex-start" },
+  termNo: { width: 18, fontWeight: "bold", textAlign: "right", marginRight: 4, fontSize: 9 },
+  termText: { fontSize: 9, flex: 1, textAlign: "justify" },
   table: { marginTop: 16, borderWidth: 1, borderColor: "#000" },
   tableHeader: { flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000", minHeight: 20 },
   tableRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000", minHeight: 20 },
@@ -149,9 +149,9 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
 
       if (mainText) {
         nodes.push(
-          <View key={k++} style={{ flexDirection: "row", marginLeft: indent, marginBottom: 1 }}>
-            <Text style={{ fontSize: 8, width: type === "ol" ? 14 : 8 }}>{bullet}</Text>
-            <Text style={{ fontSize: 8, flex: 1 }}>{parseInlineHtml(mainText)}</Text>
+          <View key={k++} style={{ flexDirection: "row", marginLeft: indent, marginBottom: depth === 0 ? 6 : 2 }}>
+            <Text style={{ fontSize: 9, width: type === "ol" ? 18 : 10 }}>{bullet}</Text>
+            <Text style={{ fontSize: 9, flex: 1 }}>{parseInlineHtml(mainText)}</Text>
           </View>
         );
       }
@@ -207,7 +207,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
     for (const seg of segments) {
       if (seg.type === "text") {
         const clean = seg.content.replace(/<\/?p>/g, "").trim();
-        if (clean) elements.push(<Text key={k++} style={{ fontSize: 8, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(clean)}</Text>);
+        if (clean) elements.push(<Text key={k++} style={{ fontSize: 9, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(clean)}</Text>);
       } else {
         elements.push(<View key={k++}>{renderList(seg.content, seg.listType!, 0, seg.start ?? 1)}</View>);
       }
@@ -216,7 +216,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
   }
 
   const blocks = html.replace(/^<p>|<\/p>$/g, "").split(/<\/p>\s*<p>|<br\s*\/?>/).filter(Boolean);
-  return (<Text style={{ fontSize: 8, fontWeight: baseFontWeight as "normal" | "bold" }}>{blocks.map((block, i) => { const c = block.replace(/<\/?p>/g, "").trim(); if (!c) return null; return (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>); })}</Text>);
+  return (<Text style={{ fontSize: 9, fontWeight: baseFontWeight as "normal" | "bold" }}>{blocks.map((block, i) => { const c = block.replace(/<\/?p>/g, "").trim(); if (!c) return null; return (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>); })}</Text>);
 }
 
 function renderHtmlToPdf(html: string) {
@@ -495,9 +495,8 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
         <View>
           {/* Title */}
           <View style={{ alignItems: "center", marginBottom: 16 }}>
-            <Text style={s.title}>
-              PURCHASE ORDER PACKAGE {varSnap?.pax ?? "800"} PAX - {(brandName || "BRAND NAME").toUpperCase()}
-            </Text>
+            <Text style={s.title}>PURCHASE ORDER PACKAGE</Text>
+            <Text style={s.title}>{varSnap?.variantName ? `${varSnap.variantName.toUpperCase()} ` : ""}{varSnap?.pax ?? "800"} PAX - {(brandName || "BRAND NAME").toUpperCase()}</Text>
             <Text style={s.subtitle}>{venueName || "VENUE NAME"}</Text>
             <Text style={s.headerAddress}>{booking.snapVenue?.address ?? "-"}</Text>
           </View>
@@ -520,41 +519,47 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             ))
           )}
 
-          {/* Detail Section — same View as T&C to eliminate boundary gap */}
-          {/* Mini Form */}
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 40, marginBottom: 16 }}>
-            <View style={{ flexDirection: "column", gap: 4, flex: 1, paddingRight: 12 }}>
-              <Text style={{ fontSize: 9 }}>Nama : {booking.snapCustomer?.name ?? "_____________________"}</Text>
-              <Text style={{ fontSize: 9 }}>
-                {"No. Telp : "}
-                {(() => {
-                  const raw = booking.snapCustomer?.mobileNumber;
-                  if (!raw) return "_____________________";
-                  try {
-                    const arr = JSON.parse(raw) as { name?: string; number: string }[];
-                    if (Array.isArray(arr)) return arr.map((e) => (e.name ? `${e.number} (${e.name})` : e.number)).join(", ");
-                  } catch { /* not JSON */ }
-                  return raw;
-                })()}
-              </Text>
-              <Text style={{ fontSize: 9 }}>No.KTP : {booking.snapCustomer?.nikNumber ?? "_____________________"}</Text>
-              <Text style={{ fontSize: 9 }}>Alamat : {booking.snapCustomer?.ktpAddress ?? "_____________________"}</Text>
+          {/* Detail Section — break to new page when T&C is long */}
+          <View wrap={false}>
+            {/* Mini Form */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 40, marginBottom: 4 }}>
+              <View style={{ flexDirection: "column", gap: 4, flex: 1, paddingRight: 12 }}>
+                <Text style={{ fontSize: 9 }}>Nama : {booking.snapCustomer?.name ?? "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>
+                  {"No. Telp : "}
+                  {(() => {
+                    const raw = booking.snapCustomer?.mobileNumber;
+                    if (!raw) return "_____________________";
+                    try {
+                      const arr = JSON.parse(raw) as { name?: string; number: string }[];
+                      if (Array.isArray(arr)) return arr.map((e) => (e.name ? `${e.number} (${e.name})` : e.number)).join(", ");
+                    } catch { /* not JSON */ }
+                    return raw;
+                  })()}
+                </Text>
+                <Text style={{ fontSize: 9 }}>No.KTP : {booking.snapCustomer?.nikNumber ?? "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>Alamat : {booking.snapCustomer?.ktpAddress ?? "_____________________"}</Text>
+              </View>
+              <View style={{ flexDirection: "column", gap: 4 }}>
+                <Text style={{ fontSize: 9 }}>Acara : {(() => { const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" }; return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception"; })()}</Text>
+                <Text style={{ fontSize: 9 }}>Hari/Tanggal : {new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
+                <Text style={{ fontSize: 9 }}>Jam : {booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>Tempat : {venueName}</Text>
+              </View>
             </View>
-            <View style={{ flexDirection: "column", gap: 4 }}>
-              <Text style={{ fontSize: 9 }}>Acara : {(() => { const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" }; return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception"; })()}</Text>
-              <Text style={{ fontSize: 9 }}>Hari/Tanggal : {new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
-              <Text style={{ fontSize: 9 }}>Jam : {booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "_____________________"}</Text>
-              <Text style={{ fontSize: 9 }}>Tempat : {venueName}</Text>
+
+            {/* Table Header — kept with mini form */}
+            <View style={s.table}>
+              <View style={s.tableHeader}>
+                <Text style={[s.tableCell, { width: "8%", fontWeight: "bold", fontSize: 9 }]}>NO</Text>
+                <Text style={[s.tableCell, { width: "72%", fontWeight: "bold", fontSize: 9 }]}>DESCRIPTION</Text>
+                <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 9 }]}>Total (Rp.)</Text>
+              </View>
             </View>
           </View>
 
-          {/* Table */}
-          <View style={s.table}>
-            <View style={s.tableHeader}>
-              <Text style={[s.tableCell, { width: "8%", fontWeight: "bold", fontSize: 9 }]}>NO</Text>
-              <Text style={[s.tableCell, { width: "72%", fontWeight: "bold", fontSize: 9 }]}>DESCRIPTION</Text>
-              <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 9 }]}>Total (Rp.)</Text>
-            </View>
+          {/* Table Body */}
+          <View style={{ borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: "#000" }}>
             {(() => {
               const groups: (typeof tableRows)[] = [];
               let current: typeof tableRows = [];
@@ -565,17 +570,17 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 return (
                   <View key={gi} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
                     <View style={{ width: "8%", borderRightWidth: 1, borderColor: "#000", justifyContent: "flex-start" }}>
-                      {noValue ? <Text style={{ padding: 4, fontSize: 8 }}>{noValue}</Text> : null}
+                      {noValue ? <Text style={{ padding: 4, fontSize: 9 }}>{noValue}</Text> : null}
                     </View>
                     <View style={{ flex: 1, flexDirection: "column" }}>
                       {group.map((row, ri) => (
                         <View key={ri} style={{ flexDirection: "row", borderBottomWidth: ri < group.length - 1 ? 1 : 0, borderColor: "#000", minHeight: 18 }}>
                           {row.desc.includes("<ul>") || row.desc.includes("<ol>") ? (
-                            <View style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000" }}>{parseRichText(row.desc)}</View>
+                            <View style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", ...(row.isTakeout ? { opacity: 0.4 } : {}) }}>{parseRichText(row.desc)}</View>
                           ) : (
-                            <Text style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 8, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc)}</Text>
+                            <Text style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 9, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc)}</Text>
                           )}
-                          <Text style={{ width: "21.74%", padding: 4, fontSize: 8 }}>{row.total}</Text>
+                          <Text style={{ width: "21.74%", padding: 4, fontSize: 9 }}>{row.total}</Text>
                         </View>
                       ))}
                     </View>
@@ -651,34 +656,34 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               )}
               {/* Client */}
               <View style={{ flex: 1, alignItems: "center" }}>
-                {sigs?.client?.signature ? (
-                  // eslint-disable-next-line jsx-a11y/alt-text
-                  <Image src={sigs.client.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                ) : (
-                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                )}
+                <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
+                  {sigs?.client?.signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image src={sigs.client.signature} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
+                  ) : null}
+                </View>
                 <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
                 <Text style={s.signatureLabel}>Client</Text>
               </View>
               {/* Event Specialist */}
               <View style={{ flex: 1, alignItems: "center" }}>
-                {sigs?.sales?.signature ? (
-                  // eslint-disable-next-line jsx-a11y/alt-text
-                  <Image src={sigs.sales.signature} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                ) : (
-                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                )}
+                <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
+                  {sigs?.sales?.signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image src={sigs.sales.signature} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
+                  ) : null}
+                </View>
                 <Text style={s.signerName}>({sigs?.sales?.name ?? booking.sales?.fullName ?? ""})</Text>
                 <Text style={s.signatureLabel}>Event Specialist</Text>
               </View>
               {/* Head of Marketing */}
               <View style={{ flex: 1, alignItems: "center" }}>
-                {sigs?.manager?.signature ? (
-                  // eslint-disable-next-line jsx-a11y/alt-text
-                  <Image src={sigs.manager.signature as string} style={{ width: 100, height: 50, marginBottom: 4 }} />
-                ) : (
-                  <View style={{ width: 100, height: 50, marginBottom: 4 }} />
-                )}
+                <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
+                  {sigs?.manager?.signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image src={sigs.manager.signature as string} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
+                  ) : null}
+                </View>
                 <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
                 <Text style={s.signatureLabel}>Head of Marketing</Text>
               </View>
