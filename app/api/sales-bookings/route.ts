@@ -1,4 +1,4 @@
-import { getSalesBookings } from "@/lib/queries/my-team";
+import { getSalesBookings } from "@/lib/queries/groups";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 
