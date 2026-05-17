@@ -66,13 +66,13 @@ function fmtRp(n: number) {
 }
 
 function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
-  const url = useMemo(() => {
-    if (!file.type.startsWith("image/")) return null;
-    return URL.createObjectURL(file);
-  }, [file]);
+  const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
-    return () => { if (url) URL.revokeObjectURL(url); };
-  }, [url]);
+    if (!file.type.startsWith("image/")) { setUrl(null); return; }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
   if (!url) return null;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
