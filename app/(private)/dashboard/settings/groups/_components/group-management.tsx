@@ -21,7 +21,7 @@ import {
   createGroup, updateGroup, deleteGroup,
   addGroupMember, removeGroupMember,
   reorderGroups, reorderGroupMembers,
-} from "@/actions/group";
+} from "@/actions/groups";
 import type { GroupsQueryResult, GroupQueryItem } from "@/lib/queries/groups";
 import type { UsersQueryResult } from "@/lib/queries/users";
 import { cn } from "../../../../../../lib/utils";

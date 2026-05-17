@@ -43,3 +43,7 @@ next-env.d.ts
 
 # Kiro
 Screenshot*.png
+
+.superpowers/
+.claude/
+docs/superpowers/

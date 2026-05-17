@@ -5,9 +5,8 @@ const FLOWS = [
     module: "package",
     name: "Approval Package",
     steps: [
-      { sortOrder: 1, roleName: "sales" },
-      { sortOrder: 2, roleName: "manager" },
-      { sortOrder: 3, roleName: "finance" },
+      { sortOrder: 1, roleName: "manager" },
+      { sortOrder: 2, roleName: "finance" },
     ],
   },
   {

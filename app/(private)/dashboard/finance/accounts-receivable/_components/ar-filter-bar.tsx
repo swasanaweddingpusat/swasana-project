@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
-import type { ARFilters, ARInvoiceStatus } from "@/types/finance";
+import type { ARFilters, ARTerminStatus } from "@/types/finance";
 
 interface ARFilterBarProps {
   filters: ARFilters;
@@ -16,12 +16,12 @@ interface ARFilterBarProps {
   salesPics?: { id: string; name: string }[];
 }
 
-const STATUS_OPTIONS: { value: ARInvoiceStatus; label: string }[] = [
-  { value: "paid", label: "Paid" },
+const STATUS_OPTIONS: { value: ARTerminStatus; label: string }[] = [
+  { value: "paid", label: "Lunas" },
   { value: "partial", label: "Partial" },
+  { value: "overdue", label: "Aging" },
   { value: "unpaid", label: "Unpaid" },
-  { value: "unissued", label: "Unissued" },
-  { value: "generated", label: "Generated" },
+  { value: "not_due_yet", label: "Not Due Yet" },
 ];
 
 export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics = [] }: ARFilterBarProps) {
@@ -32,7 +32,7 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select value={filters.status ?? ""} onValueChange={(v) => update("status", v as ARInvoiceStatus)}>
+      <Select value={filters.status ?? ""} onValueChange={(v) => update("status", v as ARTerminStatus)}>
         <SelectTrigger className="w-35 h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
         <SelectContent>
           {STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -58,11 +58,9 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
       )}
 
       <Popover>
-        <PopoverTrigger>
-          <Button variant="outline" size="sm" className="h-8 text-xs font-normal">
-            <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-            {filters.dateRange?.from ? format(new Date(filters.dateRange.from), "dd MMM") : "From"}
-          </Button>
+        <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-normal hover:bg-accent">
+          <CalendarIcon className="h-3.5 w-3.5" />
+          {filters.dateRange?.from ? format(new Date(filters.dateRange.from), "dd MMM") : "From"}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar mode="single"
@@ -73,11 +71,9 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
       </Popover>
 
       <Popover>
-        <PopoverTrigger>
-          <Button variant="outline" size="sm" className="h-8 text-xs font-normal">
-            <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-            {filters.dateRange?.to ? format(new Date(filters.dateRange.to), "dd MMM") : "To"}
-          </Button>
+        <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-normal hover:bg-accent">
+          <CalendarIcon className="h-3.5 w-3.5" />
+          {filters.dateRange?.to ? format(new Date(filters.dateRange.to), "dd MMM") : "To"}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar mode="single"

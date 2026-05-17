@@ -34,7 +34,7 @@ export function UserMenu() {
             {session?.user?.name ?? "—"}
           </span>
           <span className={cn('text-[10px]', 'text-gray-400', 'mt-0.5')}>
-            {session?.user?.roleName ?? ""}
+            {session?.user?.roleName?.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? ""}
           </span>
         </div>
         <Avatar className={cn('h-8', 'w-8')}>

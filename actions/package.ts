@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
@@ -41,63 +42,57 @@ export async function createPackage(data: unknown) {
   try {
     const { signature, ...pkgData } = parsed.data;
 
-    // Fetch flow outside transaction (read-only)
     const flow = await db.approvalFlow.findUnique({
       where: { module: "package" },
       include: { steps: { orderBy: { sortOrder: "asc" } } },
     });
 
-    const pkg = await db.$transaction(async (tx) => {
-      const created = await tx.package.create({ data: { ...pkgData, approvalStatus: "pending" } });
+    const packageId = crypto.randomUUID();
+    const recordId = crypto.randomUUID();
+    const now = new Date();
+    const creatorRoleId = session.user.roleId;
+    const creatorStepIdx = flow ? flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId) : -1;
+    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0);
 
-      if (flow && flow.steps.length > 0) {
-        const record = await tx.approvalRecord.create({
-          data: { module: "package", entityId: created.id, status: "pending", createdById: session.user.profileId, signature: signature ?? null },
-        });
-
-        const creatorRoleId = session.user.roleId;
-        const creatorStepIdx = flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId);
-
-        for (let i = 0; i < flow.steps.length; i++) {
-          const step = flow.steps[i];
-          // If creator's role is in the flow, auto-approve up to their level
-          // If creator's role is NOT in the flow, auto-approve step 1 only
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.package.create({ data: { id: packageId, ...pkgData, approvalStatus: "pending" } }),
+      ...(flow && flow.steps.length > 0 ? [
+        db.approvalRecord.create({
+          data: { id: recordId, module: "package", entityId: packageId, status: "pending", createdById: session.user.profileId!, signature: signature ?? null },
+        }),
+        ...flow.steps.map((step, i) => {
           const shouldAutoApprove = creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
           const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
-
-          await tx.approvalRecordStep.create({
+          return db.approvalRecordStep.create({
             data: {
-              recordId: record.id, stepOrder: step.sortOrder, approverType: step.approverType,
-              approverRoleId: step.approverRoleId, approverUserId: step.approverUserId,
+              recordId, stepOrder: step.sortOrder, approverType: step.approverType,
+              approverRoleId: step.approverRoleId ?? null, approverUserId: step.approverUserId ?? null,
               status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session.user.profileId : null,
-              decidedAt: shouldAutoApprove ? new Date() : null,
+              decidedById: shouldAutoApprove ? session.user.profileId! : null,
+              decidedAt: shouldAutoApprove ? now : null,
               signature: isCreatorStep ? (signature ?? null) : null,
             },
           });
-        }
+        }),
+        ...(allAutoApproved ? [
+          db.approvalRecord.update({ where: { id: recordId }, data: { status: "approved" } }),
+          db.package.update({ where: { id: packageId }, data: { approvalStatus: "approved" } }),
+        ] : []),
+      ] : []),
+    ];
 
-        const allSteps = await tx.approvalRecordStep.findMany({ where: { recordId: record.id } });
-        const allApproved = allSteps.every((s) => s.status === "approved");
-        if (allApproved) {
-          await tx.approvalRecord.update({ where: { id: record.id }, data: { status: "approved" } });
-          await tx.package.update({ where: { id: created.id }, data: { approvalStatus: "approved" } });
-        }
-      }
-
-      return created;
-    });
+    await db.$transaction(ops);
 
     await logAudit({
       userId: session.user.id,
       action: "packages.create",
       entityType: "package",
-      entityId: pkg.id,
-      description: `Created package "${pkg.packageName}"`,
+      entityId: packageId,
+      description: `Created package "${pkgData.packageName}"`,
     });
 
-    revalidateTag("packages", { expire: 0 });
-    return { success: true, data: pkg };
+    revalidateTag("packages", "max");
+    return { success: true, data: { id: packageId, ...pkgData } };
   } catch (e) {
     console.error("[createPackage]", e);
     return { success: false, error: "Terjadi kesalahan." };
@@ -115,65 +110,48 @@ export async function updatePackage(id: string, data: unknown) {
 
   const { signature, ...pkgData } = parsed.data;
 
-  const flow = await db.approvalFlow.findUnique({
-    where: { module: "package" },
-    include: { steps: { orderBy: { sortOrder: "asc" } } },
-  });
+  // Read-only queries before transaction
+  const [flow, existing] = await Promise.all([
+    db.approvalFlow.findUnique({ where: { module: "package" }, include: { steps: { orderBy: { sortOrder: "asc" } } } }),
+    db.approvalRecord.findUnique({ where: { module_entityId: { module: "package", entityId: id } }, select: { id: true } }),
+  ]);
 
   try {
-    await db.$transaction(async (tx) => {
-      await tx.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending" } });
+    const recordId = existing?.id ?? crypto.randomUUID();
+    const now = new Date();
+    const creatorRoleId = session.user.roleId;
+    const creatorStepIdx = flow ? flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId) : -1;
+    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0);
 
-      if (flow && flow.steps.length > 0) {
-        const existing = await tx.approvalRecord.findUnique({
-          where: { module_entityId: { module: "package", entityId: id } },
-        });
-
-        let recordId: string;
-
-        if (existing) {
-          // Delete old steps only, preserve record + createdById
-          await tx.approvalRecordStep.deleteMany({ where: { recordId: existing.id } });
-          await tx.approvalRecord.update({
-            where: { id: existing.id },
-            data: { status: "pending", updatedById: session.user.profileId, signature: signature ?? null },
-          });
-          recordId = existing.id;
-        } else {
-          const record = await tx.approvalRecord.create({
-            data: { module: "package", entityId: id, status: "pending", createdById: session.user.profileId, signature: signature ?? null },
-          });
-          recordId = record.id;
-        }
-
-        const creatorRoleId = session.user.roleId;
-        const creatorStepIdx = flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId);
-
-        for (let i = 0; i < flow.steps.length; i++) {
-          const step = flow.steps[i];
-          // If creator's role is in the flow, auto-approve up to their level
-          // If creator's role is NOT in the flow, auto-approve step 1 only
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending" } }),
+      ...(flow && flow.steps.length > 0 ? [
+        db.approvalRecordStep.deleteMany({ where: { recordId } }),
+        existing
+          ? db.approvalRecord.update({ where: { id: existing.id }, data: { status: "pending", updatedById: session.user.profileId!, signature: signature ?? null } })
+          : db.approvalRecord.create({ data: { id: recordId, module: "package", entityId: id, status: "pending", createdById: session.user.profileId!, signature: signature ?? null } }),
+        ...flow.steps.map((step, i) => {
           const shouldAutoApprove = creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
           const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
-          await tx.approvalRecordStep.create({
+          return db.approvalRecordStep.create({
             data: {
               recordId, stepOrder: step.sortOrder, approverType: step.approverType,
-              approverRoleId: step.approverRoleId, approverUserId: step.approverUserId,
+              approverRoleId: step.approverRoleId ?? null, approverUserId: step.approverUserId ?? null,
               status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session.user.profileId : null,
-              decidedAt: shouldAutoApprove ? new Date() : null,
+              decidedById: shouldAutoApprove ? session.user.profileId! : null,
+              decidedAt: shouldAutoApprove ? now : null,
               signature: isCreatorStep ? (signature ?? null) : null,
             },
           });
-        }
+        }),
+        ...(allAutoApproved ? [
+          db.approvalRecord.update({ where: { id: recordId }, data: { status: "approved" } }),
+          db.package.update({ where: { id }, data: { approvalStatus: "approved" } }),
+        ] : []),
+      ] : []),
+    ];
 
-        const allSteps = await tx.approvalRecordStep.findMany({ where: { recordId } });
-        if (allSteps.every((s) => s.status === "approved")) {
-          await tx.approvalRecord.update({ where: { id: recordId }, data: { status: "approved" } });
-          await tx.package.update({ where: { id }, data: { approvalStatus: "approved" } });
-        }
-      }
-    });
+    await db.$transaction(ops);
 
     await logAudit({
       userId: session.user.id,
@@ -183,7 +161,7 @@ export async function updatePackage(id: string, data: unknown) {
       description: `Updated package`,
     });
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true, data: { id } };
   } catch (e) {
     console.error("[updatePackage]", e);
@@ -208,7 +186,7 @@ export async function deletePackage(id: string) {
       description: `Deleted package "${pkg.packageName}"`,
     });
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[deletePackage]", e);
@@ -233,7 +211,7 @@ export async function deleteBulkPackages(ids: string[]) {
       description: `Deleted ${ids.length} packages`,
     });
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteBulkPackages]", e);
@@ -254,7 +232,7 @@ export async function createVariant(data: unknown) {
 
   try {
     const variant = await db.packageVariant.create({ data: parsed.data });
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true, data: variant };
   } catch (e) {
     console.error("[createVariant]", e);
@@ -273,7 +251,7 @@ export async function updateVariant(id: string, data: unknown) {
 
   try {
     const variant = await db.packageVariant.update({ where: { id }, data: parsed.data });
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true, data: variant };
   } catch (e) {
     console.error("[updateVariant]", e);
@@ -289,7 +267,7 @@ export async function deleteVariant(id: string) {
 
   try {
     await db.packageVariant.delete({ where: { id } });
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteVariant]", e);
@@ -323,7 +301,7 @@ export async function saveVendorItems(
       ),
     ]);
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[saveVendorItems]", e);
@@ -357,7 +335,7 @@ export async function saveInternalItems(
       ),
     ]);
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[saveInternalItems]", e);
@@ -367,7 +345,7 @@ export async function saveInternalItems(
 
 export async function saveVariantPrices(
   variantId: string,
-  categories: { categoryName: string; basePrice: number; sortOrder: number }[],
+  categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[],
   margin: number
 ) {
   const permResult = await requirePermission({ module: "package", action: "set-harga" });
@@ -384,12 +362,13 @@ export async function saveVariantPrices(
           categoryName: c.categoryName,
           basePrice: c.basePrice,
           sortOrder: c.sortOrder,
+          isShow: c.isShow,
         })),
       }),
       db.packageVariant.update({ where: { id: variantId }, data: { margin } }),
     ]);
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[saveVariantPrices]", e);
@@ -417,7 +396,7 @@ export async function updateVariantTC(variantId: string, termAndCondition: strin
       entityId: variantId,
       description: `Updated T&C for variant ${variantId}`,
     });
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
     console.error("[updateVariantTC]", e);
@@ -441,7 +420,7 @@ export async function togglePackageAvailable(id: string): Promise<{ success: tru
       db.package.update({ where: { id }, data: { available: !pkg.available } }),
     ]);
 
-    revalidateTag("packages", { expire: 0 });
+    revalidateTag("packages", "max");
     return { success: true, available: updated.available };
   } catch (err) {
     console.error("[togglePackageAvailable]", err);

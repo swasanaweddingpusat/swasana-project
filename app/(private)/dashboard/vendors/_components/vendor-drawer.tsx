@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useCreateVendor, useUpdateVendor } from "@/hooks/use-vendors";
+import { useCreateVendor, useUpdateVendor, useCreateVendorCategory } from "@/hooks/use-vendors";
 import type { VendorCategoryItem } from "@/lib/queries/vendors";
 import type { PaymentMethodInput } from "@/lib/validations/vendor";
 import { cn } from "../../../../../lib/utils";
@@ -26,6 +26,7 @@ interface VendorDrawerProps {
 export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDrawerProps) {
   const createMut = useCreateVendor();
   const updateMut = useUpdateVendor();
+  const createCatMut = useCreateVendorCategory();
 
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -64,6 +65,16 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
 
   function updatePM(idx: number, field: keyof PaymentMethodInput, value: string) {
     setPaymentMethods((p) => p.map((m, i) => (i === idx ? { ...m, [field]: value } : m)));
+  }
+
+  async function handleAddCategory(name: string): Promise<void> {
+    const res = await createCatMut.mutateAsync({ name });
+    if (res.success && res.data) {
+      setCategoryId(res.data.id);
+      toast.success(`Kategori "${res.data.name}" berhasil ditambahkan`);
+    } else {
+      toast.error(res.error ?? "Gagal menambahkan kategori");
+    }
   }
 
   async function handleSave() {
@@ -120,6 +131,8 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
               placeholder="Pilih kategori"
               searchPlaceholder="Cari kategori..."
               emptyText="Tidak ada kategori"
+              onAdd={handleAddCategory}
+              addingLabel="Menambahkan kategori..."
               className="text-sm"
             />
           </div>

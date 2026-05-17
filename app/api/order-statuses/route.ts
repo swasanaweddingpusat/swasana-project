@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getOrderStatuses } from "@/lib/queries/order-status";
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function GET() {
-  const { session, response } = await requirePermissionForRoute({ module: "settings-order-status", action: "view" });
-  if (response) return response;
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!apiLimiter.check(`order-statuses:${session.user.id}`)) return rateLimitResponse();
 
   try {

@@ -79,13 +79,13 @@ export async function POST(req: Request) {
       termOfPayments: booking.termOfPayments,
       paymentMethod: booking.paymentMethod,
       sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
-      signatures: null, // Client-facing PO doesn't show internal signatures
+      signatures: null, // will be populated from ApprovalRecordStep below
       createdAt: booking.createdAt,
       discountName: booking.discountName,
       discountAmount: booking.discountAmount,
     };
 
-     
+
     let termAndConditionHtml: string | null;
     if (booking.packageVariantId) {
       const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
@@ -93,8 +93,31 @@ export async function POST(req: Request) {
     } else {
       termAndConditionHtml = null;
     }
-     
-    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />;
+
+    let emateraiData: { sn: string; qrBase64: string } | null = null;
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: booking.id } },
+      include: { steps: { orderBy: { stepOrder: "asc" }, include: { decidedBy: { select: { fullName: true } } } } },
+    });
+    if (approvalRecord) {
+      emateraiData =
+        approvalRecord.emateraiSn && approvalRecord.emateraiQrBase64
+          ? { sn: approvalRecord.emateraiSn, qrBase64: approvalRecord.emateraiQrBase64 }
+          : null;
+
+      const steps = approvalRecord.steps;
+      const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
+      const latestRound = steps.slice(-roundSize);
+      const roleStepsWithSig = latestRound.filter((s) => s.approverType === "role" && s.signature).sort((a, b) => a.stepOrder - b.stepOrder);
+      const salesStep = roleStepsWithSig[0] ?? null;
+      const managerStep = roleStepsWithSig[1] ?? null;
+      pdfBooking.signatures = {
+        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "" } } : {}),
+        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),
+      };
+    }
+
+    const pdfElement = <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} ematerai={emateraiData} />;
 
     const stream = await renderToStream(pdfElement);
 

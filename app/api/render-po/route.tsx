@@ -129,6 +129,7 @@ export async function POST(req: Request) {
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
     // Fetch signatures from ApprovalRecordStep (latest round)
+    let emateraiData: { sn: string; qrBase64: string } | null = null;
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: bookingId } },
       include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, decidedBy: { select: { fullName: true } } } } },
@@ -137,20 +138,25 @@ export async function POST(req: Request) {
       const steps = approvalRecord.steps;
       const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
       const latestRound = steps.slice(-roundSize);
-      const salesStep = latestRound.find((s) => s.approverType === "role" && s.approverRole?.name === "sales" && s.signature);
-      const managerStep = latestRound.find((s) => s.approverType === "role" && s.approverRole?.name === "manager" && s.signature);
-      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature);
+      const roleStepsWithSig = latestRound.filter((s) => s.approverType === "role" && s.signature).sort((a, b) => a.stepOrder - b.stepOrder);
+      const salesStep = roleStepsWithSig[0] ?? null;
+      const managerStep = roleStepsWithSig[1] ?? null;
+      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
       pdfBooking.signatures = {
         ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "" } } : {}),
         ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),
         ...(clientStep ? { client: { signature: clientStep.signature!, name: clientStep.decidedBy?.fullName ?? "" } } : {}),
       };
+      emateraiData =
+        approvalRecord.emateraiSn && approvalRecord.emateraiQrBase64
+          ? { sn: approvalRecord.emateraiSn, qrBase64: approvalRecord.emateraiQrBase64 }
+          : null;
     }
 
     const logoBase64 = await loadLogoBase64("swasana-logo.png");
 
     const stream = await renderToStream(
-      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} />
+      <POPdfDocument booking={pdfBooking} logoBase64={logoBase64} termAndConditionHtml={termAndConditionHtml} ematerai={emateraiData} />
     );
 
     return new NextResponse(stream as unknown as ReadableStream, {

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
@@ -11,6 +12,7 @@ import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { generateEmaterai } from "@/lib/peruri";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -22,48 +24,26 @@ export async function createBooking(data: unknown) {
 
   const input = parsed.data;
 
-  let newCustomerId: string | null = null;
-
   try {
     let customerId = input.customerId;
+    let isNewCustomer = false;
 
-    // Create or update customer
+    // Resolve customer: validate existing or prepare new
     if (!customerId && input.customerName) {
-      const c = await db.customer.create({
-        data: {
-          name: input.customerName,
-          mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
-          email: input.contactEmail || "-@placeholder.com",
-          nikNumber: input.contactNik || null,
-          ktpAddress: input.contactKtpAddress || null,
-          bitrixId: input.contactBitrixId || null,
-          type: "Other",
-          memberStatus: "Non-Member",
-          updatedBy: session!.user.name ?? session!.user.email,
-        },
-      });
-      customerId = c.id;
-      newCustomerId = c.id;
+      customerId = crypto.randomUUID();
+      isNewCustomer = true;
     } else if (customerId) {
       const existing = await db.customer.findUnique({ where: { id: customerId }, select: { id: true } });
       if (!existing) return { success: false, error: "Customer tidak ditemukan." };
-
-      const updates: Record<string, unknown> = {};
-      if (input.contactNumbers) updates.mobileNumber = JSON.parse(input.contactNumbers);
-      if (input.contactEmail) updates.email = input.contactEmail;
-      if (input.contactNik) updates.nikNumber = input.contactNik;
-      if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
-      if (input.contactBitrixId) updates.bitrixId = input.contactBitrixId;
-      if (Object.keys(updates).length > 0) {
-        updates.updatedBy = session!.user.name ?? session!.user.email;
-        await db.customer.update({ where: { id: customerId }, data: updates });
-      }
     }
 
     if (!customerId) return { success: false, error: "Customer wajib diisi." };
 
-    const [customer, venue, pkg, variant] = await Promise.all([
-      db.customer.findUniqueOrThrow({ where: { id: customerId } }),
+    let emateraiResult: { sn: string; qrBase64: string } | null = null;
+
+    // Fetch data needed for transaction — for new customers, build from input
+    const [existingCustomer, venue, pkg, variant] = await Promise.all([
+      isNewCustomer ? null : db.customer.findUniqueOrThrow({ where: { id: customerId } }),
       db.venue.findUniqueOrThrow({ where: { id: input.venueId }, include: { brand: true } }),
       db.package.findUniqueOrThrow({ where: { id: input.packageId } }),
       input.packageVariantId
@@ -73,6 +53,25 @@ export async function createBooking(data: unknown) {
           })
         : null,
     ]);
+
+    // Build customer data (from input for new, from DB for existing)
+    const customerData = isNewCustomer
+      ? {
+          id: customerId,
+          name: input.customerName!,
+          mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
+          email: input.contactEmail || "-@placeholder.com",
+          nikNumber: input.contactNik || null,
+          ktpAddress: input.contactKtpAddress || null,
+        }
+      : {
+          id: existingCustomer!.id,
+          name: existingCustomer!.name,
+          mobileNumber: existingCustomer!.mobileNumber,
+          email: existingCustomer!.email,
+          nikNumber: existingCustomer!.nikNumber,
+          ktpAddress: existingCustomer!.ktpAddress,
+        };
 
     const bookingId = crypto.randomUUID();
 
@@ -99,9 +98,50 @@ export async function createBooking(data: unknown) {
       );
     }
 
-    // Build array-form transaction
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ops: any[] = [
+    if (input.withMaterai) {
+      emateraiResult = await generateEmaterai(poNumber, new Date(input.bookingDate));
+    }
+
+    // Fetch approval flow before transaction so we can include it atomically
+    const flow = await db.approvalFlow.findUnique({
+      where: { module: "booking" },
+      include: { steps: { orderBy: { sortOrder: "asc" } } },
+    });
+
+    // Build array-form transaction — customer create/update included for atomicity
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (isNewCustomer) {
+      ops.push(
+        db.customer.create({
+          data: {
+            id: customerId,
+            name: input.customerName!,
+            mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
+            email: input.contactEmail || "-@placeholder.com",
+            nikNumber: input.contactNik || null,
+            ktpAddress: input.contactKtpAddress || null,
+            bitrixId: input.contactBitrixId || null,
+            type: "Other",
+            memberStatus: "Non-Member",
+            updatedBy: session!.user.name ?? session!.user.email,
+          },
+        })
+      );
+    } else {
+      const updates: Record<string, unknown> = {};
+      if (input.contactNumbers) updates.mobileNumber = JSON.parse(input.contactNumbers);
+      if (input.contactEmail) updates.email = input.contactEmail;
+      if (input.contactNik) updates.nikNumber = input.contactNik;
+      if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
+      if (input.contactBitrixId) updates.bitrixId = input.contactBitrixId;
+      if (Object.keys(updates).length > 0) {
+        updates.updatedBy = session!.user.name ?? session!.user.email;
+        ops.push(db.customer.update({ where: { id: customerId }, data: updates }));
+      }
+    }
+
+    ops.push(
       db.booking.create({
         data: {
           id: bookingId,
@@ -119,20 +159,21 @@ export async function createBooking(data: unknown) {
           signingLocation: input.signingLocation ?? null,
           discountName: input.specialBonusName ?? null,
           discountAmount: input.specialBonusAmount ?? 0,
+          withMaterai: input.withMaterai ?? false,
           poNumber,
         },
       }),
       db.snapCustomer.create({
         data: {
           bookingId,
-          customerId: customer.id,
-          name: customer.name,
-          email: customer.email,
-          mobileNumber: Array.isArray(customer.mobileNumber)
-            ? (customer.mobileNumber as Array<{ name?: string; number: string }>).map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", ")
-            : String(customer.mobileNumber ?? ""),
-          nikNumber: customer.nikNumber,
-          ktpAddress: customer.ktpAddress,
+          customerId: customerData.id,
+          name: customerData.name,
+          email: customerData.email,
+          mobileNumber: Array.isArray(customerData.mobileNumber)
+            ? (customerData.mobileNumber as Array<{ name?: string; number: string }>).map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", ")
+            : String(customerData.mobileNumber ?? ""),
+          nikNumber: customerData.nikNumber,
+          ktpAddress: customerData.ktpAddress,
         },
       }),
       db.snapVenue.create({
@@ -154,14 +195,22 @@ export async function createBooking(data: unknown) {
           notes: pkg.notes,
         },
       }),
-    ];
+    );
 
     if (variant) {
-      const variantBase = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+      const toggleMap = new Map(
+        (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
+      );
+      // Hidden categories (isShow=false) always included; visible ones respect isTakeout toggle
+      const variantBase = variant.categoryPrices.reduce((sum, c) => {
+        if (!c.isShow) return sum + c.basePrice;
+        const isTakeout = toggleMap.get(c.categoryName) ?? false;
+        return isTakeout ? sum : sum + c.basePrice;
+      }, 0);
       const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
       ops.push(
         db.snapPackageVariant.create({
-          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, termAndCondition: variant.termAndCondition ?? null },
+          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
         })
       );
       if (variant.internalItems.length > 0) {
@@ -178,6 +227,22 @@ export async function createBooking(data: unknown) {
           )
         );
       }
+      if (variant.categoryPrices.length > 0) {
+        ops.push(
+          ...variant.categoryPrices.map((cp) =>
+            db.snapPackageCategoryPrice.create({
+              data: {
+                bookingId,
+                categoryName: cp.categoryName,
+                basePrice: cp.basePrice,
+                sortOrder: cp.sortOrder,
+                isShow: cp.isShow,
+                isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
+              },
+            })
+          )
+        );
+      }
     }
 
     if (input.bonuses && input.bonuses.length > 0) {
@@ -191,82 +256,74 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i] } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i], paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund" } })
         )
       );
     }
 
-    // Neon HTTP adapter does not support $transaction — run sequentially
-    // Create booking first (other tables have FK to it)
-    // Neon WebSocket adapter supports $transaction array form
-    await db.$transaction(ops);
-
-    // Auto-create ApprovalRecord from ApprovalFlow
-    const flow = await db.approvalFlow.findUnique({
-      where: { module: "booking" },
-      include: { steps: { orderBy: { sortOrder: "asc" } } },
-    });
-
+    // Add ApprovalRecord + steps to the same transaction
     if (flow && flow.active) {
-      const record = await db.approvalRecord.create({
-        data: {
-          module: "booking",
-          entityId: bookingId,
-          status: "pending",
-          createdById: session!.user.profileId!,
-        },
-      });
-
-      // Determine creator's position in approval flow (same logic as package)
+      const approvalRecordId = crypto.randomUUID();
       const creatorRoleId = session!.user.roleId;
       const creatorStepIdx = flow.steps.findIndex(
         (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
       );
 
-      for (let i = 0; i < flow.steps.length; i++) {
-        const step = flow.steps[i];
-        // Auto-approve up to creator's level in the flow
-        // If creator's role is NOT in the flow, auto-approve step 1 only
-        const shouldAutoApprove = step.approverType !== "client" && (
-          creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
-        );
-        const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
-
-        await db.approvalRecordStep.create({
+      ops.push(
+        db.approvalRecord.create({
           data: {
-            recordId: record.id,
-            stepOrder: step.sortOrder,
-            approverType: step.approverType,
-            approverRoleId: step.approverRoleId,
-            approverUserId: step.approverUserId,
-            status: shouldAutoApprove ? "approved" : "pending",
-            decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-            decidedAt: shouldAutoApprove ? new Date() : null,
-            signature: isCreatorStep ? (input.signatureSales ?? null) : null,
+            id: approvalRecordId,
+            module: "booking",
+            entityId: bookingId,
+            status: "pending",
+            createdById: session!.user.profileId!,
+            emateraiSn: emateraiResult?.sn ?? null,
+            emateraiQrBase64: emateraiResult?.qrBase64 ?? null,
           },
-        });
-      }
+        }),
+        ...flow.steps.map((step, i) => {
+          const shouldAutoApprove = step.approverType !== "client" && (
+            creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
+          );
+          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
+          return db.approvalRecordStep.create({
+            data: {
+              recordId: approvalRecordId,
+              stepOrder: step.sortOrder,
+              approverType: step.approverType,
+              approverRoleId: step.approverRoleId,
+              approverUserId: step.approverUserId,
+              status: shouldAutoApprove ? "approved" : "pending",
+              decidedById: shouldAutoApprove ? session!.user.profileId! : null,
+              decidedAt: shouldAutoApprove ? new Date() : null,
+              signature: isCreatorStep ? (input.signatureSales ?? null) : null,
+            },
+          });
+        })
+      );
     }
+
+    await db.$transaction(ops);
 
     await logAudit({
       userId: session!.user.id,
       action: "created",
       entityType: "booking",
       entityId: bookingId,
-      changes: { customerId, venueId: input.venueId, packageId: input.packageId },
-      description: `Created booking for ${customer.name}`,
+      changes: { customerId, venueId: input.venueId, packageId: input.packageId, withMaterai: input.withMaterai ?? false },
+      description: `Created booking for ${customerData.name}`,
     });
 
     // Create initial PO revision snapshot
     await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
 
-    revalidateTag("bookings", { expire: 0 });
-    revalidateTag("customers", { expire: 0 });
+    revalidateTag("bookings", "max");
+    revalidateTag("customers", "max");
 
     // Notify all super admins about new booking (exclude creator)
     notifySuperAdmins({
       title: "Booking Baru",
-      message: `${session!.user.name ?? "User"} membuat booking untuk ${customer.name}.`,
+      message: `${session!.user.name ?? "User"} membuat booking untuk ${customerData.name}.`,
       type: "booking_created",
       entityType: "booking",
       entityId: bookingId,
@@ -281,10 +338,6 @@ export async function createBooking(data: unknown) {
 
     return { success: true, bookingId, termIds: createdTerms };
   } catch (e) {
-    // Rollback: delete newly created customer if booking failed
-    if (newCustomerId) {
-      try { await db.customer.delete({ where: { id: newCustomerId } }); } catch { /* noop */ }
-    }
     console.error("[createBooking]", e);
     return { success: false, error: "Gagal membuat booking." };
   }
@@ -335,7 +388,7 @@ export async function updateBooking(data: unknown) {
       description: `Updated booking`,
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
 
     return { success: true };
   } catch {
@@ -393,7 +446,7 @@ export async function deleteBooking(id: string) {
       description: "Deleted booking",
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal menghapus booking." };
@@ -440,7 +493,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
       description: `Transfer booking dari ${booking.sales?.fullName ?? "Unknown"} ke ${targetSales.fullName}`,
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mentransfer booking." };
@@ -479,7 +532,7 @@ export async function editBooking(data: unknown) {
       db.snapPackageVariant.findUnique({ where: { bookingId: id }, select: { variantName: true, pax: true, price: true } }),
     ]);
 
-    const ops: any[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
+    const ops: Prisma.PrismaPromise<unknown>[] = [
       // Update booking
       db.booking.update({
         where: { id },
@@ -559,59 +612,85 @@ export async function editBooking(data: unknown) {
           where: { id: rest.packageVariantId },
           include: { vendorItems: true, internalItems: true, categoryPrices: true },
         });
-        const variantBase = variant.categoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+
+        // Apply takeout toggles to price calculation (same logic as createBooking)
+        const toggleMap = new Map(
+          (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
+        );
+        const variantBase = variant.categoryPrices.reduce((sum, c) => {
+          if (!c.isShow) return sum + c.basePrice;
+          const isTakeout = toggleMap.get(c.categoryName) ?? false;
+          return isTakeout ? sum : sum + c.basePrice;
+        }, 0);
         const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
 
         // Upsert variant snapshot
         ops.push(
           db.snapPackageVariant.upsert({
             where: { bookingId: id },
-            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, termAndCondition: variant.termAndCondition ?? null },
-            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, termAndCondition: variant.termAndCondition ?? null },
+            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
+            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
           })
         );
 
-        // Replace internal + vendor items
+        // Replace internal + vendor items + category prices
         ops.push(
           db.snapPackageInternalItem.deleteMany({ where: { bookingId: id } }),
           db.snapPackageVendorItem.deleteMany({ where: { bookingId: id } }),
+          db.snapPackageCategoryPrice.deleteMany({ where: { bookingId: id } }),
           ...variant.internalItems.map((item, i) =>
             db.snapPackageInternalItem.create({ data: { bookingId: id, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
           ),
           ...variant.vendorItems.map((item, i) =>
             db.snapPackageVendorItem.create({ data: { bookingId: id, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
+          ),
+          ...variant.categoryPrices.map((cp) =>
+            db.snapPackageCategoryPrice.create({
+              data: {
+                bookingId: id,
+                categoryName: cp.categoryName,
+                basePrice: cp.basePrice,
+                sortOrder: cp.sortOrder,
+                isShow: cp.isShow,
+                isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
+              },
+            })
           )
         );
       } else {
-        // No variant — delete variant snapshot if exists
-        ops.push(db.snapPackageVariant.deleteMany({ where: { bookingId: id } }));
+        // No variant — delete variant + category price snapshots
+        ops.push(
+          db.snapPackageVariant.deleteMany({ where: { bookingId: id } }),
+          db.snapPackageCategoryPrice.deleteMany({ where: { bookingId: id } }),
+        );
       }
+    }
+
+    // Bonuses — replace existing atomically within transaction
+    if (parsed.data.bonuses && parsed.data.bonuses.length > 0) {
+      ops.push(
+        db.snapBonus.deleteMany({ where: { bookingId: id } }),
+        ...parsed.data.bonuses.map((bonus) =>
+          db.snapBonus.create({ data: { bookingId: id, vendorId: bonus.vendorId, vendorCategoryId: bonus.vendorCategoryId, vendorName: bonus.vendorName, description: bonus.description ?? null, qty: bonus.qty, nominal: bonus.nominal ?? 0 } })
+        )
+      );
+    }
+
+    // Term of payments — upsert atomically within transaction
+    if ((venueChanged || packageChanged || variantChanged) && rest.termOfPayments && rest.termOfPayments.length > 0) {
+      const existingTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
+      ops.push(
+        db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: existingTermIds } } }),
+        ...rest.termOfPayments.map((t) => {
+          if (t.id) {
+            return db.termOfPayment.update({ where: { id: t.id }, data: { name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
+          }
+          return db.termOfPayment.create({ data: { bookingId: id, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
+        })
+      );
     }
 
     await db.$transaction(ops);
-
-    // Update bonuses — delete existing, recreate
-    if (parsed.data.bonuses && parsed.data.bonuses.length > 0) {
-      await db.snapBonus.deleteMany({ where: { bookingId: id } });
-      await Promise.all(parsed.data.bonuses.map((bonus) =>
-        db.snapBonus.create({ data: { bookingId: id, vendorId: bonus.vendorId, vendorCategoryId: bonus.vendorCategoryId, vendorName: bonus.vendorName, description: bonus.description ?? null, qty: bonus.qty, nominal: bonus.nominal ?? 0 } })
-      ));
-    }
-
-    // Upsert term of payments (only when significant change triggers step 2)
-    if ((venueChanged || packageChanged || variantChanged) && rest.termOfPayments && rest.termOfPayments.length > 0) {
-      const existingTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
-      // Delete terms not in the new list
-      await db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: existingTermIds } } });
-      // Upsert each term
-      for (const t of rest.termOfPayments) {
-        if (t.id) {
-          await db.termOfPayment.update({ where: { id: t.id }, data: { name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
-        } else {
-          await db.termOfPayment.create({ data: { bookingId: id, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
-        }
-      }
-    }
 
     // Append new approval round — only when package/venue/variant changed
     if (venueChanged || packageChanged || variantChanged) {
@@ -634,8 +713,7 @@ export async function editBooking(data: unknown) {
           (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
         );
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newStepOps: any[] = flow.steps.map((flowStep, i) => {
+        const newStepOps: Prisma.PrismaPromise<unknown>[] = flow.steps.map((flowStep, i) => {
           const stepOrder = maxStepOrder + 1 + i;
           const shouldAutoApprove = flowStep.approverType !== "client" && (
             creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
@@ -729,8 +807,8 @@ export async function editBooking(data: unknown) {
       await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
     }
 
-    revalidateTag("bookings", { expire: 0 });
-    revalidateTag("customers", { expire: 0 });
+    revalidateTag("bookings", "max");
+    revalidateTag("customers", "max");
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mengupdate booking." };

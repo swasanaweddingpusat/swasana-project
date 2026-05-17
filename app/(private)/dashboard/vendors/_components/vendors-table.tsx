@@ -16,7 +16,6 @@ import type { VendorCategoryItem } from "@/lib/queries/vendors";
 import { toast } from "sonner";
 import SearchBar from "@/components/shared/search-bar";
 import { VendorDrawer } from "./vendor-drawer";
-import { VendorCategoryDrawer } from "./vendor-category-drawer";
 
 type FlatVendor = VendorCategoryItem["vendors"][number] & { categoryName: string };
 
@@ -29,9 +28,7 @@ export function VendorsTable() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [vendorDrawerOpen, setVendorDrawerOpen] = useState(false);
-  const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<FlatVendor | null>(null);
-  const [editingCategory, setEditingCategory] = useState<VendorCategoryItem | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [vendorToDelete, setVendorToDelete] = useState<FlatVendor | null>(null);
 
@@ -82,14 +79,9 @@ export function VendorsTable() {
     <>
       <div className={cn('flex', 'justify-end', 'items-center', 'mb-4', 'gap-2')}>
         {(can("vendor", "create") || isAdmin) && (
-          <>
-            <Button variant="outline" onClick={() => { setEditingVendor(null); setVendorDrawerOpen(true); }}>
-              <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Vendor
-            </Button>
-            <Button onClick={() => { setEditingCategory(null); setCategoryDrawerOpen(true); }}>
-              <Plus className={cn('w-4', 'h-4', 'mr-1')} /> New Category
-            </Button>
-          </>
+          <Button variant="outline" onClick={() => { setEditingVendor(null); setVendorDrawerOpen(true); }}>
+            <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Vendor
+          </Button>
         )}
       </div>
 
@@ -199,7 +191,6 @@ export function VendorsTable() {
       </Card>
 
       <VendorDrawer isOpen={vendorDrawerOpen} onClose={() => { setVendorDrawerOpen(false); setEditingVendor(null); }} vendor={editingVendor} categories={categories} />
-      <VendorCategoryDrawer isOpen={categoryDrawerOpen} onClose={() => { setCategoryDrawerOpen(false); setEditingCategory(null); }} category={editingCategory} />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-md">

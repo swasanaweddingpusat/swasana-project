@@ -447,11 +447,12 @@ Permission `(module, action)` tuples — kebab-case format:
 | `approval` | `edit` |
 | `customers` | `view`, `create`, `edit`, `delete` |
 | `finance-ar` | `view`, `create`, `edit`, `delete` |
+| `groups` | `view`, `view-all`, `create`, `edit`, `delete` |
 | `package` | `view`, `create`, `edit`, `delete`, `set-harga`, `term-&-condition`, `set-status` |
 | `vendor` | `view`, `create`, `edit`, `delete` |
+| `vendor-specialist` | `view`, `create`, `edit`, `delete` |
 | `settings-brands` | `view`, `create`, `edit`, `delete` |
 | `settings-venues` | `view`, `create`, `edit`, `delete` |
-| `settings-groups` | `view`, `create`, `edit`, `delete` |
 | `settings-users` | `view`, `create`, `edit`, `delete` |
 | `settings-education-level` | `view`, `create`, `edit`, `delete` |
 | `settings-event-types` | `view`, `create`, `edit`, `delete` |

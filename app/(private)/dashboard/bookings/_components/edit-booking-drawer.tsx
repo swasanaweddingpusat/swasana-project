@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
@@ -133,7 +133,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id })));
   const selectedPkg = packages.find((p) => p.id === packageId);
-  const variants = selectedPkg?.variants ?? [];
+  const variants = useMemo(() => selectedPkg?.variants ?? [], [selectedPkg]);
 
   // Initialize state from booking
   useEffect(() => {

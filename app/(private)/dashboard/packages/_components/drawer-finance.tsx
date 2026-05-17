@@ -65,6 +65,7 @@ const DEFAULT_CATEGORIES = [
 interface VariantFinance {
   categories: string[];
   basePrices: Record<string, number>;
+  isShow: Record<string, boolean>;
   margin: number;
   newCat: string;
 }
@@ -79,18 +80,24 @@ function parse(value: string): number {
 }
 
 function initVariantFinance(): VariantFinance {
-  return { categories: [...DEFAULT_CATEGORIES], basePrices: {}, margin: 0, newCat: "" };
+  const isShow: Record<string, boolean> = {};
+  for (const cat of DEFAULT_CATEGORIES) isShow[cat] = false;
+  return { categories: [...DEFAULT_CATEGORIES], basePrices: {}, isShow, margin: 0, newCat: "" };
 }
 
 function SortableCategoryRow({
   cat,
   value,
+  isShow,
   onChange,
+  onToggleShow,
   onRemove,
 }: {
   cat: string;
   value: number;
+  isShow: boolean;
   onChange: (val: number) => void;
+  onToggleShow: () => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat });
@@ -108,7 +115,8 @@ function SortableCategoryRow({
       >
         <GripVertical className={cn('h-3.5', 'w-3.5')} />
       </button>
-      <span className={cn('text-sm', 'w-32', 'shrink-0', 'truncate')} title={cat}>{cat}</span>
+      <Switch checked={isShow} onCheckedChange={onToggleShow} className="shrink-0" />
+      <span className={cn('text-sm', 'w-32', 'shrink-0', 'truncate', !isShow && 'text-muted-foreground')} title={cat}>{cat}</span>
       <div className={cn('relative', 'flex-1')}>
         <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>Rp</span>
         <Input
@@ -140,12 +148,15 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
   useEffect(() => {
     if (isOpen && pkg) {
       setVariantData(pkg.variants.map((v) => {
-        // Load existing category prices if available
         if (v.categoryPrices && v.categoryPrices.length > 0) {
           const cats = v.categoryPrices.map((c) => c.categoryName);
           const basePrices: Record<string, number> = {};
-          for (const c of v.categoryPrices) basePrices[c.categoryName] = Number(c.basePrice);
-          return { categories: cats, basePrices, margin: v.margin ?? 0, newCat: "" };
+          const isShowMap: Record<string, boolean> = {};
+          for (const c of v.categoryPrices) {
+            basePrices[c.categoryName] = Number(c.basePrice);
+            isShowMap[c.categoryName] = c.isShow ?? true;
+          }
+          return { categories: cats, basePrices, isShow: isShowMap, margin: v.margin ?? 0, newCat: "" };
         }
         return initVariantFinance();
       }));
@@ -183,8 +194,10 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
   function removeCategory(idx: number, cat: string) {
     updateVariant(idx, (v) => {
       const bp = { ...v.basePrices };
+      const is = { ...v.isShow };
       delete bp[cat];
-      return { ...v, categories: v.categories.filter((c) => c !== cat), basePrices: bp };
+      delete is[cat];
+      return { ...v, categories: v.categories.filter((c) => c !== cat), basePrices: bp, isShow: is };
     });
   }
 
@@ -202,6 +215,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
           categoryName: cat,
           basePrice: vd.basePrices[cat] ?? 0,
           sortOrder: idx + 1,
+          isShow: vd.isShow[cat] ?? true,
         }));
         const res = await saveVariantPricesMut.mutateAsync({ variantId: variant.id, categories, margin: vd.margin });
         if (!res.success) { toast.error(res.error ?? "Gagal menyimpan"); setSaving(false); return; }
@@ -284,10 +298,17 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
                           key={cat}
                           cat={cat}
                           value={active.basePrices[cat] ?? 0}
+                          isShow={active.isShow[cat] ?? true}
                           onChange={(val) =>
                             updateVariant(activeVariantIdx, (v) => ({
                               ...v,
                               basePrices: { ...v.basePrices, [cat]: val },
+                            }))
+                          }
+                          onToggleShow={() =>
+                            updateVariant(activeVariantIdx, (v) => ({
+                              ...v,
+                              isShow: { ...v.isShow, [cat]: !(v.isShow[cat] ?? true) },
                             }))
                           }
                           onRemove={() => removeCategory(activeVariantIdx, cat)}

@@ -1,0 +1,43 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { getGroupsWithPerformance } from "@/lib/queries/groups";
+import { GroupsClient } from "./_components/GroupsClient";
+
+export default async function GroupsPage() {
+  const session = await auth();
+  if (!session?.user.profileId) redirect("/auth/login");
+
+  const profileId = session.user.profileId;
+  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isViewAll =
+    isAdmin || (await hasPermission(session.user.roleId, "groups", "view-all"));
+
+  const hasView = isViewAll || (await hasPermission(session.user.roleId, "groups", "view"));
+  if (!hasView) redirect("/dashboard?error=forbidden");
+
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+  const groups = await getGroupsWithPerformance(
+    isViewAll ? undefined : profileId,
+    startDate,
+    endDate,
+  );
+
+  const canCreate = isAdmin || (await hasPermission(session.user.roleId, "groups", "create"));
+  const canEdit = isAdmin || (await hasPermission(session.user.roleId, "groups", "edit"));
+  const canDelete = isAdmin || (await hasPermission(session.user.roleId, "groups", "delete"));
+
+  return (
+    <div className="px-2 pb-6">
+      <GroupsClient
+        initialGroups={groups}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canDelete}
+      />
+    </div>
+  );
+}

@@ -50,7 +50,7 @@ function SkeletonTable() {
 export function PackagesTable() {
   const searchParams = useSearchParams();
   const { data: packagesResult, isLoading } = usePackages();
-  const packages = packagesResult?.data ?? [];
+  const packages = useMemo(() => packagesResult?.data ?? [], [packagesResult?.data]);
   const deleteMutation = useDeletePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
   const { canCreate, can, isAdmin } = usePermissions();

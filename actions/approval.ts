@@ -5,14 +5,13 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 
-export async function approveStep(stepId: string, signature: string) {
+export async function approveStep(stepId: string, signature?: string | null) {
   const permResult = await requirePermission({ module: "approval", action: "edit" });
   if (permResult.error) return { success: false as const, error: permResult.error };
   const session = permResult.session!;
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };
-
-  if (!signature) return { success: false as const, error: "Tanda tangan wajib diisi" };
 
   try {
     const step = await db.approvalRecordStep.findUnique({
@@ -47,24 +46,25 @@ export async function approveStep(stepId: string, signature: string) {
       stepsToApprove.some((a) => a.id === s.id) ? true : s.status === "approved"
     );
 
-    await db.$transaction(async (tx) => {
-      for (const s of stepsToApprove) {
-        await tx.approvalRecordStep.update({
-          where: { id: s.id },
-          data: { status: "approved", decidedById: session.user.profileId, decidedAt: new Date(), signature },
-        });
-      }
+    const now = new Date();
+    const stepUpdates: Prisma.PrismaPromise<unknown>[] = stepsToApprove.map((s) =>
+      db.approvalRecordStep.update({
+        where: { id: s.id },
+        data: { status: "approved", decidedById: session.user.profileId, decidedAt: now, signature: signature ?? null },
+      })
+    );
 
-      if (allApprovedAfter) {
-        await tx.approvalRecord.update({ where: { id: step.recordId }, data: { status: "approved" } });
-        if (step.record.module === "package") {
-          await tx.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } });
-        }
-        if (step.record.module === "booking") {
-          await tx.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } });
-        }
-      }
-    });
+    const recordUpdate: Prisma.PrismaPromise<unknown>[] = allApprovedAfter
+      ? [db.approvalRecord.update({ where: { id: step.recordId }, data: { status: "approved" } })]
+      : [];
+
+    const entityUpdate: Prisma.PrismaPromise<unknown>[] = allApprovedAfter && step.record.module === "package"
+      ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } })]
+      : allApprovedAfter && step.record.module === "booking"
+        ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } })]
+        : [];
+
+    await db.$transaction([...stepUpdates, ...recordUpdate, ...entityUpdate]);
 
     if (!allApprovedAfter) {
       const nextStep = allSteps.find((s) => s.status === "pending" && !stepsToApprove.some((a) => a.id === s.id));
@@ -83,9 +83,9 @@ export async function approveStep(stepId: string, signature: string) {
       changes: { stepId, stepOrder: step.stepOrder, allApproved: allApprovedAfter },
     });
 
-    revalidateTag("approvals", { expire: 0 });
-    revalidateTag("packages", { expire: 0 });
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("approvals", "max");
+    revalidateTag("packages", "max");
+    revalidateTag("bookings", "max");
 
     return { success: true as const };
   } catch (e) {
@@ -113,21 +113,20 @@ export async function rejectStep(stepId: string, notes: string) {
     const canApprove = await checkApprover(step, session.user.profileId, session.user.roleId);
     if (!canApprove) return { success: false as const, error: "Anda tidak berhak reject step ini" };
 
-    await db.$transaction(async (tx) => {
-      // Reject step + record
-      await tx.approvalRecordStep.update({
+    const entityRejectUpdate: Prisma.PrismaPromise<unknown>[] = step.record.module === "package"
+      ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "rejected" } })]
+      : step.record.module === "booking"
+        ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } })]
+        : [];
+
+    await db.$transaction([
+      db.approvalRecordStep.update({
         where: { id: stepId },
         data: { status: "rejected", decidedById: session.user.profileId, decidedAt: new Date(), notes: notes.trim() },
-      });
-      await tx.approvalRecord.update({ where: { id: step.recordId }, data: { status: "rejected" } });
-
-      if (step.record.module === "package") {
-        await tx.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "rejected" } });
-      }
-      if (step.record.module === "booking") {
-        await tx.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } });
-      }
-    });
+      }),
+      db.approvalRecord.update({ where: { id: step.recordId }, data: { status: "rejected" } }),
+      ...entityRejectUpdate,
+    ]);
 
     await notifyCreator(step.record, `Ditolak oleh ${session.user.name ?? "approver"}: ${notes.trim()}`);
 
@@ -140,9 +139,9 @@ export async function rejectStep(stepId: string, notes: string) {
       changes: { stepId, stepOrder: step.stepOrder, notes: notes.trim() },
     });
 
-    revalidateTag("approvals", { expire: 0 });
-    revalidateTag("packages", { expire: 0 });
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("approvals", "max");
+    revalidateTag("packages", "max");
+    revalidateTag("bookings", "max");
 
     return { success: true as const };
   } catch (e) {

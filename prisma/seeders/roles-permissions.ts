@@ -22,6 +22,7 @@ const moduleActions: Record<string, string[]> = {
   "finance-ar": ["view", "create", "edit", "delete"],
   package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
   vendor: ["view", "create", "edit", "delete"],
+  "vendor-specialist": ["view", "create", "edit", "delete"],
   // Settings sub-modules
   "settings-brands": ["view", "create", "edit", "delete"],
   "settings-venues": ["view", "create", "edit", "delete"],
@@ -108,6 +109,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
   },
   "vendor-specialist": {
+    "vendor-specialist": ["view", "create", "edit", "delete"],
     vendor: ["view", "create", "edit", "delete"],
     booking: ["view"],
     package: ["view"],

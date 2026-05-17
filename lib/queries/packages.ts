@@ -110,3 +110,5 @@ export async function getPackageById(id: string) {
 
 export type PackagesQueryResult = Awaited<ReturnType<typeof getPackages>>;
 export type PackageQueryItem = PackagesQueryResult["data"][number];
+
+export type PackageForBookingItem = Awaited<ReturnType<typeof getPackagesForBooking>>[number];
