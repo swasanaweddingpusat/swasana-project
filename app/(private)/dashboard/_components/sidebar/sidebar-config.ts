@@ -25,9 +25,9 @@ import {
   CreditCard,
   Handshake,
   BarChart3,
-  Wrench,
-  CheckCircle,
+  CirclePile,
   Settings,
+  Wrench,
 
   type LucideIcon,
 } from "lucide-react";
@@ -81,15 +81,15 @@ export const navItems: NavItem[] = [
     permission: { module: "customers", action: "view" },
   },
   {
-    name: "Booking",
-    href: "/dashboard/bookings",
-    icon: Ticket,
-    permission: { module: "booking", action: "view" },
-  },
-  {
     name: "Calendar Event",
     href: "/dashboard/events/calendar-events",
     icon: CalendarRange,
+    permission: { module: "booking", action: "view" },
+  },
+  {
+    name: "Booking",
+    href: "/dashboard/bookings",
+    icon: Ticket,
     permission: { module: "booking", action: "view" },
   },
   {
@@ -182,20 +182,6 @@ export const navItems: NavItem[] = [
       { name: "Reimbursement & Loan", href: "/dashboard/hr/reimbursement-loan", icon: CreditCard, permission: { module: "hr", action: "view" } },
       { name: "Hubungan Industrial", href: "/dashboard/hr/hubungan-industrial", icon: Handshake, permission: { module: "hr", action: "view" } },
       { name: "Analitik & Laporan", href: "/dashboard/hr/analitik-laporan", icon: BarChart3, permission: { module: "hr", action: "view" } },
-    ],
-  },
-  {
-    name: "Vendor Specialist",
-    href: "/dashboard/vendor-specialist/pemeliharaan-venue",
-    icon: Wrench,
-    permission: { module: "vendor_specialist", action: "view" },
-    hidden: true,
-    submenu: [
-      { name: "Pemeliharaan Venue", href: "/dashboard/vendor-specialist/pemeliharaan-venue", icon: Wrench, permission: { module: "vendor_specialist", action: "view" } },
-      { name: "Evaluasi Vendor", href: "/dashboard/vendor-specialist/evaluasi-vendor", icon: CheckCircle, permission: { module: "vendor_specialist", action: "view" } },
-      { name: "Kinerja Vendor", href: "/dashboard/vendor-specialist/kinerja-vendor", icon: BarChart3, permission: { module: "vendor_specialist", action: "view" } },
-      { name: "Analisis Kinerja Sales", href: "/dashboard/vendor-specialist/analisis-kinerja-sales", icon: TrendingUp, permission: { module: "vendor_specialist", action: "view" } },
-      { name: "Indikator Pernikahan", href: "/dashboard/vendor-specialist/indikator-pernikahan", icon: Heart, permission: { module: "vendor_specialist", action: "view" } },
     ],
   },
   {
