@@ -9,7 +9,7 @@ export async function GET() {
 
   const items = await db.sourceOfInformation.findMany({
     select: { id: true, name: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: { name: "asc" },
   });
   return Response.json(items);
 }
