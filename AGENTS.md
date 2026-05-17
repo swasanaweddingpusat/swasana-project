@@ -450,6 +450,7 @@ Permission `(module, action)` tuples — kebab-case format:
 | `groups` | `view`, `view-all`, `create`, `edit`, `delete` |
 | `package` | `view`, `create`, `edit`, `delete`, `set-harga`, `term-&-condition`, `set-status` |
 | `vendor` | `view`, `create`, `edit`, `delete` |
+| `vendor-specialist` | `view`, `create`, `edit`, `delete` |
 | `settings-brands` | `view`, `create`, `edit`, `delete` |
 | `settings-venues` | `view`, `create`, `edit`, `delete` |
 | `settings-users` | `view`, `create`, `edit`, `delete` |
