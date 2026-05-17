@@ -814,23 +814,16 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       return (
                         <div
                           key={cat.categoryName}
-                          className={cn('flex', 'items-center', 'justify-between', 'rounded-lg', 'border', 'p-3')}
+                          className={cn('flex', 'items-center', 'justify-between', 'rounded-lg', 'border', 'p-3', isTakeout && 'border-destructive/30 bg-destructive/5')}
                         >
                           <div>
-                            <p className="text-sm font-medium">{cat.categoryName}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className={cn('text-sm font-medium', isTakeout && 'line-through text-muted-foreground')}>{cat.categoryName}</p>
+                            <p className={cn('text-xs text-muted-foreground', isTakeout && 'line-through')}>
                               Rp{fmtRp(cat.basePrice)}
                             </p>
                           </div>
                           <div className={cn('flex', 'items-center', 'gap-2')}>
-                            <span
-                              className={cn(
-                                'text-xs',
-                                isTakeout ? 'text-destructive' : 'text-muted-foreground',
-                              )}
-                            >
-                              {isTakeout ? 'Takeout' : 'Included'}
-                            </span>
+                            <span className={cn('text-xs', isTakeout ? 'text-destructive font-medium' : 'text-muted-foreground')}>Takeout</span>
                             <Switch
                               checked={isTakeout}
                               onCheckedChange={(v) =>
