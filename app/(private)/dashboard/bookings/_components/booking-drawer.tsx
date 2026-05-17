@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,13 +66,17 @@ function fmtRp(n: number) {
 }
 
 function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!file.type.startsWith("image/")) { setUrl(null); return; }
-    const objectUrl = URL.createObjectURL(file);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
+  const [prev, setPrev] = useState(file);
+  const [url, setUrl] = useState<string | null>(() => file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+
+  if (prev !== file) {
+    if (url) URL.revokeObjectURL(url);
+    setUrl(file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+    setPrev(file);
+  }
+
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
   if (!url) return null;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
