@@ -93,6 +93,12 @@ export const navItems: NavItem[] = [
     permission: { module: "booking", action: "view" },
   },
   {
+    name: "Vendor Specialist",
+    href: "/dashboard/vendor-specialist",
+    icon: Wrench,
+    permission: { module: "vendor-specialist", action: "view" },
+  },
+  {
     name: "Groups",
     href: "/dashboard/groups",
     icon: Users,
