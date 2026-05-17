@@ -395,7 +395,7 @@ model PackageVariantCategoryPrice {
   categoryName     String
   basePrice        Int            @default(0)
   sortOrder        Int            @default(0)
-  isShow           Boolean        @default(true)
+  isShow           Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)

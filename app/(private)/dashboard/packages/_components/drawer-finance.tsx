@@ -80,7 +80,9 @@ function parse(value: string): number {
 }
 
 function initVariantFinance(): VariantFinance {
-  return { categories: [...DEFAULT_CATEGORIES], basePrices: {}, isShow: {}, margin: 0, newCat: "" };
+  const isShow: Record<string, boolean> = {};
+  for (const cat of DEFAULT_CATEGORIES) isShow[cat] = false;
+  return { categories: [...DEFAULT_CATEGORIES], basePrices: {}, isShow, margin: 0, newCat: "" };
 }
 
 function SortableCategoryRow({
@@ -114,7 +116,7 @@ function SortableCategoryRow({
         <GripVertical className={cn('h-3.5', 'w-3.5')} />
       </button>
       <Switch checked={isShow} onCheckedChange={onToggleShow} className="shrink-0" />
-      <span className={cn('text-sm', 'w-32', 'shrink-0', 'truncate', !isShow && 'text-muted-foreground line-through')} title={cat}>{cat}</span>
+      <span className={cn('text-sm', 'w-32', 'shrink-0', 'truncate', !isShow && 'text-muted-foreground')} title={cat}>{cat}</span>
       <div className={cn('relative', 'flex-1')}>
         <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>Rp</span>
         <Input

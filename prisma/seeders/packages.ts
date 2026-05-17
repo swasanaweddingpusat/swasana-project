@@ -460,8 +460,9 @@ export async function seedPackages() {
         await prisma.packageInternalItem.create({ data: { packageVariantId: createdVariant.id, itemName: ii.itemName, itemDescription: ii.itemDescription } });
       }
       const catPrices = CATEGORY_PRICES[`${pkg.venueCode}:${v.variantName}`] ?? [];
+      const SHOW_CATEGORIES = new Set(["CATERING", "DEKORASI", "RIAS BUSANA", "PHOTOGRAPHY", "ENTERTAINMENT", "MC", "WO"]);
       for (let ci = 0; ci < catPrices.length; ci++) {
-        await prisma.packageVariantCategoryPrice.create({ data: { packageVariantId: createdVariant.id, categoryName: catPrices[ci].categoryName, basePrice: catPrices[ci].basePrice, sortOrder: ci } });
+        await prisma.packageVariantCategoryPrice.create({ data: { packageVariantId: createdVariant.id, categoryName: catPrices[ci].categoryName, basePrice: catPrices[ci].basePrice, sortOrder: ci, isShow: SHOW_CATEGORIES.has(catPrices[ci].categoryName) } });
       }
     }
 
