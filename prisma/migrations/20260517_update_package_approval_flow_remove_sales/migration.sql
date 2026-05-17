@@ -20,12 +20,12 @@ BEGIN
 
   -- Insert new steps: manager (1) + finance (2) only
   IF manager_role_id IS NOT NULL THEN
-    INSERT INTO "approval_flow_steps" (id, "flowId", "sortOrder", "approverType", "approverRoleId", "approverUserId")
-    VALUES (gen_random_uuid()::text, flow_id, 1, 'role', manager_role_id, NULL);
+    INSERT INTO "approval_flow_steps" (id, "flowId", "sortOrder", "approverType", "approverRoleId", "approverUserId", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid()::text, flow_id, 1, 'role', manager_role_id, NULL, NOW(), NOW());
   END IF;
 
   IF finance_role_id IS NOT NULL THEN
-    INSERT INTO "approval_flow_steps" (id, "flowId", "sortOrder", "approverType", "approverRoleId", "approverUserId")
-    VALUES (gen_random_uuid()::text, flow_id, 2, 'role', finance_role_id, NULL);
+    INSERT INTO "approval_flow_steps" (id, "flowId", "sortOrder", "approverType", "approverRoleId", "approverUserId", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid()::text, flow_id, 2, 'role', finance_role_id, NULL, NOW(), NOW());
   END IF;
 END $$;
