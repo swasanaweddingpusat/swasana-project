@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CustomersResult } from "@/lib/queries/customers";
-import { createCustomer, updateCustomer, deleteCustomer } from "@/actions/customer";
+import { createCustomer, updateCustomer, deleteCustomer, deleteBulkCustomers } from "@/actions/customer";
 import type { CustomerInput, UpdateCustomerInput } from "@/lib/validations/customer";
 
 async function fetchCustomers(): Promise<CustomersResult> {
@@ -42,6 +42,14 @@ export function useDeleteCustomer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteCustomer(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["customers"] }),
+  });
+}
+
+export function useDeleteBulkCustomers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => deleteBulkCustomers(ids),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["customers"] }),
   });
 }

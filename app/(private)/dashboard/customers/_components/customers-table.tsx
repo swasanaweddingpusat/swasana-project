@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -11,10 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search, Copy, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/shared/permission-gate";
-import { useCustomers, useDeleteCustomer } from "@/hooks/use-customers";
+import { useCustomers, useDeleteCustomer, useDeleteBulkCustomers } from "@/hooks/use-customers";
 import { parseMobileNumbers } from "@/lib/validations/customer";
 import { CustomerDrawer } from "./customer-drawer";
 import type { CustomerItem, CustomersResult } from "@/lib/queries/customers";
@@ -41,6 +42,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
   const { data: customersResult } = useCustomers(initialData);
   const customers = customersResult?.data ?? initialData.data;
   const deleteMut = useDeleteCustomer();
+  const bulkDeleteMut = useDeleteBulkCustomers();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -48,6 +50,8 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editCustomer, setEditCustomer] = useState<CustomerItem | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   function handleDrawerClose(open: boolean) {
     setDrawerOpen(open);
@@ -87,8 +91,45 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
     if (!deleteTarget) return;
     const result = await deleteMut.mutateAsync(deleteTarget.id);
     if (!result.success) { toast.error(result.error); }
-    else { toast.success("Customer dihapus."); }
+    else {
+      toast.success("Customer dihapus.");
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(deleteTarget.id); return n; });
+    }
     setDeleteTarget(null);
+  }
+
+  const allSelected = paginated.length > 0 && paginated.every((c) => selectedIds.has(c.id));
+
+  const toggleAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        paginated.forEach((c) => next.delete(c.id));
+      } else {
+        paginated.forEach((c) => next.add(c.id));
+      }
+      return next;
+    });
+  }, [allSelected, paginated]);
+
+  const toggleOne = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }, []);
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds);
+    const res = await bulkDeleteMut.mutateAsync(ids);
+    if (res.success) {
+      toast.success(`${ids.length} customer dihapus.`);
+      setSelectedIds(new Set());
+    } else {
+      toast.error(res.error ?? "Gagal menghapus.");
+    }
+    setBulkDeleteOpen(false);
   }
 
   return (
@@ -118,6 +159,13 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
               </Button>
             </div>
             <div className={cn('flex', 'items-center', 'gap-2')}>
+              {selectedIds.size > 0 && (
+                <PermissionGate module="customers" action="delete">
+                  <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                    <Trash2 className={cn('h-4', 'w-4', 'mr-1')} /> Hapus ({selectedIds.size})
+                  </Button>
+                </PermissionGate>
+              )}
               <div className="relative">
                 <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
                 <Input
@@ -146,7 +194,9 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
               <Table className={cn('min-w-225', 'text-sm')}>
                 <TableHeader>
                   <TableRow className="bg-gray-50">
-                    <TableHead className={cn('px-3', 'w-12.5')}>No</TableHead>
+                    <TableHead className={cn('px-3', 'w-12')}>
+                      <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                    </TableHead>
                     <TableHead className="px-3">Nama</TableHead>
                     <TableHead className={cn('px-3', 'max-w-32')}>No. HP</TableHead>
                     <TableHead className="px-3">Type</TableHead>
@@ -159,9 +209,11 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginated.map((customer, idx) => (
-                    <TableRow key={customer.id} className="hover:bg-gray-50">
-                      <TableCell className="px-3">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                  {paginated.map((customer) => (
+                    <TableRow key={customer.id} className={cn("hover:bg-gray-50", selectedIds.has(customer.id) && "bg-muted/50")}>
+                      <TableCell className="px-3">
+                        <Checkbox checked={selectedIds.has(customer.id)} onCheckedChange={() => toggleOne(customer.id)} aria-label={`Select ${customer.name}`} />
+                      </TableCell>
                       <TableCell className={cn('px-3', 'max-w-45', 'truncate', 'font-medium')} title={customer.name}>{customer.name}</TableCell>
                       <TableCell className={cn('px-3', 'max-w-32', 'overflow-hidden')}>
                         <Tooltip>
@@ -253,6 +305,23 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>
               Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus {selectedIds.size} Customer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus {selectedIds.size} customer? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} disabled={bulkDeleteMut.isPending} className={cn('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')}>
+              {bulkDeleteMut.isPending ? "Menghapus..." : "Hapus Semua"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

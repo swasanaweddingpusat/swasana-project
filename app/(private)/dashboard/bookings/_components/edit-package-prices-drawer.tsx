@@ -142,9 +142,6 @@ export function EditPackagePricesDrawer({
               <span className="text-muted-foreground">Harga setelah takeout</span>
               <span className="font-semibold">Rp{fmtRp(currentPrice)}</span>
             </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Margin {margin}%</span>
-            </div>
           </div>
         </div>
         <div className="sticky bottom-0 bg-background pt-4">

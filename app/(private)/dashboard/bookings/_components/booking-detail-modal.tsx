@@ -203,7 +203,15 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     <p className={lbl + " mt-4"}>Status Booking</p>
                     <p className={val}>{booking.bookingStatus ?? "Pending"}</p>
                     <p className={lbl + " mt-4"}>Payment Method</p>
-                    <p className={val}>{booking.paymentMethod?.bankName ?? "-"}</p>
+                    {booking.paymentMethod ? (
+                      <div className="space-y-0.5">
+                        <p className={val}>{booking.paymentMethod.bankName}</p>
+                        <p className="text-xs text-muted-foreground">{booking.paymentMethod.bankAccountNumber}</p>
+                        <p className="text-xs text-muted-foreground">{booking.paymentMethod.bankRecipient}</p>
+                      </div>
+                    ) : (
+                      <p className={val}>-</p>
+                    )}
                     <p className={lbl + " mt-4"}>Package Price</p>
                     <p className={val}>{fmtPrice(booking.snapPackageVariant?.price)}</p>
                     <p className={lbl + " mt-4"}>Variant</p>
