@@ -78,6 +78,28 @@ export async function updateCustomer(data: unknown) {
   }
 }
 
+export async function deleteBulkCustomers(ids: string[]) {
+  const { session, error } = await requirePermission({ module: "customers", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`customer-bulk-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    await db.$transaction([db.customer.deleteMany({ where: { id: { in: ids } } })]);
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "customers.bulk_delete",
+      entityType: "customer",
+      entityId: ids.join(","),
+      description: `Deleted ${ids.length} customers`,
+    });
+    revalidateTag("customers", { expire: 0 });
+    return { success: true };
+  } catch (e) {
+    console.error("[deleteBulkCustomers]", e);
+    return { success: false, error: "Gagal menghapus customers." };
+  }
+}
+
 export async function deleteCustomer(id: string) {
   const { session, error } = await requirePermission({ module: "customers", action: "delete" });
   if (error) return { success: false, error };
