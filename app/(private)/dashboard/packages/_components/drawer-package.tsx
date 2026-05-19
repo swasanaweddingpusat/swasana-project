@@ -663,7 +663,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                 </SelectTrigger>
                                 <SelectContent>
                                   {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
-                                    <SelectItem key={srcIdx} value={String(srcIdx)}>{v.variantName || `Varian ${srcIdx + 1}`}</SelectItem>
+                                    <SelectItem key={srcIdx} value={String(srcIdx)}>{v.variantName ? `${v.variantName} (${v.pax} pax)` : `Varian ${srcIdx + 1}`}</SelectItem>
                                   ) : null)}
                                 </SelectContent>
                               </Select>
@@ -754,7 +754,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                 </SelectTrigger>
                                 <SelectContent>
                                   {variants.map((v, srcIdx) => srcIdx !== variantIdx ? (
-                                    <SelectItem key={srcIdx} value={String(srcIdx)}>{v.variantName || `Varian ${srcIdx + 1}`}</SelectItem>
+                                    <SelectItem key={srcIdx} value={String(srcIdx)}>{v.variantName ? `${v.variantName} (${v.pax} pax)` : `Varian ${srcIdx + 1}`}</SelectItem>
                                   ) : null)}
                                 </SelectContent>
                               </Select>
