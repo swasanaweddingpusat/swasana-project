@@ -600,6 +600,7 @@ model BookingRevision {
 
   booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   createdBy      Profile  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  approvalSteps  ApprovalRecordStep[]
 
   @@unique([bookingId, revisionNumber])
   @@index([bookingId])
@@ -1026,16 +1027,19 @@ model ApprovalRecordStep {
   decidedById    String?
   decidedAt      DateTime?
   notes          String?
+  revisionId     String?
   createdAt      DateTime       @default(now())
   record         ApprovalRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
   approverRole   Role?          @relation("ApprovalRecordStepRole", fields: [approverRoleId], references: [id], onDelete: SetNull)
   approverUser   Profile?       @relation("ApprovalRecordStepApprover", fields: [approverUserId], references: [id], onDelete: SetNull)
   decidedBy      Profile?       @relation("ApprovalRecordStepDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  revision       BookingRevision? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
 
   @@index([recordId])
   @@index([approverRoleId])
   @@index([approverUserId])
   @@index([decidedById])
+  @@index([revisionId])
   @@map("approval_record_steps")
 }
 

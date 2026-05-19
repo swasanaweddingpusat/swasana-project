@@ -14,7 +14,6 @@ export function useUnreadCommentCounts(bookingIds: string[]) {
       return res.json();
     },
     enabled: bookingIds.length > 0,
-    refetchInterval: 5000,
     refetchOnWindowFocus: false,
   });
 }

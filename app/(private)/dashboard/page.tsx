@@ -1,63 +1,14 @@
 import { Metadata } from "next";
 import { ShieldX } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { auth } from "@/lib/auth";
+import { isSuperAdmin } from "@/lib/permissions";
+import { getDashboardData } from "@/lib/queries/dashboard";
 import { SalesStatCards } from "./_components/sales-stat-cards";
 import { GroupAchievementSection } from "./_components/group-achievement-section";
 import { SalesLeaderboard } from "./_components/sales-leaderboard";
-import type { GroupAchievementData } from "./_components/group-achievement-section";
-import type { SalesPerformanceItem } from "./_components/sales-leaderboard";
 
 export const metadata: Metadata = { title: "Dashboard" };
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_STATS = {
-  totalBookings: 48,
-  totalRevenue: 2_850_000_000,
-  pendingBookings: 12,
-  lostBookings: 5,
-};
-
-const MOCK_GROUPS: GroupAchievementData[] = [
-  {
-    id: "1",
-    name: "Team Alpha",
-    leaderName: "Rina Marlina",
-    memberCount: 4,
-    revenue: 1_450_000_000,
-    target: 2_000_000_000,
-    confirmedBookings: 18,
-  },
-  {
-    id: "2",
-    name: "Team Beta",
-    leaderName: "Doni Pratama",
-    memberCount: 3,
-    revenue: 980_000_000,
-    target: 1_500_000_000,
-    confirmedBookings: 12,
-  },
-  {
-    id: "3",
-    name: "Team Gamma",
-    leaderName: "Yuni Astuti",
-    memberCount: 5,
-    revenue: 420_000_000,
-    target: 1_000_000_000,
-    confirmedBookings: 7,
-  },
-];
-
-const MOCK_SALES: SalesPerformanceItem[] = [
-  { profileId: "1", name: "Rina Marlina", avatarUrl: null, revenue: 620_000_000, confirmedBookings: 8, target: 700_000_000 },
-  { profileId: "2", name: "Doni Pratama", avatarUrl: null, revenue: 540_000_000, confirmedBookings: 7, target: 600_000_000 },
-  { profileId: "3", name: "Yuni Astuti", avatarUrl: null, revenue: 290_000_000, confirmedBookings: 4, target: 500_000_000 },
-  { profileId: "4", name: "Hendra Wijaya", avatarUrl: null, revenue: 440_000_000, confirmedBookings: 6, target: 500_000_000 },
-  { profileId: "5", name: "Sari Dewi", avatarUrl: null, revenue: 380_000_000, confirmedBookings: 5, target: 450_000_000 },
-  { profileId: "6", name: "Budi Santoso", avatarUrl: null, revenue: 130_000_000, confirmedBookings: 2, target: 400_000_000 },
-];
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage({
   searchParams,
@@ -65,6 +16,26 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
+  const session = await auth();
+  const profileId = session?.user?.profileId;
+  const isAdmin = await isSuperAdmin(session?.user?.roleId);
+
+  const now = new Date();
+  const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
+  const month = params.month ? parseInt(params.month, 10) - 1 : now.getMonth();
+  const startDate = new Date(year, month, 1);
+  const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+  const { stats, groups, salesLeaderboard } = await getDashboardData(
+    isAdmin ? undefined : profileId,
+    startDate,
+    endDate,
+  );
+
+  const subtitle = startDate.toLocaleDateString("id-ID", {
+    month: "long",
+    year: "numeric",
+  });
 
   return (
     <div className={cn("flex", "flex-col", "gap-6", "py-6")}>
@@ -81,16 +52,18 @@ export default async function DashboardPage({
       {/* Header */}
       <div>
         <h1 className={cn("text-2xl", "font-bold", "text-foreground")}>Dashboard</h1>
-        <p className={cn("text-sm", "text-muted-foreground", "mt-1")}>Overview penjualan — Mei 2026</p>
+        <p className={cn("text-sm", "text-muted-foreground", "mt-1")}>
+          Overview penjualan — {subtitle}
+        </p>
       </div>
 
       {/* Stat Cards */}
-      <SalesStatCards stats={MOCK_STATS} />
+      <SalesStatCards stats={stats} />
 
       {/* Main Content: 2 kolom */}
       <div className={cn("grid", "grid-cols-1", "lg:grid-cols-2", "gap-6")}>
-        <GroupAchievementSection groups={MOCK_GROUPS} />
-        <SalesLeaderboard sales={MOCK_SALES} />
+        <GroupAchievementSection groups={groups} />
+        <SalesLeaderboard sales={salesLeaderboard} />
       </div>
     </div>
   );

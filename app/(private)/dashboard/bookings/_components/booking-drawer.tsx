@@ -1029,7 +1029,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     control={form.control}
                     name="withMaterai"
                     render={({ field }) => (
-                      <FormItem className="rounded-lg border p-3 space-y-2 hidden">
+                      <FormItem className="rounded-lg border p-3 space-y-2">
                         <div className="flex flex-row items-center justify-between gap-3">
                           <FormLabel className="text-sm font-medium">E-Meterai <span className="font-normal text-muted-foreground">(opsional)</span></FormLabel>
                           <FormControl>

@@ -32,7 +32,6 @@ export function useBookings(params: BookingsParams, initialData?: BookingsResult
     initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
-    refetchInterval: 30 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
@@ -47,7 +46,6 @@ export function useBookingDetail(id: string) {
       return res.json();
     },
     staleTime: 2 * 60 * 1000,
-    refetchInterval: 30 * 1000,
   });
 }
 

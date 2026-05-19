@@ -661,11 +661,6 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
                 });
               }} disabled={isPending}>Tandai Sudah Dikirim</Button>
             )}
-            {agreement.status !== "Signed" && (
-              <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isPending}>
-                <RefreshCw className="h-3.5 w-3.5 mr-1" />Regenerate
-              </Button>
-            )}
           </div>
         </div>
       )}

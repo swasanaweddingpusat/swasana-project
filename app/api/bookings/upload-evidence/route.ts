@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { uploadToR2 } from "@/lib/r2";
+import { uploadToR2, getPublicUrl } from "@/lib/r2";
 import sharp from "sharp";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -30,8 +30,7 @@ export async function POST(req: Request) {
   const randomId = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, "0")).join("");
   const key = `${randomId}.${ext}`;
   await uploadToR2(buffer, key, contentType);
-
   await db.termOfPayment.update({ where: { id: termId }, data: { paymentEvidence: key } });
 
-  return NextResponse.json({ filePath: key });
+  return NextResponse.json({ filePath: getPublicUrl(key) });
 }

@@ -6,9 +6,16 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Plus } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Plus, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Drawer } from "@/components/shared/drawer";
 import { updateVariantTC } from "@/actions/package";
@@ -120,6 +127,12 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     [editor]
   );
 
+  function handleCopyFromVariant(sourceId: string) {
+    const source = variants.find((v) => v.id === sourceId);
+    const tc = (source as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
+    editor?.commands.setContent(tc);
+  }
+
   function handleVariantChange(id: string) {
     setSelectedVariantId(id);
     const variant = variants.find((v) => v.id === id);
@@ -163,18 +176,40 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
         {/* Variant Selector */}
         <div className="shrink-0">
           <Label className="text-sm font-medium mb-1 block">Variant</Label>
-          <Select value={selectedVariantId} onValueChange={handleVariantChange}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Pilih variant" />
-            </SelectTrigger>
-            <SelectContent>
-              {variants.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.variantName} — {v.pax} PAX
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedVariantId} onValueChange={handleVariantChange}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih variant" />
+              </SelectTrigger>
+              <SelectContent>
+                {variants.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.variantName} — {v.pax} PAX
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {variants.length > 1 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0">
+                    <Copy className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel className="text-xs">Salin dari varian</DropdownMenuLabel>
+                  {variants
+                    .filter((v) => v.id !== selectedVariantId)
+                    .map((v) => (
+                      <DropdownMenuItem key={v.id} onSelect={() => handleCopyFromVariant(v.id)}>
+                        {v.variantName} — {v.pax} PAX
+                      </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
 
         {/* Editor + Variable Panel */}
