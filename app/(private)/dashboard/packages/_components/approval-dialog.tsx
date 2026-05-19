@@ -58,8 +58,18 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
   }, [module, packageId]);
 
   useEffect(() => {
-    if (open) fetchRecord();
-  }, [open, fetchRecord]);
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/approval-records?module=${module}&entityId=${packageId}`);
+        if (res.ok && !cancelled) setRecord(await res.json());
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [open, module, packageId]);
 
   const activeStep = record?.steps.find((s) => s.status === "pending");
 

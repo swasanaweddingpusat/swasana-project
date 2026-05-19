@@ -325,8 +325,12 @@ export async function createBooking(data: unknown) {
       description: `Created booking for ${customerData.name}`,
     });
 
-    // Create initial PO revision snapshot
-    await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
+    // Create initial PO revision snapshot + link approval steps
+    const revisionId = await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
+    await db.approvalRecordStep.updateMany({
+      where: { record: { module: "booking", entityId: bookingId } },
+      data: { revisionId },
+    });
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
@@ -703,8 +707,14 @@ export async function editBooking(data: unknown) {
 
     await db.$transaction(ops);
 
-    // Append new approval round — only when package/venue/variant changed
+    // Reset approval + create revision — only when package/venue/variant changed
     if (venueChanged || packageChanged || variantChanged) {
+    const reasons: string[] = [];
+    if (venueChanged) reasons.push("venue");
+    if (packageChanged) reasons.push("package");
+    if (variantChanged) reasons.push("variant");
+    const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
+
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: id } },
       include: { steps: { orderBy: { stepOrder: "asc" } } },
@@ -737,6 +747,7 @@ export async function editBooking(data: unknown) {
               decidedById: shouldAutoApprove ? session!.user.profileId : null,
               decidedAt: shouldAutoApprove ? new Date() : null,
               signature: isCreatorStep ? (rest.signatureSales ?? null) : null,
+              revisionId,
             },
           });
         });
@@ -805,15 +816,6 @@ export async function editBooking(data: unknown) {
       })(),
       description: `Edited booking for ${customerName}`,
     });
-
-    // Create new revision if package/venue/variant changed
-    if (venueChanged || packageChanged || variantChanged) {
-      const reasons: string[] = [];
-      if (venueChanged) reasons.push("venue");
-      if (packageChanged) reasons.push("package");
-      if (variantChanged) reasons.push("variant");
-      await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
-    }
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
