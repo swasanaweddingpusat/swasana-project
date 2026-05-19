@@ -16,6 +16,39 @@ import { updateTermOfPayments } from "@/actions/term-of-payment";
 import { deletePartialPayment } from "@/actions/partial-payment";
 import { useQueryClient } from "@tanstack/react-query";
 
+const R2_BASE = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
+
+function toFullUrl(raw: string): string {
+  if (raw.startsWith("http")) return raw;
+  return R2_BASE ? `${R2_BASE}/${raw}` : raw;
+}
+
+function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: () => void }) {
+  const [prev, setPrev] = useState(src);
+  const [url, setUrl] = useState<string | null>(() => {
+    if (typeof src === "string") return toFullUrl(src);
+    return src.type.startsWith("image/") ? URL.createObjectURL(src) : null;
+  });
+
+  if (prev !== src) {
+    if (url && typeof prev !== "string") URL.revokeObjectURL(url);
+    if (typeof src === "string") {
+      setUrl(toFullUrl(src));
+    } else {
+      setUrl(src.type.startsWith("image/") ? URL.createObjectURL(src) : null);
+    }
+    setPrev(src);
+  }
+
+  useEffect(() => () => { if (url && typeof prev !== "string") URL.revokeObjectURL(url); }, [url, prev]);
+
+  if (!url) return null;
+  const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");
+  if (!isImage) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
+}
+
 const PAYMENT_STATUS = ["paid", "partial", "unpaid"] as const;
 
 interface PartialPayment {
@@ -295,14 +328,26 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                     {/* Upload evidence — all statuses except partial (partial has its own per sub-payment) */}
                     {term.paymentStatus !== "partial" && !locked && !isNew && (
                       <div className={cn("relative", "flex", "items-center", "gap-2", "px-3", "py-2", "border", "rounded-md", "bg-muted/30", "text-muted-foreground", "cursor-pointer", "hover:bg-muted/50", "text-xs")}>
-                        <FileText className={cn("h-3.5", "w-3.5", "shrink-0")} />
+                        {(() => {
+                          const evidenceSrc = pendingFiles[term.id] ?? term.paymentEvidence;
+                          if (evidenceSrc) {
+                            return (
+                              <EvidencePreview src={evidenceSrc} onOpen={() => {
+                                const file = pendingFiles[term.id];
+                                if (file) { const url = URL.createObjectURL(file); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }
+                                else if (term.paymentEvidence) { window.open(toFullUrl(term.paymentEvidence), "_blank"); }
+                              }} />
+                            );
+                          }
+                          return <FileText className={cn("h-3.5", "w-3.5", "shrink-0")} />;
+                        })()}
                         {(pendingFiles[term.id] || term.paymentEvidence) ? (
-                          <button type="button" className={cn("flex-1", "truncate", "text-left", "hover:underline")} onClick={(e) => { e.stopPropagation(); const file = pendingFiles[term.id]; if (file) { const url = URL.createObjectURL(file); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); } else if (term.paymentEvidence) { window.open(term.paymentEvidence, "_blank"); } }}>{pendingFiles[term.id]?.name ?? term.paymentEvidence?.split("/").pop()}</button>
+                          <button type="button" className={cn("relative", "z-10", "flex-1", "truncate", "text-left", "hover:underline")} onClick={(e) => { e.stopPropagation(); const file = pendingFiles[term.id]; if (file) { const url = URL.createObjectURL(file); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); } else if (term.paymentEvidence) { window.open(toFullUrl(term.paymentEvidence), "_blank"); } }}>{pendingFiles[term.id]?.name ?? term.paymentEvidence?.split("/").pop()}</button>
                         ) : (
                           <span className={cn("flex-1", "truncate")}>Upload bukti pembayaran</span>
                         )}
                         {(pendingFiles[term.id] || term.paymentEvidence) && (
-                          <button type="button" className={cn("shrink-0", "hover:text-destructive")} onClick={() => { setPendingFiles((prev) => { const n = { ...prev }; delete n[term.id]; return n; }); handleFieldChange(term.id, "paymentEvidence", null); }}><X className="h-3 w-3" /></button>
+                          <button type="button" className={cn("shrink-0", "hover:text-destructive", "z-10", "relative")} onClick={() => { setPendingFiles((prev) => { const n = { ...prev }; delete n[term.id]; return n; }); handleFieldChange(term.id, "paymentEvidence", null); }}><X className="h-3 w-3" /></button>
                         )}
                         <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { if (e.target.files?.[0]) setPendingFiles((prev) => ({ ...prev, [term.id]: e.target.files![0] })); e.target.value = ""; }} />
                       </div>
@@ -338,13 +383,20 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                               </div>
                               {/* Row 2: Upload bukti */}
                               <div className={cn("relative", "flex", "items-center", "gap-2", "px-2", "py-1.5", "border", "rounded-md", "bg-white", "text-muted-foreground", "cursor-pointer", "hover:bg-muted/30", "text-xs")}>
-                                <FileText className="h-3 w-3 shrink-0" />
                                 {p.evidence ? (
-                                  <button type="button" className="flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); if (typeof p.evidence === "string") { window.open(p.evidence.startsWith("http") ? p.evidence : `/${p.evidence}`, "_blank"); } else if (p.evidence) { const url = URL.createObjectURL(p.evidence); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); } }}>{typeof p.evidence === "string" ? p.evidence.split("/").pop() : p.evidence.name}</button>
+                                  <EvidencePreview src={p.evidence} onOpen={() => {
+                                    if (typeof p.evidence === "string") { window.open(toFullUrl(p.evidence), "_blank"); }
+                                    else if (p.evidence) { const url = URL.createObjectURL(p.evidence); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }
+                                  }} />
+                                ) : (
+                                  <FileText className="h-3 w-3 shrink-0" />
+                                )}
+                                {p.evidence ? (
+                                  <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); if (typeof p.evidence === "string") { window.open(toFullUrl(p.evidence), "_blank"); } else if (p.evidence) { const url = URL.createObjectURL(p.evidence); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); } }}>{typeof p.evidence === "string" ? p.evidence.split("/").pop() : p.evidence.name}</button>
                                 ) : (
                                   <span className="flex-1 truncate">Upload bukti pembayaran</span>
                                 )}
-                                {p.evidence && <button type="button" className="shrink-0 hover:text-destructive" onClick={() => setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, evidence: null } : x) }))}><X className="h-2.5 w-2.5" /></button>}
+                                {p.evidence && <button type="button" className="shrink-0 hover:text-destructive z-10 relative" onClick={() => setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, evidence: null } : x) }))}><X className="h-2.5 w-2.5" /></button>}
                                 <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, evidence: f } : x) })); e.target.value = ""; }} />
                               </div>
                               {/* Row 3: Catatan */}
@@ -362,9 +414,9 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
 
                     {/* Locked paid — show evidence read-only */}
                     {locked && term.paymentEvidence && (
-                      <div className={cn("flex", "items-center", "gap-2", "px-3", "py-2", "border", "rounded-md", "bg-secondary", "text-foreground", "text-xs")}>
-                        <FileText className={cn("h-3.5", "w-3.5", "shrink-0")} />
-                        <span className={cn("flex-1", "truncate")}>{term.paymentEvidence.split("/").pop()}</span>
+                      <div className={cn("flex", "items-center", "gap-2", "px-3", "py-2", "border", "rounded-md", "bg-secondary", "text-foreground", "text-xs", "cursor-pointer")} onClick={() => window.open(toFullUrl(term.paymentEvidence!), "_blank")}>
+                        <EvidencePreview src={term.paymentEvidence} onOpen={() => window.open(toFullUrl(term.paymentEvidence!), "_blank")} />
+                        <span className={cn("flex-1", "truncate", "hover:underline")}>{term.paymentEvidence.split("/").pop()}</span>
                       </div>
                     )}
 

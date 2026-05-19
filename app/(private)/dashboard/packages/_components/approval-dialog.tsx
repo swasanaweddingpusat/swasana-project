@@ -80,17 +80,6 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
     setSubmitting(false);
   }
 
-  async function handleRegenerateLink() {
-    setSubmitting(true);
-    try {
-      const { generateAgreementToken } = await import("@/actions/client-agreement");
-      const result = await generateAgreementToken(packageId);
-      if (!result.success) { toast.error(result.error); setSubmitting(false); return; }
-      toast.success("Link agreement berhasil di-regenerate");
-      fetchRecord();
-    } catch { toast.error("Gagal regenerate link"); }
-    setSubmitting(false);
-  }
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
@@ -164,11 +153,6 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                   {isSuperAdmin && step.approverType === "client" && step.status === "approved" && (
                     <button type="button" onClick={() => handleResetStep(step.id)} disabled={submitting} className={cn('text-xs', 'text-muted-foreground', 'hover:text-destructive', 'underline', 'shrink-0')}>
                       Reset
-                    </button>
-                  )}
-                  {isSuperAdmin && step.approverType === "client" && step.status === "pending" && (
-                    <button type="button" onClick={() => handleRegenerateLink()} disabled={submitting} className={cn('text-xs', 'text-muted-foreground', 'hover:text-foreground', 'underline', 'shrink-0')}>
-                      Re-generate Link
                     </button>
                   )}
                 </div>

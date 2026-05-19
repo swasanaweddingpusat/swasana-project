@@ -46,13 +46,28 @@ export async function POST(req: Request) {
     });
 
     if (approvalRecord) {
-      const clientStep = approvalRecord.steps.find(
+      const allSteps = approvalRecord.steps;
+      let latestRoundSteps = allSteps;
+      if (allSteps.length > 0) {
+        const first = allSteps[0];
+        let roundSize = allSteps.length;
+        for (let i = 1; i < allSteps.length; i++) {
+          if (allSteps[i].approverType === first.approverType &&
+              allSteps[i].approverRoleId === first.approverRoleId &&
+              allSteps[i].approverUserId === first.approverUserId) {
+            roundSize = i;
+            break;
+          }
+        }
+        latestRoundSteps = allSteps.slice(-roundSize);
+      }
+
+      const clientStep = latestRoundSteps.find(
         (s) => s.approverType === "client" && s.status === "pending"
       );
 
       if (clientStep) {
-        // Client can sign regardless of manager approval status
-        const allOtherApproved = approvalRecord.steps
+        const allOtherApproved = latestRoundSteps
           .filter((s) => s.id !== clientStep.id)
           .every((s) => s.status === "approved");
 

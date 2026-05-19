@@ -934,8 +934,8 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         ) : (
           <div className={cn('space-y-3', 'py-1')}>
             {agreement.status === "Pending" && (
-              <div className="rounded-lg border border-orange-200 bg-orange-50 p-2.5">
-                <p className="text-xs text-orange-700 font-medium">⚠️ Booking telah diubah. Silakan regenerate link agar client dapat menandatangani ulang PO terbaru.</p>
+              <div className="rounded-lg border border-border bg-muted/50 p-2.5">
+                <p className="text-xs text-muted-foreground font-medium">Link dan kode akses baru sudah otomatis di-generate. Silakan kirimkan ke client untuk menandatangani ulang PO terbaru.</p>
               </div>
             )}
             <div className="space-y-1">
@@ -962,10 +962,6 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
         <AlertDialogFooter>
           {agreement?.status === "Signed" && bookingStatus === "Confirmed" ? (
             <p className={cn('text-xs', 'text-muted-foreground', 'mr-auto')}>✓ Sudah ditandatangani</p>
-          ) : agreement ? (
-            <Button variant="outline" size="default" disabled={isPending} onClick={generate}>
-              <RefreshCw className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Regenerate
-            </Button>
           ) : null}
           <AlertDialogCancel onClick={onClose}>Tutup</AlertDialogCancel>
         </AlertDialogFooter>

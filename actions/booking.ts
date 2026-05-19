@@ -303,6 +303,17 @@ export async function createBooking(data: unknown) {
       );
     }
 
+    ops.push(
+      db.clientAgreement.create({
+        data: {
+          bookingId,
+          token: crypto.randomUUID(),
+          accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      })
+    );
+
     await db.$transaction(ops);
 
     await logAudit({
@@ -699,9 +710,6 @@ export async function editBooking(data: unknown) {
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
     if (approvalRecord) {
-      const maxStepOrder = approvalRecord.steps.reduce((max, s) => Math.max(max, s.stepOrder), 0);
-
-      // Get flow template for new steps
       const flow = await db.approvalFlow.findUnique({
         where: { module: "booking" },
         include: { steps: { orderBy: { sortOrder: "asc" } } },
@@ -714,7 +722,6 @@ export async function editBooking(data: unknown) {
         );
 
         const newStepOps: Prisma.PrismaPromise<unknown>[] = flow.steps.map((flowStep, i) => {
-          const stepOrder = maxStepOrder + 1 + i;
           const shouldAutoApprove = flowStep.approverType !== "client" && (
             creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
           );
@@ -722,7 +729,7 @@ export async function editBooking(data: unknown) {
           return db.approvalRecordStep.create({
             data: {
               recordId: approvalRecord.id,
-              stepOrder,
+              stepOrder: i + 1,
               approverType: flowStep.approverType,
               approverRoleId: flowStep.approverRoleId,
               approverUserId: flowStep.approverUserId,
@@ -735,6 +742,7 @@ export async function editBooking(data: unknown) {
         });
 
         await db.$transaction([
+          db.approvalRecordStep.deleteMany({ where: { recordId: approvalRecord.id } }),
           db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
           db.booking.update({ where: { id }, data: { bookingStatus: "Pending" } }),
           ...newStepOps,
