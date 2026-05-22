@@ -159,14 +159,8 @@ function SellingPriceInput({
   sellingPrice: number;
   onChange: (value: number) => void;
 }) {
-  const [localText, setLocalText] = useState(fmt(sellingPrice));
+  const [localText, setLocalText] = useState("");
   const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    if (!focused) {
-      setLocalText(fmt(sellingPrice));
-    }
-  }, [sellingPrice, focused]);
 
   return (
     <div className={cn('relative', 'w-48')}>
@@ -175,8 +169,8 @@ function SellingPriceInput({
         type="text"
         inputMode="numeric"
         placeholder="0"
-        value={localText}
-        onFocus={() => setFocused(true)}
+        value={focused ? localText : fmt(sellingPrice)}
+        onFocus={() => { setLocalText(fmt(sellingPrice)); setFocused(true); }}
         onBlur={() => setFocused(false)}
         onChange={(e) => {
           const raw = e.target.value.replace(/\D/g, "");
