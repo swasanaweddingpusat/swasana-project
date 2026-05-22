@@ -202,12 +202,15 @@ export async function createBooking(data: unknown) {
         (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
       // Hidden categories (isShow=false) always included; visible ones respect isTakeout toggle
+      const hasTakeout = (input.categoryToggles ?? []).some((t) => t.isTakeout);
       const variantBase = variant.categoryPrices.reduce((sum, c) => {
         if (!c.isShow) return sum + c.basePrice;
         const isTakeout = toggleMap.get(c.categoryName) ?? false;
         return isTakeout ? sum : sum + c.basePrice;
       }, 0);
-      const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
+      const variantPrice = (!hasTakeout && variant.sellingPrice > 0)
+        ? variant.sellingPrice
+        : variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
       ops.push(
         db.snapPackageVariant.create({
           data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
@@ -632,12 +635,15 @@ export async function editBooking(data: unknown) {
         const toggleMap = new Map(
           (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
         );
+        const hasTakeout = (parsed.data.categoryToggles ?? []).some((t) => t.isTakeout);
         const variantBase = variant.categoryPrices.reduce((sum, c) => {
           if (!c.isShow) return sum + c.basePrice;
           const isTakeout = toggleMap.get(c.categoryName) ?? false;
           return isTakeout ? sum : sum + c.basePrice;
         }, 0);
-        const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
+        const variantPrice = (!hasTakeout && variant.sellingPrice > 0)
+          ? variant.sellingPrice
+          : variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
 
         // Upsert variant snapshot
         ops.push(

@@ -30,7 +30,7 @@ interface Props {
 
 interface VenueOption { id: string; name: string }
 interface CategoryPriceEntry { id: string; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }
-interface PackageVariant { id: string; variantName: string; pax: number; margin: number; categoryPrices: CategoryPriceEntry[] }
+interface PackageVariant { id: string; variantName: string; pax: number; margin: number; sellingPrice: number; categoryPrices: CategoryPriceEntry[] }
 interface PackageOption { id: string; packageName: string; variants: PackageVariant[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
@@ -47,6 +47,7 @@ function fmtRp(n: number) {
 }
 
 function getVariantPrice(v: PackageVariant) {
+  if (v.sellingPrice > 0) return v.sellingPrice;
   const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
   return base + Math.round(base * ((v.margin ?? 0) / 100));
 }

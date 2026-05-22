@@ -46,6 +46,7 @@ interface PackageData {
     variantName: string;
     pax: number;
     margin: number;
+    sellingPrice: number;
     categoryPrices: CategoryPriceEntry[];
   }[];
 }
@@ -83,6 +84,7 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
 }
 
 function getVariantPrice(v: PackageData["variants"][number]) {
+  if (v.sellingPrice > 0) return v.sellingPrice;
   const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
   return base + Math.round(base * ((v.margin ?? 0) / 100));
 }
@@ -339,6 +341,10 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const margin = selectedVariantData?.margin ?? 0;
 
   const step2Price = (() => {
+    const hasTakeout = visibleCategories.some((c) => categoryToggles[c.categoryName]);
+    if (!hasTakeout && selectedVariantData?.sellingPrice && selectedVariantData.sellingPrice > 0) {
+      return selectedVariantData.sellingPrice;
+    }
     const visibleBase = visibleCategories.reduce(
       (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
       0,

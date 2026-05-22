@@ -346,7 +346,8 @@ export async function saveInternalItems(
 export async function saveVariantPrices(
   variantId: string,
   categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[],
-  margin: number
+  margin: number,
+  sellingPrice: number
 ) {
   const permResult = await requirePermission({ module: "package", action: "set-harga" });
   if (permResult.error) return { success: false, error: permResult.error };
@@ -365,7 +366,7 @@ export async function saveVariantPrices(
           isShow: c.isShow,
         })),
       }),
-      db.packageVariant.update({ where: { id: variantId }, data: { margin } }),
+      db.packageVariant.update({ where: { id: variantId }, data: { margin, sellingPrice } }),
     ]);
 
     revalidateTag("packages", "max");
