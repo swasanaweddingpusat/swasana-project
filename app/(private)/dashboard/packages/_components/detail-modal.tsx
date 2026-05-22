@@ -22,6 +22,7 @@ const variantBasePrice = (v: PackageVariant) =>
   (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
 
 const variantSellingPrice = (v: PackageVariant) => {
+  if (v.sellingPrice > 0) return v.sellingPrice;
   const base = variantBasePrice(v);
   return base + Math.round(base * ((v.margin ?? 0) / 100));
 };

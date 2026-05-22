@@ -29,8 +29,11 @@ export interface RefundTerm {
  * Calculate final price from category snapshots + margin.
  * Only non-takeout categories contribute to baseTotal.
  * Hidden categories (isShow = false) are never takeout, so always included.
+ * If sellingPrice is provided and no takeouts exist, returns sellingPrice exactly.
  */
-export function calcFinalPrice(categories: CategorySnap[], margin: number): number {
+export function calcFinalPrice(categories: CategorySnap[], margin: number, sellingPrice?: number): number {
+  const hasTakeout = categories.some((c) => c.isTakeout);
+  if (!hasTakeout && sellingPrice && sellingPrice > 0) return sellingPrice;
   const baseTotal = categories
     .filter((c) => !c.isTakeout)
     .reduce((sum, c) => sum + c.basePrice, 0);

@@ -126,8 +126,8 @@ export function usePackageApprovals() {
 export function useSaveVariantPrices() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ variantId, categories, margin }: { variantId: string; categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[]; margin: number }) =>
-      saveVariantPrices(variantId, categories, margin),
+    mutationFn: ({ variantId, categories, margin, sellingPrice }: { variantId: string; categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[]; margin: number; sellingPrice: number }) =>
+      saveVariantPrices(variantId, categories, margin, sellingPrice),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }

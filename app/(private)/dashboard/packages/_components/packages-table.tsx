@@ -113,6 +113,7 @@ export function PackagesTable() {
     if (!pkg.variants?.length) return "-";
     const prices = pkg.variants
       .map((v) => {
+        if (v.sellingPrice > 0) return v.sellingPrice;
         const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
         return base + Math.round(base * ((v.margin ?? 0) / 100));
       })

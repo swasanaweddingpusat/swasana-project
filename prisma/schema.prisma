@@ -375,6 +375,7 @@ model PackageVariant {
   variantName    String
   pax            Int
   margin         Float                         @default(0)
+  sellingPrice   Int                           @default(0)
   available      Boolean                       @default(true)
   termAndCondition String?
   createdAt      DateTime                      @default(now())
