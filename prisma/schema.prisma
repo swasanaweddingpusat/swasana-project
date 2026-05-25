@@ -370,23 +370,25 @@ model Package {
 }
 
 model PackageVariant {
-  id             String                        @id @default(uuid())
-  packageId      String
-  variantName    String
-  pax            Int
-  margin         Float                         @default(0)
-  sellingPrice   Int                           @default(0)
-  available      Boolean                       @default(true)
+  id               String                        @id @default(uuid())
+  packageId        String
+  variantName      String
+  pax              Int
+  margin           Float                         @default(0)
+  sellingPrice     Int                           @default(0)
+  available        Boolean                       @default(true)
   termAndCondition String?
-  createdAt      DateTime                      @default(now())
-  updatedAt      DateTime                      @updatedAt
-  package        Package                       @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  vendorItems    PackageVendorItem[]
-  internalItems  PackageInternalItem[]
-  categoryPrices PackageVariantCategoryPrice[]
-  bookings       Booking[]
+  deletedAt        DateTime?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+  package          Package                       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  vendorItems      PackageVendorItem[]
+  internalItems    PackageInternalItem[]
+  categoryPrices   PackageVariantCategoryPrice[]
+  bookings         Booking[]
 
   @@index([packageId])
+  @@index([packageId, deletedAt])
   @@map("package_variants")
 }
 
@@ -410,6 +412,7 @@ model PackageVendorItem {
   packageVariantId String
   categoryName     String
   itemText         String
+  sortOrder        Int            @default(0)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
@@ -423,6 +426,7 @@ model PackageInternalItem {
   packageVariantId String
   itemName         String
   itemDescription  String         @default("")
+  sortOrder        Int            @default(0)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
