@@ -35,38 +35,38 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
     let revoked = false;
     let createdUrl: string | null = null;
 
-    setLoading(true);
-    setError(null);
-    setBlobUrl(null);
+    async function run() {
+      setLoading(true);
+      setError(null);
+      setBlobUrl(null);
 
-    void fetch("/api/render-po/package", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        packageId: target.packageId,
-        variantId: target.variantId,
-      }),
-    })
-      .then(async (res) => {
+      try {
+        const res = await fetch("/api/render-po/package", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            packageId: target!.packageId,
+            variantId: target!.variantId,
+          }),
+        });
         if (!res.ok) {
           const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
           throw new Error(errBody?.error ?? `Failed to load PDF (${res.status})`);
         }
-        return res.blob();
-      })
-      .then((blob) => {
+        const blob = await res.blob();
         if (revoked) return;
         createdUrl = URL.createObjectURL(blob);
         setBlobUrl(createdUrl);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (revoked) return;
         const message = err instanceof Error ? err.message : "Failed to load PDF";
         setError(message);
-      })
-      .finally(() => {
+      } finally {
         if (!revoked) setLoading(false);
-      });
+      }
+    }
+
+    void run();
 
     return () => {
       revoked = true;

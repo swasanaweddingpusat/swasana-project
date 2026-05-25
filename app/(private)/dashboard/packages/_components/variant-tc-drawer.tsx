@@ -120,7 +120,7 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     setSelectedVariantId(first.id); // eslint-disable-line react-hooks/set-state-in-effect
     const tc = (first as { termAndCondition?: string | null }).termAndCondition ?? "";
     editor?.commands.setContent(tc);
-  }, [open, pkg, editor]);
+  }, [open, pkg, variants, editor]);
 
   const insertVariable = useCallback(
     (key: string) => {
