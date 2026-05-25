@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -82,9 +83,11 @@ interface Props {
 }
 
 export function VariantTCDrawer({ open, onClose, pkg }: Props) {
+  const qc = useQueryClient();
   const variants = pkg?.variants ?? [];
   const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [draftMap, setDraftMap] = useState<Record<string, string>>({});
 
   const selectedVariant = variants.find((v) => v.id === selectedVariantId);
   const initialTC = (selectedVariant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
@@ -117,7 +120,7 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     setSelectedVariantId(first.id); // eslint-disable-line react-hooks/set-state-in-effect
     const tc = (first as { termAndCondition?: string | null }).termAndCondition ?? "";
     editor?.commands.setContent(tc);
-  }, [open, pkg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, pkg, variants, editor]);
 
   const insertVariable = useCallback(
     (key: string) => {
@@ -131,13 +134,17 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     const source = variants.find((v) => v.id === sourceId);
     const tc = (source as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
     editor?.commands.setContent(tc);
+    setDraftMap((prev) => ({ ...prev, [selectedVariantId]: tc }));
   }
 
   function handleVariantChange(id: string) {
+    if (editor && selectedVariantId) {
+      setDraftMap((prev) => ({ ...prev, [selectedVariantId]: editor.getHTML() }));
+    }
     setSelectedVariantId(id);
     const variant = variants.find((v) => v.id === id);
-    const tc = (variant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
-    editor?.commands.setContent(tc);
+    const dbTC = (variant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
+    editor?.commands.setContent(draftMap[id] ?? dbTC);
   }
 
   async function handleSave() {
@@ -149,15 +156,26 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     setSaving(false);
     if (res.success) {
       toast.success("T&C berhasil disimpan.");
+      setDraftMap((prev) => {
+        const next = { ...prev };
+        delete next[selectedVariantId];
+        return next;
+      });
+      await qc.invalidateQueries({ queryKey: ["packages"] });
     } else {
       toast.error(res.error);
     }
   }
 
+  function handleClose() {
+    setDraftMap({});
+    onClose();
+  }
+
   return (
     <Drawer
       isOpen={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={`Term & Condition — ${pkg?.packageName ?? ""}`}
       maxWidth="sm:max-w-full"
       childrenClassName="overflow-hidden flex flex-col"

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
   variants: {
+    where: { deletedAt: null },
     orderBy: { pax: "asc" as const },
     include: {
       vendorItems: true,
@@ -42,7 +43,7 @@ export async function getPackagesForBooking(venueId?: string) {
       ...packageInclude,
       variants: {
         ...packageInclude.variants,
-        where: { available: true },
+        where: { available: true, deletedAt: null },
       },
     },
   });
