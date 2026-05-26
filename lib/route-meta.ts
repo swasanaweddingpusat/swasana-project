@@ -50,6 +50,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Sumber informasi customer untuk tracking lead",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/lead-status": {
+    title: "Lead Status",
+    subtitle: "Kelola status pipeline lead",
+    parent: "/dashboard/settings",
+  },
   "/dashboard/settings/education-level": {
     title: "Tingkat Pendidikan",
     subtitle: "Kelola daftar tingkat pendidikan karyawan",
@@ -90,8 +95,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
 
   // ─── Bookings ───────────────────────────────────────────────────────────────
   "/dashboard/bookings": {
-    title: "Bookings",
-    subtitle: "Kelola data booking",
+    title: "Booking Weddings",
+    subtitle: "Kelola data booking weddings",
+  },
+  "/dashboard/bookings/mice": {
+    title: "Booking MICE",
+    subtitle: "Kelola data booking MICE",
   },
   // ─── Finance ────────────────────────────────────────────────────────────────
   "/dashboard/finance": {
@@ -110,6 +119,18 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Semua notifikasi",
   },
 
+  // ─── Leads ─────────────────────────────────────────────────────────────────
+  "/dashboard/leads": {
+    title: "Leads",
+    subtitle: "Kelola data lead dan pipeline penjualan",
+  },
+
+  // ─── Quotations ───────────────────────────────────────────────────────────
+  "/dashboard/quotations": {
+    title: "Quotations",
+    subtitle: "Kelola penawaran harga untuk lead",
+  },
+
   // ─── Customers ─────────────────────────────────────────────────────────────
   "/dashboard/customers": {
     title: "Customers",
@@ -117,7 +138,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
 
   // ─── Calendar Events ──────────────────────────────────────────────────────
-  "/dashboard/events/calendar-events": {
+  "/dashboard/bookings/calendar-events": {
     title: "Calendar Event",
     subtitle: "Lihat jadwal event di kalender",
   },
@@ -130,9 +151,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kinerja dan target penjualan tim",
     parent: "/dashboard/groups",
   },
-  "/dashboard/vendor-specialist": {
-    title: "Vendor Specialist",
-    subtitle: "Kelola set vendor, catering, dan dekorasi per booking",
+  "/dashboard/purchase-order": {
+    title: "Purchase Order",
+    subtitle: "Kelola purchase order vendor per booking",
   },
 };
 

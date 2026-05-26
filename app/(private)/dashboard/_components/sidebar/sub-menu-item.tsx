@@ -9,7 +9,8 @@ import type { SubMenuItem } from "./sidebar-config";
 
 function isPathActive(href: string, pathname: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname.startsWith(href);
+  if (pathname === href) return true;
+  return pathname.startsWith(href + "/");
 }
 
 function hasActiveChild(submenu: SubMenuItem[], pathname: string): boolean {
@@ -28,7 +29,9 @@ export function SubMenuItemRow({
   depth?: number;
 }) {
   const pathname = usePathname();
-  const active = isPathActive(item.href, pathname);
+  const active = item.submenu
+    ? isPathActive(item.href, pathname)
+    : pathname === item.href;
   const childActive = item.submenu ? hasActiveChild(item.submenu, pathname) : false;
   const [open, setOpen] = useState(active || childActive);
 

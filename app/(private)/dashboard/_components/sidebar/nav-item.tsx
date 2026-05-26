@@ -10,7 +10,8 @@ import { SubMenuItemRow } from "./sub-menu-item";
 
 function isPathActive(href: string, pathname: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname.startsWith(href);
+  if (pathname === href) return true;
+  return pathname.startsWith(href + "/");
 }
 
 function hasActiveChild(submenu: { href: string; submenu?: typeof submenu }[], pathname: string): boolean {
@@ -23,9 +24,7 @@ export function NavItemRow({ item, collapsed }: { item: NavItem; collapsed: bool
   const pathname = usePathname();
   const active = isPathActive(item.href, pathname);
   const childActive = item.submenu ? hasActiveChild(item.submenu, pathname) : false;
-  const [manualOpen, setManualOpen] = useState(false);
-  const open = active || childActive || manualOpen;
-  const setOpen = (v: boolean) => setManualOpen(v);
+  const [open, setOpen] = useState(active || childActive);
 
   const Icon = item.icon;
 
@@ -55,9 +54,12 @@ export function NavItemRow({ item, collapsed }: { item: NavItem; collapsed: bool
                 <Icon className={cn('mr-3', 'h-5', 'w-5', 'shrink-0')} style={{ color: "#A4A7AE" }} />
                 <span className="font-semibold">{item.name}</span>
               </button>
-              <span className={cn('p-1', 'shrink-0', 'pointer-events-none')}>
+              <button
+                onClick={() => setOpen(!open)}
+                className={cn('p-1', 'shrink-0', 'rounded', 'hover:bg-gray-200', 'transition-colors', 'cursor-pointer')}
+              >
                 {open ? <ChevronDown className={cn('h-4', 'w-4')} /> : <ChevronRight className={cn('h-4', 'w-4')} />}
-              </span>
+              </button>
             </>
           )}
         </div>

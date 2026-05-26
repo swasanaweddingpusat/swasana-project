@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { BookingsResult, SalesProfile } from "@/lib/queries/bookings";
+import { usePoll } from "@/hooks/use-poll";
 
 const BookingsTable = dynamic(
   () => import("./bookings-table").then((m) => ({ default: m.BookingsTable })),
@@ -15,5 +16,6 @@ export function BookingsTableClient({
   initialData: BookingsResult;
   salesProfiles: SalesProfile[];
 }) {
+  usePoll();
   return <BookingsTable initialData={initialData} salesProfiles={salesProfiles} />;
 }

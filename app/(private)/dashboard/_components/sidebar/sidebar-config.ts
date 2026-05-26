@@ -26,7 +26,11 @@ import {
   Handshake,
   BarChart3,
   CirclePile,
+  TicketCheck,
+  User,
   Settings,
+  Megaphone,
+  ReceiptText,
 
   type LucideIcon,
 } from "lucide-react";
@@ -65,6 +69,7 @@ export const SETTINGS_MODULES = [
   "settings-payment-methods",
   "settings-role-permission",
   "settings-source-of-information",
+  "settings-lead-status",
 ] as const;
 
 export const navItems: NavItem[] = [
@@ -74,34 +79,60 @@ export const navItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
+    name: "Leads",
+    href: "/dashboard/leads",
+    icon: Megaphone,
+    permission: { module: "leads", action: "view" },
+  },
+  {
+    name: "Quotations",
+    href: "/dashboard/quotations",
+    icon: ReceiptText,
+    permission: { module: "quotations", action: "view" },
+  },
+  {
     name: "Customers",
     href: "/dashboard/customers",
-    icon: Users,
+    icon: User,
     permission: { module: "customers", action: "view" },
-  },
-  {
-    name: "Calendar Event",
-    href: "/dashboard/events/calendar-events",
-    icon: CalendarRange,
-    permission: { module: "booking", action: "view" },
-  },
-  {
-    name: "Booking",
-    href: "/dashboard/bookings",
-    icon: Ticket,
-    permission: { module: "booking", action: "view" },
-  },
-  {
-    name: "Vendor Specialist",
-    href: "/dashboard/vendor-specialist",
-    icon: CirclePile,
-    permission: { module: "vendor-specialist", action: "view" },
   },
   {
     name: "Groups",
     href: "/dashboard/groups",
     icon: Users,
     permission: { module: "groups", action: "view" },
+  },
+  {
+    name: "Bookings",
+    href: "/dashboard/bookings",
+    icon: Ticket,
+    permission: { module: "booking", action: "view" },
+    submenu: [
+      {
+        name: "Calendar Event",
+        href: "/dashboard/bookings/calendar-events",
+        icon: CalendarRange,
+        permission: { module: "booking", action: "view" },
+      },
+      {
+        name: "Weddings",
+        href: "/dashboard/bookings",
+        icon: Ticket,
+        permission: { module: "booking", action: "view" },
+      },
+      {
+        name: "MICE",
+        href: "/dashboard/bookings/mice",
+        icon: TicketCheck,
+        permission: { module: "booking", action: "view" },
+      },
+    ],
+  },
+  {
+    name: "Purchase Order",
+    href: "/dashboard/purchase-order",
+    icon: CirclePile,
+    permission: { module: "vendor-specialist", action: "view" },
   },
   {
     name: "Finance",
