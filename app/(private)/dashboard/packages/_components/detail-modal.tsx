@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Package, Users, Settings, X, Pencil, FileText, Calendar, MapPin, Tag } from "lucide-react";
+import { Box, UsersGroupRounded, Settings, CloseCircle, Pen, FileText, Calendar, MapPoint, Tag } from "@solar-icons/react";
 import { getPackageCreatedBy } from "@/actions/package";
 import { cn } from "@/lib/utils";
 import type { PackageQueryItem } from "@/lib/queries/packages";
@@ -71,13 +71,13 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
               <DialogTitle className="text-lg truncate">{pkg.packageName}</DialogTitle>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />{pkg.venue?.name ?? "No venue"}
+                  <MapPoint weight="BoldDuotone" className="h-3 w-3" />{pkg.venue?.name ?? "No venue"}
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Tag className="h-3 w-3" />{variants.length} variant
+                  <Tag weight="BoldDuotone" className="h-3 w-3" />{variants.length} variant
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />Updated {formatDate(pkg.updatedAt)}
+                  <Calendar weight="BoldDuotone" className="h-3 w-3" />Updated {formatDate(pkg.updatedAt)}
                 </span>
                 {createdByName && (
                   <span className="inline-flex items-center gap-1">
@@ -103,11 +103,11 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
               </Badge>
               {onEdit && (
                 <Button variant="outline" size="sm" onClick={() => onEdit(pkg.id)} className="gap-1.5">
-                  <Pencil className="h-3.5 w-3.5" />Edit
+                  <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />Edit
                 </Button>
               )}
               <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
-                <X className="h-4 w-4" />
+                <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -125,7 +125,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
         {variants.length === 0 ? (
           <div className="flex-1 flex items-center justify-center py-12">
             <div className="text-center text-muted-foreground">
-              <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <Box weight="BoldDuotone" className="h-10 w-10 mx-auto mb-2 opacity-30" />
               <p className="text-sm">No variants yet</p>
             </div>
           </div>
@@ -177,7 +177,7 @@ function VariantContent({ variant: v }: { variant: PackageVariant }) {
 
       {/* Price Breakdown */}
       {categoryPrices.length > 0 && (
-        <SectionBlock title="Price Breakdown" icon={<Tag className="h-3.5 w-3.5" />}>
+        <SectionBlock title="Price Breakdown" icon={<Tag weight="BoldDuotone" className="h-3.5 w-3.5" />}>
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm">
               <tbody>
@@ -217,7 +217,7 @@ function VariantContent({ variant: v }: { variant: PackageVariant }) {
 
       {/* Term & Condition */}
       {v.termAndCondition && (
-        <SectionBlock title="Term & Condition" icon={<FileText className="h-3.5 w-3.5" />}>
+        <SectionBlock title="Term & Condition" icon={<FileText weight="BoldDuotone" className="h-3.5 w-3.5" />}>
           <div
             className="text-xs leading-relaxed rounded-md border bg-muted/20 p-3 max-h-64 overflow-y-auto [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:my-0.5 [&_strong]:font-semibold"
             dangerouslySetInnerHTML={{ __html: v.termAndCondition }}
@@ -259,10 +259,10 @@ function VendorItemsSection({ items }: { items: VendorItem[] }) {
   return (
     <SectionBlock
       title={`Vendor Items (${categories.length} categor${categories.length === 1 ? "y" : "ies"})`}
-      icon={<Users className="h-3.5 w-3.5" />}
+      icon={<UsersGroupRounded weight="BoldDuotone" className="h-3.5 w-3.5" />}
     >
       {categories.length === 0 ? (
-        <EmptyState icon={<Users className="h-6 w-6" />} label="No vendor items" />
+        <EmptyState icon={<UsersGroupRounded weight="BoldDuotone" className="h-6 w-6" />} label="No vendor items" />
       ) : (
         <div className="space-y-2">
           {categories.map((cat) => (
@@ -291,10 +291,10 @@ function InternalItemsSection({ items }: { items: InternalItem[] }) {
   return (
     <SectionBlock
       title={`Internal Items (${items.length})`}
-      icon={<Settings className="h-3.5 w-3.5" />}
+      icon={<Settings weight="BoldDuotone" className="h-3.5 w-3.5" />}
     >
       {items.length === 0 ? (
-        <EmptyState icon={<Settings className="h-6 w-6" />} label="No internal items" />
+        <EmptyState icon={<Settings weight="BoldDuotone" className="h-6 w-6" />} label="No internal items" />
       ) : (
         <div className="space-y-1.5">
           {items.map((item) => (

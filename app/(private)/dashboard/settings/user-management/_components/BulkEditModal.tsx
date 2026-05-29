@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Globe, User, Users, X } from "lucide-react";
+import { Earth, User, UsersGroupRounded, CloseCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -77,12 +77,12 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, onSuccess
             <p className="text-xs text-gray-500 mt-1 mb-2">Controls which booking data this user can see</p>
             <div className="flex gap-2">
               {(["own", "group", "all"] as const).map((scope) => {
-                const icons = { own: <User className="h-3 w-3" />, group: <Users className="h-3 w-3" />, all: <Globe className="h-3 w-3" /> };
+                const icons = { own: <User weight="BoldDuotone" className="h-3 w-3" />, group: <UsersGroupRounded weight="BoldDuotone" className="h-3 w-3" />, all: <Earth weight="BoldDuotone" className="h-3 w-3" /> };
                 const labels = { own: "Own", group: "Group", all: "All" };
                 return (
                   <button key={scope} type="button" onClick={() => setDataScope(scope)}
                     className={cn("flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition-all flex-1 justify-center",
-                      dataScope === scope ? "bg-gray-900 text-white border-gray-900" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                      dataScope === scope ? "bg-primary text-primary-foreground border-primary" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
                     )}>
                     {icons[scope]}{labels[scope]}
                   </button>
@@ -100,7 +100,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, onSuccess
                       return (
                         <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full">
                           {g.name}
-                          <button type="button" onClick={() => setSelectedGroupIds((p) => p.filter((id) => id !== gid))} className="ml-0.5 hover:text-gray-300"><X className="h-3 w-3" /></button>
+                          <button type="button" onClick={() => setSelectedGroupIds((p) => p.filter((id) => id !== gid))} className="ml-0.5 hover:text-gray-300"><CloseCircle weight="BoldDuotone" className="h-3 w-3" /></button>
                         </span>
                       );
                     })}

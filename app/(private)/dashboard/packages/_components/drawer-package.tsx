@@ -9,7 +9,7 @@ import { SimpleEditor } from "@/components/ui/simple-editor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Users, Settings, PenLine, Plus, Trash2, ChevronDown, GripVertical, Copy } from "lucide-react";
+import { Box, UsersGroupRounded, Settings, PenNewSquare, AddCircle, TrashBinTrash, AltArrowDown, MenuDots, Copy } from "@solar-icons/react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -52,10 +52,10 @@ interface DrawerPackageProps {
 }
 
 const stepperSteps = [
-  { id: 1, title: "Detail Paket", subtitle: "Informasi dasar & varian", icon: Package },
-  { id: 2, title: "Item Vendor", subtitle: "Item vendor per kategori", icon: Users },
+  { id: 1, title: "Detail Paket", subtitle: "Informasi dasar & varian", icon: Box },
+  { id: 2, title: "Item Vendor", subtitle: "Item vendor per kategori", icon: UsersGroupRounded },
   { id: 3, title: "Item Internal", subtitle: "Atur item internal", icon: Settings },
-  { id: 4, title: "Tanda Tangan", subtitle: "Konfirmasi & tanda tangan", icon: PenLine },
+  { id: 4, title: "Tanda Tangan", subtitle: "Konfirmasi & tanda tangan", icon: PenNewSquare },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ function SortableVariantRow({ id, onToggle, isOpen, label, pax, children }: {
           className={cn('pl-3', 'pr-1', 'py-3', 'text-gray-400', 'hover:text-gray-600', 'cursor-grab', 'active:cursor-grabbing')}
           tabIndex={-1}
         >
-          <GripVertical className={cn('h-4', 'w-4')} />
+          <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4')} />
         </button>
         <button
           type="button"
@@ -94,7 +94,7 @@ function SortableVariantRow({ id, onToggle, isOpen, label, pax, children }: {
             <h4 className={cn('font-medium', 'text-gray-900', 'text-sm')}>{label}</h4>
             <p className={cn('text-xs', 'text-gray-500')}>{pax || 0} PAX</p>
           </div>
-          <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform mr-2", isOpen && "rotate-180")} />
+          <AltArrowDown weight="BoldDuotone" className={cn("h-4 w-4 text-gray-400 transition-transform mr-2", isOpen && "rotate-180")} />
         </button>
       </div>
       {children}
@@ -112,7 +112,7 @@ function SortableItemRow({ id, children }: { id: string; children: React.ReactNo
     >
       <div className={cn('flex', 'items-center', 'gap-2')}>
         <button type="button" {...attributes} {...listeners} className={cn('text-gray-400', 'hover:text-gray-600', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')} tabIndex={-1}>
-          <GripVertical className={cn('h-4', 'w-4')} />
+          <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4')} />
         </button>
         <div className={cn('flex-1', 'space-y-2')}>{children}</div>
       </div>
@@ -553,14 +553,14 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
               <div>
                 <div className={cn('flex', 'items-center', 'justify-between', 'mb-2')}>
                   <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Varian Paket *</Label>
-                  <Button type="button" size="sm" onClick={addVariant} className={cn('h-8', 'px-3', 'text-xs', 'bg-black', 'text-white', 'hover:bg-gray-800')}>
-                    <Plus className={cn('h-3', 'w-3', 'mr-1')} />Tambah Varian
+                  <Button type="button" size="sm" onClick={addVariant} className={cn('h-8', 'px-3', 'text-xs')}>
+                    <AddCircle weight="BoldDuotone" className={cn('h-3', 'w-3', 'mr-1')} />Tambah Varian
                   </Button>
                 </div>
 
                 {variants.length === 0 ? (
                   <div className={cn('text-center', 'py-8', 'text-gray-500', 'border-2', 'border-dashed', 'border-gray-300', 'rounded-lg')}>
-                    <Package className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
+                    <Box weight="BoldDuotone" className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
                     <p className="text-sm">Belum ada varian</p>
                     <p className={cn('text-xs', 'text-gray-400')}>Klik &quot;Tambah Varian&quot; untuk mulai</p>
                   </div>
@@ -602,7 +602,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                   <Label className={cn('text-xs', 'text-gray-600')}>Tersedia</Label>
                                 </div>
                                 <Button type="button" variant="outline" size="sm" onClick={() => removeVariant(idx)} className={cn('h-7', 'px-2', 'text-xs', 'text-red-600', 'hover:text-red-700', 'hover:bg-red-50')}>
-                                  <Trash2 className={cn('h-3', 'w-3', 'mr-1')} />Hapus
+                                  <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'mr-1')} />Hapus
                                 </Button>
                               </div>
                             </div>
@@ -629,7 +629,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
 
               {variants.length === 0 ? (
                 <div className={cn('text-center', 'py-8', 'text-gray-500', 'border-2', 'border-dashed', 'border-gray-300', 'rounded-lg')}>
-                  <Package className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
+                  <Box weight="BoldDuotone" className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
                   <p className="text-sm">Belum ada varian. Tambahkan di Step 1.</p>
                 </div>
               ) : (
@@ -647,7 +647,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                         </div>
                         <div className={cn('flex', 'items-center', 'gap-2')}>
                           <span className={cn('text-xs', 'text-gray-500')}>{(vendorItems[variantIdx] ?? []).length} items</span>
-                          <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
+                          <AltArrowDown weight="BoldDuotone" className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
                         </div>
                       </button>
 
@@ -656,7 +656,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                           <DndContext sensors={itemSensors} collisionDetection={closestCenter} onDragEnd={(e) => handleVendorItemDragEnd(variantIdx, e)}>
                           {variants.length > 1 && (
                             <div className={cn("flex", "items-center", "gap-2", "pb-1")}>
-                              <Copy className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
+                              <Copy weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
                               <Select onValueChange={(val) => duplicateVendorItems(variantIdx, parseInt(val))}>
                                 <SelectTrigger className={cn("h-7", "text-xs", "flex-1", "border-gray-300")}>
                                   <SelectValue placeholder="Copy dari..." />
@@ -681,7 +681,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                         className={cn('text-sm', 'font-medium', 'border-gray-300')}
                                       />
                                       <Button variant="outline" size="sm" onClick={() => removeVendorItem(variantIdx, item.id)} className={cn('h-8', 'w-8', 'p-0', 'shrink-0', 'text-red-600', 'hover:text-red-700', 'hover:bg-red-50')}>
-                                        <Trash2 className={cn('h-4', 'w-4')} />
+                                        <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                                       </Button>
                                     </div>
                                     <SimpleEditor
@@ -699,7 +699,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                             onClick={() => addVendorItem(variantIdx)}
                             className={cn('w-full', 'border-dashed', 'border-gray-300', 'text-gray-600', 'hover:bg-gray-50')}
                           >
-                            <Plus className={cn('h-4', 'w-4', 'mr-2')} />Tambah Item
+                            <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} />Tambah Item
                           </Button>
                         </div>
                       )}
@@ -720,7 +720,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
 
               {variants.length === 0 ? (
                 <div className={cn('text-center', 'py-8', 'text-gray-500', 'border-2', 'border-dashed', 'border-gray-300', 'rounded-lg')}>
-                  <Package className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
+                  <Box weight="BoldDuotone" className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-gray-400')} />
                   <p className="text-sm">Belum ada varian.</p>
                 </div>
               ) : (
@@ -738,7 +738,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                         </div>
                         <div className={cn('flex', 'items-center', 'gap-2')}>
                           <span className={cn('text-xs', 'text-gray-500')}>{(internalItems[variantIdx] ?? []).length} items</span>
-                          <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
+                          <AltArrowDown weight="BoldDuotone" className={cn("h-4 w-4 text-gray-400 transition-transform", openVariants.has(variantIdx) && "rotate-180")} />
                         </div>
                       </button>
 
@@ -747,7 +747,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                           <DndContext sensors={itemSensors} collisionDetection={closestCenter} onDragEnd={(e) => handleInternalItemDragEnd(variantIdx, e)}>
                           {variants.length > 1 && (
                             <div className={cn("flex", "items-center", "gap-2", "pb-1")}>
-                              <Copy className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
+                              <Copy weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "text-gray-400", "shrink-0")} />
                               <Select onValueChange={(val) => duplicateInternalItems(variantIdx, parseInt(val))}>
                                 <SelectTrigger className={cn("h-7", "text-xs", "flex-1", "border-gray-300")}>
                                   <SelectValue placeholder="Copy dari..." />
@@ -772,7 +772,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                                         className={cn('text-sm', 'font-medium', 'border-gray-300')}
                                       />
                                       <Button variant="outline" size="sm" onClick={() => removeInternalItem(variantIdx, item.id)} className={cn('h-8', 'w-8', 'p-0', 'shrink-0', 'text-red-600', 'hover:text-red-700', 'hover:bg-red-50')}>
-                                        <Trash2 className={cn('h-4', 'w-4')} />
+                                        <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                                       </Button>
                                     </div>
                                     <SimpleEditor
@@ -790,7 +790,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                             onClick={() => addInternalItem(variantIdx)}
                             className={cn('w-full', 'border-dashed', 'border-gray-300', 'text-gray-600', 'hover:bg-gray-50')}
                           >
-                            <Plus className={cn('h-4', 'w-4', 'mr-2')} />Tambah Item
+                            <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} />Tambah Item
                           </Button>
                         </div>
                       )}
@@ -834,7 +834,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
             </Button>
             <Button
               onClick={currentStep === 4 ? handleSubmit : handleNext}
-              className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}
+              className={cn('flex-1', 'cursor-pointer')}
               disabled={isNextDisabled || (currentStep === 4 && !signature)}
             >
               {submitting ? "Menyimpan..." : currentStep < 4 ? "Selanjutnya" : (isEdit ? "Simpan Perubahan" : "Buat Paket")}

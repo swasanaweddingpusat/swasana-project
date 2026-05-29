@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, ExternalLink, X } from "lucide-react";
+import { Refresh, ArrowRightUp, CloseCircle } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -92,7 +92,7 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
         <div className="relative min-h-0 flex-1 overflow-hidden bg-muted">
           {loading && (
             <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Refresh weight="BoldDuotone" className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           )}
           {error && !loading && (
@@ -113,11 +113,11 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
 
         <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none border-t p-4">
           <Button variant="outline" onClick={handleOpenNewTab} disabled={!blobUrl}>
-            <ExternalLink className="mr-2 h-4 w-4" />
+            <ArrowRightUp weight="BoldDuotone" className="mr-2 h-4 w-4" />
             Buka di Tab Baru
           </Button>
           <Button variant="default" onClick={() => onOpenChange(false)}>
-            <X className="mr-2 h-4 w-4" />
+            <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
             Tutup
           </Button>
         </DialogFooter>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, AlertTriangle, Target as TargetIcon } from "lucide-react";
+import { Crown, DangerTriangle, Target as TargetIcon } from "@solar-icons/react";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { cn } from "@/lib/utils";
 import { SalesRecentBookings } from "./SalesRecentBookings";
@@ -68,7 +68,7 @@ export function GroupSalesDetailPanel({ member, hasMembers, onViewAllBookings }:
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-foreground">{member.name}</h2>
             {isTop && (
-              <Crown className="h-4 w-4 text-foreground shrink-0" />
+              <Crown weight="BoldDuotone" className="h-4 w-4 text-foreground shrink-0" />
             )}
           </div>
           {isTop && (
@@ -82,7 +82,7 @@ export function GroupSalesDetailPanel({ member, hasMembers, onViewAllBookings }:
       {/* Pending approval warning */}
       {member.pendingApproval > 0 && (
         <div className="flex items-center gap-2.5 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+          <DangerTriangle weight="BoldDuotone" className="h-4 w-4 text-destructive shrink-0" />
           <p className="text-sm text-destructive font-medium">
             {member.pendingApproval} booking menunggu approval
           </p>
@@ -101,6 +101,7 @@ export function GroupSalesDetailPanel({ member, hasMembers, onViewAllBookings }:
         >
           {/* Corner decoration */}
           <TargetIcon
+            weight="BoldDuotone"
             className="absolute top-3 right-3 h-8 w-8 text-amber-200/60 pointer-events-none"
             aria-hidden="true"
           />

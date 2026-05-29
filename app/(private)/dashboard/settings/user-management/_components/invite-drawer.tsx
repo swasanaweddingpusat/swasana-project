@@ -11,7 +11,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Globe, User, Users } from "lucide-react";
+import { Earth, User, UsersGroupRounded } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useInviteUser, useUpdateUser } from "@/hooks/use-users";
 import { useGroups, useCreateGroup, useAddGroupMember, useRemoveGroupMember } from "@/hooks/use-groups";
@@ -263,7 +263,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
             <p className="text-xs text-gray-500 mt-1 mb-2">Controls which booking data this user can see</p>
             <div className="flex gap-2">
               {(["own", "group", "all"] as const).map((scope) => {
-                const icons = { own: <User className="h-3 w-3" />, group: <Users className="h-3 w-3" />, all: <Globe className="h-3 w-3" /> };
+                const icons = { own: <User weight="BoldDuotone" className="h-3 w-3" />, group: <UsersGroupRounded weight="BoldDuotone" className="h-3 w-3" />, all: <Earth weight="BoldDuotone" className="h-3 w-3" /> };
                 const labels = { own: "Own", group: "Group", all: "All" };
                 return (
                   <button
@@ -273,7 +273,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border transition-all flex-1 justify-center",
                       formData.dataScope === scope
-                        ? "bg-gray-900 text-white border-gray-900"
+                        ? "bg-primary text-primary-foreground border-primary"
                         : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
                     )}
                   >

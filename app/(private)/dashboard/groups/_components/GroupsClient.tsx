@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { AddCircle } from "@solar-icons/react";
 import { GroupsStatsCards } from "./GroupsStatsCards";
 import { GroupsTable } from "./GroupsTable";
 import { GroupFormDialog } from "./GroupFormDialog";
@@ -42,7 +42,7 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _ca
           <h2 className="text-sm font-semibold">Daftar Groups</h2>
           {canCreate && (
             <Button size="sm" className="h-9 gap-1.5" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> New Group
+              <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> New Group
             </Button>
           )}
         </div>

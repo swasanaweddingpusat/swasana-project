@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { Loader2 } from "lucide-react"
+import { Refresh } from "@solar-icons/react"
 import { VerifyForm } from "./_components/verify-form"
 import { Metadata } from "next"
 import { cn } from "../../../../lib/utils";
@@ -14,7 +14,7 @@ export default function VerifyEmailPage() {
       <Suspense
         fallback={
           <div className={cn('flex', 'flex-col', 'items-center', 'gap-3')}>
-            <Loader2 className={cn('h-8', 'w-8', 'animate-spin', 'text-blue-600')} />
+            <Refresh weight="BoldDuotone" className={cn('h-8', 'w-8', 'animate-spin', 'text-blue-600')} />
             <p className="text-muted-foreground">Memuat...</p>
           </div>
         }

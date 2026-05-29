@@ -4,7 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ChevronDown, Search, Plus, X } from "lucide-react";
+import { CheckCircle, AltArrowDown, Magnifer, AddCircle, CloseCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -109,7 +109,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
       {!showAdd ? (
         <>
           <div className="flex items-center border-b px-3">
-            <Search className="h-4 w-4 shrink-0 opacity-50 mr-2" />
+            <Magnifer weight="BoldDuotone" className="h-4 w-4 shrink-0 opacity-50 mr-2" />
             <input
               autoFocus
               className="flex h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -132,7 +132,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
                   <p className="font-medium truncate">{pm.bankName} — {pm.bankRecipient}</p>
                   <p className="text-xs text-muted-foreground">{pm.bankAccountNumber}</p>
                 </div>
-                {value === pm.id && <Check className="h-4 w-4 shrink-0 ml-2" />}
+                {value === pm.id && <CheckCircle weight="BoldDuotone" className="h-4 w-4 shrink-0 ml-2" />}
               </div>
             ))}
           </div>
@@ -143,7 +143,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
                 className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent text-muted-foreground"
                 onClick={() => setShowAdd(true)}
               >
-                <Plus className="h-3.5 w-3.5" /> Tambah rekening baru
+                <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> Tambah rekening baru
               </button>
             </div>
           )}
@@ -153,7 +153,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-semibold">Rekening Baru</p>
             <button type="button" onClick={() => setShowAdd(false)} className="text-muted-foreground hover:text-foreground">
-              <X className="h-3.5 w-3.5" />
+              <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
             </button>
           </div>
           <Input placeholder="Nama bank" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} className="h-8 text-xs" />
@@ -185,7 +185,7 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
         <span className="truncate">
           {selected ? `${selected.bankName} — ${selected.bankRecipient}` : placeholder}
         </span>
-        <ChevronDown className={cn("ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
+        <AltArrowDown weight="BoldDuotone" className={cn("ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
       </button>
       {typeof window !== "undefined" && dropdown && createPortal(dropdown, document.body)}
     </div>

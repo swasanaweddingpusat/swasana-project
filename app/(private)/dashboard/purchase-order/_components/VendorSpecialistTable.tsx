@@ -13,8 +13,8 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Search, ArrowLeft, ArrowRight, Store, UtensilsCrossed, Palette, CalendarDays,
-} from "lucide-react";
+  Magnifer, ArrowLeft, ArrowRight, Shop, ChefHat, Palette, Calendar,
+} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -131,7 +131,7 @@ export function VendorSpecialistTable({
             </div>
             <div className={cn("flex", "flex-wrap", "items-center", "gap-2")}>
               <div className={cn("relative", "flex-1", "sm:flex-none")}>
-                <Search className={cn("absolute", "left-3", "top-1/2", "-translate-y-1/2", "h-4", "w-4", "text-muted-foreground")} />
+                <Magnifer weight="BoldDuotone" className={cn("absolute", "left-3", "top-1/2", "-translate-y-1/2", "h-4", "w-4", "text-muted-foreground")} />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn("pl-9", "w-full", "sm:w-55")} />
               </div>
               <SearchableSelect
@@ -148,7 +148,7 @@ export function VendorSpecialistTable({
           {/* Table */}
           {bookings.length === 0 ? (
             <div className={cn("flex", "flex-col", "items-center", "justify-center", "py-16", "text-muted-foreground")}>
-              <CalendarDays className={cn("h-10", "w-10", "mb-3", "opacity-40")} />
+              <Calendar weight="BoldDuotone" className={cn("h-10", "w-10", "mb-3", "opacity-40")} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
             </div>
           ) : (
@@ -284,7 +284,7 @@ export function VendorSpecialistTable({
                                   onClick={(e) => { e.stopPropagation(); setVendorTarget(booking); }}
                                 />
                               }>
-                                <Store className={cn("h-4", "w-4")} />
+                                <Shop weight="BoldDuotone" className={cn("h-4", "w-4")} />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Set Vendor</p></TooltipContent>
                             </Tooltip>
@@ -300,7 +300,7 @@ export function VendorSpecialistTable({
                                   onClick={(e) => { e.stopPropagation(); setCateringTarget(booking.id); }}
                                 />
                               }>
-                                <UtensilsCrossed className={cn("h-4", "w-4")} />
+                                <ChefHat weight="BoldDuotone" className={cn("h-4", "w-4")} />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Catering PO</p></TooltipContent>
                             </Tooltip>
@@ -316,7 +316,7 @@ export function VendorSpecialistTable({
                                   onClick={(e) => { e.stopPropagation(); setDecorationTarget(booking.id); }}
                                 />
                               }>
-                                <Palette className={cn("h-4", "w-4")} />
+                                <Palette weight="BoldDuotone" className={cn("h-4", "w-4")} />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Dekorasi PO</p></TooltipContent>
                             </Tooltip>
@@ -338,10 +338,10 @@ export function VendorSpecialistTable({
               </p>
               <div className="flex gap-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <ArrowLeft weight="BoldDuotone" className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <ArrowRight weight="BoldDuotone" className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>

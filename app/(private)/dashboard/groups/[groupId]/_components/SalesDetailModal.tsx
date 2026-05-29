@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { X, Check } from "lucide-react";
+import { CloseCircle, CheckCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { approveBooking } from "@/actions/booking";
@@ -114,7 +114,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
             className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20"
             aria-label="Tutup detail sales"
           >
-            <X size={18} className="text-destructive" />
+            <CloseCircle weight="BoldDuotone" className="h-[18px] w-[18px] text-destructive" />
           </button>
         </div>
 
@@ -200,7 +200,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
 
                     <TableCell className="px-4 sm:px-8 py-2.5 text-right">
                       <Button size="xs" variant="outline" className="h-9 gap-1 text-xs min-w-20" onClick={() => { setApproveTarget(b.id); }}>
-                        <Check className="h-3 w-3" /> Approve
+                        <CheckCircle weight="BoldDuotone" className="h-3 w-3" /> Approve
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -219,7 +219,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
           <div className="flex gap-2 mt-4">
             <Button variant="outline" className="flex-1" onClick={() => { setApproveTarget(null); }}>Batal</Button>
             <Button className="flex-1 gap-1.5" disabled={isPending} onClick={handleApprove}>
-              <Check className="h-3.5 w-3.5" /> Approve
+              <CheckCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> Approve
             </Button>
           </div>
         </DialogContent>

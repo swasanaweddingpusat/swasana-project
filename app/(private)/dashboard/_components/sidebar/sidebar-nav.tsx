@@ -1,16 +1,14 @@
 "use client";
 
-import Image from "next/image";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuSkeleton,
+} from "@/components/ui/sidebar";
 import { navItems, SETTINGS_MODULES, type NavItem, type SubMenuItem } from "./sidebar-config";
 import { NavItemRow } from "./nav-item";
 import { usePermissions } from "@/hooks/use-permissions";
-import { cn } from "../../../../../lib/utils";
-
-interface SidebarNavProps {
-  collapsed?: boolean;
-  onNavigate?: () => void;
-}
 
 type CanFn = (module: string, action: string) => boolean;
 
@@ -49,50 +47,23 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
   });
 }
 
-export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
+export function SidebarNav() {
   const { can, isLoading, isGroupMember } = usePermissions();
   const visibleItems = isLoading ? [] : filterNavItems(navItems, can, isGroupMember);
 
   return (
-    <>
-      {/* Logo */}
-      <div className={cn('sticky', 'top-0', 'bg-white', 'z-10', 'border-b', 'border-gray-200', 'h-16', 'flex', 'items-center', 'px-5')}>
-        {collapsed ? (
-          <div className={cn('w-full', 'flex', 'justify-center')}>
-            <Image
-              src="/logo-sgp.svg"
-              alt="SGP"
-              width={100}
-              height={100}
-              style={{ width: "auto", height: "auto" }}
-              priority
-            />
-          </div>
-        ) : (
-          <Image
-            src="/logo-swasana.svg"
-            alt="Swasana Wedding"
-            width={100}
-            height={100}
-            style={{ width: "65%", height: "auto" }}
-            priority
-          />
-        )}
-      </div>
-
-      {/* Nav */}
-      <nav className={cn('flex-1', 'p-4', 'space-y-2', 'overflow-y-auto', 'overflow-x-hidden')} onClick={onNavigate}>
-        {isLoading
-          ? Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} className={collapsed ? "flex justify-center py-3" : "flex items-center gap-3 px-3 py-2"}>
-                <Skeleton className={cn('h-5', 'w-5', 'shrink-0', 'rounded')} />
-                {!collapsed && <Skeleton className={cn('h-4', 'rounded')} style={{ width: `${60 + (i % 3) * 15}%` }} />}
-              </div>
-            ))
-          : visibleItems.map((item) => (
-              <NavItemRow key={item.href} item={item} collapsed={collapsed} />
-            ))}
-      </nav>
-    </>
+    <SidebarGroup>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {isLoading
+            ? Array.from({ length: 7 }).map((_, i) => (
+                <SidebarMenuSkeleton key={i} showIcon />
+              ))
+            : visibleItems.map((item) => (
+                <NavItemRow key={item.href} item={item} />
+              ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }

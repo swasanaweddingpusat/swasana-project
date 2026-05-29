@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, GripVertical, PenLine, Save, Shield } from "lucide-react";
+import { AddCircle, TrashBinTrash, MenuDots, PenNewSquare, Diskette, Shield } from "@solar-icons/react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -35,7 +35,7 @@ function SortableStep({ id, children }: { id: string; children: React.ReactNode 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex items-center gap-2 p-3 border rounded-lg bg-white", isDragging && "opacity-50 shadow-lg")}>
       <button type="button" {...attributes} {...listeners} className={cn('text-gray-400', 'hover:text-gray-600', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')} tabIndex={-1}>
-        <GripVertical className={cn('h-4', 'w-4')} />
+        <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4')} />
       </button>
       <div className={cn('flex-1', 'min-w-0')}>{children}</div>
     </div>
@@ -187,8 +187,8 @@ export function ApprovalFlowManager() {
               <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Approval Flows</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({flows.length})</span>
             </div>
-            <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'rounded-md', 'px-4', 'py-2', 'text-sm', 'font-medium')}>
-              <Plus className={cn('h-4', 'w-4')} /> Tambah Flow
+            <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
+              <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Tambah Flow
             </Button>
           </div>
 
@@ -208,7 +208,7 @@ export function ApprovalFlowManager() {
               {flows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
-                    <Shield className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-muted-foreground/30')} />
+                    <Shield weight="BoldDuotone" className={cn('h-8', 'w-8', 'mx-auto', 'mb-2', 'text-muted-foreground/30')} />
                     Belum ada approval flow
                   </TableCell>
                 </TableRow>
@@ -234,10 +234,10 @@ export function ApprovalFlowManager() {
                     <TableCell>
                       <div className={cn('flex', 'items-center', 'gap-1')}>
                         <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} onClick={() => openEdit(flow)} title="Edit">
-                          <PenLine className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                          <PenNewSquare weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                         </button>
                         <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} onClick={() => setDeleteTarget(flow)} title="Hapus">
-                          <Trash2 className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                          <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                         </button>
                       </div>
                     </TableCell>
@@ -312,7 +312,7 @@ export function ApprovalFlowManager() {
                               )}
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => removeStep(step.tempId)} className={cn('h-8', 'w-8', 'p-0', 'shrink-0', 'text-red-500', 'hover:text-red-700', 'hover:bg-red-50')}>
-                              <Trash2 className={cn('h-3.5', 'w-3.5')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                             </Button>
                           </div>
                         </SortableStep>
@@ -321,14 +321,14 @@ export function ApprovalFlowManager() {
                   </SortableContext>
                 </DndContext>
                 <Button variant="outline" size="sm" onClick={addStep} className={cn('w-full', 'border-dashed')}>
-                  <Plus className={cn('h-3.5', 'w-3.5', 'mr-1')} />Tambah Step
+                  <AddCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-1')} />Tambah Step
                 </Button>
               </div>
             </div>
             <div className={cn('px-5', 'py-3', 'border-t', 'flex', 'gap-2')}>
               <Button variant="outline" onClick={() => setFormOpen(false)} className="flex-1">Batal</Button>
               <Button onClick={handleSave} disabled={upsertMut.isPending} className="flex-1">
-                <Save className={cn('h-4', 'w-4', 'mr-1')} />{upsertMut.isPending ? "Menyimpan..." : "Simpan"}
+                <Diskette weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} />{upsertMut.isPending ? "Menyimpan..." : "Simpan"}
               </Button>
             </div>
           </div>

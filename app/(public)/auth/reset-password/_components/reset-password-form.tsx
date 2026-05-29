@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { Loader2, Eye, EyeOff } from "lucide-react"
+import { Refresh, Eye, EyeClosed } from "@solar-icons/react"
 import { toast } from "sonner"
 import { useSearchParams, useRouter } from "next/navigation"
 import { resetPassword } from "@/actions/auth"
@@ -124,9 +124,9 @@ export function ResetPasswordForm({
               disabled={isPending}
             >
               {showPassword ? (
-                <EyeOff className={cn('h-4', 'w-4')} />
+                <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               ) : (
-                <Eye className={cn('h-4', 'w-4')} />
+                <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               )}
             </Button>
           </div>
@@ -154,9 +154,9 @@ export function ResetPasswordForm({
               disabled={isPending}
             >
               {showConfirmPassword ? (
-                <EyeOff className={cn('h-4', 'w-4')} />
+                <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               ) : (
-                <Eye className={cn('h-4', 'w-4')} />
+                <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               )}
             </Button>
           </div>
@@ -164,7 +164,7 @@ export function ResetPasswordForm({
         <Button type="submit" className="w-full" disabled={isPending}>
           {isPending ? (
             <>
-              <Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
+              <Refresh weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
               Membuat kata sandi...
             </>
           ) : (

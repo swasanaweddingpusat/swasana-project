@@ -1,4 +1,4 @@
-import { Crown } from "lucide-react";
+import { Crown } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
 export interface SalesPerformanceItem {
@@ -52,7 +52,7 @@ export function SalesLeaderboard({ sales }: { sales: SalesPerformanceItem[] }) {
               {/* Rank */}
               <div className={cn("w-6", "shrink-0", "flex", "justify-center")}>
                 {isTop ? (
-                  <Crown className={cn("h-5", "w-5")} style={{ color: "#D97706" }} />
+                  <Crown weight="BoldDuotone" className={cn("h-5", "w-5")} style={{ color: "#D97706" }} />
                 ) : (
                   <span className={cn("text-sm", "font-medium", "text-muted-foreground")}>{idx + 1}</span>
                 )}

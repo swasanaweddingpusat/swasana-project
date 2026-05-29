@@ -1,12 +1,10 @@
 import { Suspense } from "react";
-import { Sidebar } from "./_components/sidebar/sidebar";
-import { MobileSidebar } from "./_components/sidebar/mobile-sidebar";
-import { SidebarProvider } from "./_components/sidebar/sidebar-context";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { SwasanaSidebar } from "./_components/sidebar/sidebar";
 import { Header } from "./_components/header/header";
 import { AuthGate } from "../_components/auth-gate";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
-import { cn } from "../../../lib/utils";
 
 export default function DashboardLayout({
   children,
@@ -17,18 +15,17 @@ export default function DashboardLayout({
     <SidebarProvider>
       <HeaderActionProvider>
         <BookingDrawerProvider>
-        <div className={cn('flex', 'h-screen', 'bg-gray-100')}>
-          <Suspense><Sidebar /></Suspense>
-          <Suspense><MobileSidebar /></Suspense>
-          <div className={cn('flex', 'flex-col', 'flex-1', 'min-w-0', 'overflow-hidden')}>
-            <Suspense><Header /></Suspense>
-            <main className={cn('flex-1', 'overflow-y-auto', 'p-4', 'lg:p-6')}>
+          <SwasanaSidebar />
+          <SidebarInset>
+            <Suspense>
+              <Header />
+            </Suspense>
+            <main className="flex-1 overflow-y-auto p-4 lg:p-6">
               <Suspense>
                 <AuthGate>{children}</AuthGate>
               </Suspense>
             </main>
-          </div>
-        </div>
+          </SidebarInset>
         </BookingDrawerProvider>
       </HeaderActionProvider>
     </SidebarProvider>

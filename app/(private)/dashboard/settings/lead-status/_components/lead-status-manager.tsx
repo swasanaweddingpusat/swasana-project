@@ -33,11 +33,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Plus,
-  PenLine,
-  Trash2,
+  AddCircle,
+  PenNewSquare,
+  TrashBinTrash,
   Lock,
-} from "lucide-react";
+} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import {
   useLeadStatuses,
@@ -151,7 +151,7 @@ export function LeadStatusManager() {
                 </p>
               </div>
               <Button onClick={handleOpenAdd} className="cursor-pointer shrink-0">
-                <Plus className="w-4 h-4 mr-2" />
+                <AddCircle weight="BoldDuotone" className="w-4 h-4 mr-2" />
                 Tambah Status
               </Button>
             </div>
@@ -195,7 +195,7 @@ export function LeadStatusManager() {
                             <span className={cn("font-medium", item.isSystem && "text-muted-foreground")}>
                               {item.name}
                             </span>
-                            {item.isSystem && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                            {item.isSystem && <Lock weight="BoldDuotone" className="w-3 h-3 text-muted-foreground shrink-0" />}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -233,7 +233,7 @@ export function LeadStatusManager() {
                               className="p-1.5 rounded-md hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                               aria-label="Edit"
                             >
-                              <PenLine className="w-4 h-4 text-muted-foreground" />
+                              <PenNewSquare weight="BoldDuotone" className="w-4 h-4 text-muted-foreground" />
                             </button>
                             <button
                               onClick={() => setDeleteTarget(item)}
@@ -241,7 +241,7 @@ export function LeadStatusManager() {
                               className="p-1.5 rounded-md hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                               aria-label="Hapus"
                             >
-                              <Trash2 className="w-4 h-4 text-destructive" />
+                              <TrashBinTrash weight="BoldDuotone" className="w-4 h-4 text-destructive" />
                             </button>
                           </div>
                         </TableCell>

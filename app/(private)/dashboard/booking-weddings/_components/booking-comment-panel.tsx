@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Send, X, Paperclip, ImageIcon, FileText, Reply, Pencil, Trash2, Check, Loader2, MessageSquare, Plus } from "lucide-react";
+import { Plain, CloseCircle, Paperclip, Gallery, FileText, Reply, Pen, TrashBinTrash, CheckCircle, Refresh, ChatRound, AddCircle } from "@solar-icons/react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { id as localeId } from "date-fns/locale";
@@ -250,7 +250,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
           {/* Header */}
           <div className={cn('shrink-0', 'flex', 'items-center', 'justify-between', 'px-5', 'py-4', 'border-b')}>
             <SheetTitle className={cn('text-base', 'sm:text-lg', 'font-semibold', 'text-[#121417]', 'flex', 'items-center', 'gap-2', 'truncate', 'max-w-[80%]')}>
-              <MessageSquare className={cn('h-5', 'w-5', 'shrink-0', 'text-muted-foreground')} />
+              <ChatRound weight="BoldDuotone" className={cn('h-5', 'w-5', 'shrink-0', 'text-muted-foreground')} />
               {customerName}
             </SheetTitle>
             <button
@@ -258,7 +258,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
               onClick={onClose}
               aria-label="Close"
             >
-              <X className={cn('h-5', 'w-5', 'text-red-500')} />
+              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-red-500')} />
             </button>
           </div>
 
@@ -327,8 +327,8 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                                   rows={2}
                                   autoFocus
                                 />
-                                <button onClick={() => handleEditSave(comment.id)} className={cn('p-0.5', 'text-primary', 'hover:text-primary/80')}><Check className={cn('h-4', 'w-4')} /></button>
-                                <button onClick={() => setEditingId(null)} className={cn('p-0.5', 'text-muted-foreground', 'hover:text-foreground')}><X className={cn('h-4', 'w-4')} /></button>
+                                <button onClick={() => handleEditSave(comment.id)} className={cn('p-0.5', 'text-primary', 'hover:text-primary/80')}><CheckCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
+                                <button onClick={() => setEditingId(null)} className={cn('p-0.5', 'text-muted-foreground', 'hover:text-foreground')}><CloseCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
                               </div>
                             ) : (
                               <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed ${isSelf ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-secondary text-secondary-foreground rounded-tl-sm"}`}>
@@ -352,7 +352,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                                       ) : (
                                         <div key={i} className={cn('flex', 'items-center', 'gap-2', 'bg-black/10', 'rounded-lg', 'px-2', 'py-1.5', 'cursor-pointer')} onClick={() => window.open(url, "_blank")}>
                                           <div className={cn('shrink-0', 'flex', 'flex-col', 'items-center', 'justify-center', 'w-8', 'h-8', 'rounded', 'bg-black/10')}>
-                                            <FileText className={cn('h-3.5', 'w-3.5')} />
+                                            <FileText weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                                             <span className={cn('text-[8px]', 'font-bold', 'uppercase', 'leading-none', 'mt-0.5')}>
                                               {att.name.split(".").pop() ?? att.type.split("/")[1]}
                                             </span>
@@ -385,15 +385,15 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                               )}
                               <div className={`hidden group-hover:flex items-center gap-0.5 ${isSelf ? "flex-row-reverse" : "flex-row"}`}>
                                 <button onClick={() => setReplyTo(comment)} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
-                                  <Reply className={cn('h-3', 'w-3')} />
+                                  <Reply weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                                 </button>
                                 {isSelf && editingId !== comment.id && (
                                   <>
                                     <button onClick={() => { setEditingId(comment.id); setEditInput(comment.content); }} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
-                                      <Pencil className={cn('h-3', 'w-3')} />
+                                      <Pen weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                                     </button>
                                     <button onClick={() => setDeleteTarget(comment.id)} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-destructive')}>
-                                      <Trash2 className={cn('h-3', 'w-3')} />
+                                      <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                                     </button>
                                   </>
                                 )}
@@ -418,7 +418,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                 <p className={cn('text-[10px]', 'text-muted-foreground', 'truncate')}>{replyTo.content.slice(0, 80)}</p>
               </div>
               <button onClick={() => setReplyTo(null)} className={cn('shrink-0', 'text-muted-foreground', 'hover:text-foreground', 'mt-0.5')}>
-                <X className={cn('h-3.5', 'w-3.5')} />
+                <CloseCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
               </button>
             </div>
           )}
@@ -431,11 +431,11 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                   {a.type === "image"
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={a.url} alt="" className={cn('h-7', 'w-7', 'rounded', 'object-cover', 'shrink-0')} />
-                    : <FileText className={cn('h-4', 'w-4', 'text-muted-foreground', 'shrink-0')} />
+                    : <FileText weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground', 'shrink-0')} />
                   }
                   <span className={cn('text-xs', 'truncate', 'flex-1', 'min-w-0')}>{a.name}</span>
                   <button onClick={() => setPendingAttachments((prev) => prev.filter((_, idx) => idx !== i))} className={cn('text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
-                    <X className={cn('h-3', 'w-3')} />
+                    <CloseCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                   </button>
                 </div>
               ))}
@@ -447,15 +447,15 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className={cn('p-1.5', 'rounded-lg', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
-                  <Plus className={cn('h-4', 'w-4')} />
+                  <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start">
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <ImageIcon className={cn('h-4', 'w-4', 'mr-2')} /> Foto / Gambar
+                  <Gallery weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Foto / Gambar
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
-                  <Paperclip className={cn('h-4', 'w-4', 'mr-2')} /> Dokumen
+                  <Paperclip weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Dokumen
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -474,7 +474,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
               style={{ minHeight: "36px", maxHeight: "160px", overflowY: "auto" }}
             />
             <Button size="icon" onClick={handleSend} disabled={sending || (!input.trim() && !pendingAttachments.length)} className={cn('shrink-0', 'rounded-xl', 'h-9', 'w-9')}>
-              {sending ? <Loader2 className={cn('h-4', 'w-4', 'animate-spin')} /> : <Send className={cn('h-4', 'w-4')} />}
+              {sending ? <Refresh weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin')} /> : <Plain weight="BoldDuotone" className={cn('h-4', 'w-4')} />}
             </Button>
           </div>
 
@@ -500,7 +500,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
           onClick={() => setPreviewImage(null)}
         >
           <button className={cn('absolute', 'top-4', 'right-4', 'p-1', 'rounded-full', 'bg-white/10', 'hover:bg-white/20')} onClick={() => setPreviewImage(null)}>
-            <X className={cn('h-6', 'w-6', 'text-white')} />
+            <CloseCircle weight="BoldDuotone" className={cn('h-6', 'w-6', 'text-white')} />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

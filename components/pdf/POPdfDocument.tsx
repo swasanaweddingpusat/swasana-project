@@ -524,10 +524,9 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             ))
           )}
 
-          {/* Detail Section — break to new page when T&C is long */}
-          <View wrap={false}>
-            {/* Mini Form */}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 40, marginBottom: 4 }}>
+          {/* Detail Section — flows natural setelah T&C; tiap unit kecil dilindungi dari orphan */}
+          {/* Mini Form — kept together (blok kecil), ngalir tepat setelah T&C */}
+          <View wrap={false} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 16, marginBottom: 4 }}>
               <View style={{ flexDirection: "column", gap: 4, flex: 1, paddingRight: 12 }}>
                 <Text style={{ fontSize: 9 }}>Nama : {booking.snapCustomer?.name ?? "_____________________"}</Text>
                 <Text style={{ fontSize: 9 }}>
@@ -553,15 +552,14 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               </View>
             </View>
 
-            {/* Table Header — kept with mini form */}
-            <View style={s.table}>
+            {/* Table Header — anti-orphan: pindah halaman cuma kalau ruang tersisa kurang */}
+            <View style={s.table} minPresenceAhead={72}>
               <View style={s.tableHeader}>
                 <Text style={[s.tableCell, { width: "8%", fontWeight: "bold", fontSize: 9 }]}>NO</Text>
                 <Text style={[s.tableCell, { width: "72%", fontWeight: "bold", fontSize: 9 }]}>DESCRIPTION</Text>
                 <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 9 }]}>Total (Rp.)</Text>
               </View>
             </View>
-          </View>
 
           {/* Table Body */}
           <View style={{ borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: "#000" }}>

@@ -29,15 +29,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus,
+  AddCircle,
   ArrowLeft,
   ArrowRight,
-  Search,
+  Magnifer,
   FileText,
-  CalendarCheck,
-  MoreHorizontal,
-  PencilIcon,
-} from "lucide-react";
+  CalendarMark,
+  MenuDots,
+  Pen,
+} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { QuotationDrawer } from "./quotation-drawer";
 
@@ -500,7 +500,8 @@ export function QuotationsTable() {
 
               {/* Search */}
               <div className="relative">
-                <Search
+                <Magnifer
+                  weight="BoldDuotone"
                   aria-hidden="true"
                   className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
                 />
@@ -519,7 +520,7 @@ export function QuotationsTable() {
 
               {/* Add button */}
               <Button className="h-9" onClick={handleAdd}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
+                <AddCircle weight="BoldDuotone" className="h-4 w-4" aria-hidden="true" />
                 Tambah Quotation
               </Button>
             </div>
@@ -560,6 +561,7 @@ export function QuotationsTable() {
                   >
                     <div className="flex flex-col items-center gap-3">
                       <FileText
+                        weight="BoldDuotone"
                         aria-hidden="true"
                         className="h-10 w-10 opacity-40"
                       />
@@ -668,7 +670,8 @@ export function QuotationsTable() {
                             size="icon"
                             aria-label={`Aksi untuk quotation ${q.leadName}`}
                           >
-                            <MoreHorizontal
+                            <MenuDots
+                              weight="BoldDuotone"
                               aria-hidden="true"
                               className="h-4 w-4"
                             />
@@ -678,7 +681,8 @@ export function QuotationsTable() {
                           <DropdownMenuItem
                             onClick={() => handleEdit(q)}
                           >
-                            <PencilIcon
+                            <Pen
+                              weight="BoldDuotone"
                               aria-hidden="true"
                               className="h-4 w-4 mr-2"
                             />
@@ -688,7 +692,8 @@ export function QuotationsTable() {
                             <DropdownMenuItem
                               onClick={() => handleConvertToBooking(q)}
                             >
-                              <CalendarCheck
+                              <CalendarMark
+                                weight="BoldDuotone"
                                 aria-hidden="true"
                                 className="h-4 w-4 mr-2"
                               />
@@ -717,7 +722,7 @@ export function QuotationsTable() {
                 disabled={currentPage === 1}
                 aria-label="Halaman sebelumnya"
               >
-                <ArrowLeft aria-hidden="true" className="w-4 h-4" /> Previous
+                <ArrowLeft weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" /> Previous
               </Button>
               <div className="flex items-center gap-1 overflow-x-auto justify-center">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(
@@ -752,7 +757,7 @@ export function QuotationsTable() {
                 disabled={currentPage === totalPages}
                 aria-label="Halaman berikutnya"
               >
-                Next <ArrowRight aria-hidden="true" className="w-4 h-4" />
+                Next <ArrowRight weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
               </Button>
             </nav>
           )}

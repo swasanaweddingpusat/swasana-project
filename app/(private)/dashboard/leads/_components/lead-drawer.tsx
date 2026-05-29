@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { X } from "lucide-react";
+import { CloseCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { createLeadSchema } from "@/lib/validations/lead";
 import type { CreateLeadInput } from "@/lib/validations/lead";
@@ -267,7 +267,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                         className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1"
                         onClick={() => removeContact(idx)}
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <CloseCircle weight="BoldDuotone" className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}

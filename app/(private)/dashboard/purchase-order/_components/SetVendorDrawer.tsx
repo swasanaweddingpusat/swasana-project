@@ -10,7 +10,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Save, Plus, Trash2 } from "lucide-react";
+import { Diskette, AddCircle, TrashBinTrash } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useVendorCategories } from "@/hooks/use-vendors";
 import { saveBookingVendors, updateSnapBonus, addSnapBonus, deleteSnapBonus } from "@/actions/booking-vendor";
@@ -168,7 +168,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
 
   const saveBtn = (
     <Button size="sm" onClick={handleSave} disabled={saving} className="h-8 px-3 text-xs">
-      <Save className="h-3.5 w-3.5 mr-1" />
+      <Diskette weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />
       {saving ? "Menyimpan..." : "Simpan"}
     </Button>
   );
@@ -231,7 +231,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                           <span className="text-sm truncate flex-1">{cat.vendors.find((v) => v.id === state.vendorId)?.name}</span>
                           <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive shrink-0"
                             onClick={() => updateField(cat.id, "vendorId", "")}>
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       ) : (
@@ -296,7 +296,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                       }
                     }}
                   >
-                    <Plus className="h-3 w-3 mr-1" /> Tambah Bonus
+                    <AddCircle weight="BoldDuotone" className="h-3 w-3 mr-1" /> Tambah Bonus
                   </Button>
                 </TableCell>
               </TableRow>
@@ -313,7 +313,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                           <span className="text-sm truncate flex-1">{allVendors.find((v) => v.id === b.vendorId)?.name ?? b.vendorName}</span>
                           <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive shrink-0"
                             onClick={() => setComplimentary((p) => p.map((x) => x.id === b.id ? { ...x, vendorId: "", vendorName: "" } : x))}>
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       ) : (
@@ -369,7 +369,7 @@ export function SetVendorDrawer({ open, onClose, booking, onSaved }: Props) {
                             }
                           }}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </TableCell>

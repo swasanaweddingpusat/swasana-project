@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { CalendarIcon, Trash2, X } from "lucide-react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
@@ -99,6 +99,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [sourceOfInformationId, setSourceOfInformationId] = useState("");
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({});
+  const [takeoutPrices, setTakeoutPrices] = useState<Record<string, number>>({}); // categoryName -> editable takeout nominal
 
   // Step 2 state (Kategori Harga) is managed via categoryToggles above
 
@@ -185,6 +186,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setSignatureSales("");
     sigSalesRef.current?.clear();
     setCategoryToggles({});
+    setTakeoutPrices({});
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
     setTerms(bTerms.length > 0 ? bTerms : [{ name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0 }]);
@@ -219,16 +221,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (v) setSelectedVariantPrice(getVariantPrice(v));
   }, [variantId, variants]);
 
-  // Venue availability
+  // Venue availability — per-venue, not per-package.
+  // Passing `exclude` so the current booking doesn't block its own slot in edit mode.
   useEffect(() => {
     if (!venueId) { setAvailability({}); return; }
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const bookingId = booking?.id ?? "";
     const params = new URLSearchParams({ month, exclude: bookingId });
-    if (packageId) params.set("packageId", packageId);
-    if (variantId) params.set("variantId", variantId);
     fetch(`/api/venues/${venueId}/availability?${params}`).then((r) => r.json()).then(setAvailability).catch(() => setAvailability({}));
-  }, [venueId, visibleMonth, booking?.id, packageId, variantId]);
+  }, [venueId, visibleMonth, booking?.id]);
 
   function getAvailableSessions(dateStr: string): string[] {
     const a = availability[dateStr];
@@ -296,6 +297,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       setSelectedVariantPrice(step2Price);
       allocatePrice(step2Price, specialBonusAmount);
     }
+    if (currentStep === 3) {
+      const dpTerm = terms.find((t) => t.name.trim().toUpperCase() === "DP");
+      if (dpTerm && (!dpTerm.amount || dpTerm.amount <= 0)) {
+        toast.error("Nominal DP wajib diisi dan harus lebih dari 0.");
+        return;
+      }
+    }
     if (currentStep === 3 && getBasePrice() > 0 && getDifference() !== 0) { toast.error(`Selisih: Rp${fmtRp(Math.abs(getDifference()))}`); return; }
     if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
   };
@@ -360,7 +368,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   {contactNumbers.map((entry, i) => (
                     <div key={i} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
                       <div className="flex-1 min-w-0">{entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}<p className="text-sm font-medium">{entry.number}</p></div>
-                      <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))}><X className="w-3.5 h-3.5" /></button>
+                      <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))}><CloseCircle weight="BoldDuotone" className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
                   <div className="flex gap-2">
@@ -379,21 +387,21 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div><label className={LBL}>Bitrix ID</label><Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" /></div>
 
               {/* Venue */}
-              <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setVariantId(""); setSelectedVariantPrice(0); setPaymentMethodId(""); setCategoryToggles({}); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
+              <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setVariantId(""); setSelectedVariantPrice(0); setPaymentMethodId(""); setCategoryToggles({}); setTakeoutPrices({}); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
 
               {/* Package */}
-              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={packageId} onChange={(id) => { setPackageId(id); setVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
+              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={packageId} onChange={(id) => { setPackageId(id); setVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); setTakeoutPrices({}); }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
 
               {/* Variant */}
               {variants.length > 0 && (
-                <div><label className={LBL}>Pilih Tipe Paket *</label><SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={variantId} onChange={(id) => { setVariantId(id); setCategoryToggles({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" /></div>
+                <div><label className={LBL}>Pilih Tipe Paket *</label><SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={variantId} onChange={(id) => { setVariantId(id); setCategoryToggles({}); setTakeoutPrices({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" /></div>
               )}
 
               {/* Event Date */}
               <div>
                 <label className={LBL}>Event Date *</label>
                 <Popover>
-                  <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-gray-400")}><CalendarIcon className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
+                  <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-gray-400")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => !!venueId && getDateStatus(d) === "unavailable"} modifiers={{ available: (d) => !!venueId && getDateStatus(d) === "available", partial: (d) => !!venueId && getDateStatus(d) === "partial", unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable" }} modifiersClassNames={{ available: "day-available", partial: "day-partial", unavailable: "day-unavailable" }} />
                   </PopoverContent>
@@ -426,7 +434,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   <div key={idx} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <div className="flex-1"><SearchableSelect options={allVendors.filter((v) => !bonuses.some((x, i) => i !== idx && x.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))} value={b.vendorId} onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name } : x)); }} placeholder="Pilih vendor..." searchPlaceholder="Cari vendor..." emptyText="Tidak ada vendor" /></div>
-                      <button type="button" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}><X className="h-3 w-3" /></button>
+                      <button type="button" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}><CloseCircle weight="BoldDuotone" className="h-3 w-3" /></button>
                     </div>
                     <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span><input type="text" inputMode="numeric" className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white" placeholder="Nominal" value={b.nominal ? fmtRp(b.nominal) : ""} onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }} /></div>
                     <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-15" />
@@ -454,26 +462,55 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div className="space-y-2">
                 {visibleCategories.map((cat) => {
                   const isTakeout = categoryToggles[cat.categoryName] ?? false;
+                  const takeoutNominal = takeoutPrices[cat.categoryName] ?? cat.basePrice;
                   return (
                     <div
                       key={cat.categoryName}
-                      className={cn("flex", "items-center", "justify-between", "rounded-lg", "border", "p-3", isTakeout && "border-destructive/30 bg-destructive/5")}
+                      className={cn("rounded-lg", "border", "p-3", isTakeout && "border-destructive/30 bg-destructive/5")}
                     >
-                      <div>
-                        <p className={cn("text-sm font-medium", isTakeout && "line-through text-muted-foreground")}>{cat.categoryName}</p>
-                        <p className={cn("text-xs text-muted-foreground", isTakeout && "line-through")}>
-                          Rp{fmtRp(cat.basePrice)}
-                        </p>
+                      <div className={cn("flex", "items-center", "justify-between")}>
+                        <div>
+                          <p className={cn("text-sm font-medium", isTakeout && "line-through text-muted-foreground")}>{cat.categoryName}</p>
+                          <p className={cn("text-xs text-muted-foreground", isTakeout && "line-through")}>
+                            Rp{fmtRp(cat.basePrice)}
+                          </p>
+                        </div>
+                        <div className={cn("flex", "items-center", "gap-2")}>
+                          <span className={cn("text-xs", isTakeout ? "text-destructive font-medium" : "text-muted-foreground")}>Takeout</span>
+                          <Switch
+                            checked={isTakeout}
+                            onCheckedChange={(v) => {
+                              setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }));
+                              if (!v) {
+                                setTakeoutPrices((prev) => {
+                                  const next = { ...prev };
+                                  delete next[cat.categoryName];
+                                  return next;
+                                });
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className={cn("flex", "items-center", "gap-2")}>
-                        <span className={cn("text-xs", isTakeout ? "text-destructive font-medium" : "text-muted-foreground")}>Takeout</span>
-                        <Switch
-                          checked={isTakeout}
-                          onCheckedChange={(v) =>
-                            setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }))
-                          }
-                        />
-                      </div>
+                      {isTakeout && (
+                        <div className="mt-2">
+                          <p className="text-xs text-muted-foreground mb-1">Nominal takeout</p>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                              value={takeoutNominal ? fmtRp(takeoutNominal) : ""}
+                              onChange={(e) => {
+                                const num = parseInt(e.target.value.replace(/\D/g, "")) || 0;
+                                setTakeoutPrices((prev) => ({ ...prev, [cat.categoryName]: num }));
+                              }}
+                              placeholder={`Rp${fmtRp(cat.basePrice)}`}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -505,24 +542,34 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div>
                 <label className={cn(LBL, 'mb-2 block')}>Term of Payments</label>
                 <div className="space-y-4">
-                  {terms.map((t, idx) => (
+                  {terms.map((t, idx) => {
+                    const isDP = t.name.trim().toUpperCase() === "DP";
+                    const isDPInvalid = isDP && (!t.amount || t.amount <= 0);
+                    return (
                     <div key={t.id ?? idx} className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <Input value={t.name} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} placeholder="Term name" className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto" />
-                        {terms.length > 1 && <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), bookingDate))} className="text-red-400 hover:text-red-600 shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>}
+                        <div className="flex items-center gap-0.5 flex-1">
+                          <Input value={t.name} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} placeholder="Term name" className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto" />
+                          {isDP && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
+                        </div>
+                        {terms.length > 1 && <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), bookingDate))} className="text-red-400 hover:text-red-600 shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
                       </div>
                       <div className="flex gap-3 items-center">
                         <div className="flex-2"><Input value={t.amount ? fmtRp(t.amount) : ""} onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }} placeholder="Amount" inputMode="numeric" /></div>
                         <div className="flex-1">
                           <Popover>
-                            <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}</Button>} />
+                            <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}</Button>} />
                             <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={t.dueDate ? new Date(t.dueDate) : undefined} onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))} /></PopoverContent>
                           </Popover>
                         </div>
                       </div>
+                      {isDPInvalid && (
+                        <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
+                      )}
                       {idx < terms.length - 1 && <div className="border-b border-gray-100 pt-1" />}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="flex gap-2 mt-4"><Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }], bookingDate))}>Tambah Payment</Button></div>
               </div>
@@ -566,7 +613,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <Button variant="outline" onClick={currentStep === 1 ? () => onOpenChange(false) : handlePrevious} disabled={mut.isPending} className={cn("flex-[40%] cursor-pointer", currentStep === 1 ? "text-red-600 border-red-600 hover:bg-red-50" : "border-black text-black hover:bg-gray-100")}>
               {currentStep === 1 ? "Cancel" : "Previous"}
             </Button>
-            <Button onClick={currentStep < totalSteps ? handleNext : handleSubmit} disabled={isContinueDisabled} className={cn("flex-[60%] bg-black text-white hover:bg-gray-800 cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}>
+            <Button onClick={currentStep < totalSteps ? handleNext : handleSubmit} disabled={isContinueDisabled} className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}>
               {currentStep < totalSteps ? "Continue" : mut.isPending ? "Updating..." : hasSignificantChange ? "Update Booking" : "Save"}
             </Button>
           </div>

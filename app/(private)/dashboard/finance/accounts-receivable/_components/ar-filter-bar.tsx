@@ -1,6 +1,6 @@
 "use client";
 
-import { X, CalendarIcon } from "lucide-react";
+import { CloseCircle, Calendar as CalendarIcon } from "@solar-icons/react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -59,7 +59,7 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
 
       <Popover>
         <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-normal hover:bg-accent">
-          <CalendarIcon className="h-3.5 w-3.5" />
+          <CalendarIcon weight="BoldDuotone" className="h-3.5 w-3.5" />
           {filters.dateRange?.from ? format(new Date(filters.dateRange.from), "dd MMM") : "From"}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
@@ -72,7 +72,7 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
 
       <Popover>
         <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-normal hover:bg-accent">
-          <CalendarIcon className="h-3.5 w-3.5" />
+          <CalendarIcon weight="BoldDuotone" className="h-3.5 w-3.5" />
           {filters.dateRange?.to ? format(new Date(filters.dateRange.to), "dd MMM") : "To"}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
@@ -87,7 +87,7 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
         <div className="flex items-center gap-1.5">
           <Badge variant="secondary" className="text-xs">{activeCount} filter</Badge>
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => onFiltersChange({})}>
-            <X className="h-3.5 w-3.5 mr-1" /> Reset
+            <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" /> Reset
           </Button>
         </div>
       )}

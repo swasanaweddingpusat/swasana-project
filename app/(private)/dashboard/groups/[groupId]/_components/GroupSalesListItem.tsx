@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, TrendingUp, TrendingDown, MoreHorizontal, PenLine, Trash2 } from "lucide-react";
+import { Crown, GraphUp, GraphDown, MenuDots, PenNewSquare, TrashBinTrash } from "@solar-icons/react";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import {
   DropdownMenu,
@@ -68,7 +68,7 @@ export function GroupSalesListItem({
       {/* Rank badge */}
       <div className="shrink-0 flex items-center justify-center w-6">
         {isTop ? (
-          <Crown className="h-4 w-4 text-foreground" />
+          <Crown weight="BoldDuotone" className="h-4 w-4 text-foreground" />
         ) : (
           <span
             className={cn(
@@ -124,9 +124,9 @@ export function GroupSalesListItem({
             {pct}%
           </span>
           {overTarget ? (
-            <TrendingUp className="h-3 w-3 text-foreground" />
+            <GraphUp weight="BoldDuotone" className="h-3 w-3 text-foreground" />
           ) : (
-            <TrendingDown className="h-3 w-3 text-muted-foreground" />
+            <GraphDown weight="BoldDuotone" className="h-3 w-3 text-muted-foreground" />
           )}
         </div>
       </div>
@@ -144,17 +144,17 @@ export function GroupSalesListItem({
               className="flex items-center justify-center h-9 w-9 rounded hover:bg-accent cursor-pointer outline-none"
               aria-label={`Aksi untuk ${member.name}`}
             >
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+              <MenuDots weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onEditTarget(member)}>
-                <PenLine className="h-3.5 w-3.5 mr-2" /> Edit Target
+                <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5 mr-2" /> Edit Target
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
                 onClick={() => onRemove(member)}
               >
-                <Trash2 className="h-3.5 w-3.5 mr-2" /> Hapus dari Grup
+                <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5 mr-2" /> Hapus dari Grup
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PencilIcon, Trash2, Plus, Users, ArrowLeft, ArrowRight, Search, Copy, RefreshCw } from "lucide-react";
+import { Pen, TrashBinTrash, AddCircle, UsersGroupRounded, ArrowLeft, ArrowRight, Magnifer, Copy, Refresh } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useCustomers, useDeleteCustomer, useDeleteBulkCustomers } from "@/hooks/use-customers";
@@ -155,19 +155,19 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                   setIsRefreshing(false);
                 }}
               >
-                <RefreshCw className={cn("h-3.5 w-3.5 text-gray-600", isRefreshing && "animate-spin")} />
+                <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5 text-gray-600", isRefreshing && "animate-spin")} />
               </Button>
             </div>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               {selectedIds.size > 0 && (
                 <PermissionGate module="customers" action="delete">
                   <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                    <Trash2 className={cn('h-4', 'w-4', 'mr-1')} /> Hapus ({selectedIds.size})
+                    <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} /> Hapus ({selectedIds.size})
                   </Button>
                 </PermissionGate>
               )}
               <div className="relative">
-                <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
+                <Magnifer weight="BoldDuotone" className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
                 <Input
                   placeholder="Cari customer..."
                   value={search}
@@ -176,8 +176,8 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                 />
               </div>
               <PermissionGate module="customers" action="create">
-                <Button onClick={handleAdd} className={cn('cursor-pointer', 'bg-gray-900', 'hover:bg-gray-800', 'text-white')}>
-                  <Plus className={cn('h-4', 'w-4', 'mr-2')} /> Tambah Customer
+                <Button onClick={handleAdd} className={cn('cursor-pointer')}>
+                  <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Tambah Customer
                 </Button>
               </PermissionGate>
             </div>
@@ -186,7 +186,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
           {/* Table */}
           {filtered.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-gray-400')}>
-              <Users className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
+              <UsersGroupRounded weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada customer."}</p>
             </div>
           ) : (
@@ -236,7 +236,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                         {customer.bitrixId ? (
                           <button type="button" className={cn('flex', 'items-center', 'gap-1', 'group')} onClick={() => { navigator.clipboard.writeText(customer.bitrixId!); toast.success("Bitrix ID copied!"); }}>
                             <Badge variant="secondary" className={cn('font-mono', 'text-xs')}>{customer.bitrixId}</Badge>
-                            <Copy className={cn('h-3', 'w-3', 'text-muted-foreground', 'opacity-0', 'group-hover:opacity-100', 'transition-opacity')} />
+                            <Copy weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-muted-foreground', 'opacity-0', 'group-hover:opacity-100', 'transition-opacity')} />
                           </button>
                         ) : "—"}
                       </TableCell>
@@ -252,12 +252,12 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                         <div className={cn('flex', 'items-center', 'gap-1')}>
                           <PermissionGate module="customers" action="edit">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
-                              <PencilIcon className={cn('h-4', 'w-4')} />
+                              <Pen weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                             </Button>
                           </PermissionGate>
                           <PermissionGate module="customers" action="delete">
                             <Button variant="ghost" size="icon" className={cn('text-destructive', 'hover:text-destructive', 'hover:bg-destructive/10')} onClick={() => setDeleteTarget(customer)}>
-                              <Trash2 className={cn('h-4', 'w-4')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                             </Button>
                           </PermissionGate>
                         </div>
@@ -273,7 +273,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
           {totalPages > 1 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-4', 'border-t')}>
               <Button variant="outline" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-                <ArrowLeft className={cn('w-4', 'h-4', 'mr-2')} /> Previous
+                <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Previous
               </Button>
               <div className={cn('flex', 'items-center', 'gap-1')}>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
@@ -284,7 +284,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                 ))}
               </div>
               <Button variant="outline" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-                Next <ArrowRight className={cn('w-4', 'h-4', 'ml-2')} />
+                Next <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'ml-2')} />
               </Button>
             </div>
           )}

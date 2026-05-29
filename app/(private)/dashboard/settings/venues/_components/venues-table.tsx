@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Magnifer } from "@solar-icons/react";
 import { deleteVenue } from "@/actions/venue";
 import { VenueDrawer } from "./venue-drawer";
 import type { VenuesQueryResult, VenueQueryItem, BrandsQueryResult } from "@/lib/queries/venues";
@@ -104,7 +104,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
             </div>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <div className="relative">
-                <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
+                <Magnifer weight="BoldDuotone" className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
                 <Input
                   placeholder="Cari venue..."
                   value={search}
@@ -114,11 +114,11 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
               </div>
               {selected.size > 1 && (
                 <Button variant="outline" onClick={() => setBulkDeleteOpen(true)} className={cn('h-9', 'text-red-500', 'border-red-500', 'hover:bg-red-50', 'cursor-pointer')}>
-                  <Trash2 className={cn('w-4', 'h-4', 'mr-1')} /> Hapus ({selected.size})
+                  <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Hapus ({selected.size})
                 </Button>
               )}
-              <Button onClick={handleAdd} className={cn('h-9', 'cursor-pointer', 'bg-gray-900', 'hover:bg-gray-800', 'text-white')}>
-                <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Venue
+              <Button onClick={handleAdd} className={cn('h-9', 'cursor-pointer')}>
+                <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Add Venue
               </Button>
             </div>
           </div>
@@ -165,7 +165,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               aria-label="Edit"
                             >
-                              <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                              <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Edit Venue</TooltipContent>
                           </Tooltip>
@@ -175,7 +175,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               aria-label="Hapus"
                             >
-                              <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
                             </TooltipTrigger>
                             <TooltipContent>Hapus Venue</TooltipContent>
                           </Tooltip>
@@ -194,10 +194,10 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
               <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
               <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className={cn('h-4', 'w-4')} />
+                  <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </Button>
                 <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className={cn('h-4', 'w-4')} />
+                  <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </Button>
               </div>
             </div>

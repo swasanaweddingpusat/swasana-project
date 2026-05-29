@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, FileText, Lock } from "lucide-react";
+import { Refresh, CheckCircle, FileText, Lock } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { cn } from "../../../lib/utils";
 
@@ -95,7 +95,7 @@ function ClientAgreementContent() {
     return (
       <div className={cn('min-h-screen', 'flex', 'items-center', 'justify-center', 'bg-gray-50', 'px-4')}>
         <div className={cn('text-center', 'space-y-3')}>
-          <Lock className={cn('h-12', 'w-12', 'text-gray-400', 'mx-auto')} />
+          <Lock weight="BoldDuotone" className={cn('h-12', 'w-12', 'text-gray-400', 'mx-auto')} />
           <h1 className={cn('text-lg', 'font-semibold')}>Link Tidak Valid</h1>
           <p className={cn('text-sm', 'text-gray-500')}>Link agreement yang Anda akses tidak valid.</p>
         </div>
@@ -107,7 +107,7 @@ function ClientAgreementContent() {
     return (
       <div className={cn('min-h-screen', 'flex', 'items-center', 'justify-center', 'bg-gray-50', 'px-4')}>
         <div className={cn('w-full', 'max-w-sm', 'bg-white', 'rounded-xl', 'shadow-sm', 'border', 'p-6', 'text-center', 'space-y-4')}>
-          <CheckCircle2 className={cn('h-14', 'w-14', 'text-green-500', 'mx-auto')} />
+          <CheckCircle weight="BoldDuotone" className={cn('h-14', 'w-14', 'text-green-500', 'mx-auto')} />
           <h1 className={cn('text-lg', 'font-semibold')}>Terima Kasih</h1>
           <p className={cn('text-sm', 'text-gray-500')}>Tanda tangan Anda telah berhasil disimpan. Anda dapat menutup halaman ini.</p>
         </div>
@@ -138,7 +138,7 @@ function ClientAgreementContent() {
             </div>
             {loadingPdf ? (
               <div className={cn('flex', 'items-center', 'justify-center', 'py-16')}>
-                <Loader2 className={cn('h-5', 'w-5', 'animate-spin', 'text-gray-400', 'mr-2')} />
+                <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin', 'text-gray-400', 'mr-2')} />
                 <span className={cn('text-sm', 'text-gray-500')}>Memuat dokumen...</span>
               </div>
             ) : pdfUrl ? (
@@ -167,7 +167,7 @@ function ClientAgreementContent() {
                   Hapus
                 </Button>
                 <Button size="sm" className="ml-auto" onClick={handleSign} disabled={signing || !hasSigned}>
-                  {signing ? <><Loader2 className={cn('h-3.5', 'w-3.5', 'mr-1', 'animate-spin')} />Menyimpan...</> : "Kirim Tanda Tangan"}
+                  {signing ? <><Refresh weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-1', 'animate-spin')} />Menyimpan...</> : "Kirim Tanda Tangan"}
                 </Button>
               </div>
             </div>
@@ -181,7 +181,7 @@ function ClientAgreementContent() {
     <div className={cn('min-h-screen', 'flex', 'items-center', 'justify-center', 'bg-gray-50', 'px-4')}>
       <div className={cn('w-full', 'max-w-md', 'bg-white', 'rounded-xl', 'shadow-sm', 'border', 'p-6', 'sm:p-8', 'space-y-5')}>
         <div className={cn('text-center', 'space-y-1')}>
-          <FileText className={cn('h-10', 'w-10', 'text-gray-700', 'mx-auto')} />
+          <FileText weight="BoldDuotone" className={cn('h-10', 'w-10', 'text-gray-700', 'mx-auto')} />
           <h1 className={cn('text-lg', 'font-semibold')}>Client Agreement</h1>
           <p className={cn('text-sm', 'text-gray-500')}>Masukkan kode akses untuk melanjutkan</p>
         </div>
@@ -200,7 +200,7 @@ function ClientAgreementContent() {
             />
           </div>
           <Button type="submit" className="w-full" disabled={loading || !accessCode.trim()}>
-            {loading ? <><Loader2 className={cn('h-4', 'w-4', 'mr-2', 'animate-spin')} />Memvalidasi...</> : "Masuk"}
+            {loading ? <><Refresh weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'animate-spin')} />Memvalidasi...</> : "Masuk"}
           </Button>
         </form>
       </div>
@@ -212,7 +212,7 @@ export default function ClientAgreementPage() {
   return (
     <Suspense fallback={
       <div className={cn('min-h-screen', 'flex', 'items-center', 'justify-center', 'bg-gray-50')}>
-        <Loader2 className={cn('h-6', 'w-6', 'animate-spin', 'text-gray-400')} />
+        <Refresh weight="BoldDuotone" className={cn('h-6', 'w-6', 'animate-spin', 'text-gray-400')} />
       </div>
     }>
       <ClientAgreementContent />

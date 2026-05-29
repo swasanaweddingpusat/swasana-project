@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { AltArrowDown, AltArrowRight } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { SubMenuItem } from "./sidebar-config";
 
@@ -53,8 +53,8 @@ export function SubMenuItemRow({
               : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
           )}
         >
-          <Link href={item.href} className={cn('flex', 'items-center', 'flex-1', 'min-w-0')}>
-            {Icon && <Icon className={cn('mr-2', 'h-4', 'w-4', 'shrink-0')} style={{ color: "#A4A7AE" }} />}
+          <Link href={item.href} className="flex items-center flex-1 min-w-0">
+            {Icon && <Icon weight="BoldDuotone" className="mr-2 h-4 w-4 shrink-0 text-foreground" />}
             {!collapsed && <span>{item.name}</span>}
           </Link>
           {!collapsed && (
@@ -62,12 +62,12 @@ export function SubMenuItemRow({
               onClick={() => setOpen(!open)}
               className={cn('p-1', 'rounded', 'hover:bg-gray-200', 'transition-colors', 'cursor-pointer', 'shrink-0')}
             >
-              {open ? <ChevronDown className={cn('h-3.5', 'w-3.5')} /> : <ChevronRight className={cn('h-3.5', 'w-3.5')} />}
+              {open ? <AltArrowDown weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} /> : <AltArrowRight weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />}
             </button>
           )}
         </div>
         {open && !collapsed && (
-          <div className={cn('ml-4', 'mt-1', 'space-y-1')}>
+          <div className={cn('ml-4')}>
             {item.submenu.map((sub) => (
               <SubMenuItemRow key={sub.href} item={sub} collapsed={collapsed} depth={depth + 1} />
             ))}
@@ -87,7 +87,7 @@ export function SubMenuItemRow({
           : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
       )}
     >
-      {Icon && <Icon className={cn('mr-2', 'h-4', 'w-4')} style={{ color: "#A4A7AE" }} />}
+      {Icon && <Icon weight="BoldDuotone" className="mr-2 h-4 w-4 text-foreground" />}
       {!collapsed && <span>{item.name}</span>}
     </Link>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ReceiptText } from "lucide-react";
+import { Bill } from "@solar-icons/react";
 import { SUMMARY_FINANCIAL_COLORS } from "@/types/catering";
 import type { CateringSection, GroupOperationType } from "@/types/catering";
 
@@ -48,7 +48,7 @@ export function SummaryPanel({ totalMakanan, totalPayment, displayGroups, selisi
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-white space-y-2">
       <div className="flex items-center gap-1.5 mb-2">
-        <ReceiptText className="h-4 w-4 text-gray-500" />
+        <Bill weight="BoldDuotone" className="h-4 w-4 text-gray-500" />
         <p className="text-sm font-bold text-gray-900">Detail Summary</p>
       </div>
 

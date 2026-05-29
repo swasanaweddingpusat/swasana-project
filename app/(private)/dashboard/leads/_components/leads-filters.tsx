@@ -10,11 +10,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus,
-  Search,
-  LayoutList,
-  Columns3,
-} from "lucide-react";
+  AddCircle,
+  Magnifer,
+  List,
+  Widget,
+} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
 export type ViewMode = "list" | "pipeline";
@@ -88,7 +88,7 @@ export function LeadsFilters({
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <LayoutList aria-hidden="true" className="size-3.5" />
+              <List weight="BoldDuotone" aria-hidden="true" className="size-3.5" />
               List
             </button>
             <button
@@ -104,7 +104,7 @@ export function LeadsFilters({
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Columns3 aria-hidden="true" className="size-3.5" />
+              <Widget weight="BoldDuotone" aria-hidden="true" className="size-3.5" />
               Pipeline
             </button>
           </div>
@@ -136,7 +136,8 @@ export function LeadsFilters({
 
           {/* Search */}
           <div className="relative">
-            <Search
+            <Magnifer
+              weight="BoldDuotone"
               aria-hidden="true"
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
             />
@@ -152,7 +153,7 @@ export function LeadsFilters({
 
           {/* Add button */}
           <Button onClick={onAdd}>
-            <Plus aria-hidden="true" className="h-4 w-4" />
+            <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
             Tambah Lead
           </Button>
         </div>

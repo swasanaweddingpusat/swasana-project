@@ -4,7 +4,7 @@ import type { CalendarEventsResult } from '@/lib/queries/calendar-events';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format, isSameDay } from 'date-fns';
-import { CalendarX } from 'lucide-react';
+import { Calendar } from '@solar-icons/react';
 import { cn } from "@/lib/utils";
 
 interface CalendarDayViewProps {
@@ -12,11 +12,10 @@ interface CalendarDayViewProps {
   date: Date;
 }
 
-const SESSION_ORDER = ['morning', 'afternoon', 'evening', 'fullday'] as const;
+const SESSION_ORDER = ['morning', 'evening', 'fullday'] as const;
 
 const SESSION_LABELS: Record<string, string> = {
   morning: 'Pagi (Morning)',
-  afternoon: 'Siang (Afternoon)',
   evening: 'Malam (Evening)',
   fullday: 'Full Day',
 };
@@ -49,7 +48,7 @@ export function CalendarDayView({ events, date }: CalendarDayViewProps) {
 
       {dayEvents.length === 0 ? (
         <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-12', 'text-muted-foreground')}>
-          <CalendarX className={cn('size-10', 'mb-2')} />
+          <Calendar weight="BoldDuotone" className={cn('size-10', 'mb-2')} />
           <p className="text-sm">Tidak ada event di tanggal ini</p>
         </div>
       ) : (

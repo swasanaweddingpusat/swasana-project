@@ -10,7 +10,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CalendarDays, ArrowLeft, ArrowRight, Search, Eye, RefreshCw, EllipsisVertical, Trash2, SquareX, RotateCcw, Pencil, ArrowLeftRight, X, FileSignature, Copy, Printer, FileUp, MessageSquare, ClipboardCheck, WalletMinimal, Settings2 } from "lucide-react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2 } from "@solar-icons/react";
+const RefreshCw = Refresh;
+const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
@@ -197,13 +199,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 {totalBookings} Bookings
               </span>
               <Button variant="ghost" size="sm" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
-                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4", isFetching && "animate-spin")} />
                 <span className="text-xs">Refresh</span>
               </Button>
             </div>
             <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2')}>
               <div className={cn('relative', 'flex-1', 'sm:flex-none')}>
-                <Search className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
+                <Search weight="BoldDuotone" className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn('pl-9', 'w-full', 'sm:w-55')} />
               </div>
               <SearchableSelect
@@ -215,7 +217,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 className="w-40"
               />
               <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
-                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4", isFetching && "animate-spin")} />
               </Button>
             </div>
           </div>
@@ -223,7 +225,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           {/* Table */}
           {bookings.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-gray-400')}>
-              <CalendarDays className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
+              <CalendarDays weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
             </div>
           ) : (
@@ -378,7 +380,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           <TooltipProvider delay={200}>
                             <Tooltip>
                               <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
-                                <FileSignature className={cn('h-4', 'w-4')} />
+                                <FileSignature weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
                             </Tooltip>
@@ -388,7 +390,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           {/* Comment button */}
                           <PermissionGate module="booking" action="comment">
                             <Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)}>
-                              <MessageSquare className={cn('h-4', 'w-4')} />
+                              <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                               {(unreadCounts[booking.id] ?? 0) > 0 && (
                                 <span className={cn('absolute', '-top-0.5', '-right-0.5', 'min-w-4', 'h-4', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[9px]', 'font-bold', 'flex', 'items-center', 'justify-center', 'px-0.5')}>
                                   {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
@@ -417,7 +419,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} title="Approval">
-                                    <ClipboardCheck className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                                    <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
@@ -455,23 +457,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="cursor-pointer">
-                                <EllipsisVertical className={cn('h-4', 'w-4')} />
+                                <EllipsisVertical weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
-                                <Eye className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
+                                <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {can("booking", "edit") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
-                                <Pencil className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
+                                <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
                               </DropdownMenuItem>
                               )}
                               {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
                                 <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
                                   <DropdownMenuSubTrigger className="cursor-pointer">
-                                    <Printer className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                                    <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent>
                                     <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id)}>
@@ -487,43 +489,43 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 </DropdownMenuSub>
                               )}
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
-                                <FileUp className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
+                                <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
                               </DropdownMenuItem>
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-                                <WalletMinimal className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
+                                <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
                               </DropdownMenuItem>
                               {can("booking", "edit") &&
                                 booking.snapPackageCategoryPrices &&
                                 booking.snapPackageCategoryPrices.length > 0 && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
-                                  <Settings2 className={cn('mr-2', 'h-4', 'w-4')} /> Edit Set Harga
+                                  <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Set Harga
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "transfer") && (
                               <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
-                                <ArrowLeftRight className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
+                                <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
                               </DropdownMenuItem>
                               )}
                               {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
                               {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
                                 <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
-                                  <SquareX className={cn('mr-2', 'h-4', 'w-4', 'text-red-500')} /> Reject Booking
+                                  <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-red-500')} /> Reject Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
                                 <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setLostTarget(booking)}>
-                                  <SquareX className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
+                                  <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
                                 <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
-                                  <RotateCcw className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
+                                  <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
                                 </DropdownMenuItem>
                               )}
                               {can("booking", "delete") && <DropdownMenuSeparator />}
                               {can("booking", "delete") && (
                               <DropdownMenuItem className={cn('cursor-pointer', 'text-red-600', 'focus:text-red-600')} onClick={() => setDeleteTarget(booking)}>
-                                <Trash2 className={cn('mr-2', 'h-4', 'w-4')} /> Hapus
+                                <Trash2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Hapus
                               </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
@@ -541,7 +543,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           {totalPages > 1 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-4', 'sm:px-6', 'py-4', 'border-t')}>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-                <ArrowLeft className={cn('w-4', 'h-4', 'sm:mr-2')} /> <span className={cn('hidden', 'sm:inline')}>Previous</span>
+                <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'sm:mr-2')} /> <span className={cn('hidden', 'sm:inline')}>Previous</span>
               </Button>
               {/* Mobile: page X/Y */}
               <span className={cn('text-sm', 'text-muted-foreground', 'sm:hidden')}>{currentPage} / {totalPages}</span>
@@ -555,7 +557,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 ))}
               </div>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-                <span className={cn('hidden', 'sm:inline')}>Next</span> <ArrowRight className={cn('w-4', 'h-4', 'sm:ml-2')} />
+                <span className={cn('hidden', 'sm:inline')}>Next</span> <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'sm:ml-2')} />
               </Button>
             </div>
           )}
@@ -703,7 +705,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 type="button"
                 aria-label="Tutup"
               >
-                <X className={cn('h-5', 'w-5', 'text-red-500')} />
+                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-red-500')} />
               </button>
             </div>
 
@@ -743,7 +745,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 Batal
               </button>
               <button
-                className={cn('flex-1', 'bg-black', 'text-white', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-gray-900', 'transition', 'text-sm', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
+                className={cn('flex-1', 'bg-primary', 'text-primary-foreground', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-primary/90', 'transition', 'text-sm', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
                 disabled={!transferSalesId || transferMut.isPending}
                 type="button"
                 onClick={async () => {
@@ -923,7 +925,7 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
 
         {isPending ? (
           <div className={cn('flex', 'items-center', 'justify-center', 'py-8', 'gap-2', 'text-sm', 'text-muted-foreground')}>
-            <RefreshCw className={cn('h-4', 'w-4', 'animate-spin')} /> Loading...
+            <RefreshCw weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin')} /> Loading...
           </div>
         ) : !agreement ? (
           <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-8', 'gap-3', 'text-center')}>
@@ -942,7 +944,7 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
               <div className={cn('flex', 'items-center', 'gap-2', 'overflow-hidden')}>
                 <code className={cn('min-w-0', 'flex-1', 'text-xs', 'bg-muted', 'rounded', 'px-2', 'py-1.5', 'block', 'break-all')}>{agreementUrl}</code>
                 <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreementUrl!); toast.success("Link disalin"); }}>
-                  <Copy className={cn('h-3.5', 'w-3.5')} />
+                  <Copy weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                 </Button>
               </div>
             </div>
@@ -951,7 +953,7 @@ function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProp
               <div className={cn('flex', 'items-center', 'gap-2')}>
                 <code className={cn('flex-1', 'text-lg', 'font-mono', 'font-bold', 'tracking-widest', 'bg-muted', 'rounded', 'px-2', 'py-1.5')}>{agreement.accessCode}</code>
                 <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreement.accessCode); toast.success("Kode disalin"); }}>
-                  <Copy className={cn('h-3.5', 'w-3.5')} />
+                  <Copy weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                 </Button>
               </div>
             </div>

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight } from "lucide-react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight } from "@solar-icons/react";
 import { createOrderStatus, updateOrderStatus, deleteOrderStatus } from "@/actions/order-status";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { OrderStatusesResult, OrderStatusItem } from "@/lib/queries/order-status";
@@ -73,8 +73,8 @@ export function OrderStatusManager({ initialData }: Props) {
                 <span className={cn('text-sm', 'text-muted-foreground')}>({items.length})</span>
               </div>
               {(can("settings-order-status", "create") || isAdmin) && (
-                <Button onClick={handleOpenAdd} className={cn('bg-gray-900', 'hover:bg-gray-800', 'text-white', 'cursor-pointer')}>
-                  <Plus className={cn('w-4', 'h-4', 'mr-2')} /> Tambah
+                <Button onClick={handleOpenAdd} className={cn('cursor-pointer')}>
+                  <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Tambah
                 </Button>
               )}
             </div>
@@ -102,12 +102,12 @@ export function OrderStatusManager({ initialData }: Props) {
                         <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
                           {(can("settings-order-status", "edit") || isAdmin) && (
                             <button onClick={() => handleOpenEdit(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
-                              <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                              <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                             </button>
                           )}
                           {(can("settings-order-status", "delete") || isAdmin) && (
                             <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                              <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
                             </button>
                           )}
                         </div>
@@ -124,10 +124,10 @@ export function OrderStatusManager({ initialData }: Props) {
                 <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
                 <div className={cn('flex', 'gap-1')}>
                   <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                    <ArrowLeft className={cn('h-4', 'w-4')} />
+                    <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                   </Button>
                   <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                    <ArrowRight className={cn('h-4', 'w-4')} />
+                    <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                   </Button>
                 </div>
               </div>
@@ -143,7 +143,7 @@ export function OrderStatusManager({ initialData }: Props) {
             <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Contoh: Sudah Diorder" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             <div className={cn('flex', 'gap-3')}>
               <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className={cn('flex-1', 'cursor-pointer')}>Batal</Button>
-              <Button onClick={handleSave} disabled={saving || !formName.trim()} className={cn('flex-1', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'cursor-pointer')}>
+              <Button onClick={handleSave} disabled={saving || !formName.trim()} className={cn('flex-1', 'cursor-pointer')}>
                 {saving ? "Menyimpan..." : editingItem ? "Simpan" : "Tambah"}
               </Button>
             </div>

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Settings2, ClipboardCheck, RefreshCw, FileText, ScanText, MoreVertical } from "lucide-react";
+import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -201,19 +201,19 @@ export function PackagesTable() {
               <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Packages</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
               <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
-                <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               </button>
             </div>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <SearchBar placeholder="Search packages..." />
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                  <Trash2 className={cn('h-4', 'w-4', 'mr-1')} /> Delete ({selectedIds.size})
+                  <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} /> Delete ({selectedIds.size})
                 </Button>
               )}
               {canCreate("package") && (
-                <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'rounded-md', 'px-4', 'py-2', 'text-sm', 'font-medium')}>
-                  <Plus className={cn('h-4', 'w-4')} /> Add New Package
+                <Button onClick={openAdd} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
+                  <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Add New Package
                 </Button>
               )}
             </div>
@@ -322,7 +322,7 @@ export function PackagesTable() {
                                 setTcDrawerOpen(true);
                               }}
                             >
-                              <FileText className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                              <FileText weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Term & Condition</TooltipContent>
                           </Tooltip>
@@ -333,7 +333,7 @@ export function PackagesTable() {
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               onClick={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
                             >
-                              <Settings2 className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                              <SettingsMinimalistic weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Set Harga</TooltipContent>
                           </Tooltip>
@@ -349,7 +349,7 @@ export function PackagesTable() {
                                 <TooltipTrigger
                                   className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                                 >
-                                  <ClipboardCheck className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                                  <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                                 </TooltipTrigger>
                               </DropdownMenuTrigger>
                               <TooltipContent>Approval</TooltipContent>
@@ -392,7 +392,7 @@ export function PackagesTable() {
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               onClick={() => openEdit(pkg)}
                             >
-                              <PenLine className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                              <PenNewSquare weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
@@ -404,7 +404,7 @@ export function PackagesTable() {
                                 <TooltipTrigger
                                   className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                                 >
-                                  <MoreVertical className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                                  <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                                 </TooltipTrigger>
                               </DropdownMenuTrigger>
                               <TooltipContent>Lainnya</TooltipContent>
@@ -414,14 +414,14 @@ export function PackagesTable() {
                                 <DropdownMenuItem
                                   onSelect={() => { setDetailPkg(pkg); setDetailOpen(true); }}
                                 >
-                                  <Eye className="mr-2 h-4 w-4" />
+                                  <Eye weight="BoldDuotone" className="mr-2 h-4 w-4" />
                                   Lihat Detail
                                 </DropdownMenuItem>
                               )}
                               {can("package", "view") && Boolean(pkg.variants?.length) && (
                                 <DropdownMenuSub>
                                   <DropdownMenuSubTrigger>
-                                    <ScanText className="mr-2 h-4 w-4" />
+                                    <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4" />
                                     Preview PO
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent>
@@ -452,7 +452,7 @@ export function PackagesTable() {
                                     onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                                     className="text-destructive focus:text-destructive"
                                   >
-                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <TrashBinTrash weight="BoldDuotone" className="mr-2 h-4 w-4" />
                                     Hapus
                                   </DropdownMenuItem>
                                 </>
@@ -476,10 +476,10 @@ export function PackagesTable() {
               </span>
               <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className={cn('h-4', 'w-4')} />
+                  <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </Button>
                 <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className={cn('h-4', 'w-4')} />
+                  <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </Button>
               </div>
             </div>

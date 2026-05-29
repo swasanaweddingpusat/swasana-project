@@ -4,7 +4,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
-import { Save, Package, Printer } from "lucide-react";
+import { Diskette, Box, Printer } from "@solar-icons/react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BookingDetail } from "@/lib/queries/bookings";
@@ -148,7 +148,7 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
     return (
       <Drawer isOpen={isOpen} onClose={onClose} title={`Catering — ${booking.snapCustomer?.name ?? "-"}`}>
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-          <Package className="h-12 w-12 text-gray-300 mb-3" />
+          <Box weight="BoldDuotone" className="h-12 w-12 text-gray-300 mb-3" />
           <p className="text-sm text-gray-500">Belum ada vendor catering yang di-set.</p>
           <p className="text-xs text-gray-400 mt-1">Set vendor bawaan terlebih dahulu.</p>
         </div>
@@ -181,11 +181,11 @@ export function CateringSelectionDrawer({ isOpen, onClose, booking, onUpdated, i
   const headerActions = (
     <div className="flex items-center gap-2">
       <Button size="sm" variant="outline" onClick={handlePrintPO} disabled={isPrinting} className="h-8 px-3 text-xs cursor-pointer">
-        <Printer className="h-3.5 w-3.5 mr-1" />{isPrinting ? "..." : "Cetak PO"}
+        <Printer weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />{isPrinting ? "..." : "Cetak PO"}
       </Button>
       {!isViewOnly && (
         <Button size="sm" onClick={handleSubmit} disabled={loading} className="h-8 px-3 text-xs cursor-pointer">
-          <Save className="h-3.5 w-3.5 mr-1" />{loading ? "Menyimpan..." : "Simpan"}
+          <Diskette weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />{loading ? "Menyimpan..." : "Simpan"}
         </Button>
       )}
     </div>

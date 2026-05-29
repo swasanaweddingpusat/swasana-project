@@ -1,4 +1,4 @@
-import { Users, DollarSign, CalendarCheck, Wallet, Target as TargetIcon } from "lucide-react";
+import { UsersGroupRounded, Dollar, CalendarMark, Wallet, Target as TargetIcon } from "@solar-icons/react";
 
 interface Props {
   totalGroups: number;
@@ -82,11 +82,11 @@ export function GroupsStatsCards({
           Ringkasan Groups
         </p>
         <div className="space-y-3.5">
-          <StatRow icon={Users} label="Total Groups" value={totalGroups.toString()} />
+          <StatRow icon={UsersGroupRounded} label="Total Groups" value={totalGroups.toString()} />
           <div className="border-t border-stone-200/70" />
-          <StatRow icon={DollarSign} label="Total Sales" value={formatRp(totalSales)} />
+          <StatRow icon={Dollar} label="Total Sales" value={formatRp(totalSales)} />
           <div className="border-t border-stone-200/70" />
-          <StatRow icon={CalendarCheck} label="Booking Confirmed" value={totalConfirmed.toString()} />
+          <StatRow icon={CalendarMark} label="Booking Confirmed" value={totalConfirmed.toString()} />
         </div>
       </div>
 
@@ -96,7 +96,7 @@ export function GroupsStatsCards({
           <AchievementDonut pct={realisasiPct} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
-              <TargetIcon className="h-3 w-3" /> Total Target
+              <TargetIcon weight="BoldDuotone" className="h-3 w-3" /> Total Target
             </p>
             <p className="text-xl sm:text-2xl font-bold text-foreground leading-tight tabular-nums mt-1 truncate">
               {formatRpFull(totalTarget)}
@@ -108,7 +108,7 @@ export function GroupsStatsCards({
             <div className="mt-4 pt-4 border-t border-stone-200/70 space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Wallet className="h-3 w-3" /> Terealisasi
+                  <Wallet weight="BoldDuotone" className="h-3 w-3" /> Terealisasi
                 </span>
                 <span className="text-sm font-semibold text-amber-800 tabular-nums truncate">
                   {formatRp(totalSales)}
@@ -133,14 +133,14 @@ function StatRow({
   label,
   value,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: typeof UsersGroupRounded;
   label: string;
   value: string;
 }) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-100/60 shrink-0">
-        <Icon className="h-4 w-4 text-amber-700" />
+        <Icon weight="BoldDuotone" className="h-4 w-4 text-amber-700" />
       </div>
       <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>

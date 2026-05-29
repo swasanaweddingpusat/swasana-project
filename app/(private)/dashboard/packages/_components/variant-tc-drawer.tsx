@@ -7,7 +7,8 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Plus, Copy } from "lucide-react";
+import { TextBold, TextItalic, TextUnderline as UnderlineIcon, List, AddCircle, Copy } from "@solar-icons/react";
+const ListOrdered = List;
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -184,7 +185,7 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
           onClick={handleSave}
           disabled={saving || !selectedVariantId}
           size="sm"
-          className={cn("bg-gray-900 hover:bg-gray-800 text-white cursor-pointer")}
+          className="cursor-pointer"
         >
           {saving ? "Menyimpan..." : "Simpan"}
         </Button>
@@ -212,7 +213,7 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0">
-                    <Copy className="size-4" />
+                    <Copy weight="BoldDuotone" className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -235,33 +236,33 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
           {/* Left — Editor */}
           <div className="flex-1 flex flex-col min-w-0 border rounded-lg overflow-hidden">
             {editor && (
-              <div className="flex items-center gap-0.5 px-2 py-1.5 border-b bg-white">
+              <div className="flex items-center gap-0.5 px-2 py-1.5 border-b bg-card">
                 <ToolbarButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold">
-                  <Bold className="h-4 w-4" />
+                  <TextBold weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic">
-                  <Italic className="h-4 w-4" />
+                  <TextItalic weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline">
-                  <UnderlineIcon className="h-4 w-4" />
+                  <UnderlineIcon weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-gray-300 mx-1" />
+                <div className="w-px h-5 bg-border mx-1" />
                 <ToolbarButton active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet List">
-                  <List className="h-4 w-4" />
+                  <List weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numbered List">
-                  <ListOrdered className="h-4 w-4" />
+                  <ListOrdered weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
               </div>
             )}
-            <div className="flex-1 overflow-y-auto bg-white">
+            <div className="flex-1 overflow-y-auto bg-card">
               <EditorContent editor={editor} className="h-full" />
             </div>
           </div>
 
           {/* Right — Variable Panel */}
           <div className="w-72 shrink-0 border rounded-lg flex flex-col overflow-hidden max-h-full">
-            <div className="px-4 py-3 border-b bg-white">
+            <div className="px-4 py-3 border-b bg-card">
               <h3 className="text-sm font-semibold">Variable</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Klik untuk insert ke editor</p>
             </div>
@@ -280,7 +281,7 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
                           onClick={() => insertVariable(v.key)}
                           className="w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-sm hover:bg-muted transition-colors cursor-pointer group"
                         >
-                          <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           <div className="flex-1 min-w-0">
                             <span className="font-medium text-foreground">{v.label}</span>
                             <span className="block text-xs text-muted-foreground truncate">{`{${v.key}}`}</span>
@@ -318,7 +319,7 @@ function ToolbarButton({
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       title={title}
-      className={cn("p-1.5 rounded hover:bg-gray-200 transition-colors", active && "bg-gray-200 text-black")}
+      className={cn("p-1.5 rounded hover:bg-muted transition-colors", active && "bg-muted text-foreground")}
     >
       {children}
     </button>

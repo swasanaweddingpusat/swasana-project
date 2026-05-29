@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Input } from "@/components/ui/input";
-import { GripVertical, ChevronRight, ChevronDown, Trash2, Plus, FolderPlus } from "lucide-react";
+import { MenuDots, AltArrowRight, AltArrowDown, TrashBinTrash, AddCircle, FolderWithFiles } from "@solar-icons/react";
 import { CurrencyInput } from "./helpers";
 import { EDITOR_OPERATION_STYLES } from "@/types/catering";
 import type { PaketNode, CateringSection, GroupOperationType, GroupMode } from "@/types/catering";
@@ -39,7 +39,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
   if (node.type === "item") {
     return (
       <div ref={setNodeRef} style={style} className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded px-1" {...attributes}>
-        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><GripVertical className="h-3.5 w-3.5" /></button>}
+        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><MenuDots weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           {!isViewOnly ? (
             <>
@@ -57,7 +57,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
         </div>
         <span className="text-xs font-medium text-gray-600 shrink-0 w-20 text-right">{fmt(total)}</span>
         {!isViewOnly && (
-          <button type="button" onClick={() => onRemoveNode(sectionId, node.id)} className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
+          <button type="button" onClick={() => onRemoveNode(sectionId, node.id)} className="text-gray-300 hover:text-red-500 shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>
         )}
       </div>
     );
@@ -72,9 +72,9 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
     <div ref={setNodeRef} style={style} {...attributes} className="border border-gray-200 rounded-lg overflow-hidden" >
       {/* Group header */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50">
-        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><GripVertical className="h-3.5 w-3.5" /></button>}
+        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><MenuDots weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
         <button type="button" onClick={() => setCollapsed(!collapsed)} className="shrink-0 text-gray-400">
-          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {collapsed ? <AltArrowRight weight="BoldDuotone" className="h-3.5 w-3.5" /> : <AltArrowDown weight="BoldDuotone" className="h-3.5 w-3.5" />}
         </button>
 
         {!isViewOnly ? (
@@ -138,7 +138,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
         <span className="text-xs font-medium text-gray-700 shrink-0 w-24 text-right">{fmt(total)}</span>
 
         {!isViewOnly && (
-          <button type="button" onClick={() => onRemoveNode(sectionId, node.id)} className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
+          <button type="button" onClick={() => onRemoveNode(sectionId, node.id)} className="text-gray-300 hover:text-red-500 shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>
         )}
       </div>
 
@@ -155,8 +155,8 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
           </DndContext>
           {!isViewOnly && (
             <div className="flex gap-2 py-1">
-              <button type="button" onClick={() => onAddChildGroup(sectionId, node.id)} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"><FolderPlus className="h-3 w-3" /> Group</button>
-              <button type="button" onClick={() => onAddChildItem(sectionId, node.id)} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"><Plus className="h-3 w-3" /> Item</button>
+              <button type="button" onClick={() => onAddChildGroup(sectionId, node.id)} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"><FolderWithFiles weight="BoldDuotone" className="h-3 w-3" /> Group</button>
+              <button type="button" onClick={() => onAddChildItem(sectionId, node.id)} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"><AddCircle weight="BoldDuotone" className="h-3 w-3" /> Item</button>
             </div>
           )}
         </div>

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { CalendarIcon, FileText, Trash2, X } from "lucide-react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
@@ -144,6 +144,7 @@ interface BookingDraft {
   bonuses: BonusRow[];
   terms: TermRow[];
   formValues: Record<string, unknown>;
+  takeoutPrices?: Record<string, number>;
 }
 
 function saveDraft(d: BookingDraft) {
@@ -203,6 +204,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const variants = selectedPackage?.variants ?? [];
   const [selectedVariantPrice, setSelectedVariantPrice] = useState(0);
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({}); // categoryName -> isTakeout
+  const [takeoutPrices, setTakeoutPrices] = useState<Record<string, number>>({}); // categoryName -> editable takeout nominal
 
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -215,15 +217,15 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (!selectedVenueId) { setAvailability({}); return; }
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
+    // Availability is per-venue — do NOT pass packageId/variantId.
+    // Any active booking at this venue blocks the slot regardless of package.
     const params = new URLSearchParams({ month });
-    if (selectedPackageId) params.set("packageId", selectedPackageId);
-    if (selectedVariantId) params.set("variantId", selectedVariantId);
     fetch(`/api/venues/${selectedVenueId}/availability?${params}`)
       .then((r) => r.json())
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [selectedVenueId, visibleMonth, selectedPackageId, selectedVariantId]);
+  }, [selectedVenueId, visibleMonth]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
@@ -282,6 +284,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setSelectedVariantPrice(draft.selectedVariantPrice);
         setBonuses(draft.bonuses);
         setTerms(draft.terms.some((t) => t.dueDate) ? draft.terms : makeDefaultTerms());
+        if (draft.takeoutPrices) setTakeoutPrices(draft.takeoutPrices);
         form.reset(draft.formValues as BookingInput);
       } else {
         form.reset();
@@ -290,6 +293,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
         setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
         setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName("");
+        setTakeoutPrices({});
         sigSalesRef.current?.clear();
       }
     }
@@ -306,7 +310,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         contactKtpAddress,
       contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
         specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice,
-        bonuses, terms, formValues: form.getValues(),
+        bonuses, terms, formValues: form.getValues(), takeoutPrices,
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
@@ -393,6 +397,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       const firstTerm = terms[0];
       if (!firstTerm || (firstTerm.paymentStatus ?? "unpaid") !== "paid") {
         toast.error("Booking Fee harus berstatus Paid sebelum melanjutkan.");
+        return;
+      }
+      const dpTerm = terms.find((t) => t.name.trim().toUpperCase() === "DP");
+      if (dpTerm && (!dpTerm.amount || dpTerm.amount <= 0)) {
+        toast.error("Nominal DP wajib diisi dan harus lebih dari 0.");
         return;
       }
       const diff = getDifference();
@@ -520,7 +529,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
                           </div>
                           <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))}>
-                            <X className={cn('w-3.5', 'h-3.5')} />
+                            <CloseCircle weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} />
                           </button>
                         </div>
                       ))}
@@ -638,7 +647,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Venue *</FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -647,7 +656,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantId(""); setSelectedVariantPrice(0); form.setValue("packageVariantId", null); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageVariantId", null); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -657,7 +666,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     <FormField control={form.control} name="packageVariantId" render={({ field }) => (
                       <FormItem>
                         <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700')}>Pilih Tipe Paket *</FormLabel>
-                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); setSelectedVariantId(id); setCategoryToggles({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
+                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); setSelectedVariantId(id); setCategoryToggles({}); setTakeoutPrices({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -674,7 +683,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             disabled={!selectedVenueId}
                             className={cn("w-full justify-start text-left font-normal", !field.value && "text-gray-400")}
                           >
-                            <CalendarIcon className={cn('mr-2', 'h-4', 'w-4')} />
+                            <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
                             {selectedVenueId
                               ? (field.value ? format(new Date(field.value), "PPP") : "Pilih tanggal event")
                               : "Pilih venue terlebih dahulu"}
@@ -777,7 +786,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             />
                           </div>
                           <Button type="button" variant="ghost" size="sm" className={cn('h-6', 'w-6', 'p-0', 'text-red-500', 'hover:text-red-700', 'shrink-0')} onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}>
-                            <X className={cn('h-3', 'w-3')} />
+                            <CloseCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                           </Button>
                         </div>
                         <div className="relative">
@@ -821,26 +830,55 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <div className="space-y-2">
                     {visibleCategories.map((cat) => {
                       const isTakeout = categoryToggles[cat.categoryName] ?? false;
+                      const takeoutNominal = takeoutPrices[cat.categoryName] ?? cat.basePrice;
                       return (
                         <div
                           key={cat.categoryName}
-                          className={cn('flex', 'items-center', 'justify-between', 'rounded-lg', 'border', 'p-3', isTakeout && 'border-destructive/30 bg-destructive/5')}
+                          className={cn('rounded-lg', 'border', 'p-3', isTakeout && 'border-destructive/30 bg-destructive/5')}
                         >
-                          <div>
-                            <p className={cn('text-sm font-medium', isTakeout && 'line-through text-muted-foreground')}>{cat.categoryName}</p>
-                            <p className={cn('text-xs text-muted-foreground', isTakeout && 'line-through')}>
-                              Rp{fmtRp(cat.basePrice)}
-                            </p>
+                          <div className={cn('flex', 'items-center', 'justify-between')}>
+                            <div>
+                              <p className={cn('text-sm font-medium', isTakeout && 'line-through text-muted-foreground')}>{cat.categoryName}</p>
+                              <p className={cn('text-xs text-muted-foreground', isTakeout && 'line-through')}>
+                                Rp{fmtRp(cat.basePrice)}
+                              </p>
+                            </div>
+                            <div className={cn('flex', 'items-center', 'gap-2')}>
+                              <span className={cn('text-xs', isTakeout ? 'text-destructive font-medium' : 'text-muted-foreground')}>Takeout</span>
+                              <Switch
+                                checked={isTakeout}
+                                onCheckedChange={(v) => {
+                                  setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }));
+                                  if (!v) {
+                                    setTakeoutPrices((prev) => {
+                                      const next = { ...prev };
+                                      delete next[cat.categoryName];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              />
+                            </div>
                           </div>
-                          <div className={cn('flex', 'items-center', 'gap-2')}>
-                            <span className={cn('text-xs', isTakeout ? 'text-destructive font-medium' : 'text-muted-foreground')}>Takeout</span>
-                            <Switch
-                              checked={isTakeout}
-                              onCheckedChange={(v) =>
-                                setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }))
-                              }
-                            />
-                          </div>
+                          {isTakeout && (
+                            <div className="mt-2">
+                              <p className="text-xs text-muted-foreground mb-1">Nominal takeout</p>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                                  value={takeoutNominal ? fmtRp(takeoutNominal) : ""}
+                                  onChange={(e) => {
+                                    const num = parseInt(e.target.value.replace(/\D/g, "")) || 0;
+                                    setTakeoutPrices((prev) => ({ ...prev, [cat.categoryName]: num }));
+                                  }}
+                                  placeholder={`Rp${fmtRp(cat.basePrice)}`}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -894,16 +932,22 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Term of Payments</FormLabel>
                     <div className="space-y-4">
-                      {terms.map((t, idx) => (
+                      {terms.map((t, idx) => {
+                        const isDP = t.name.trim().toUpperCase() === "DP";
+                        const isDPInvalid = isDP && (!t.amount || t.amount <= 0);
+                        return (
                         <div key={idx} className="space-y-2">
                           {/* Term name — inline editable */}
                           <div className={cn('flex', 'items-center', 'gap-2')}>
-                            <Input
-                              value={t.name}
-                              onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                              placeholder="Term name"
-                              className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-gray-700', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
-                            />
+                            <div className="flex items-center gap-0.5 flex-1">
+                              <Input
+                                value={t.name}
+                                onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                                placeholder="Term name"
+                                className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-gray-700', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
+                              />
+                              {isDP && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
+                            </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <Select value={t.paymentStatus ?? "unpaid"} onValueChange={(v) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentStatus: v as TermRow["paymentStatus"] } : x))}>
                                 <SelectTrigger className="w-24 h-7">
@@ -919,7 +963,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               </Select>
                               {terms.length > 1 && (
                                 <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), wBookingDate))} className={cn('text-red-400', 'hover:text-red-600', 'shrink-0')}>
-                                  <Trash2 className={cn('h-3.5', 'w-3.5')} />
+                                  <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                                 </button>
                               )}
                             </div>
@@ -938,7 +982,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                               <Popover>
                                 <PopoverTrigger render={
                                   <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
-                                    <CalendarIcon className={cn('mr-2', 'h-4', 'w-4')} />
+                                    <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
                                     {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
                                   </Button>
                                 } />
@@ -962,7 +1006,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                                 {t.paymentEvidence instanceof File && t.paymentEvidence.type.startsWith("image/") ? (
                                   <FilePreview file={t.paymentEvidence} onOpen={() => { const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }} />
                                 ) : (
-                                  <FileText className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
+                                  <FileText weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
                                 )}
                                 {t.paymentEvidence ? (
                                   <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }}>
@@ -973,7 +1017,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                                 )}
                                 {t.paymentEvidence && (
                                   <button type="button" className={cn('shrink-0', 'hover:text-destructive', 'z-10', 'relative')} onClick={(e) => { e.stopPropagation(); setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x)); }}>
-                                    <X className={cn('h-3', 'w-3')} />
+                                    <CloseCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                                   </button>
                                 )}
                                 <input type="file" accept="image/*,application/pdf" className={cn('absolute', 'inset-0', 'opacity-0', 'cursor-pointer')} onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
@@ -985,8 +1029,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                           )}
                           {/* Divider between terms */}
                           {idx < terms.length - 1 && <div className={cn('border-b', 'border-gray-100', 'pt-1')} />}
+                          {isDP && isDPInvalid && (
+                            <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* Add button */}
@@ -1097,7 +1145,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
             <Button
               onClick={currentStep < totalSteps ? handleNext : form.handleSubmit(onSubmit)}
               disabled={isContinueDisabled}
-              className={cn("flex-[60%] bg-black text-white hover:bg-gray-800 cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
+              className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
             >
               {currentStep < totalSteps ? "Continue" : createMut.isPending ? "Creating..." : "Create New Booking"}
             </Button>

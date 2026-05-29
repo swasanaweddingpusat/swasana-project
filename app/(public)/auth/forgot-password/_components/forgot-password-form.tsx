@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useTransition } from "react"
-import { Loader2 } from "lucide-react"
+import { Refresh } from "@solar-icons/react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { forgotPassword } from "@/actions/auth"
@@ -78,7 +78,7 @@ export function ForgotPasswordForm({
         >
           {isPending ? (
             <>
-              <Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
+              <Refresh weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
               Mengirim link...
             </>
           ) : (

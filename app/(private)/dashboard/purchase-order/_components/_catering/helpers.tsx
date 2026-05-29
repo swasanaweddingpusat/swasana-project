@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
+import { AddCircle } from "@solar-icons/react";
 import type { CateringSection } from "@/types/catering";
 
 // ─── CurrencyInput ────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export function AddSectionButton({ onAdd }: { onAdd: (name: string) => void }) {
   if (!open) return (
     <button type="button" onClick={() => setOpen(true)}
       className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 py-1.5 px-2 rounded-md hover:bg-gray-50 transition-colors border border-dashed border-gray-200 w-full justify-center">
-      <Plus className="h-3.5 w-3.5" /> Tambah Section
+      <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> Tambah Section
     </button>
   );
 
@@ -112,7 +112,7 @@ export function AddGroupButton({ section, onAddNormal, onAddMenuPilihan }: {
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen(!open)}
         className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-50">
-        <Plus className="h-3 w-3" /> Group
+        <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Group
       </button>
       {open && (
         <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-45">

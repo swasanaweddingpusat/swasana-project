@@ -28,16 +28,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus,
-  Search,
+  AddCircle,
+  Magnifer,
   ArrowLeft,
   ArrowRight,
-  EllipsisVertical,
-  Pencil,
+  MenuDots,
+  Pen,
   Eye,
-  CalendarDays,
+  Calendar,
   FileText,
-} from "lucide-react";
+} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { usePoll } from "@/hooks/use-poll";
 import { MiceBookingDrawer } from "./MiceBookingDrawer";
@@ -266,7 +266,8 @@ export function MiceTable() {
             </Select>
 
             <div className="relative">
-              <Search
+              <Magnifer
+                weight="BoldDuotone"
                 aria-hidden="true"
                 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
               />
@@ -289,7 +290,7 @@ export function MiceTable() {
                 setDrawerOpen(true);
               }}
             >
-              <Plus aria-hidden="true" className="h-4 w-4" />
+              <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
               Tambah Booking
             </Button>
           </div>
@@ -298,7 +299,8 @@ export function MiceTable() {
         {/* Table */}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <CalendarDays
+            <Calendar
+              weight="BoldDuotone"
               aria-hidden="true"
               className="h-10 w-10 mb-3 opacity-40"
             />
@@ -396,6 +398,7 @@ export function MiceTable() {
                       {item.quotation ? (
                         <Badge variant="secondary" className="text-xs gap-1">
                           <FileText
+                            weight="BoldDuotone"
                             aria-hidden="true"
                             className="w-3 h-3"
                           />
@@ -444,7 +447,8 @@ export function MiceTable() {
                             size="icon"
                             aria-label={`Aksi untuk booking ${item.clientName}`}
                           >
-                            <EllipsisVertical
+                            <MenuDots
+                              weight="BoldDuotone"
                               aria-hidden="true"
                               className="w-4 h-4"
                             />
@@ -458,7 +462,7 @@ export function MiceTable() {
                               setDetailOpen(true);
                             }}
                           >
-                            <Eye aria-hidden="true" className="w-4 h-4" />
+                            <Eye weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
                             View Detail
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -468,7 +472,7 @@ export function MiceTable() {
                               setDrawerOpen(true);
                             }}
                           >
-                            <Pencil aria-hidden="true" className="w-4 h-4" />
+                            <Pen weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
                             Edit
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -493,7 +497,7 @@ export function MiceTable() {
               disabled={currentPage === 1}
               aria-label="Halaman sebelumnya"
             >
-              <ArrowLeft aria-hidden="true" className="w-4 h-4" /> Previous
+              <ArrowLeft weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" /> Previous
             </Button>
             <div className="flex items-center gap-1 overflow-x-auto justify-center">
               {Array.from({ length: totalPages }, (_, i) => i + 1).map(
@@ -527,7 +531,7 @@ export function MiceTable() {
               disabled={currentPage === totalPages}
               aria-label="Halaman berikutnya"
             >
-              Next <ArrowRight aria-hidden="true" className="w-4 h-4" />
+              Next <ArrowRight weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
             </Button>
           </nav>
         )}

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { CloseCircle } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -191,7 +191,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                         <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
                       </div>
                       <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
-                        <X className={cn('w-3.5', 'h-3.5')} />
+                        <CloseCircle weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} />
                       </button>
                     </div>
                   ))}
@@ -297,7 +297,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
             <Button variant="outline" onClick={() => onOpenChange(false)} className={cn('flex-1', 'cursor-pointer')} disabled={isPending}>
               Batal
             </Button>
-            <Button onClick={form.handleSubmit(onSubmit)} className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')} disabled={isPending}>
+            <Button onClick={form.handleSubmit(onSubmit)} className={cn('flex-1', 'cursor-pointer')} disabled={isPending}>
               {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
             </Button>
           </div>

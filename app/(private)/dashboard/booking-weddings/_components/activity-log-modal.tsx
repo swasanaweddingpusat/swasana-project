@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X } from "lucide-react";
+import { CloseCircle } from "@solar-icons/react";
 import { format } from "date-fns";
 
 interface ActivityLog {
@@ -88,7 +88,7 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
             {customerName && <p className="text-sm text-gray-500 mt-0.5">{customerName}</p>}
           </div>
           <button onClick={onClose} className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 transition-colors" aria-label="Close">
-            <X className="h-4 w-4 text-red-500" />
+            <CloseCircle weight="BoldDuotone" className="h-4 w-4 text-red-500" />
           </button>
         </div>
 

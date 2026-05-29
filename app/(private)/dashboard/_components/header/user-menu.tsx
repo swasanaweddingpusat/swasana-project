@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { signOut, useSession } from "next-auth/react";
-import { LogOut, User, ChevronDown } from "lucide-react";
+import { Logout, User, AltArrowDown } from "@solar-icons/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +43,7 @@ export function UserMenu() {
             {getInitials(session?.user?.name)}
           </AvatarFallback>
         </Avatar>
-        <ChevronDown className={cn('h-3.5', 'w-3.5', 'text-gray-400', 'hidden', 'sm:block')} />
+        <AltArrowDown weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-gray-400', 'hidden', 'sm:block')} />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">
@@ -70,7 +70,7 @@ export function UserMenu() {
           onClick={() => (window.location.href = "/dashboard/profile")}
           className={cn('cursor-pointer', 'gap-2')}
         >
-          <User className={cn('h-4', 'w-4')} />
+          <User weight="BoldDuotone" className={cn('h-4', 'w-4')} />
           Profile
         </DropdownMenuItem>
 
@@ -80,7 +80,7 @@ export function UserMenu() {
           onClick={() => signOut({ callbackUrl: "/auth/login" })}
           className={cn('text-red-600', 'cursor-pointer', 'focus:text-red-600', 'gap-2')}
         >
-          <LogOut className={cn('h-4', 'w-4')} />
+          <Logout weight="BoldDuotone" className={cn('h-4', 'w-4')} />
           Keluar
         </DropdownMenuItem>
       </DropdownMenuContent>

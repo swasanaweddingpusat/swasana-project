@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PencilIcon, ArrowLeft, ArrowRight, Users, FileText } from "lucide-react";
+import { Pen, ArrowLeft, ArrowRight, UsersGroupRounded, FileText } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 
@@ -57,7 +57,7 @@ export function LeadsListView({
   if (leads.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <Users aria-hidden="true" className="h-10 w-10 mb-3 opacity-40" />
+        <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-10 w-10 mb-3 opacity-40" />
         <p className="text-sm">
           {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada lead."}
         </p>
@@ -159,7 +159,7 @@ export function LeadsListView({
                         onClick={() => onEdit(lead)}
                         aria-label={`Edit lead ${lead.name}`}
                       >
-                        <PencilIcon aria-hidden="true" className="h-4 w-4" />
+                        <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                       </Button>
                       {lead.status.name === "Hot" && !lead.status.isFinal && (
                         <Button
@@ -168,7 +168,7 @@ export function LeadsListView({
                           onClick={() => onBuatQuotation(lead)}
                           aria-label={`Buat quotation untuk ${lead.name}`}
                         >
-                          <FileText aria-hidden="true" className="h-4 w-4" />
+                          <FileText weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
@@ -192,7 +192,7 @@ export function LeadsListView({
             disabled={currentPage === 1}
             aria-label="Halaman sebelumnya"
           >
-            <ArrowLeft aria-hidden="true" className="w-4 h-4" /> Previous
+            <ArrowLeft weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" /> Previous
           </Button>
           <div className="flex items-center gap-1 overflow-x-auto justify-center">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
@@ -222,7 +222,7 @@ export function LeadsListView({
             disabled={currentPage === totalPages}
             aria-label="Halaman berikutnya"
           >
-            Next <ArrowRight aria-hidden="true" className="w-4 h-4" />
+            Next <ArrowRight weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
           </Button>
         </nav>
       )}

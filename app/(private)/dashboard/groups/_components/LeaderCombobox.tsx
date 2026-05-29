@@ -11,7 +11,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { SortVertical, CheckCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { EligibleLeader } from "@/lib/queries/groups";
 
@@ -51,7 +51,7 @@ export function LeaderCombobox({ eligibleLeaders, value, onChange, triggerId }: 
             ) : (
               <span className="text-muted-foreground">Pilih orang...</span>
             )}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            <SortVertical weight="BoldDuotone" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         }
       />
@@ -71,7 +71,8 @@ export function LeaderCombobox({ eligibleLeaders, value, onChange, triggerId }: 
                   }}
                   className="cursor-pointer"
                 >
-                  <Check
+                  <CheckCircle
+                    weight="BoldDuotone"
                     className={cn(
                       "mr-2 h-4 w-4 shrink-0",
                       value === leader.id ? "opacity-100" : "opacity-0",

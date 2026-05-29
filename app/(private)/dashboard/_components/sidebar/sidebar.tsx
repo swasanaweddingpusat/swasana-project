@@ -1,35 +1,49 @@
 "use client";
 
-import { useState } from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { cn } from "@/lib/utils";
+import Image from "next/image";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarRail,
+} from "@/components/ui/sidebar";
 import { SidebarNav } from "./sidebar-nav";
+import { NavUser } from "./nav-user";
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-
+export function SwasanaSidebar() {
   return (
-    <aside
-      className={cn(
-        "relative bg-white border-r border-gray-200 flex-col h-screen transition-all duration-200 shrink-0",
-        "hidden lg:flex",
-        collapsed ? "w-20" : "w-64"
-      )}
-    >
-      <SidebarNav collapsed={collapsed} />
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-3 py-0">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <Image
+            src="/logo-sgp.svg"
+            alt="Swasana Gemilang Persada"
+            width={36}
+            height={36}
+            priority
+            className="size-9 shrink-0 group-data-[collapsible=icon]:size-7"
+          />
+          <div className="flex items-baseline gap-1.5 min-w-0 group-data-[collapsible=icon]:hidden">
+            <span className="font-display text-base font-semibold text-sidebar-foreground truncate">
+              Kediaman
+            </span>
+            <span className="text-xs font-medium text-sidebar-foreground/60">
+              Corp
+            </span>
+          </div>
+        </div>
+      </SidebarHeader>
 
-      {/* Collapse toggle */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className={cn('absolute', 'top-7', '-translate-y-1/2', '-right-3.5', 'z-20', 'flex', 'h-7', 'w-7', 'items-center', 'justify-center', 'rounded-full', 'border', 'border-gray-200', 'bg-white', 'shadow-sm', 'hover:bg-gray-50', 'transition-colors')}
-      >
-        {collapsed ? (
-          <PanelLeftOpen className={cn('h-3.5', 'w-3.5', 'text-gray-500')} />
-        ) : (
-          <PanelLeftClose className={cn('h-3.5', 'w-3.5', 'text-gray-500')} />
-        )}
-      </button>
-    </aside>
+      <SidebarContent>
+        <SidebarNav />
+      </SidebarContent>
+
+      <SidebarFooter>
+        <NavUser />
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
   );
 }

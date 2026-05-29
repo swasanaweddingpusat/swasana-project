@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, Calendar, Filter } from "lucide-react";
+import { UploadMinimalistic, Calendar, Filter } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { StatCards } from "./_components/stat-cards";
 import { FinanceTabs } from "./_components/finance-tabs";
@@ -47,13 +47,13 @@ export default function FinancePage() {
       {/* Action Buttons */}
       <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-3')}>
         <Button size="sm">
-          <Upload className={cn('h-4', 'w-4', 'mr-2')} /> Export CSV
+          <UploadMinimalistic weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Export CSV
         </Button>
         <Button variant="outline" size="sm">
-          <Calendar className={cn('h-4', 'w-4', 'mr-2')} /> Apr 2026
+          <Calendar weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Apr 2026
         </Button>
         <Button variant="outline" size="sm">
-          <Filter className={cn('h-4', 'w-4', 'mr-2')} /> Filter
+          <Filter weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Filter
         </Button>
       </div>
 

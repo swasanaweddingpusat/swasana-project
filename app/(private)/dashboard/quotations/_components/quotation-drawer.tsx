@@ -604,7 +604,7 @@ export function QuotationDrawer({
             </Button>
             <Button
               onClick={form.handleSubmit(onSubmit)}
-              className="flex-[60%] bg-black text-white hover:bg-gray-800 cursor-pointer"
+              className="flex-[60%] cursor-pointer"
             >
               {isEdit ? "Simpan" : "Tambah"}
             </Button>

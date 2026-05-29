@@ -15,12 +15,12 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   Target,
-  Users,
-  DollarSign,
-  CalendarCheck,
+  UsersGroupRounded,
+  Dollar,
+  CalendarMark,
   Settings,
-  UserCog,
-} from "lucide-react";
+  UserCircle,
+} from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SalesDetailModal } from "./SalesDetailModal";
@@ -267,7 +267,7 @@ export function GroupDetailClient({
               className="h-9 gap-1.5"
               onClick={() => setChangeLeaderOpen(true)}
             >
-              <UserCog className="h-3.5 w-3.5" /> Ganti Leader
+              <UserCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> Ganti Leader
             </Button>
           )}
           {canManage && (
@@ -277,7 +277,7 @@ export function GroupDetailClient({
               className="h-9 gap-1.5"
               onClick={() => setSettingsOpen(true)}
             >
-              <Settings className="h-3.5 w-3.5" /> Pengaturan
+              <Settings weight="BoldDuotone" className="h-3.5 w-3.5" /> Pengaturan
             </Button>
           )}
         </div>
@@ -286,7 +286,7 @@ export function GroupDetailClient({
       {/* Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <OverviewCard
-          icon={DollarSign}
+          icon={Dollar}
           label="Total Penjualan"
           value={formatRp(totalSales)}
           sub={`dari target ${formatRp(totalTarget)}`}
@@ -299,13 +299,13 @@ export function GroupDetailClient({
           accent={overallPct >= 80}
         />
         <OverviewCard
-          icon={CalendarCheck}
+          icon={CalendarMark}
           label="Booking Confirmed"
           value={`${totalConfirmed}`}
           sub={`dari ${totalBookings} total booking`}
         />
         <OverviewCard
-          icon={Users}
+          icon={UsersGroupRounded}
           label="Anggota Grup"
           value={`${memberRows.length}`}
           sub="Sales aktif"
@@ -565,7 +565,7 @@ function OverviewCard({
               accent ? "bg-primary text-primary-foreground" : "bg-secondary",
             )}
           >
-            <Icon className="h-4 w-4" />
+            <Icon weight="BoldDuotone" className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">{label}</p>

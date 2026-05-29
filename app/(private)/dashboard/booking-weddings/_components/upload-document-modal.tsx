@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Upload, X, FileText, Loader2 } from "lucide-react";
+import { UploadMinimalistic, CloseCircle, FileText, Refresh } from "@solar-icons/react";
 import { uploadBookingDocument } from "@/actions/booking-document";
 
 interface UploadDocumentModalProps {
@@ -101,7 +101,7 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">File (multiple)</label>
             <div className="relative flex items-center w-full px-3 py-2 border rounded-md bg-[#FAFAFA] text-[#667085] gap-2 cursor-pointer mt-1">
-              <FileText className="w-4 h-4" />
+              <FileText weight="BoldDuotone" className="w-4 h-4" />
               <span className="text-sm">Pilih file untuk diupload</span>
               <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx" onChange={handleFileSelect} className="absolute inset-0 cursor-pointer opacity-0" style={{ width: "100%", height: "100%" }} />
             </div>
@@ -112,11 +112,11 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
             <div className="space-y-1">
               {selectedFiles.map((f, i) => (
                 <div key={i} className="flex items-center w-full px-3 py-2 border rounded-md bg-[#FAFAFA] text-[#667085] gap-2 min-w-0">
-                  <FileText className="w-4 h-4 shrink-0" />
+                  <FileText weight="BoldDuotone" className="w-4 h-4 shrink-0" />
                   <span className="flex-1 truncate text-sm min-w-0">{truncName(f.name)}</span>
                   <span className="text-xs text-gray-400 shrink-0">({formatSize(f.size)})</span>
                   <button type="button" className="text-red-500 hover:text-red-700 shrink-0" onClick={() => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== i))}>
-                    <X className="h-4 w-4" />
+                    <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
                   </button>
                 </div>
               ))}
@@ -124,7 +124,7 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
           )}
 
           <Button className="w-full" onClick={handleUpload} disabled={uploading || !docName.trim() || selectedFiles.length === 0}>
-            {uploading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Mengupload...</> : <><Upload className="h-4 w-4 mr-2" /> Upload File</>}
+            {uploading ? <><Refresh weight="BoldDuotone" className="h-4 w-4 mr-2 animate-spin" /> Mengupload...</> : <><UploadMinimalistic weight="BoldDuotone" className="h-4 w-4 mr-2" /> Upload File</>}
           </Button>
         </div>
       </DialogContent>

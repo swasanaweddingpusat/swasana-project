@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { CalendarDays } from 'lucide-react';
+import { Calendar } from '@solar-icons/react';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import type { CalendarEventsResult } from '@/lib/queries/calendar-events';
 import { Button } from '@/components/ui/button';
@@ -75,7 +75,7 @@ export function CalendarEventView({
       {/* Top bar */}
       <div className={cn('flex', 'items-center', 'justify-between')}>
         <div className={cn('flex', 'items-center', 'gap-2')}>
-          <CalendarDays className={cn('size-5', 'text-muted-foreground')} />
+          <Calendar weight="BoldDuotone" className={cn('size-5', 'text-muted-foreground')} />
           {/* Year select */}
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
             <SelectTrigger className={cn('w-24', 'h-9')}>

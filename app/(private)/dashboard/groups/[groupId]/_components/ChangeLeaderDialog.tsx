@@ -14,7 +14,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { SortVertical, CheckCircle } from "@solar-icons/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useUpdateGroupLeader } from "@/hooks/use-groups";
@@ -82,7 +82,7 @@ export function ChangeLeaderDialog({ open, onOpenChange, group, eligibleLeaders 
                     ) : (
                       <span className="text-muted-foreground">Pilih orang...</span>
                     )}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    <SortVertical weight="BoldDuotone" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 }
               />
@@ -108,7 +108,8 @@ export function ChangeLeaderDialog({ open, onOpenChange, group, eligibleLeaders 
                           }}
                           className="cursor-pointer"
                         >
-                          <Check
+                          <CheckCircle
+                            weight="BoldDuotone"
                             className={cn(
                               "mr-2 h-4 w-4 shrink-0",
                               selectedId === leader.id ? "opacity-100" : "opacity-0",

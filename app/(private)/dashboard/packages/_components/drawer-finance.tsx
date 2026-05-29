@@ -30,7 +30,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Package, Plus, X, GripVertical, Copy } from "lucide-react";
+import { Box, AddCircle, CloseCircle, MenuDots, Copy } from "@solar-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -127,7 +127,7 @@ function SortableCategoryRow({
         className={cn('p-1', 'text-muted-foreground', 'hover:text-foreground', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')}
         tabIndex={-1}
       >
-        <GripVertical className={cn('h-3.5', 'w-3.5')} />
+        <MenuDots weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
       </button>
       <Switch checked={isShow} onCheckedChange={onToggleShow} className="shrink-0" />
       <span className={cn('text-sm', 'w-32', 'shrink-0', 'truncate', !isShow && 'text-muted-foreground')} title={cat}>{cat}</span>
@@ -146,7 +146,7 @@ function SortableCategoryRow({
         onClick={onRemove}
         className={cn('p-1', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-destructive', 'transition-colors', 'shrink-0')}
       >
-        <X className={cn('h-3.5', 'w-3.5')} />
+        <CloseCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
       </button>
     </div>
   );
@@ -291,7 +291,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
           {/* Package Info */}
           <div className={cn('flex', 'items-start', 'gap-3', 'p-3', 'bg-muted/40', 'rounded-lg', 'border', 'border-border')}>
             <div className={cn('p-2', 'bg-background', 'rounded-md', 'border', 'border-border')}>
-              <Package className={cn('h-4', 'w-4')} />
+              <Box weight="BoldDuotone" className={cn('h-4', 'w-4')} />
             </div>
             <div className={cn('flex-1', 'min-w-0')}>
               <p className={cn('font-semibold', 'text-sm', 'truncate')}>{pkg.packageName}</p>
@@ -323,7 +323,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className={cn('h-9', 'w-9', 'p-0', 'shrink-0')}>
-                    <Copy className="size-4" />
+                    <Copy weight="BoldDuotone" className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -407,7 +407,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
                       disabled={!vd.newCat.trim() || vd.categories.includes(vd.newCat.trim())}
                       className={cn('h-9', 'shrink-0')}
                     >
-                      <Plus className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tambah
+                      <AddCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tambah
                     </Button>
                   </div>
                 </div>

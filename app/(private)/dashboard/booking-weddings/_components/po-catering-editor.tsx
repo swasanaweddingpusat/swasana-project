@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Trash2, GripVertical, ChevronRight, Calculator, Merge } from "lucide-react";
+import { AddCircle, TrashBinTrash, MenuDots, AltArrowRight, Calculator, BranchingPathsDown } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -186,39 +186,39 @@ export function POCateringEditorV2({ data, onChange, readOnly, paymentMethods = 
       {/* Add row toolbar */}
       {!readOnly && (        <div className="flex items-center gap-3 pt-1">
           <button type="button" onClick={() => addRow({ id: createId(), type: "group", label: "Group baru", qty: undefined, unit: undefined, price: undefined })} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900 font-semibold">
-            <Plus className="h-3 w-3" /> Group
+            <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Group
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "item", description: "", unit: "Porsi" })} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
-            <Plus className="h-3 w-3" /> Item
+            <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Item
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "subgroup", label: "Sub-group baru", qty: undefined, unit: undefined, price: undefined })} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800">
-            <Merge className="h-3 w-3" /> Sub-group
+            <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" /> Sub-group
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "subtotal", label: "Jumlah", sumRowIds: [] })} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800">
-            <Calculator className="h-3 w-3" /> Subtotal
+            <Calculator weight="BoldDuotone" className="h-3 w-3" /> Subtotal
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "formula", label: "Formula", formulaKind: "diff", formulaAIds: [], formulaBIds: [] })} className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800">
-            <Calculator className="h-3 w-3" /> Formula
+            <Calculator weight="BoldDuotone" className="h-3 w-3" /> Formula
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "payment", description: "", chargeType: "flat" })} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
-            <Calculator className="h-3 w-3" /> Payment
+            <Calculator weight="BoldDuotone" className="h-3 w-3" /> Payment
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "settlement", description: "", settlementType: "refund", grandTotal: 0 })} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900">
-            <Calculator className="h-3 w-3" /> Settlement
+            <Calculator weight="BoldDuotone" className="h-3 w-3" /> Settlement
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "charge", description: "", unit: "Porsi", chargeType: "qty" })} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
-            <Calculator className="h-3 w-3" /> Charge
+            <Calculator weight="BoldDuotone" className="h-3 w-3" /> Charge
           </button>
           <span className="text-gray-300">|</span>
           <button type="button" onClick={() => addRow({ id: createId(), type: "blank", depth: 1 })} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-            <Merge className="h-3 w-3" /> Blank
+            <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" /> Blank
           </button>
         </div>
       )}
@@ -230,20 +230,20 @@ export function POCateringEditorV2({ data, onChange, readOnly, paymentMethods = 
           <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-42.5" style={ctxMenu.flipUp ? { bottom: window.innerHeight - ctxMenu.y, left: ctxMenu.x } : { top: ctxMenu.y, left: ctxMenu.x }}>
             <p className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wide">Tambah di bawah</p>
             {([
-              { label: "Group", icon: <GripVertical className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "group" as const, label: "Group baru" }) },
-              { label: "Sub-group (L1)", icon: <Merge className="h-3 w-3" />, color: "text-purple-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 0 }) },
-              { label: "Sub-group (L2)", icon: <Merge className="h-3 w-3" />, color: "text-purple-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 1 }) },
-              { label: "Sub-group (L3)", icon: <Merge className="h-3 w-3" />, color: "text-purple-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 2 }) },
-              { label: "Item", icon: <Plus className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "item" as const, description: "", unit: "Porsi" }) },
-              { label: "Subtotal", icon: <Calculator className="h-3 w-3" />, color: "text-green-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subtotal" as const, label: "Jumlah", sumRowIds: [] }) },
-              { label: "Formula", icon: <Calculator className="h-3 w-3" />, color: "text-orange-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "formula" as const, label: "Formula", formulaKind: "diff", formulaAIds: [], formulaBIds: [] }) },
-              { label: "Charge", icon: <Calculator className="h-3 w-3" />, color: "text-red-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "charge" as const, description: "", unit: "Porsi", chargeType: "qty" }) },
-              { label: "Payment", icon: <Calculator className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "payment" as const, description: "", chargeType: "flat" }) },
-              { label: "Settlement", icon: <Calculator className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "settlement" as const, description: "", settlementType: "refund", grandTotal: 0 }) },
-              { label: "Blank", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
-              { label: "Blank (L1)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
-              { label: "Blank (L2)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 1 }) },
-              { label: "Blank (L3)", icon: <Merge className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 2 }) },
+              { label: "Group", icon: <MenuDots weight="BoldDuotone" className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "group" as const, label: "Group baru" }) },
+              { label: "Sub-group (L1)", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-purple-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 0 }) },
+              { label: "Sub-group (L2)", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-purple-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 1 }) },
+              { label: "Sub-group (L3)", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-purple-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subgroup" as const, label: "Sub-group baru", depth: 2 }) },
+              { label: "Item", icon: <AddCircle weight="BoldDuotone" className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "item" as const, description: "", unit: "Porsi" }) },
+              { label: "Subtotal", icon: <Calculator weight="BoldDuotone" className="h-3 w-3" />, color: "text-green-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "subtotal" as const, label: "Jumlah", sumRowIds: [] }) },
+              { label: "Formula", icon: <Calculator weight="BoldDuotone" className="h-3 w-3" />, color: "text-orange-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "formula" as const, label: "Formula", formulaKind: "diff", formulaAIds: [], formulaBIds: [] }) },
+              { label: "Charge", icon: <Calculator weight="BoldDuotone" className="h-3 w-3" />, color: "text-red-500", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "charge" as const, description: "", unit: "Porsi", chargeType: "qty" }) },
+              { label: "Payment", icon: <Calculator weight="BoldDuotone" className="h-3 w-3" />, color: "text-blue-600", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "payment" as const, description: "", chargeType: "flat" }) },
+              { label: "Settlement", icon: <Calculator weight="BoldDuotone" className="h-3 w-3" />, color: "text-gray-700", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "settlement" as const, description: "", settlementType: "refund", grandTotal: 0 }) },
+              { label: "Blank", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
+              { label: "Blank (L1)", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 0 }) },
+              { label: "Blank (L2)", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 1 }) },
+              { label: "Blank (L3)", icon: <BranchingPathsDown weight="BoldDuotone" className="h-3 w-3" />, color: "text-gray-400", fn: () => addRowAfter(ctxMenu.rowId, { id: createId(), type: "blank" as const, depth: 2 }) },
             ] as { label: string; icon: React.ReactNode; color: string; fn: () => void }[]).map(({ label, icon, color, fn }) => (
               <button key={label} type="button" className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 ${color}`} onClick={() => { fn(); setCtxMenu(null); }}>
                 {icon} {label}
@@ -251,10 +251,10 @@ export function POCateringEditorV2({ data, onChange, readOnly, paymentMethods = 
             ))}
             <div className="border-t border-gray-100 my-1" />
             <button type="button" className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-600" onClick={() => { duplicateRow(ctxMenu.rowId); setCtxMenu(null); }}>
-              <Plus className="h-3 w-3" /> Duplicate
+              <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Duplicate
             </button>
             <button type="button" className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600" onClick={() => { removeRow(ctxMenu.rowId); setCtxMenu(null); }}>
-              <Trash2 className="h-3 w-3" /> Delete
+              <TrashBinTrash weight="BoldDuotone" className="h-3 w-3" /> Delete
             </button>
           </div>
         </>
@@ -285,7 +285,7 @@ function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBook
   const dragHandle = !readOnly && (
     <td className="border border-gray-300 px-0.5 w-5 cursor-grab">
       <div className="flex items-center justify-center opacity-0 group-hover:opacity-100" {...attributes} {...listeners}>
-        <GripVertical className="h-3.5 w-3.5 text-gray-400" />
+        <MenuDots weight="BoldDuotone" className="h-3.5 w-3.5 text-gray-400" />
       </div>
     </td>
   );
@@ -293,7 +293,7 @@ function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBook
   const deleteBtn = !readOnly && (
     <td className="border border-gray-300 px-1 w-5">
       <button type="button" onClick={onRemove} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600">
-        <Trash2 className="h-3 w-3" />
+        <TrashBinTrash weight="BoldDuotone" className="h-3 w-3" />
       </button>
     </td>
   );
@@ -328,7 +328,7 @@ function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBook
         <td colSpan={2} className="border border-gray-300 px-2 py-1.5 font-bold text-xs">
           <div className="flex items-center gap-1">
             <button type="button" onClick={onToggleCollapse} className="text-gray-500 hover:text-gray-800 shrink-0">
-              <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !isCollapsed && "rotate-90")} />
+              <AltArrowRight weight="BoldDuotone" className={cn("h-3.5 w-3.5 transition-transform", !isCollapsed && "rotate-90")} />
             </button>
             {readOnly ? row.label : (
               <input className="flex-1 bg-transparent outline-none font-bold text-xs" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
@@ -382,7 +382,7 @@ function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBook
         <td colSpan={2} className="border border-gray-300 px-2 py-1.5 font-bold text-xs">
           <div className="flex items-center gap-1" style={{ paddingLeft: labelIndent }}>
             <button type="button" onClick={onToggleCollapse} className="text-gray-400 hover:text-gray-700 shrink-0">
-              <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !isCollapsed && "rotate-90")} />
+              <AltArrowRight weight="BoldDuotone" className={cn("h-3.5 w-3.5 transition-transform", !isCollapsed && "rotate-90")} />
             </button>
             {readOnly ? row.label : (
               <input className="flex-1 bg-transparent outline-none font-bold text-xs" value={row.label ?? ""} onChange={(e) => onUpdate({ label: e.target.value })} />
@@ -931,7 +931,7 @@ function RowPicker({ label, selectedIds, signs, rows, onChange, onSignChange }: 
             {/* Sticky footer */}
             <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-white rounded-b-lg shrink-0">
               <button type="button" onClick={() => onChange([])} className="text-[10px] text-gray-400 hover:text-red-500">Reset</button>
-              <button type="button" onClick={() => setOpen(false)} className="text-[10px] bg-gray-900 text-white px-2 py-0.5 rounded hover:bg-gray-700">Selesai</button>
+              <button type="button" onClick={() => setOpen(false)} className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded hover:bg-primary/90">Selesai</button>
             </div>
           </div>
         </>

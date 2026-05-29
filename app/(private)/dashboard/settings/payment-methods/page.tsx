@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight, CreditCard } from "lucide-react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Card as CardIcon } from "@solar-icons/react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -181,7 +181,7 @@ export default function PaymentMethodsPage() {
               />
               {(can("settings-payment-methods", "create") || isAdmin) && (
                 <Button onClick={openAdd}>
-                  <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Payment Method
+                  <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Add Payment Method
                 </Button>
               )}
             </div>
@@ -190,7 +190,7 @@ export default function PaymentMethodsPage() {
           {/* Table */}
           {filtered.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'py-12', 'text-muted-foreground')}>
-              <CreditCard className={cn('h-12', 'w-12', 'mb-3', 'opacity-30')} />
+              <CardIcon weight="BoldDuotone" className={cn('h-12', 'w-12', 'mb-3', 'opacity-30')} />
               <p>No payment methods yet</p>
             </div>
           ) : (
@@ -217,12 +217,12 @@ export default function PaymentMethodsPage() {
                       <div className={cn('flex', 'gap-1', 'justify-end')}>
                         {(can("settings-payment-methods", "edit") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)}>
-                            <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                           </button>
                         )}
                         {(can("settings-payment-methods", "delete") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
-                            <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
                           </button>
                         )}
                       </div>
@@ -237,11 +237,11 @@ export default function PaymentMethodsPage() {
           {totalPages > 1 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
               <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                <ArrowLeft className={cn('w-4', 'h-4', 'mr-1')} /> Previous
+                <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Previous
               </Button>
               <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
               <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                Next <ArrowRight className={cn('w-4', 'h-4', 'ml-1')} />
+                Next <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'ml-1')} />
               </Button>
             </div>
           )}

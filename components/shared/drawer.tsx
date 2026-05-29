@@ -6,7 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import { CloseCircle } from "@solar-icons/react";
 import React from "react";
 import { Stepper } from "@/components/ui/stepper";
 
@@ -76,7 +76,7 @@ export function Drawer({
                     onClick={onClose}
                     aria-label="Close"
                   >
-                    <X className="h-6 w-6 text-foreground" />
+                    <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-foreground" />
                   </button>
                 </>
               )}
@@ -87,7 +87,7 @@ export function Drawer({
                   onClick={onClose}
                   aria-label="Close"
                 >
-                  <X className="h-6 w-6 text-foreground" />
+                  <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-foreground" />
                 </button>
               )}
             </div>

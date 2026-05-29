@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useState, useTransition, useEffect, useRef } from "react"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { Eye, EyeClosed, Refresh } from "@solar-icons/react"
 import { toast } from "sonner"
 import { useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
@@ -142,9 +142,9 @@ export function LoginForm({
                     disabled={isPending}
                   >
                     {showPassword ? (
-                      <EyeOff className={cn('h-4', 'w-4')} />
+                      <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                     ) : (
-                      <Eye className={cn('h-4', 'w-4')} />
+                      <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                     )}
                   </Button>
                 </div>
@@ -152,7 +152,7 @@ export function LoginForm({
               <Button type="submit" className="w-full" disabled={isPending}>
                 {isPending ? (
                   <>
-                    <Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
+                    <Refresh weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} />
                     Logging in...
                   </>
                 ) : (

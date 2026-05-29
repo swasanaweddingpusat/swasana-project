@@ -8,12 +8,12 @@ import { cn } from "@/lib/utils";
 import {
   ArrowRight,
   Crown,
-  Edit,
-  Medal,
-  TrendingDown,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+  Pen,
+  MedalStar,
+  GraphDown,
+  GraphUp,
+  UsersGroupRounded,
+} from "@solar-icons/react";
 import type { GroupWithPerformance } from "@/lib/queries/groups";
 
 interface Props {
@@ -79,7 +79,7 @@ function RankBadge({ rank }: { rank: number }) {
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white text-xs font-bold leading-none shadow-sm shadow-amber-300/40"
         aria-label="Peringkat ke-1 (top performer)"
       >
-        <Crown className="h-3 w-3" />
+        <Crown weight="BoldDuotone" className="h-3 w-3" />
         #1
       </span>
     );
@@ -90,7 +90,7 @@ function RankBadge({ rank }: { rank: number }) {
         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold leading-none"
         aria-label={`Peringkat ke-${rank}`}
       >
-        <Medal className="h-3 w-3" />
+        <MedalStar weight="BoldDuotone" className="h-3 w-3" />
         #{rank}
       </span>
     );
@@ -172,7 +172,7 @@ function GroupCard({
                 }}
                 aria-label={`Edit group ${group.name}`}
               >
-                <Edit className="h-3.5 w-3.5" />
+                <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
               </Button>
             )}
             <Link
@@ -184,7 +184,7 @@ function GroupCard({
               )}
               aria-label={`Lihat detail group ${group.name}`}
             >
-              <ArrowRight className="h-3.5 w-3.5" />
+              <ArrowRight weight="BoldDuotone" className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
@@ -204,7 +204,7 @@ function GroupCard({
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+            <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-xs text-muted-foreground">
               Belum ada leader · {group._count.members} anggota
             </span>
@@ -227,14 +227,15 @@ function GroupCard({
             </span>
             <div className="flex items-center gap-1">
               {group.avgAchievement >= 100 ? (
-                <TrendingUp
+                <GraphUp
+                  weight="BoldDuotone"
                   className={cn(
                     "h-3 w-3",
                     rank <= 3 ? "text-amber-600" : "text-foreground",
                   )}
                 />
               ) : (
-                <TrendingDown className="h-3 w-3 text-destructive" />
+                <GraphDown weight="BoldDuotone" className="h-3 w-3 text-destructive" />
               )}
               <span className="text-xs font-semibold">
                 {group.avgAchievement >= 100 ? "above target" : "below target"}

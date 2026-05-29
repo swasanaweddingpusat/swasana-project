@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { X, FileText, Copy, RefreshCw, Link2, Download, Trash2 } from "lucide-react";
+import { CloseCircle, FileText, Copy, Refresh, Link, DownloadMinimalistic, TrashBinTrash } from "@solar-icons/react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
@@ -122,7 +122,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
                   aria-label="Refresh"
                 >
-                  <RefreshCw size={15} />
+                  <Refresh weight="BoldDuotone" className="h-4 w-4" />
                 </button>
               )}
             </div>
@@ -133,7 +133,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
             aria-label="Close"
             style={{ background: "#FFD6D6", width: 32, height: 32 }}
           >
-            <X size={18} className="text-[#E80606]" />
+            <CloseCircle weight="BoldDuotone" className="h-5 w-5 text-[#E80606]" />
           </button>
         </div>
 
@@ -488,14 +488,14 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                                   }
                                                 }}
                                               >
-                                                <Download className="h-2.5 w-2.5" />
+                                                <DownloadMinimalistic weight="BoldDuotone" className="h-2.5 w-2.5" />
                                               </button>
                                               <button
                                                 type="button"
                                                 className="shrink-0 text-gray-400 hover:text-destructive"
                                                 onClick={(e) => { e.stopPropagation(); setDeleteDocTarget({ id: doc.id, name: doc.fileName }); }}
                                               >
-                                                <Trash2 className="h-2.5 w-2.5" />
+                                                <TrashBinTrash weight="BoldDuotone" className="h-2.5 w-2.5" />
                                               </button>
                                             </div>
                                           </div>
@@ -605,7 +605,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
       </div>
       {!agreement ? (
         <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <Link2 className="h-8 w-8 text-muted-foreground" />
+          <Link weight="BoldDuotone" className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Belum ada link agreement.</p>
           <Button onClick={handleGenerate} disabled={isPending} size="sm">
             {isPending ? "Generating..." : "Generate Link"}

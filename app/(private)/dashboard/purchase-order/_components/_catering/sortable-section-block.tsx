@@ -5,7 +5,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { GripVertical, ChevronRight, ChevronDown, Trash2, Plus } from "lucide-react";
+import { MenuDots, AltArrowRight, AltArrowDown, TrashBinTrash, AddCircle } from "@solar-icons/react";
 import { SortableNodeRow } from "./sortable-node-row";
 import { AddGroupButton, InlineAddItemForm } from "./helpers";
 import type { PaketNode, CateringSection } from "@/types/catering";
@@ -51,9 +51,9 @@ export function SortableSectionBlock(props: Props) {
     <div ref={setNodeRef} style={style} {...attributes} className="border border-gray-300 rounded-lg bg-white overflow-hidden">
       {/* Section header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
-        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><GripVertical className="h-4 w-4" /></button>}
+        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><MenuDots weight="BoldDuotone" className="h-4 w-4" /></button>}
         <button type="button" onClick={() => setIsCollapsed(!isCollapsed)} className="shrink-0 text-gray-400">
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {isCollapsed ? <AltArrowRight weight="BoldDuotone" className="h-4 w-4" /> : <AltArrowDown weight="BoldDuotone" className="h-4 w-4" />}
         </button>
 
         {editingName && !isViewOnly ? (
@@ -68,7 +68,7 @@ export function SortableSectionBlock(props: Props) {
         )}
 
         {!isViewOnly && (
-          <button type="button" onClick={() => props.onDelete(section.id)} className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 className="h-4 w-4" /></button>
+          <button type="button" onClick={() => props.onDelete(section.id)} className="text-gray-300 hover:text-red-500 shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-4 w-4" /></button>
         )}
       </div>
 
@@ -97,7 +97,7 @@ export function SortableSectionBlock(props: Props) {
             <div className="flex items-center gap-2 pt-1">
               <AddGroupButton section={section} onAddNormal={() => props.onAddGroup(section.id)} onAddMenuPilihan={(srcId) => props.onAddMenuPilihan(section.id, srcId)} />
               <button type="button" onClick={() => setShowAddItemForm(true)} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-50">
-                <Plus className="h-3 w-3" /> Item
+                <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Item
               </button>
             </div>
           )}

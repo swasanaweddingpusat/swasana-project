@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, ChevronLeft } from "lucide-react";
+import { AddCircle, AltArrowLeft } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { GroupSalesListItem, type SalesListMember } from "./GroupSalesListItem";
@@ -65,7 +65,7 @@ export function GroupSalesMasterDetail({
                 className="h-8 gap-1 text-xs"
                 onClick={onAddMember}
               >
-                <Plus className="h-3 w-3" /> Tambah
+                <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Tambah
               </Button>
             )}
           </div>
@@ -120,7 +120,7 @@ export function GroupSalesMasterDetail({
                   className="h-11 min-w-11 gap-1 text-sm px-3"
                   onClick={onAddMember}
                 >
-                  <Plus className="h-4 w-4" /> Tambah
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" /> Tambah
                 </Button>
               )}
             </div>
@@ -156,7 +156,7 @@ export function GroupSalesMasterDetail({
                 onClick={handleBackToList}
                 aria-label="Kembali ke daftar sales"
               >
-                <ChevronLeft className="h-4 w-4" /> Kembali
+                <AltArrowLeft weight="BoldDuotone" className="h-4 w-4" /> Kembali
               </Button>
             </div>
 

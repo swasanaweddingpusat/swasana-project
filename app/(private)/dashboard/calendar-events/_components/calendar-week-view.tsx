@@ -30,7 +30,6 @@ const DAY_NAMES = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
 const SESSION_LABEL: Record<string, string> = {
   morning: 'Pagi',
-  afternoon: 'Siang',
   evening: 'Malam',
   fullday: 'Full Day',
 };
