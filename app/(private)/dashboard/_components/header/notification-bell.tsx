@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, Refresh } from "@solar-icons/react";
+import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, Refresh, MentionCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
 import { formatDistanceToNow } from "date-fns";
@@ -20,6 +20,7 @@ const TYPE_ICON: Record<string, typeof Bell> = {
   user_invited: UserPlus,
   vendor_updated: Shop,
   catering_updated: ChefHat,
+  comment_mention: MentionCircle,
 };
 
 export function NotificationBell() {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat } from "@solar-icons/react";
+import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, MentionCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
@@ -21,6 +21,7 @@ const TYPE_ICON: Record<string, typeof Bell> = {
   user_invited: UserPlus,
   vendor_updated: Shop,
   catering_updated: ChefHat,
+  comment_mention: MentionCircle,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -34,6 +35,7 @@ const TYPE_LABEL: Record<string, string> = {
   user_invited: "User Invited",
   vendor_updated: "Vendor Updated",
   catering_updated: "Catering Updated",
+  comment_mention: "Disebut di Komentar",
 };
 
 export default function NotificationsPage() {

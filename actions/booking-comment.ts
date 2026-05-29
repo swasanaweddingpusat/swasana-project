@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { deleteFromR2 } from "@/lib/r2";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { createNotifications } from "@/lib/notifications";
 
 const contentSchema = z.string().max(2000);
 
@@ -54,6 +55,25 @@ export async function createBookingComment(data: {
     })]);
 
     revalidateTag(`booking-comments-${data.bookingId}`, { expire: 0 });
+
+    // Send mention notifications (non-blocking)
+    const authorProfileId = session!.user.profileId;
+    const authorName = comment.author.fullName ?? "Seseorang";
+    const uniqueMentions = [...new Set(data.mentions)].filter((id) => id !== authorProfileId);
+    if (uniqueMentions.length > 0) {
+      const contentPreview = parsed.data.trim().slice(0, 80);
+      void createNotifications(
+        uniqueMentions.map((profileId) => ({
+          userId: profileId,
+          type: "comment_mention",
+          title: "Kamu disebut di komentar",
+          message: `${authorName} menyebut kamu: "${contentPreview}${parsed.data.trim().length > 80 ? "..." : ""}"`,
+          entityType: "booking",
+          entityId: data.bookingId,
+        }))
+      );
+    }
+
     return { success: true as const, comment };
   } catch (e) {
     console.error("[createBookingComment]", e);

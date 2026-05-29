@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Plain, CloseCircle, Paperclip, Gallery, FileText, Reply, Pen, TrashBinTrash, CheckCircle, Refresh, ChatRound, AddCircle } from "@solar-icons/react";
@@ -12,8 +12,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useBookingComments } from "@/hooks/use-booking-comments";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useMentionableUsers } from "@/hooks/use-mentionable-users";
 import { createBookingComment, editBookingComment, deleteBookingComment, markCommentsRead } from "@/actions/booking-comment";
 import type { BookingCommentItem } from "@/lib/queries/booking-comments";
+import type { MentionableUser } from "@/lib/queries/users";
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,6 +70,27 @@ async function compressImage(file: File): Promise<{ blob: Blob; url: string }> {
   });
 }
 
+// ─── Mention token detection ──────────────────────────────────────────────────
+
+/**
+ * Returns the `@query` token being typed at the current caret position,
+ * or null if the caret is not inside a mention token.
+ */
+function getMentionQuery(value: string, caretPos: number): string | null {
+  const textBefore = value.slice(0, caretPos);
+  // Walk backwards from caret to find the nearest '@'
+  const atIdx = textBefore.lastIndexOf("@");
+  if (atIdx === -1) return null;
+  // If there's a space between '@' and caret, the user is no longer typing a mention
+  const tokenAfterAt = textBefore.slice(atIdx + 1);
+  if (tokenAfterAt.includes(" ") && tokenAfterAt.trimEnd() !== tokenAfterAt) return null;
+  // Allow up to one space in the name (e.g. "Budi S") — but not two consecutive spaces
+  if (/\s{2,}/.test(tokenAfterAt)) return null;
+  // Max 40 chars for a name token
+  if (tokenAfterAt.length > 40) return null;
+  return tokenAfterAt;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function DateBadge({ date }: { date: Date }) {
@@ -82,7 +105,64 @@ function DateBadge({ date }: { date: Date }) {
   );
 }
 
+// ─── Mention Dropdown ─────────────────────────────────────────────────────────
+
+interface MentionDropdownProps {
+  users: MentionableUser[];
+  query: string;
+  activeIndex: number;
+  onSelect: (user: MentionableUser) => void;
+}
+
+function MentionDropdown({ users, query, activeIndex, onSelect }: MentionDropdownProps) {
+  const filtered = users
+    .filter((u) => (u.fullName ?? "").toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 8);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className={cn(
+      'absolute', 'bottom-full', 'left-0', 'mb-1',
+      'w-64', 'max-h-52', 'overflow-y-auto',
+      'bg-card', 'border', 'border-border', 'rounded-xl',
+      'shadow-md', 'z-50', 'py-1'
+    )}>
+      {filtered.map((user, idx) => (
+        <button
+          key={user.id}
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); onSelect(user); }}
+          className={cn(
+            'w-full', 'flex', 'items-center', 'gap-2.5',
+            'px-3', 'py-2', 'text-left', 'text-sm',
+            'transition-colors', 'cursor-pointer',
+            idx === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+          )}
+        >
+          <div className={cn(
+            'shrink-0', 'w-7', 'h-7', 'rounded-full',
+            'overflow-hidden', 'bg-secondary', 'flex', 'items-center',
+            'justify-center', 'text-[10px]', 'font-semibold', 'text-secondary-foreground'
+          )}>
+            {user.avatarUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={user.avatarUrl} alt={user.fullName ?? ""} className={cn('w-full', 'h-full', 'object-cover')} />
+              : getInitials(user.fullName)
+            }
+          </div>
+          <span className="truncate text-foreground">{user.fullName}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface PendingAttachment { type: "image" | "document"; url: string; name: string; size: number; blob: Blob }
+interface SelectedMention { profileId: string; name: string }
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -96,6 +176,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
   const { user } = useCurrentUser();
   const qc = useQueryClient();
   const { data: comments = [], isLoading } = useBookingComments(open ? bookingId : null);
+  const { users: mentionableUsers } = useMentionableUsers();
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -106,6 +187,11 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Mention autocomplete state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionActiveIdx, setMentionActiveIdx] = useState(0);
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -142,14 +228,104 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
 
   const resetPanel = () => {
     setInput(""); setReplyTo(null); setEditingId(null); setPendingAttachments([]);
+    setMentionQuery(null); setSelectedMentions([]);
+  };
+
+  // ─── Mention helpers ─────────────────────────────────────────────────────────
+
+  const filteredMentionUsers = mentionQuery !== null
+    ? mentionableUsers
+        .filter((u) => (u.fullName ?? "").toLowerCase().includes(mentionQuery.toLowerCase()))
+        .slice(0, 8)
+    : [];
+
+  const insertMention = useCallback((user: MentionableUser) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const caretPos = textarea.selectionStart ?? input.length;
+    const textBefore = input.slice(0, caretPos);
+    const textAfter = input.slice(caretPos);
+    const atIdx = textBefore.lastIndexOf("@");
+    if (atIdx === -1) return;
+
+    const newText = textBefore.slice(0, atIdx) + `@${user.fullName} ` + textAfter;
+    setInput(newText);
+    setSelectedMentions((prev) => {
+      const exists = prev.some((m) => m.profileId === user.id);
+      if (exists) return prev;
+      return [...prev, { profileId: user.id, name: user.fullName ?? "" }];
+    });
+    setMentionQuery(null);
+    setMentionActiveIdx(0);
+
+    // Restore focus and move caret after the inserted mention
+    setTimeout(() => {
+      if (!textarea) return;
+      textarea.focus();
+      const newCaretPos = atIdx + `@${user.fullName} `.length;
+      textarea.setSelectionRange(newCaretPos, newCaretPos);
+      // Trigger height recalc
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }, 0);
+  }, [input]);
+
+  // ─── Handlers ────────────────────────────────────────────────────────────────
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    e.target.style.height = "auto";
+    e.target.style.height = `${e.target.scrollHeight}px`;
+
+    const caret = e.target.selectionStart ?? val.length;
+    const query = getMentionQuery(val, caret);
+    setMentionQuery(query);
+    setMentionActiveIdx(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // When mention dropdown is open, intercept navigation keys
+    if (mentionQuery !== null && filteredMentionUsers.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionActiveIdx((prev) => (prev + 1) % filteredMentionUsers.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionActiveIdx((prev) => (prev - 1 + filteredMentionUsers.length) % filteredMentionUsers.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const selected = filteredMentionUsers[mentionActiveIdx];
+        if (selected) insertMention(selected);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
+    // Default: Enter without shift = send
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text && !pendingAttachments.length) return;
 
-    const mentionMatches = text.match(/@(\w+(?:\s\w+)?)/g) ?? [];
-    const mentions = mentionMatches.map((m) => m.slice(1));
+    // Build mentions array: profileIds of selectedMentions that still appear as @name in text
+    const mentionIds = selectedMentions
+      .filter((m) => text.includes(`@${m.name}`))
+      .map((m) => m.profileId);
+    const uniqueMentionIds = [...new Set(mentionIds)];
 
     // Optimistic — inject ke cache dulu
     const tempId = `optimistic-${Date.now()}`;
@@ -158,7 +334,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
     const optimisticComment: BookingCommentItem = {
       id: tempId,
       content: text,
-      mentions,
+      mentions: uniqueMentionIds,
       edited: false,
       attachments: capturedAttachments.length ? capturedAttachments.map((a) => ({ path: "", name: a.name, size: a.size, type: a.type, url: a.url, _uploading: true })) : [],
       createdAt: new Date(),
@@ -169,6 +345,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
     qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], (prev) => [...(prev ?? []), optimisticComment]);
     setOptimisticIds((prev) => new Set(prev).add(tempId));
     setInput(""); setPendingAttachments([]); setReplyTo(null);
+    setSelectedMentions([]); setMentionQuery(null);
     setSending(true);
 
     // Upload attachments if any
@@ -184,7 +361,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
     }
 
     const result = await createBookingComment({
-      bookingId, content: text, mentions,
+      bookingId, content: text, mentions: uniqueMentionIds,
       replyToId: capturedReplyTo?.id,
       attachments: uploadedAttachments,
     });
@@ -249,16 +426,16 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
         <SheetContent side="right" className={cn('w-screen!', 'sm:max-w-xl', 'flex', 'flex-col', 'p-0', 'gap-0')} showCloseButton={false}>
           {/* Header */}
           <div className={cn('shrink-0', 'flex', 'items-center', 'justify-between', 'px-5', 'py-4', 'border-b')}>
-            <SheetTitle className={cn('text-base', 'sm:text-lg', 'font-semibold', 'text-[#121417]', 'flex', 'items-center', 'gap-2', 'truncate', 'max-w-[80%]')}>
+            <SheetTitle className={cn('text-base', 'sm:text-lg', 'font-semibold', 'text-foreground', 'flex', 'items-center', 'gap-2', 'truncate', 'max-w-[80%]')}>
               <ChatRound weight="BoldDuotone" className={cn('h-5', 'w-5', 'shrink-0', 'text-muted-foreground')} />
               {customerName}
             </SheetTitle>
             <button
-              className={cn('p-1', 'rounded-full', 'bg-red-100', 'hover:bg-red-200', 'cursor-pointer', 'shrink-0')}
+              className={cn('flex', 'items-center', 'justify-center', 'min-h-9', 'min-w-9', 'rounded-full', 'bg-muted', 'hover:bg-muted/80', 'text-foreground', 'cursor-pointer', 'shrink-0')}
               onClick={onClose}
               aria-label="Close"
             >
-              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-red-500')} />
+              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
             </button>
           </div>
 
@@ -442,7 +619,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
             </div>
           )}
 
-          {/* Input */}
+          {/* Input area */}
           <div className={cn('shrink-0', 'border-t', 'px-3', 'py-3', 'flex', 'gap-2', 'items-end')}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -459,20 +636,29 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = `${e.target.scrollHeight}px`;
-              }}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="Ketik komentar... (@ untuk mention)"
-              rows={1}
-              className={cn('flex-1', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
-              style={{ minHeight: "36px", maxHeight: "160px", overflowY: "auto" }}
-            />
+
+            {/* Textarea wrapper — relative for mention dropdown */}
+            <div className="relative flex-1">
+              {mentionQuery !== null && filteredMentionUsers.length > 0 && (
+                <MentionDropdown
+                  users={mentionableUsers}
+                  query={mentionQuery}
+                  activeIndex={mentionActiveIdx}
+                  onSelect={insertMention}
+                />
+              )}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Ketik komentar... (@ untuk mention)"
+                rows={1}
+                className={cn('w-full', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
+                style={{ minHeight: "36px", maxHeight: "160px", overflowY: "auto" }}
+              />
+            </div>
+
             <Button size="icon" onClick={handleSend} disabled={sending || (!input.trim() && !pendingAttachments.length)} className={cn('shrink-0', 'rounded-xl', 'h-9', 'w-9')}>
               {sending ? <Refresh weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin')} /> : <Plain weight="BoldDuotone" className={cn('h-4', 'w-4')} />}
             </Button>

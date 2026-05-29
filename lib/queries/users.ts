@@ -123,3 +123,14 @@ export async function getManagerProfiles() {
 }
 
 export type ManagerProfile = Awaited<ReturnType<typeof getManagerProfiles>>[number];
+
+export async function getMentionableUsers() {
+  return db.profile.findMany({
+    where: { status: "active" },
+    select: { id: true, fullName: true, avatarUrl: true },
+    orderBy: { fullName: "asc" },
+    take: 200,
+  });
+}
+
+export type MentionableUser = Awaited<ReturnType<typeof getMentionableUsers>>[number];
