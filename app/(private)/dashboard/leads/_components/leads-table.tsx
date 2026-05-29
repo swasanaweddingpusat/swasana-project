@@ -10,6 +10,7 @@ import { LeadsListView } from "./leads-list-view";
 import { LeadsPipelineView } from "./leads-pipeline-view";
 import { useLeads, useUpdateLeadStatus } from "@/hooks/use-leads";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { LeadItem } from "@/lib/queries/leads";
 import type { LeadListItem } from "@/types/lead";
 
@@ -19,6 +20,9 @@ export type { LeadItem };
 
 export function LeadsTable() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const isMobile = useIsMobile();
+  // On mobile, always render list view regardless of viewMode state
+  const effectiveViewMode: ViewMode = isMobile ? "list" : viewMode;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -115,7 +119,7 @@ export function LeadsTable() {
             onAdd={handleAdd}
           />
 
-          {viewMode === "list" && (
+          {effectiveViewMode === "list" && (
             <LeadsListView
               leads={leads}
               search={search}
@@ -129,7 +133,7 @@ export function LeadsTable() {
             />
           )}
 
-          {viewMode === "pipeline" && (
+          {effectiveViewMode === "pipeline" && (
             <LeadsPipelineView
               leads={leads}
               statuses={pipelineStatuses}

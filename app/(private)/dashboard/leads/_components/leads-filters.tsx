@@ -70,6 +70,7 @@ export function LeadsFilters({
       {/* Header row */}
       <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
+          {/* View mode toggle — Pipeline button hidden on mobile (<sm) */}
           <div
             role="tablist"
             aria-label="View mode"
@@ -97,7 +98,7 @@ export function LeadsFilters({
               aria-selected={viewMode === "pipeline"}
               onClick={() => onViewModeChange("pipeline")}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "hidden sm:flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 viewMode === "pipeline"
                   ? "bg-primary text-primary-foreground"

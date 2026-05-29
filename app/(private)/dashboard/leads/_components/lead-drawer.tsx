@@ -356,7 +356,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                       disabled={statuses.length === 0}
                     >
                       <FormControl>
-                        <SelectTrigger className={cn(statuses.length === 0 && "opacity-60")}>
+                        <SelectTrigger className={cn("w-full", statuses.length === 0 && "opacity-60")}>
                           <SelectValue placeholder="Pilih status..." />
                         </SelectTrigger>
                       </FormControl>
@@ -388,7 +388,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                     <FormLabel>Assigned To (Sales)</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Pilih sales (opsional)..." />
                         </SelectTrigger>
                       </FormControl>
@@ -420,7 +420,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                       }}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Pilih venue (opsional)..." />
                         </SelectTrigger>
                       </FormControl>
@@ -451,7 +451,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                         disabled={packages.length === 0}
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="w-full">
                             <SelectValue placeholder="Pilih paket (opsional)..." />
                           </SelectTrigger>
                         </FormControl>
@@ -478,7 +478,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                     <FormLabel>Event Type</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Pilih event type (opsional)..." />
                         </SelectTrigger>
                       </FormControl>
