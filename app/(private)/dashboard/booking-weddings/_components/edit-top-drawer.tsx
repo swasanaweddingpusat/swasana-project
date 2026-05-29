@@ -227,21 +227,21 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
         <div className="flex-1 overflow-y-auto space-y-4 px-1">
           {/* Package price */}
           <div>
-            <span className={cn("text-sm", "font-medium", "text-gray-700")}>Total Harga Package</span>
-            <Input disabled value={`Rp${fmtRp(priceAfterDiscount)}`} className="mt-1" />
+            <span className="text-sm font-medium text-foreground">Total Harga Package</span>
+            <Input disabled value={`Rp${fmtRp(priceAfterDiscount)}`} className="mt-1 w-full" />
           </div>
 
           {/* Discount */}
-          <div className={cn("flex", "flex-col", "gap-2", "border-y", "py-4")}>
-            <div className={cn("flex", "items-center", "gap-2")}>
+          <div className="flex flex-col gap-2 border-y py-4">
+            <div className="flex items-center gap-2">
               <Input
                 placeholder="Nama bonus (e.g. Discount)"
                 value={discountName}
                 onChange={(e) => setDiscountName(e.target.value)}
                 disabled={!discountEditing}
-                className={cn("border-0", "p-0", "text-sm", "font-medium", "text-gray-700", "bg-transparent", "shadow-none", "focus-visible:ring-0", "h-auto")}
+                className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
               />
-              <button type="button" onClick={() => setDiscountEditing((p) => !p)} className={cn("shrink-0", "text-muted-foreground", "hover:text-foreground")}>
+              <button type="button" onClick={() => setDiscountEditing((p) => !p)} className="shrink-0 text-muted-foreground hover:text-foreground">
                 <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -251,16 +251,16 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
               onChange={(e) => setDiscountAmount(parseInt(e.target.value.replace(/\D/g, "")) || 0)}
               inputMode="numeric"
               disabled={!discountEditing}
-              className="rounded-none"
+              className="rounded-none w-full"
             />
             {discountEditing && (
-              <p className={cn("text-xs", "text-gray-500")}>Edit discount lalu klik Update untuk menyimpan.</p>
+              <p className="text-xs text-muted-foreground">Edit discount lalu klik Update untuk menyimpan.</p>
             )}
           </div>
 
           {/* Terms */}
           <div>
-            <span className={cn("text-sm", "font-medium", "text-gray-700", "mb-2", "block")}>Term of Payments</span>
+            <span className="text-sm font-medium text-foreground mb-2 block">Term of Payments</span>
             <div className="space-y-4">
               {terms.map((term, idx) => {
                 const locked = lockedIds.includes(term.id);
@@ -270,14 +270,14 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                 return (
                   <div key={term.id} className="space-y-2">
                     {/* Term name — inline editable */}
-                    <div className={cn("flex", "items-center", "gap-2")}>
-                      <div className="flex items-center gap-0.5 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-0.5 flex-1 min-w-0">
                         <Input
                           value={term.name}
                           onChange={(e) => handleFieldChange(term.id, "name", e.target.value)}
                           placeholder="Term name"
                           disabled={locked}
-                          className={cn("border-0", "p-0", "text-sm", "font-medium", "text-gray-700", "bg-transparent", "shadow-none", "focus-visible:ring-0", "h-auto")}
+                          className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
                         />
                         {isDP && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
                       </div>
@@ -297,25 +297,26 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                           </Select>
                         )}
                         {terms.length > 1 && !locked && (
-                          <button type="button" onClick={() => setTerms((prev) => prev.filter((t) => t.id !== term.id))} className={cn("text-red-400", "hover:text-red-600", "shrink-0")}>
-                            <TrashBinTrash weight="BoldDuotone" className={cn("h-3.5", "w-3.5")} />
+                          <button type="button" onClick={() => setTerms((prev) => prev.filter((t) => t.id !== term.id))} className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-9 min-w-9">
+                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
                           </button>
                         )}
                       </div>
                     </div>
 
                     {/* Amount + Date row */}
-                    <div className={cn("flex", "gap-3", "items-center")}>
-                      <div className="flex-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 sm:items-center">
+                      <div className="w-full sm:flex-2">
                         <Input
                           value={term.amount ? fmtRp(term.amount) : ""}
                           onChange={(e) => handleFieldChange(term.id, "amount", parseInt(e.target.value.replace(/\D/g, "")) || 0)}
                           placeholder="IDR. 0"
                           inputMode="numeric"
                           disabled={locked}
+                          className="w-full"
                         />
                       </div>
-                      <div className="flex-1">
+                      <div className="w-full sm:flex-1">
                         <Popover>
                           <PopoverTrigger render={
                             <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !term.dueDate && "text-muted-foreground")} disabled={locked}>
@@ -378,21 +379,21 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                             <span className={cn("ml-auto font-medium", remaining > 0 ? "text-orange-600" : remaining === 0 ? "text-foreground" : "text-destructive")}>Sisa: Rp{fmtRp(Math.abs(remaining))}{remaining === 0 ? " ✓" : ""}</span>
                           </button>
                           {isExpanded && (
-                          <div className="space-y-2 ml-2 pl-3 border-l-2 border-gray-200">
+                          <div className="space-y-2 ml-2 pl-3 border-l-2 border-border">
                           {payments.map((p, pi) => (
-                            <div key={p.tempId} className="space-y-1.5 bg-gray-50 rounded-md p-2.5">
+                            <div key={p.tempId} className="space-y-1.5 bg-muted/50 rounded-md p-2.5">
                               {/* Row 1: # + Nominal + Date + Delete */}
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-gray-500 shrink-0">#{pi + 1}</span>
-                                <Input value={p.amount ? fmtRp(p.amount) : ""} onChange={(e) => { const n = parseInt(e.target.value.replace(/\D/g, "")) || 0; setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, amount: n } : x) })); }} placeholder="Nominal" inputMode="numeric" className="h-7 text-xs flex-1" />
+                                <span className="text-xs font-medium text-muted-foreground shrink-0">#{pi + 1}</span>
+                                <Input value={p.amount ? fmtRp(p.amount) : ""} onChange={(e) => { const n = parseInt(e.target.value.replace(/\D/g, "")) || 0; setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, amount: n } : x) })); }} placeholder="Nominal" inputMode="numeric" className="h-8 text-xs flex-1 min-w-0" />
                                 <Popover>
-                                  <PopoverTrigger render={<Button variant="outline" className={cn("h-7 text-xs px-2", !p.paidAt && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="h-3 w-3 mr-1" />{p.paidAt ? format(new Date(p.paidAt), "dd MMM yy") : "Tgl"}</Button>} />
+                                  <PopoverTrigger render={<Button variant="outline" className={cn("h-8 text-xs px-2 shrink-0", !p.paidAt && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="h-3 w-3 mr-1" />{p.paidAt ? format(new Date(p.paidAt), "dd MMM yy") : "Tgl"}</Button>} />
                                   <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={p.paidAt ? new Date(p.paidAt) : undefined} onSelect={(d) => setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, paidAt: d ? toLocalISO(d) : "" } : x) }))} /></PopoverContent>
                                 </Popover>
-                                <button type="button" className="text-red-400 hover:text-red-600 shrink-0" onClick={async () => { if (p.dbId) { const r = await deletePartialPayment(p.dbId); if (!r.success) { toast.error(r.error); return; } toast.success("Pembayaran dihapus"); } setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).filter((x) => x.tempId !== p.tempId) })); }}><TrashBinTrash weight="BoldDuotone" className="h-3 w-3" /></button>
+                                <button type="button" className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-8 min-w-8" onClick={async () => { if (p.dbId) { const r = await deletePartialPayment(p.dbId); if (!r.success) { toast.error(r.error); return; } toast.success("Pembayaran dihapus"); } setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).filter((x) => x.tempId !== p.tempId) })); }}><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>
                               </div>
                               {/* Row 2: Upload bukti */}
-                              <div className={cn("relative", "flex", "items-center", "gap-2", "px-2", "py-1.5", "border", "rounded-md", "bg-white", "text-muted-foreground", "cursor-pointer", "hover:bg-muted/30", "text-xs")}>
+                              <div className={cn("relative", "flex", "items-center", "gap-2", "px-2", "py-1.5", "border", "rounded-md", "bg-background", "text-muted-foreground", "cursor-pointer", "hover:bg-muted/30", "text-xs")}>
                                 {p.evidence ? (
                                   <EvidencePreview src={p.evidence} onOpen={() => {
                                     if (typeof p.evidence === "string") { window.open(toFullUrl(p.evidence), "_blank"); }
@@ -434,7 +435,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                       <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
                     )}
                     {/* Divider */}
-                    {idx < terms.length - 1 && <div className={cn("border-b", "border-gray-100", "pt-1")} />}
+                    {idx < terms.length - 1 && <div className="border-b border-border pt-1" />}
                   </div>
                 );
               })}
@@ -449,26 +450,26 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
           </div>
 
           {/* Summary */}
-          <div className={cn("p-3", "bg-gray-50", "rounded-lg")}>
-            <div className={cn("flex", "justify-between", "items-center", "mb-2")}>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Harga Paket:</span>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Rp{fmtRp(packagePrice)}</span>
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-foreground">Harga Paket:</span>
+              <span className="text-sm font-medium text-foreground">Rp{fmtRp(packagePrice)}</span>
             </div>
-            <div className={cn("flex", "justify-between", "items-center", "mb-2")}>
-              <span className={cn("text-sm", "font-medium", "text-red-600")}>{discountName || "Discount"}:</span>
-              <span className={cn("text-sm", "font-medium", "text-red-600")}>- Rp{fmtRp(discountAmount)}</span>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-destructive">{discountName || "Discount"}:</span>
+              <span className="text-sm font-medium text-destructive">- Rp{fmtRp(discountAmount)}</span>
             </div>
-            <div className={cn("flex", "justify-between", "items-center", "mb-2", "border-t", "pt-2")}>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Harga Setelah Discount:</span>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Rp{fmtRp(priceAfterDiscount)}</span>
+            <div className="flex justify-between items-center mb-2 border-t pt-2">
+              <span className="text-sm font-medium text-foreground">Harga Setelah Discount:</span>
+              <span className="text-sm font-medium text-foreground">Rp{fmtRp(priceAfterDiscount)}</span>
             </div>
-            <div className={cn("flex", "justify-between", "items-center", "mb-2")}>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Total Input:</span>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Rp{fmtRp(totalTerms)}</span>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-foreground">Total Input:</span>
+              <span className="text-sm font-medium text-foreground">Rp{fmtRp(totalTerms)}</span>
             </div>
-            <div className={cn("flex", "justify-between", "items-center")}>
-              <span className={cn("text-sm", "font-medium", "text-gray-700")}>Selisih:</span>
-              <span className={cn("text-sm font-medium", difference !== 0 ? "text-red-600" : "text-foreground")}>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-foreground">Selisih:</span>
+              <span className={cn("text-sm font-medium", difference !== 0 ? "text-destructive" : "text-foreground")}>
                 Rp{fmtRp(Math.abs(difference))}{difference < 0 ? " (Kurang)" : difference > 0 ? " (Lebih)" : " (Sesuai)"}
               </span>
             </div>
@@ -476,7 +477,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white pt-4">
+        <div className="sticky bottom-0 bg-background pt-4">
           <Button className="w-full" onClick={handleUpdate} disabled={loading || !isChanged}>
             {loading ? "Updating..." : "Update"}
           </Button>

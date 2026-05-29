@@ -15,8 +15,8 @@ import type { BookingDetail } from "@/lib/queries/bookings";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
 
-const lbl = "text-sm font-medium mb-0 text-[#637587]";
-const val = "text-sm font-normal text-black";
+const lbl = "text-sm font-medium mb-0 text-muted-foreground";
+const val = "text-sm font-normal text-foreground";
 
 function fmtPrice(v: bigint | number | null | undefined): string {
   if (v == null) return "-";
@@ -39,10 +39,10 @@ function fmtDateTime(d: string | Date | null | undefined): string {
 }
 
 function RichText({ html }: { html: string | null | undefined }) {
-  if (!html || html === "<p></p>") return <span className="text-gray-400">-</span>;
+  if (!html || html === "<p></p>") return <span className="text-muted-foreground">-</span>;
   return (
     <div
-      className="prose prose-sm max-w-none text-gray-500 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0 [&_p]:my-0 [&_strong]:text-gray-700"
+      className="prose prose-sm max-w-none text-muted-foreground [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0 [&_p]:my-0 [&_strong]:text-foreground"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -104,11 +104,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:bg-black/40">
       <div
-        className="bg-white w-full h-full flex flex-col sm:rounded-xl sm:shadow-lg sm:w-[70%] sm:max-w-[70%] overflow-hidden sm:h-auto sm:max-h-[90vh]"
+        className="bg-background w-full h-full flex flex-col sm:rounded-xl sm:shadow-lg sm:w-[70%] sm:max-w-[70%] overflow-hidden sm:h-auto sm:max-h-[90vh]"
         style={{ minWidth: 0 }}
       >
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="flex justify-between items-start px-4 sm:px-8 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <div className="flex justify-between items-start px-4 sm:px-8 py-4 border-b sticky top-0 bg-background z-10">
           {loading ? (
             <Skeleton className="h-6 w-48" />
           ) : (
@@ -119,7 +119,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               {bookingId && (
                 <button
                   onClick={() => fetchBooking(bookingId)}
-                  className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Refresh"
                 >
                   <Refresh weight="BoldDuotone" className="h-4 w-4" />
@@ -129,24 +129,23 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           )}
           <button
             onClick={onClose}
-            className="shrink-0 mt-0.5 rounded-full flex items-center justify-center cursor-pointer"
+            className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
             aria-label="Close"
-            style={{ background: "#FFD6D6", width: 32, height: 32 }}
           >
-            <CloseCircle weight="BoldDuotone" className="h-5 w-5 text-[#E80606]" />
+            <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
           </button>
         </div>
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
-        <div className="flex border-b border-gray-200 mb-0 px-4 sm:px-8 shrink-0 overflow-x-auto scrollbar-none">
+        <div className="flex border-b mb-0 px-4 sm:px-8 shrink-0 overflow-x-auto scrollbar-none">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
               className={`px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === t.key
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {t.label}
@@ -166,7 +165,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               ))}
             </div>
           ) : !booking ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Gagal memuat data booking.</div>
+            <div className="text-center py-12 text-muted-foreground text-sm">Gagal memuat data booking.</div>
           ) : (
             <>
               {/* ═══ TAB: Booking Details ═══ */}
@@ -245,7 +244,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     {booking.bookingStatus === "Rejected" && booking.rejectionNotes && (
                       <>
                         <p className={lbl + " mt-4"}>Notes of rejection</p>
-                        <p className="text-gray-500 text-sm font-normal">{booking.rejectionNotes}</p>
+                        <p className="text-muted-foreground text-sm font-normal">{booking.rejectionNotes}</p>
                       </>
                     )}
                     <p className={lbl + " mt-4"}>Venue Address</p>
@@ -264,7 +263,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     <div className="rounded-md border overflow-x-auto">
                       <Table>
                         <TableHeader>
-                          <TableRow className="bg-gray-50">
+                          <TableRow className="bg-muted/50">
                             <TableHead className="px-4 w-40">Kategori</TableHead>
                             <TableHead className="px-4">Nama Vendor</TableHead>
                             <TableHead className="px-4 w-37.5">Nominal</TableHead>
@@ -275,25 +274,25 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         <TableBody>
                           {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
                             <TableRow key={v.id}>
-                              <TableCell className="px-4 font-medium text-sm text-gray-700">{v.vendorCategoryName}</TableCell>
+                              <TableCell className="px-4 font-medium text-sm text-foreground">{v.vendorCategoryName}</TableCell>
                               <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
                               <TableCell className="px-4 text-sm">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
                               <TableCell className="px-4 text-sm"><RichText html={v.description} /></TableCell>
-                              <TableCell className="px-4 text-sm text-gray-500">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
+                              <TableCell className="px-4 text-sm text-muted-foreground">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
                             </TableRow>
                           ))}
                           {booking.snapBonuses.length > 0 && (
-                            <TableRow className="bg-gray-50">
-                              <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Complimentary / Bonus</TableCell>
+                            <TableRow className="bg-muted/50">
+                              <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Complimentary / Bonus</TableCell>
                             </TableRow>
                           )}
                           {booking.snapBonuses.map((b) => (
                             <TableRow key={b.id}>
-                              <TableCell className="px-4 font-medium text-sm text-gray-700">Complimentary</TableCell>
+                              <TableCell className="px-4 font-medium text-sm text-foreground">Complimentary</TableCell>
                               <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>
                               <TableCell className="px-4 text-sm">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
                               <TableCell className="px-4 text-sm"><RichText html={b.description} /></TableCell>
-                              <TableCell className="px-4 text-sm text-gray-500">{b.orderStatus?.name ?? "-"}</TableCell>
+                              <TableCell className="px-4 text-sm text-muted-foreground">{b.orderStatus?.name ?? "-"}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -304,11 +303,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   {/* Internal items */}
                   {booking.snapPackageInternalItems.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Internal Items</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Internal Items</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
                         {booking.snapPackageInternalItems.map((item) => (
-                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
-                            <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                          <div key={item.id} className="py-2 border-b last:border-b-0">
+                            <p className="text-sm font-medium text-foreground">{item.itemName}</p>
                             {item.itemDescription && <RichText html={item.itemDescription} />}
                           </div>
                         ))}
@@ -319,11 +318,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   {/* Package vendor items */}
                   {booking.snapPackageVendorItems.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Paket Vendor Items</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Paket Vendor Items</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
                         {booking.snapPackageVendorItems.map((item) => (
-                          <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
-                            <p className="text-xs text-gray-400">{item.categoryName}</p>
+                          <div key={item.id} className="py-2 border-b last:border-b-0">
+                            <p className="text-xs text-muted-foreground">{item.categoryName}</p>
                             <RichText html={item.itemText} />
                           </div>
                         ))}
@@ -334,8 +333,8 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   {/* Empty state */}
                   {booking.snapVendorItems.length === 0 && booking.snapBonuses.length === 0 && booking.snapPackageInternalItems.length === 0 && booking.snapPackageVendorItems.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <FileText className="h-10 w-10 text-gray-300 mb-3" />
-                      <p className="text-sm text-gray-500">Belum ada data vendor.</p>
+                      <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+                      <p className="text-sm text-muted-foreground">Belum ada data vendor.</p>
                     </div>
                   )}
                 </div>
@@ -353,26 +352,26 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   </div>
 
                   {booking.termOfPayments.length === 0 ? (
-                    <p className="text-gray-400 text-sm">Belum ada data pembayaran.</p>
+                    <p className="text-muted-foreground text-sm">Belum ada data pembayaran.</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-gray-200 bg-gray-50">
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">Termin</th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">Nominal</th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">Jatuh Tempo</th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">No. Invoice</th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
+                          <tr className="border-b bg-muted/50">
+                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
+                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
+                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
+                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">No. Invoice</th>
+                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                           </tr>
                         </thead>
                         <tbody>
                           {booking.termOfPayments.map((t, i) => (
-                            <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
-                              <td className="px-4 py-3 font-medium text-gray-900">{t.name || `Termin ${i + 1}`}</td>
-                              <td className="px-4 py-3 text-gray-900">{fmtPrice(t.amount)}</td>
-                              <td className="px-4 py-3 text-gray-900">{fmtDate(t.dueDate, "long")}</td>
-                              <td className="px-4 py-3 text-gray-900">{t.invoiceNumber ?? "-"}</td>
+                            <tr key={t.id} className="border-b hover:bg-muted/50">
+                              <td className="px-4 py-3 font-medium text-foreground">{t.name || `Termin ${i + 1}`}</td>
+                              <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
+                              <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
+                              <td className="px-4 py-3 text-foreground">{t.invoiceNumber ?? "-"}</td>
                               <td className="px-4 py-3">
                                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
                                   t.paymentStatus === "paid" ? "bg-green-100 text-green-700" :
@@ -396,9 +395,9 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                 <div className="space-y-6">
                   {booking.bookingDocuments.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <FileText className="h-10 w-10 text-gray-300 mb-3" />
-                      <p className="text-sm text-gray-500">Belum ada dokumen.</p>
-                      <p className="text-xs text-gray-400 mt-1">Upload dokumen melalui tombol di action table.</p>
+                      <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+                      <p className="text-sm text-muted-foreground">Belum ada dokumen.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Upload dokumen melalui tombol di action table.</p>
                     </div>
                   ) : (
                     (() => {
@@ -421,15 +420,15 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               });
                             };
                             return (
-                              <div key={docName} className="border border-gray-100 rounded-lg p-3">
+                              <div key={docName} className="border rounded-lg p-3">
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="text-xs font-medium text-gray-700 truncate">{docName}</p>
-                                  <button type="button" onClick={toggleGroup} className="text-[10px] text-gray-400 hover:text-gray-600 shrink-0">
+                                  <p className="text-xs font-medium text-foreground truncate">{docName}</p>
+                                  <button type="button" onClick={toggleGroup} className="text-[10px] text-muted-foreground hover:text-foreground shrink-0">
                                     {allSelected ? "Deselect all" : "Select all"}
                                   </button>
                                 </div>
                                 {docs[0]?.description && (
-                                  <p className="text-[10px] text-gray-400 mt-0.5">{docs[0].description}</p>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">{docs[0].description}</p>
                                 )}
                                 <div className="flex flex-wrap gap-2 mt-2">
                                   {docs.map((doc) => {
@@ -438,10 +437,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                     const ext = doc.fileName?.split(".").pop() ?? "FILE";
                                     const isSelected = selectedDocIds.has(doc.id);
                                     return (
-                                      <div key={doc.id} className={`w-25 border rounded-lg overflow-hidden bg-white transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-gray-200"}`}>
+                                      <div key={doc.id} className={`w-25 border rounded-lg overflow-hidden bg-card transition-colors ${isSelected ? "border-primary ring-1 ring-primary" : "border-border"}`}>
                                         <div className="relative">
                                           <div
-                                            className="h-20 w-full bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                                            className="h-20 w-full bg-muted/50 flex items-center justify-center overflow-hidden cursor-pointer"
                                             onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
                                           >
                                             {isImage && url ? (
@@ -449,8 +448,8 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                               <img src={url} alt={doc.fileName} className="w-full h-full object-cover" />
                                             ) : (
                                               <div className="flex flex-col items-center gap-1">
-                                                <FileText className="h-6 w-6 text-gray-300" />
-                                                <span className="text-[9px] text-gray-400 uppercase font-medium">{ext}</span>
+                                                <FileText className="h-6 w-6 text-muted-foreground" />
+                                                <span className="text-[9px] text-muted-foreground uppercase font-medium">{ext}</span>
                                               </div>
                                             )}
                                           </div>
@@ -463,16 +462,16 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                               return next;
                                             })}
                                             onClick={(e) => e.stopPropagation()}
-                                            className="absolute top-1.5 left-1.5 h-3.5 w-3.5 cursor-pointer accent-black"
+                                            className="absolute top-1.5 left-1.5 h-3.5 w-3.5 cursor-pointer accent-foreground"
                                           />
                                         </div>
                                         <div className="px-1.5 py-1">
                                           <div className="flex items-center justify-between gap-0.5">
-                                            <p className="text-[10px] text-gray-600 truncate flex-1">{doc.fileName}</p>
+                                            <p className="text-[10px] text-foreground truncate flex-1">{doc.fileName}</p>
                                             <div className="flex items-center gap-0.5 shrink-0">
                                               <button
                                                 type="button"
-                                                className="shrink-0 text-gray-400 hover:text-gray-600"
+                                                className="shrink-0 text-muted-foreground hover:text-foreground"
                                                 onClick={async (e) => {
                                                   e.stopPropagation();
                                                   try {
@@ -492,14 +491,14 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                               </button>
                                               <button
                                                 type="button"
-                                                className="shrink-0 text-gray-400 hover:text-destructive"
+                                                className="shrink-0 text-muted-foreground hover:text-destructive"
                                                 onClick={(e) => { e.stopPropagation(); setDeleteDocTarget({ id: doc.id, name: doc.fileName }); }}
                                               >
                                                 <TrashBinTrash weight="BoldDuotone" className="h-2.5 w-2.5" />
                                               </button>
                                             </div>
                                           </div>
-                                          <p className="text-[9px] text-gray-400">
+                                          <p className="text-[9px] text-muted-foreground">
                                             {doc.fileSize < 1024 * 1024
                                               ? `${(doc.fileSize / 1024).toFixed(1)} KB`
                                               : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}
@@ -519,10 +518,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
                   {/* Bulk action bar */}
                   {selectedDocIds.size > 0 && (
-                    <div className="sticky bottom-0 bg-white border-t pt-3 flex items-center justify-between gap-3">
-                      <span className="text-sm text-gray-600">{selectedDocIds.size} file dipilih</span>
+                    <div className="sticky bottom-0 bg-background border-t pt-3 flex items-center justify-between gap-3">
+                      <span className="text-sm text-muted-foreground">{selectedDocIds.size} file dipilih</span>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => setSelectedDocIds(new Set())} className="text-sm text-gray-500 hover:text-gray-700">Batal</button>
+                        <button type="button" onClick={() => setSelectedDocIds(new Set())} className="text-sm text-muted-foreground hover:text-foreground">Batal</button>
                         <button type="button" onClick={() => setShowBulkConfirm(true)} className="text-sm text-destructive hover:text-destructive/80 font-medium">Hapus {selectedDocIds.size} file</button>
                       </div>
                     </div>
@@ -598,7 +597,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+    <div className="border rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold">Client Agreement</p>
         {agreement && <Badge className={AGREEMENT_COLOR[agreement.status]}>{agreement.status}</Badge>}
@@ -616,7 +615,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground font-medium">Link Agreement</p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-gray-50 border rounded px-3 py-2 truncate">{agreementUrl}</code>
+              <code className="flex-1 text-xs bg-muted/50 border rounded px-3 py-2 truncate">{agreementUrl}</code>
               <Button variant="outline" size="sm" disabled={isPending} onClick={() => { navigator.clipboard.writeText(agreementUrl!); toast.success("Link disalin"); }}>
                 <Copy className="h-3.5 w-3.5" />
               </Button>
@@ -625,7 +624,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground font-medium">Kode Akses</p>
             <div className="flex items-center gap-2">
-              <code className="text-lg font-mono font-bold tracking-widest bg-gray-50 border rounded px-3 py-2">{agreement.accessCode}</code>
+              <code className="text-lg font-mono font-bold tracking-widest bg-muted/50 border rounded px-3 py-2">{agreement.accessCode}</code>
               <Button variant="outline" size="sm" disabled={isPending} onClick={() => { navigator.clipboard.writeText(agreement!.accessCode); toast.success("Kode disalin"); }}>
                 <Copy className="h-3.5 w-3.5" />
               </Button>
@@ -640,7 +639,7 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
           {agreement.status === "Signed" && clientSignature && (
             <div className="space-y-1.5">
               <p className="text-xs text-muted-foreground">Tanda Tangan Client</p>
-              <div className="border rounded-lg p-2 bg-white w-fit">
+              <div className="border rounded-lg p-2 bg-card w-fit">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={clientSignature}

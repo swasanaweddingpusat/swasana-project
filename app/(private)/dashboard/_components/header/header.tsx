@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AddCircle } from "@solar-icons/react";
+import { AddCircle, Book } from "@solar-icons/react";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
@@ -50,6 +51,15 @@ export function Header() {
             <span className={cn("hidden sm:inline ml-1")}>Tambah Booking</span>
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          render={<Link href="/dashboard/tutorial" />}
+          className={cn("cursor-pointer gap-1.5")}
+        >
+          <Book weight="BoldDuotone" className="h-4 w-4" />
+          <span className={cn("hidden sm:inline")}>Tutorial</span>
+        </Button>
         <NotificationBell />
       </div>
     </header>

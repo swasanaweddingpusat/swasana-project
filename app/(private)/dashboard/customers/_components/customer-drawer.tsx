@@ -34,7 +34,9 @@ function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* n
 
 async function fetchOptions(url: string): Promise<OptionItem[]> {
   const res = await fetch(url);
-  if (!res.ok) return [];
+  // Throw on error so a transient failure isn't cached as an empty "success"
+  // under a shared queryKey (e.g. ["source-of-informations"]).
+  if (!res.ok) throw new Error(`Request failed (${res.status}): ${url}`);
   return res.json();
 }
 

@@ -38,7 +38,9 @@ interface TermRow { id?: string; name: string; amount: number; dueDate: string; 
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) return [] as unknown as T;
+  // Throw on error so a transient failure isn't cached as an empty "success"
+  // under a shared queryKey (e.g. ["source-of-informations"]).
+  if (!res.ok) throw new Error(`Request failed (${res.status}): ${url}`);
   return res.json();
 }
 
@@ -74,7 +76,7 @@ function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
   }));
 }
 
-const LBL = "text-sm font-medium text-gray-700";
+const LBL = "text-sm font-medium text-foreground";
 
 export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const qc = useQueryClient();
@@ -366,16 +368,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <label className={LBL}>Contact Person *</label>
                 <div className="mt-1 rounded-lg bg-muted p-3 space-y-2">
                   {contactNumbers.map((entry, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-md bg-white border px-3 py-2">
+                    <div key={i} className="flex items-center gap-2 rounded-md bg-background border px-3 py-2">
                       <div className="flex-1 min-w-0">{entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}<p className="text-sm font-medium">{entry.number}</p></div>
                       <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))}><CloseCircle weight="BoldDuotone" className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
-                  <div className="flex gap-2">
-                    <Input value={contactInput.name} onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))} placeholder="Label (opsional)" className="flex-1 bg-white" />
-                    <Input value={contactInput.number} onChange={(e) => setContactInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))} placeholder="081234567890" inputMode="numeric" className="flex-1 bg-white"
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input value={contactInput.name} onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))} placeholder="Label (opsional)" className="w-full sm:flex-1 bg-background" />
+                    <Input value={contactInput.number} onChange={(e) => setContactInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))} placeholder="081234567890" inputMode="numeric" className="w-full sm:flex-1 bg-background"
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const num = contactInput.number.trim(); if (!num || contactNumbers.some((c) => c.number === num)) return; setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]); setContactInput({ name: "", number: "" }); } }} />
-                    <Button type="button" variant="outline" className="shrink-0 bg-white" onClick={() => { const num = contactInput.number.trim(); if (!num || contactNumbers.some((c) => c.number === num)) return; setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]); setContactInput({ name: "", number: "" }); }}>Tambah</Button>
+                    <Button type="button" variant="outline" className="w-full sm:w-auto sm:shrink-0 bg-background" onClick={() => { const num = contactInput.number.trim(); if (!num || contactNumbers.some((c) => c.number === num)) return; setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]); setContactInput({ name: "", number: "" }); }}>Tambah</Button>
                   </div>
                 </div>
               </div>
@@ -401,7 +403,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div>
                 <label className={LBL}>Event Date *</label>
                 <Popover>
-                  <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-gray-400")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
+                  <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => !!venueId && getDateStatus(d) === "unavailable"} modifiers={{ available: (d) => !!venueId && getDateStatus(d) === "available", partial: (d) => !!venueId && getDateStatus(d) === "partial", unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable" }} modifiersClassNames={{ available: "day-available", partial: "day-partial", unavailable: "day-unavailable" }} />
                   </PopoverContent>
@@ -431,16 +433,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <label className={LBL}>Complimentary (Bonus)</label>
                 <SearchableSelect options={allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))} value="" onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); }} placeholder="Pilih vendor..." searchPlaceholder="Cari vendor..." emptyText="Tidak ada vendor" />
                 {bonuses.map((b, idx) => (
-                  <div key={idx} className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1.5">
+                  <div key={idx} className="bg-muted border border-border rounded-md px-3 py-2 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <div className="flex-1"><SearchableSelect options={allVendors.filter((v) => !bonuses.some((x, i) => i !== idx && x.vendorId === v.id)).map((v) => ({ id: v.id, name: v.name }))} value={b.vendorId} onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name } : x)); }} placeholder="Pilih vendor..." searchPlaceholder="Cari vendor..." emptyText="Tidak ada vendor" /></div>
-                      <button type="button" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}><CloseCircle weight="BoldDuotone" className="h-3 w-3" /></button>
+                      <button type="button" className="h-6 w-6 p-0 text-destructive hover:text-destructive shrink-0" onClick={() => setBonuses((prev) => prev.filter((_, i) => i !== idx))}><CloseCircle weight="BoldDuotone" className="h-3 w-3" /></button>
                     </div>
-                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span><input type="text" inputMode="numeric" className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white" placeholder="Nominal" value={b.nominal ? fmtRp(b.nominal) : ""} onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }} /></div>
+                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span><input type="text" inputMode="numeric" className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background" placeholder="Nominal" value={b.nominal ? fmtRp(b.nominal) : ""} onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, nominal: n } : x)); }} /></div>
                     <SimpleEditor value={b.description} onChange={(html) => setBonuses((prev) => prev.map((x, i) => i === idx ? { ...x, description: html } : x))} placeholder="Keterangan bonus..." className="min-h-15" />
                   </div>
                 ))}
-                {bonuses.length === 0 && <p className="text-xs text-gray-400 italic text-center py-1">Belum ada complimentary</p>}
+                {bonuses.length === 0 && <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>}
               </div>
             </div>
           )}
@@ -449,7 +451,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           {currentStep === 2 && (
             <div className="space-y-4">
               <div>
-                <p className={cn("text-sm", "font-medium", "text-gray-700")}>Kategori Harga Package</p>
+                <p className={cn("text-sm", "font-medium", "text-foreground")}>Kategori Harga Package</p>
                 <p className="text-xs text-muted-foreground mt-1 mb-3">
                   Tandai kategori sebagai takeout jika klien menyediakan sendiri. Harga otomatis berkurang.
                 </p>
@@ -531,7 +533,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
               {/* Discount */}
               <div className="flex flex-col gap-2 border-y py-4">
-                <Input placeholder="Nama bonus (e.g. Discount)" value={specialBonusName} onChange={(e) => setSpecialBonusName(e.target.value)} className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto" />
+                <Input placeholder="Nama bonus (e.g. Discount)" value={specialBonusName} onChange={(e) => setSpecialBonusName(e.target.value)} className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto" />
                 <Input placeholder="IDR. 0" value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""} onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }} inputMode="numeric" className="rounded-none" />
               </div>
 
@@ -549,14 +551,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                     <div key={t.id ?? idx} className="space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-0.5 flex-1">
-                          <Input value={t.name} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} placeholder="Term name" className="border-0 p-0 text-sm font-medium text-gray-700 bg-transparent shadow-none focus-visible:ring-0 h-auto" />
+                          <Input value={t.name} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} placeholder="Term name" className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto" />
                           {isDP && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
                         </div>
-                        {terms.length > 1 && <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), bookingDate))} className="text-red-400 hover:text-red-600 shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
+                        {terms.length > 1 && <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), bookingDate))} className="text-destructive hover:text-destructive shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
                       </div>
-                      <div className="flex gap-3 items-center">
-                        <div className="flex-2"><Input value={t.amount ? fmtRp(t.amount) : ""} onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }} placeholder="Amount" inputMode="numeric" /></div>
-                        <div className="flex-1">
+                      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                        <div className="sm:flex-2"><Input value={t.amount ? fmtRp(t.amount) : ""} onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }} placeholder="Amount" inputMode="numeric" /></div>
+                        <div className="sm:flex-1">
                           <Popover>
                             <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}</Button>} />
                             <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={t.dueDate ? new Date(t.dueDate) : undefined} onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))} /></PopoverContent>
@@ -566,7 +568,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                       {isDPInvalid && (
                         <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
                       )}
-                      {idx < terms.length - 1 && <div className="border-b border-gray-100 pt-1" />}
+                      {idx < terms.length - 1 && <div className="border-b border-border pt-1" />}
                     </div>
                     );
                   })}
@@ -575,12 +577,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               </div>
 
               {/* Summary */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-gray-700">Harga Paket:</span><span className="text-sm font-medium text-gray-700">Rp{fmtRp(getBasePrice())}</span></div>
-                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-red-600">{specialBonusName || "Discount"}:</span><span className="text-sm font-medium text-red-600">- Rp{fmtRp(specialBonusAmount)}</span></div>
-                <div className="flex justify-between items-center mb-2 border-t pt-2"><span className="text-sm font-medium text-gray-700">Harga Setelah Discount:</span><span className="text-sm font-medium text-gray-700">Rp{fmtRp(getPriceAfterDiscount())}</span></div>
-                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-gray-700">Total Input:</span><span className="text-sm font-medium text-gray-700">Rp{fmtRp(getTotalTerms())}</span></div>
-                <div className="flex justify-between items-center"><span className="text-sm font-medium text-gray-700">Selisih:</span><span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-red-600" : "text-gray-700")}>Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}</span></div>
+              <div className="p-3 bg-muted rounded-lg">
+                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-foreground">Harga Paket:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getBasePrice())}</span></div>
+                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-destructive">{specialBonusName || "Discount"}:</span><span className="text-sm font-medium text-destructive">- Rp{fmtRp(specialBonusAmount)}</span></div>
+                <div className="flex justify-between items-center mb-2 border-t pt-2"><span className="text-sm font-medium text-foreground">Harga Setelah Discount:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getPriceAfterDiscount())}</span></div>
+                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-foreground">Total Input:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getTotalTerms())}</span></div>
+                <div className="flex justify-between items-center"><span className="text-sm font-medium text-foreground">Selisih:</span><span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-destructive" : "text-foreground")}>Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}</span></div>
               </div>
             </div>
           )}
@@ -591,12 +593,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div><label className={cn(LBL, 'mb-2 block')}>Lokasi Tanda Tangan *</label><Input placeholder="Contoh: Jakarta, Bandung..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} /></div>
               <div>
                 <label className={cn(LBL, 'mb-2 block')}>Tanda Tangan Sales *</label>
-                <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-gray-50", !signatureSales ? "border-red-300" : "border-gray-300")}>
+                <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
                   <SignatureCanvas ref={sigSalesRef} penColor="black" canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }} onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }} />
                 </div>
                 <div className="flex items-center justify-between mt-1.5">
-                  {!signatureSales && <p className="text-xs text-red-500">Tanda tangan sales wajib diisi</p>}
-                  <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-red-500 hover:text-red-700 underline ml-auto">Hapus tanda tangan</button>
+                  {!signatureSales && <p className="text-xs text-destructive">Tanda tangan sales wajib diisi</p>}
+                  <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-destructive hover:text-destructive underline ml-auto">Hapus tanda tangan</button>
                 </div>
               </div>
               <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-1">
@@ -608,9 +610,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="bg-white sticky bottom-0 z-10">
+        <div className="bg-background sticky bottom-0 z-10">
           <div className="flex py-4 gap-2">
-            <Button variant="outline" onClick={currentStep === 1 ? () => onOpenChange(false) : handlePrevious} disabled={mut.isPending} className={cn("flex-[40%] cursor-pointer", currentStep === 1 ? "text-red-600 border-red-600 hover:bg-red-50" : "border-black text-black hover:bg-gray-100")}>
+            <Button variant="outline" onClick={currentStep === 1 ? () => onOpenChange(false) : handlePrevious} disabled={mut.isPending} className="flex-[40%] cursor-pointer">
               {currentStep === 1 ? "Cancel" : "Previous"}
             </Button>
             <Button onClick={currentStep < totalSteps ? handleNext : handleSubmit} disabled={isContinueDisabled} className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}>

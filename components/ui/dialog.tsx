@@ -65,7 +65,7 @@ function DialogContent({
             render={
               <Button
                 variant="ghost"
-                className={cn('absolute', 'top-2', 'right-2')}
+                className={cn('absolute', 'top-2', 'right-2', 'text-destructive', 'hover:text-destructive')}
                 size="icon-sm"
               />
             }

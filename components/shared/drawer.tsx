@@ -72,22 +72,22 @@ export function Drawer({
                     Step {steps} / {totalSteps}
                   </span>
                   <button
-                    className="p-1 rounded-full bg-muted hover:bg-muted/80 cursor-pointer"
+                    className="p-1 rounded-full bg-destructive/10 hover:bg-destructive/20 cursor-pointer"
                     onClick={onClose}
                     aria-label="Close"
                   >
-                    <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-foreground" />
+                    <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
                   </button>
                 </>
               )}
               {headerActions}
               {isCloseButton && !steps && (
                 <button
-                  className="p-1 rounded-full bg-muted hover:bg-muted/80 cursor-pointer"
+                  className="p-1 rounded-full bg-destructive/10 hover:bg-destructive/20 cursor-pointer"
                   onClick={onClose}
                   aria-label="Close"
                 >
-                  <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-foreground" />
+                  <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
                 </button>
               )}
             </div>

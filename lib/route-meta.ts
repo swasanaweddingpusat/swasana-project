@@ -155,6 +155,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Purchase Order",
     subtitle: "Kelola purchase order vendor per booking",
   },
+
+  // ─── Tutorial ─────────────────────────────────────────────────────────────
+  "/dashboard/tutorial": {
+    title: "Tutorial",
+    subtitle: "Panduan penggunaan aplikasi",
+  },
 };
 
 export interface Breadcrumb {

@@ -179,6 +179,177 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   const { data: unreadCounts = {} } = useUnreadCommentCounts(bookings.map((b: BookingListItem) => b.id));
 
+  function renderBookingActions(booking: BookingListItem) {
+    return (
+      <>
+        {/* Agreement modal trigger — hidden on mobile */}
+        {can("booking", "client-agreement") && (booking.clientAgreement?.status !== "Signed" || (approvalMap.get(booking.id)?.steps.some((s) => s.approverType === "client" && s.status === "pending"))) && (
+        <TooltipProvider delay={200}>
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
+              <FileSignature weight="BoldDuotone" className={cn('h-4', 'w-4')} />
+            </TooltipTrigger>
+            <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        )}
+
+        {/* Comment button */}
+        <PermissionGate module="booking" action="comment">
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} />}>
+              <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
+              {(unreadCounts[booking.id] ?? 0) > 0 && (
+                <span className={cn('absolute', '-top-0.5', '-right-0.5', 'min-w-4', 'h-4', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[9px]', 'font-bold', 'flex', 'items-center', 'justify-center', 'px-0.5')}>
+                  {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
+                </span>
+              )}
+            </TooltipTrigger>
+            <TooltipContent side="top"><p className="text-xs">Komentar</p></TooltipContent>
+          </Tooltip>
+        </PermissionGate>
+
+        {/* Booking Approval dropdown */}
+        {approvalMap.has(booking.id) && (() => {
+          const record = approvalMap.get(booking.id)!;
+          const allSteps = record.steps;
+          // Show only latest round: detect round size from first repeated approver pattern
+          const firstStep = allSteps[0];
+          let roundSize = allSteps.length;
+          for (let i = 1; i < allSteps.length; i++) {
+            if (allSteps[i].approverType === firstStep?.approverType && allSteps[i].approverRoleId === firstStep?.approverRoleId && allSteps[i].approverUserId === firstStep?.approverUserId) {
+              roundSize = i;
+              break;
+            }
+          }
+          const steps = allSteps.slice(-roundSize);
+          const nonClientSteps = steps.filter((s) => s.approverType !== "client");
+          if (nonClientSteps.every((s) => s.status === "approved")) return null;
+          return (
+            <DropdownMenu>
+              <Tooltip>
+                <DropdownMenuTrigger asChild>
+                  <TooltipTrigger className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}>
+                    <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                  </TooltipTrigger>
+                </DropdownMenuTrigger>
+                <TooltipContent side="top"><p className="text-xs">Approval</p></TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                {steps.filter((s) => s.approverType !== "client").map((step) => {
+                  const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+                  const isApproved = step.status === "approved";
+                  const isRejected = step.status === "rejected";
+                  const isPending = step.status === "pending";
+                  const canAct = isPending && (
+                    isAdmin ||
+                    (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
+                    (step.approverType === "user" && step.approverUserId === user?.profileId)
+                  );
+                  return (
+                    <DropdownMenuItem
+                      key={step.id}
+                      className="cursor-pointer"
+                      disabled={isApproved || isRejected || (isPending && !canAct)}
+                      onClick={() => {
+                        if (canAct) {
+                          setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", bookingName: booking.snapCustomer?.name ?? "Booking" });
+                        }
+                      }}
+                    >
+                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
+
+        {/* More actions dropdown */}
+        <DropdownMenu>
+          <Tooltip>
+            <DropdownMenuTrigger asChild>
+              <TooltipTrigger className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}>
+                <EllipsisVertical weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+              </TooltipTrigger>
+            </DropdownMenuTrigger>
+            <TooltipContent side="top"><p className="text-xs">Lainnya</p></TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
+              <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {can("booking", "edit") && (
+            <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
+              <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
+            </DropdownMenuItem>
+            )}
+            {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
+              <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
+                <DropdownMenuSubTrigger className="cursor-pointer">
+                  <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id)}>
+                    Cetak Terbaru (Live)
+                  </DropdownMenuItem>
+                  {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
+                  {(revisionCache[booking.id] ?? []).map((rev) => (
+                    <DropdownMenuItem key={rev.id} className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id, rev.id)}>
+                      <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.variantName ? ` (${rev.variantName})` : ""}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
+              <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
+              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
+            </DropdownMenuItem>
+            {can("booking", "edit") &&
+              booking.snapPackageCategoryPrices &&
+              booking.snapPackageCategoryPrices.length > 0 && (
+              <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
+                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Set Harga
+              </DropdownMenuItem>
+            )}
+            {can("booking", "transfer") && (
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
+              <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
+            </DropdownMenuItem>
+            )}
+            {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
+            {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
+              <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
+                <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Reject Booking
+              </DropdownMenuItem>
+            )}
+            {can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
+              <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setLostTarget(booking)}>
+                <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
+              </DropdownMenuItem>
+            )}
+            {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
+              <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
+                <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
+              </DropdownMenuItem>
+            )}
+            {can("booking", "delete") && <DropdownMenuSeparator />}
+            {can("booking", "delete") && (
+            <DropdownMenuItem className={cn('cursor-pointer', 'text-destructive', 'focus:text-destructive')} onClick={() => setDeleteTarget(booking)}>
+              <Trash2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Hapus
+            </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    );
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     const result = await deleteMut.mutateAsync(deleteTarget.id);
@@ -194,8 +365,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           {/* Header */}
           <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'justify-between', 'px-4', 'sm:px-6', 'pb-4', 'gap-3')}>
             <div className={cn('flex', 'items-center', 'gap-3')}>
-              <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Wedding Bookings</h2>
-              <span className={cn('text-gray-700', 'text-sm', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'px-3', 'py-1')}>
+              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Wedding Bookings</h2>
+              <span className={cn('text-foreground', 'text-sm', 'rounded-full', 'border', 'border-border', 'bg-muted', 'px-3', 'py-1')}>
                 {totalBookings} Bookings
               </span>
               <Button variant="ghost" size="sm" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
@@ -203,57 +374,60 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 <span className="text-xs">Refresh</span>
               </Button>
             </div>
-            <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2')}>
-              <div className={cn('relative', 'flex-1', 'sm:flex-none')}>
-                <Search weight="BoldDuotone" className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-gray-400')} />
+            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'gap-2')}>
+              <div className={cn('relative', 'w-full', 'sm:flex-1')}>
+                <Search weight="BoldDuotone" className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-muted-foreground')} />
                 <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn('pl-9', 'w-full', 'sm:w-55')} />
               </div>
-              <SearchableSelect
-                options={[{ id: "", name: "Semua Venue" }, ...venues.map((v) => ({ id: v.id, name: v.name }))]}
-                value={venueFilter}
-                onChange={(val) => { setVenueFilter(val); setCurrentPage(1); }}
-                placeholder="Filter venue..."
-                searchPlaceholder="Cari venue..."
-                className="w-40"
-              />
-              <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
-                <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4", isFetching && "animate-spin")} />
-              </Button>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <SearchableSelect
+                  options={[{ id: "", name: "Semua Venue" }, ...venues.map((v) => ({ id: v.id, name: v.name }))]}
+                  value={venueFilter}
+                  onChange={(val) => { setVenueFilter(val); setCurrentPage(1); }}
+                  placeholder="Filter venue..."
+                  searchPlaceholder="Cari venue..."
+                  className="w-full sm:w-48"
+                />
+                <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
+                  <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Table */}
           {bookings.length === 0 ? (
-            <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-gray-400')}>
+            <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
               <CalendarDays weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
             </div>
           ) : (
-            <div className={cn('w-full', 'overflow-x-auto')}>
+            <>
+            <div className={cn('hidden', 'sm:block', 'w-full', 'overflow-x-auto')}>
               <Table className={cn('w-full', 'text-sm')}>
-                <TableHeader className="bg-[#F9FAFB]">
+                <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'text-center', 'w-[3%]', 'hidden', 'sm:table-cell')}>No</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]')}>Customer</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[14%]')}>Package</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
-                    <TableHead className={cn('px-2', 'py-2', 'text-[#475467]', 'hidden', 'sm:table-cell', 'w-[8%]')}>Approval</TableHead>
-                    <TableHead className={cn('px-1', 'py-2', 'text-[#475467]', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'w-[3%]', 'hidden', 'sm:table-cell')}>No</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground')}>Customer</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                    <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
+                    <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bookings.map((booking: BookingListItem, idx: number) => (
-                    <TableRow key={booking.id} className={cn('hover:bg-gray-50', 'cursor-pointer')} onClick={() => setDetailTarget(booking.id)}>
+                    <TableRow key={booking.id} className={cn('hover:bg-muted/40', 'cursor-pointer')} onClick={() => setDetailTarget(booking.id)}>
                       <TableCell className={cn('px-2', 'py-2', 'text-center', 'hidden', 'sm:table-cell')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
 
                       {/* Customer cell */}
                       <TableCell className={cn('px-2', 'py-2')}>
                         <div className="overflow-hidden max-w-0 min-w-full">
-                          <p className={cn('text-sm', 'font-medium', 'text-gray-900', 'truncate')}>{booking.snapCustomer?.name ?? "—"}</p>
+                          <p className={cn('text-sm', 'font-medium', 'text-foreground', 'truncate')}>{booking.snapCustomer?.name ?? "—"}</p>
                           <Tooltip>
-                            <TooltipTrigger className="block truncate w-full text-left text-xs text-gray-400 mt-0.5">
+                            <TooltipTrigger className="block truncate w-full text-left text-xs text-muted-foreground mt-0.5">
                               {(() => {
                                 const raw = booking.snapCustomer?.mobileNumber ?? "";
                                 try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
@@ -271,21 +445,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               </ul>
                             </TooltipContent>
                           </Tooltip>
-                          {/* Event date — mobile only */}
-                          <p className={cn('text-xs', 'text-gray-500', 'mt-0.5', 'sm:hidden')}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
+                          {/* Event date — tablet only (date col shown at sm) */}
+                          <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'sm:hidden')}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
                           <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-1', 'mt-1')}>
                             {/* Status badge */}
-                            <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-white", STATUS_TEXT[booking.bookingStatus] ?? "text-gray-600 border-gray-200")}>
-                              <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-gray-400")} />
+                            <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
+                              <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
                               {booking.bookingStatus}
                             </span>
                             {/* Payment method badge */}
-                            <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'text-gray-600', 'text-[10px]', 'font-medium')}>
+                            <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground', 'text-[10px]', 'font-medium')}>
                               {booking.paymentMethod?.bankName ?? "N/A"}
                             </span>
                             {/* Session badge */}
                             {booking.weddingSession && (
-                              <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-gray-100 text-gray-600")}>
+                              <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-muted text-muted-foreground")}>
                                 {SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}
                               </span>
                             )}
@@ -312,24 +486,24 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           {booking.poNumber ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
-                              className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-gray-100', 'text-[10px]', 'font-mono', 'text-gray-500', 'hover:bg-gray-200', 'transition-colors', 'cursor-pointer', 'truncate', 'mt-0.5')}
+                              className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-muted', 'text-[10px]', 'font-mono', 'text-muted-foreground', 'hover:bg-muted/80', 'transition-colors', 'cursor-pointer', 'truncate', 'mt-0.5')}
                             >
                               <span className="truncate">{booking.poNumber}</span>
                             </button>
                           ) : (
-                            <span className={cn('text-gray-300', 'text-[10px]', 'block', 'mt-0.5')}>No PO</span>
+                            <span className={cn('text-muted-foreground', 'text-[10px]', 'block', 'mt-0.5')}>No PO</span>
                           )}
                         </div>
                       </TableCell>
 
                       {/* Package cell */}
-                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
                         <div className="leading-tight">
                           <span className={cn('truncate', 'block')}>{booking.snapPackage?.packageName ?? "—"}</span>
                           {booking.snapPackageVariant && (
                             <>
-                              <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.variantName}</span>
-                              <span className={cn('text-xs', 'text-gray-400', 'block')}>{booking.snapPackageVariant.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackageVariant.price) - (booking.discountAmount ?? 0)))}</span>
+                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackageVariant.variantName}</span>
+                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackageVariant.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackageVariant.price) - (booking.discountAmount ?? 0)))}</span>
                             </>
                           )}
                         </div>
@@ -351,7 +525,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       </TableCell>
 
                       {/* Approval */}
-                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')} onClick={(e) => e.stopPropagation()}>
+                      <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')} onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const record = approvalMap.get(booking.id);
                           if (!record) return <span className={cn('text-xs', 'text-muted-foreground')}>—</span>;
@@ -375,161 +549,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       {/* Action */}
                       <TableCell className={cn('px-1', 'py-2', 'whitespace-nowrap')} onClick={(e) => e.stopPropagation()}>
                         <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
-                          {/* Agreement modal trigger — hidden on mobile */}
-                          {can("booking", "client-agreement") && (booking.clientAgreement?.status !== "Signed" || (approvalMap.get(booking.id)?.steps.some((s) => s.approverType === "client" && s.status === "pending"))) && (
-                          <TooltipProvider delay={200}>
-                            <Tooltip>
-                              <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
-                                <FileSignature weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                              </TooltipTrigger>
-                              <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          )}
-
-                          {/* Comment button */}
-                          <PermissionGate module="booking" action="comment">
-                            <Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)}>
-                              <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                              {(unreadCounts[booking.id] ?? 0) > 0 && (
-                                <span className={cn('absolute', '-top-0.5', '-right-0.5', 'min-w-4', 'h-4', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[9px]', 'font-bold', 'flex', 'items-center', 'justify-center', 'px-0.5')}>
-                                  {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
-                                </span>
-                              )}
-                            </Button>
-                          </PermissionGate>
-
-                          {/* Booking Approval dropdown */}
-                          {approvalMap.has(booking.id) && (() => {
-                            const record = approvalMap.get(booking.id)!;
-                            const allSteps = record.steps;
-                            // Show only latest round: detect round size from first repeated approver pattern
-                            const firstStep = allSteps[0];
-                            let roundSize = allSteps.length;
-                            for (let i = 1; i < allSteps.length; i++) {
-                              if (allSteps[i].approverType === firstStep?.approverType && allSteps[i].approverRoleId === firstStep?.approverRoleId && allSteps[i].approverUserId === firstStep?.approverUserId) {
-                                roundSize = i;
-                                break;
-                              }
-                            }
-                            const steps = allSteps.slice(-roundSize);
-                            const nonClientSteps = steps.filter((s) => s.approverType !== "client");
-                            if (nonClientSteps.every((s) => s.status === "approved")) return null;
-                            return (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} title="Approval">
-                                    <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {steps.filter((s) => s.approverType !== "client").map((step) => {
-                                    const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
-                                    const isApproved = step.status === "approved";
-                                    const isRejected = step.status === "rejected";
-                                    const isPending = step.status === "pending";
-                                    const canAct = isPending && (
-                                      isAdmin ||
-                                      (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
-                                      (step.approverType === "user" && step.approverUserId === user?.profileId)
-                                    );
-                                    return (
-                                      <DropdownMenuItem
-                                        key={step.id}
-                                        className="cursor-pointer"
-                                        disabled={isApproved || isRejected || (isPending && !canAct)}
-                                        onClick={() => {
-                                          if (canAct) {
-                                            setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", bookingName: booking.snapCustomer?.name ?? "Booking" });
-                                          }
-                                        }}
-                                      >
-                                        {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
-                                      </DropdownMenuItem>
-                                    );
-                                  })}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            );
-                          })()}
-
-                          {/* More actions dropdown */}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="cursor-pointer">
-                                <EllipsisVertical weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
-                                <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {can("booking", "edit") && (
-                              <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
-                                <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
-                              </DropdownMenuItem>
-                              )}
-                              {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
-                                <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
-                                  <DropdownMenuSubTrigger className="cursor-pointer">
-                                    <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
-                                  </DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent>
-                                    <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id)}>
-                                      Cetak Terbaru (Live)
-                                    </DropdownMenuItem>
-                                    {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
-                                    {(revisionCache[booking.id] ?? []).map((rev) => (
-                                      <DropdownMenuItem key={rev.id} className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id, rev.id)}>
-                                        <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.variantName ? ` (${rev.variantName})` : ""}</span>
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                              )}
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
-                                <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-                                <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
-                              </DropdownMenuItem>
-                              {can("booking", "edit") &&
-                                booking.snapPackageCategoryPrices &&
-                                booking.snapPackageCategoryPrices.length > 0 && (
-                                <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
-                                  <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Set Harga
-                                </DropdownMenuItem>
-                              )}
-                              {can("booking", "transfer") && (
-                              <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
-                                <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
-                              </DropdownMenuItem>
-                              )}
-                              {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
-                              {can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost" && (
-                                <DropdownMenuItem className="cursor-pointer" onClick={() => setRejectTarget(booking)}>
-                                  <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-red-500')} /> Reject Booking
-                                </DropdownMenuItem>
-                              )}
-                              {can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed" && (
-                                <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setLostTarget(booking)}>
-                                  <SquareX weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lost Booking
-                                </DropdownMenuItem>
-                              )}
-                              {can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed") && (
-                                <DropdownMenuItem className={cn('cursor-pointer', 'text-muted-foreground', 'focus:text-foreground')} onClick={() => setRestoreTarget(booking)}>
-                                  <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Restore Booking
-                                </DropdownMenuItem>
-                              )}
-                              {can("booking", "delete") && <DropdownMenuSeparator />}
-                              {can("booking", "delete") && (
-                              <DropdownMenuItem className={cn('cursor-pointer', 'text-red-600', 'focus:text-red-600')} onClick={() => setDeleteTarget(booking)}>
-                                <Trash2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Hapus
-                              </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {renderBookingActions(booking)}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -537,6 +557,118 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile (<sm): card list */}
+            <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
+              {bookings.map((booking: BookingListItem, idx: number) => {
+                const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
+                const variant = booking.snapPackageVariant;
+                return (
+                  <div
+                    key={booking.id}
+                    className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', 'cursor-pointer')}
+                    onClick={() => setDetailTarget(booking.id)}
+                  >
+                    {/* Row 1: customer name + status badge */}
+                    <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
+                      <span className={cn('font-medium', 'text-foreground', 'truncate')}>
+                        {rowNumber}. {booking.snapCustomer?.name ?? "—"}
+                      </span>
+                      <span className={cn("inline-flex items-center shrink-0 px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
+                        <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
+                        {booking.bookingStatus}
+                      </span>
+                    </div>
+
+                    {/* Row 2: venue + package */}
+                    <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs', 'text-muted-foreground')}>
+                      <span className="truncate">{booking.snapVenue?.venueName ?? "Venue —"}</span>
+                      {booking.snapPackage?.packageName && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="text-foreground/70 truncate">{booking.snapPackage.packageName}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Row 3: event date + session badge */}
+                    <div className={cn('flex', 'items-center', 'gap-2', 'flex-wrap', 'text-xs', 'text-muted-foreground')}>
+                      <span className={cn('flex', 'items-center', 'gap-1')}>
+                        <CalendarDays weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
+                        {format(new Date(booking.bookingDate), "dd MMM yyyy")}
+                      </span>
+                      {booking.weddingSession && (
+                        <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-muted text-muted-foreground")}>
+                          {SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}
+                        </span>
+                      )}
+                      {variant && (
+                        <span>{variant.pax} PAX</span>
+                      )}
+                    </div>
+
+                    {/* Row 4: approval badge + PO number */}
+                    <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs')}>
+                      {(() => {
+                        const record = approvalMap.get(booking.id);
+                        if (!record) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setApprovalDialogTarget(booking); }}
+                            className={cn(
+                              "inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer",
+                              record.status === "approved" && "bg-primary text-primary-foreground",
+                              record.status === "pending" && "bg-muted text-muted-foreground",
+                              record.status === "rejected" && "bg-destructive/10 text-destructive",
+                            )}
+                          >
+                            {record.status === "approved" ? "Approved" : record.status === "pending" ? "Pending" : "Rejected"}
+                          </button>
+                        );
+                      })()}
+                      {booking.poNumber ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
+                          className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-muted', 'text-[10px]', 'font-mono', 'text-muted-foreground', 'hover:bg-muted/80', 'transition-colors', 'cursor-pointer', 'truncate')}
+                        >
+                          <span className="truncate">{booking.poNumber}</span>
+                        </button>
+                      ) : (
+                        <span className={cn('text-muted-foreground', 'text-[10px]')}>No PO</span>
+                      )}
+                    </div>
+
+                    {/* Footer: action buttons */}
+                    <div className={cn('flex', 'items-center', 'gap-1', 'pt-1', 'border-t', 'border-border')} onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        className={cn('h-9', 'flex-1', 'text-xs')}
+                        onClick={() => setDetailTarget(booking.id)}
+                        aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
+                      >
+                        <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Detail
+                      </Button>
+                      {can("booking", "edit") && (
+                        <Button
+                          variant="outline"
+                          className={cn('h-9', 'flex-1', 'text-xs')}
+                          onClick={() => setEditTarget(booking)}
+                          aria-label={`Edit booking ${booking.snapCustomer?.name ?? ""}`}
+                        >
+                          <Pencil weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Edit
+                        </Button>
+                      )}
+                      <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
+                        {renderBookingActions(booking)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            </>
           )}
 
           {/* Pagination */}
@@ -551,7 +683,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               <div className={cn('hidden', 'sm:flex', 'items-center', 'gap-1')}>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <button key={page} onClick={() => setCurrentPage(page)}
-                    className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === page ? "bg-gray-200 text-gray-900" : "text-gray-700 hover:bg-gray-100")}>
+                    className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === page ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")}>
                     {page}
                   </button>
                 ))}
@@ -582,34 +714,34 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Reject */}
       {rejectTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
-          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
+          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
             <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
               <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-[#19202C]')}>Reject Booking</h2>
-                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>
-                  Reject booking <span className={cn('font-semibold', 'text-gray-800')}>{rejectTarget.snapCustomer?.name}</span>?
+                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Reject Booking</h2>
+                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
+                  Reject booking <span className={cn('font-semibold', 'text-foreground')}>{rejectTarget.snapCustomer?.name}</span>?
                 </p>
               </div>
               <button
                 type="button"
-                className={cn('rounded-full', 'bg-red-100', 'hover:bg-red-200', 'p-1.5', 'shrink-0')}
+                className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')}
                 onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
                 aria-label="Tutup"
               >
-                <svg className={cn('h-5', 'w-5', 'text-red-500')} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
               </button>
             </div>
 
             <div className="mb-4">
-              <label className={cn('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block')}>Alasan Penolakan</label>
+              <label className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Alasan Penolakan</label>
               <Input placeholder="Alasan penolakan (opsional)..." value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} />
             </div>
 
             <div className={cn('flex', 'gap-3')}>
               <button
                 type="button"
-                className={cn('flex-1', 'bg-red-600', 'text-white', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-red-700', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
+                className={cn('flex-1', 'bg-destructive', 'text-destructive-foreground', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-destructive/90', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
                 disabled={updateMut.isPending}
                 onClick={async () => {
                   const r = await updateMut.mutateAsync({ id: rejectTarget.id, bookingStatus: "Rejected", rejectionNotes: rejectNotes || null });
@@ -621,7 +753,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               </button>
               <button
                 type="button"
-                className={cn('flex-1', 'border', 'border-gray-300', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-gray-100', 'transition')}
+                className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-accent', 'transition')}
                 onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
               >
                 Batal
@@ -654,17 +786,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Restore Booking Modal */}
       {restoreTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
-          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
+          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
             <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
               <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-[#19202C]')}>Restore Booking</h2>
-                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>
-                  Restore booking <span className={cn('font-semibold', 'text-gray-800')}>{restoreTarget.snapCustomer?.name}</span> ke status Pending?
+                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Restore Booking</h2>
+                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
+                  Restore booking <span className={cn('font-semibold', 'text-foreground')}>{restoreTarget.snapCustomer?.name}</span> ke status Pending?
                 </p>
               </div>
-              <button type="button" className={cn('rounded-full', 'hover:bg-muted', 'p-1.5', 'shrink-0')} onClick={() => setRestoreTarget(null)} aria-label="Tutup">
-                <svg className={cn('h-5', 'w-5', 'text-muted-foreground')} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button type="button" className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')} onClick={() => setRestoreTarget(null)} aria-label="Tutup">
+                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
               </button>
             </div>
             <div className={cn('flex', 'gap-3')}>
@@ -690,39 +822,39 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Transfer Booking Modal */}
       {transferTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40')}>
-          <div className={cn('bg-white', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-6', 'relative')}>
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
+          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
             <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-6')}>
               <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-[#19202C]')}>Transfer Booking</h2>
-                <p className={cn('text-sm', 'text-gray-500', 'mt-1')}>
+                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Transfer Booking</h2>
+                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
                   Memindahkan kepemilikan data booking dari sales sebelumnya ke sales yang dipilih.
                 </p>
               </div>
               <button
-                className={cn('rounded-full', 'bg-red-100', 'hover:bg-red-200', 'p-1.5', 'shrink-0')}
+                className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')}
                 onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
                 type="button"
                 aria-label="Tutup"
               >
-                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-red-500')} />
+                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
               </button>
             </div>
 
             <div className="mb-4">
-              <p className={cn('text-xs', 'text-gray-400', 'mb-1')}>Sales saat ini</p>
+              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Sales saat ini</p>
               <div className={cn('flex', 'items-center', 'gap-2')}>
-                <span className={cn('text-sm', 'font-medium', 'text-gray-800')}>
-                  {transferTarget.sales?.fullName ?? <span className={cn('text-gray-400', 'italic')}>Tidak ada</span>}
+                <span className={cn('text-sm', 'font-medium', 'text-foreground')}>
+                  {transferTarget.sales?.fullName ?? <span className={cn('text-muted-foreground', 'italic')}>Tidak ada</span>}
                 </span>
                 {transferTarget.sales?.fullName && (
-                  <span className={cn('text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'text-gray-500')}>sales</span>
+                  <span className={cn('text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground')}>sales</span>
                 )}
               </div>
             </div>
 
             <div>
-              <p className={cn('text-xs', 'text-gray-400', 'mb-1')}>Pilih Sales</p>
+              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Pilih Sales</p>
               <SearchableSelect
                 options={salesProfiles
                   .filter((s) => s.id !== transferTarget.salesId)
@@ -732,12 +864,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 placeholder="Pilih sales tujuan..."
                 searchPlaceholder="Cari nama sales..."
                 emptyText="Sales tidak ditemukan"
+                className="w-full"
               />
             </div>
 
             <div className={cn('flex', 'gap-3', 'mt-6')}>
               <button
-                className={cn('flex-1', 'border', 'border-gray-300', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-gray-100', 'transition', 'text-sm')}
+                className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-accent', 'transition', 'text-sm')}
                 onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
                 disabled={transferMut.isPending}
                 type="button"

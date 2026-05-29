@@ -91,31 +91,31 @@ export function UploadDocumentModal({ open, onClose, bookingId, bookingName }: U
         <DialogTitle className="text-base font-semibold">Dokumen. {bookingName}</DialogTitle>
         <div className="space-y-3">
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Nama Dokumen *</label>
-            <Input value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="Contoh: Surat Perjanjian, Invoice, dll" className="mt-1" />
+            <label className="text-sm font-medium text-foreground mb-1 block">Nama Dokumen *</label>
+            <Input value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="Contoh: Surat Perjanjian, Invoice, dll" className="mt-1 w-full" />
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Deskripsi</label>
-            <Textarea value={docDescription} onChange={(e) => setDocDescription(e.target.value)} placeholder="Deskripsi singkat (opsional)" className="mt-1 min-h-15 resize-none" />
+            <label className="text-sm font-medium text-foreground mb-1 block">Deskripsi</label>
+            <Textarea value={docDescription} onChange={(e) => setDocDescription(e.target.value)} placeholder="Deskripsi singkat (opsional)" className="mt-1 min-h-15 resize-none w-full" />
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">File (multiple)</label>
-            <div className="relative flex items-center w-full px-3 py-2 border rounded-md bg-[#FAFAFA] text-[#667085] gap-2 cursor-pointer mt-1">
+            <label className="text-sm font-medium text-foreground mb-1 block">File (multiple)</label>
+            <div className="relative flex items-center w-full px-3 py-2 border rounded-md bg-muted/50 text-muted-foreground gap-2 cursor-pointer mt-1">
               <FileText weight="BoldDuotone" className="w-4 h-4" />
               <span className="text-sm">Pilih file untuk diupload</span>
               <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx" onChange={handleFileSelect} className="absolute inset-0 cursor-pointer opacity-0" style={{ width: "100%", height: "100%" }} />
             </div>
-            <p className="text-[10px] text-gray-400 mt-1">Image (JPG, PNG, WebP) akan di-compress ke WebP. File lain max 10 MB.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Image (JPG, PNG, WebP) akan di-compress ke WebP. File lain max 10 MB.</p>
           </div>
 
           {selectedFiles.length > 0 && (
             <div className="space-y-1">
               {selectedFiles.map((f, i) => (
-                <div key={i} className="flex items-center w-full px-3 py-2 border rounded-md bg-[#FAFAFA] text-[#667085] gap-2 min-w-0">
+                <div key={i} className="flex items-center w-full px-3 py-2 border rounded-md bg-muted/50 text-muted-foreground gap-2 min-w-0">
                   <FileText weight="BoldDuotone" className="w-4 h-4 shrink-0" />
                   <span className="flex-1 truncate text-sm min-w-0">{truncName(f.name)}</span>
-                  <span className="text-xs text-gray-400 shrink-0">({formatSize(f.size)})</span>
-                  <button type="button" className="text-red-500 hover:text-red-700 shrink-0" onClick={() => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== i))}>
+                  <span className="text-xs text-muted-foreground shrink-0">({formatSize(f.size)})</span>
+                  <button type="button" aria-label="Hapus file" className="flex items-center justify-center h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== i))}>
                     <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
                   </button>
                 </div>

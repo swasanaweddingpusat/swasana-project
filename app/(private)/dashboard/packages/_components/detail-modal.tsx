@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Box, UsersGroupRounded, Settings, CloseCircle, Pen, FileText, Calendar, MapPoint, Tag } from "@solar-icons/react";
 import { getPackageCreatedBy } from "@/actions/package";
@@ -41,6 +40,7 @@ interface DetailModalProps {
 
 export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
   const [createdByName, setCreatedByName] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
 
   useEffect(() => {
     if (!open || !pkg) return;
@@ -59,11 +59,16 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
   };
 
   const variants = pkg.variants ?? [];
-  const defaultTab = variants[0]?.id ?? "";
+  // Derive active variant without setState-in-effect: fall back to first when the
+  // stored id isn't part of the current package (e.g. after switching packages).
+  const activeId = variants.some((v) => v.id === selectedVariantId)
+    ? selectedVariantId
+    : variants[0]?.id ?? "";
+  const activeVariant = variants.find((v) => v.id === activeId) ?? null;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl! max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" showCloseButton={false}>
+      <DialogContent className="w-full max-w-5xl! max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" showCloseButton={false}>
         {/* Header */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b">
           <div className="flex items-start justify-between gap-4">
@@ -121,7 +126,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
           </div>
         )}
 
-        {/* Variant Tabs */}
+        {/* Variant master-detail: rail (left) + content (right) */}
         {variants.length === 0 ? (
           <div className="flex-1 flex items-center justify-center py-12">
             <div className="text-center text-muted-foreground">
@@ -130,21 +135,64 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
             </div>
           </div>
         ) : (
-          <Tabs defaultValue={defaultTab} className="flex flex-col flex-1 overflow-hidden">
-            <TabsList variant="line" className="px-6 w-full justify-start rounded-none border-b h-11 gap-1 shrink-0 overflow-x-auto">
-              {variants.map((v) => (
-                <TabsTrigger key={v.id} value={v.id} className="px-4 shrink-0">
-                  {v.variantName}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
+            {/* Variant rail */}
+            <div
+              role="tablist"
+              aria-label="Pilih variant"
+              className="flex md:flex-col gap-1.5 p-3 shrink-0 overflow-x-auto md:w-56 md:overflow-y-auto border-b md:border-b-0 md:border-r bg-muted/20"
+            >
+              {variants.map((v) => {
+                const isActive = v.id === activeId;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setSelectedVariantId(v.id)}
+                    className={cn(
+                      "text-left rounded-xl border px-3 py-2.5 transition-colors shrink-0 min-w-40 md:min-w-0 md:w-full",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isActive
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card border-border hover:bg-muted",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold truncate">{v.variantName}</span>
+                      {!v.available && (
+                        <span
+                          className={cn(
+                            "text-[10px] shrink-0",
+                            isActive ? "text-primary-foreground/70" : "text-muted-foreground",
+                          )}
+                        >
+                          N/A
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xs mt-0.5",
+                        isActive ? "text-primary-foreground/70" : "text-muted-foreground",
+                      )}
+                    >
+                      {v.pax} PAX
+                    </div>
+                    <div className="text-sm font-bold mt-1 tabular-nums">
+                      {formatCurrency(variantSellingPrice(v))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
-            {variants.map((v) => (
-              <TabsContent key={v.id} value={v.id} className="flex-1 overflow-y-auto mt-0 p-6 space-y-5 data-state-inactive:hidden">
-                <VariantContent variant={v} />
-              </TabsContent>
-            ))}
-          </Tabs>
+            {/* Variant content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5 min-w-0">
+              {activeVariant && <VariantContent variant={activeVariant} />}
+            </div>
+          </div>
         )}
       </DialogContent>
     </Dialog>

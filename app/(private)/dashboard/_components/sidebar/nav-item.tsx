@@ -10,8 +10,29 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NavItem, SubMenuItem } from "./sidebar-config";
+
+// Tooltip cuma muncul saat sidebar collapsed (mini). Saat expanded/mobile,
+// render anak apa adanya supaya tidak ada Tooltip.Trigger tanpa Root.
+function NavTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactElement;
+}): React.ReactElement {
+  const { state, isMobile } = useSidebar();
+  if (state !== "collapsed" || isMobile) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 function isPathActive(href: string, pathname: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
@@ -89,20 +110,22 @@ export function NavItemRow({ item }: { item: NavItem }) {
   if (item.submenu) {
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton
-          render={<button type="button" onClick={() => setOpen((v) => !v)} />}
-          isActive={active || childActive}
-          className="font-semibold"
-        >
-          <Icon weight="BoldDuotone" className="text-sidebar-foreground" />
-          <span>{item.name}</span>
-          <span className="ml-auto group-data-[collapsible=icon]:hidden">
-            {open
-              ? <AltArrowDown weight="BoldDuotone" className="size-4 text-sidebar-foreground/60" />
-              : <AltArrowRight weight="BoldDuotone" className="size-4 text-sidebar-foreground/60" />
-            }
-          </span>
-        </SidebarMenuButton>
+        <NavTooltip label={item.name}>
+          <SidebarMenuButton
+            render={<button type="button" onClick={() => setOpen((v) => !v)} />}
+            isActive={active || childActive}
+            className="font-semibold"
+          >
+            <Icon weight="BoldDuotone" className="text-sidebar-foreground" />
+            <span>{item.name}</span>
+            <span className="ml-auto group-data-[collapsible=icon]:hidden">
+              {open
+                ? <AltArrowDown weight="BoldDuotone" className="size-4 text-sidebar-foreground/60" />
+                : <AltArrowRight weight="BoldDuotone" className="size-4 text-sidebar-foreground/60" />
+              }
+            </span>
+          </SidebarMenuButton>
+        </NavTooltip>
         {open && (
           <SidebarMenuSub>
             {item.submenu.map((sub) => (
@@ -116,14 +139,16 @@ export function NavItemRow({ item }: { item: NavItem }) {
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<Link href={item.href} />}
-        isActive={active}
-        className="font-semibold"
-      >
-        <Icon weight="BoldDuotone" className="text-sidebar-foreground" />
-        <span>{item.name}</span>
-      </SidebarMenuButton>
+      <NavTooltip label={item.name}>
+        <SidebarMenuButton
+          render={<Link href={item.href} />}
+          isActive={active}
+          className="font-semibold"
+        >
+          <Icon weight="BoldDuotone" className="text-sidebar-foreground" />
+          <span>{item.name}</span>
+        </SidebarMenuButton>
+      </NavTooltip>
     </SidebarMenuItem>
   );
 }

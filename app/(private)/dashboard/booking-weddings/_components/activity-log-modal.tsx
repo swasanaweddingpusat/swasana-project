@@ -81,14 +81,14 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent showCloseButton={false} className="max-w-4xl w-full rounded-2xl p-0 overflow-hidden">
+      <DialogContent showCloseButton={false} className="w-[calc(100%-2rem)] max-w-4xl rounded-2xl p-0 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <DialogTitle className="text-lg font-semibold">Activity Log</DialogTitle>
-            {customerName && <p className="text-sm text-gray-500 mt-0.5">{customerName}</p>}
+            {customerName && <p className="text-sm text-muted-foreground mt-0.5">{customerName}</p>}
           </div>
-          <button onClick={onClose} className="rounded-full bg-red-100 hover:bg-red-200 p-1.5 transition-colors" aria-label="Close">
-            <CloseCircle weight="BoldDuotone" className="h-4 w-4 text-red-500" />
+          <button onClick={onClose} className="shrink-0 h-11 w-11 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors" aria-label="Close">
+            <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-foreground" />
           </button>
         </div>
 
@@ -106,30 +106,30 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
               ))}
             </div>
           ) : logs.length === 0 ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Belum ada activity log untuk booking ini.</div>
+            <div className="text-center py-12 text-muted-foreground text-sm">Belum ada activity log untuk booking ini.</div>
           ) : (
-            <ol className="relative border-l border-gray-200 ml-3 space-y-6">
+            <ol className="relative border-l ml-3 space-y-6">
               {logs.map((log) => {
                 const badge = ACTION_BADGE[log.action] ?? { label: log.action, color: "bg-gray-100 text-gray-600" };
                 const changedFields = log.changes ? Object.keys(log.changes) : [];
                 return (
                   <li key={log.id} className="ml-4">
-                    <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-sky-400" />
+                    <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
                     <div className="flex items-start gap-2 flex-wrap">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
-                      <span className="text-xs text-gray-500 mt-0.5">
+                      <span className="text-xs text-muted-foreground mt-0.5">
                         {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm")}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-800 mt-1">
+                    <p className="text-sm font-medium text-foreground mt-1">
                       {log.profile?.fullName ?? "System"}
                       {log.profile?.role?.name && (
-                        <span className="ml-1.5 text-xs text-gray-400 font-normal">({log.profile.role.name})</span>
+                        <span className="ml-1.5 text-xs text-muted-foreground font-normal">({log.profile.role.name})</span>
                       )}
                     </p>
-                    {log.description && <p className="text-sm text-gray-600 mt-0.5">{log.description}</p>}
+                    {log.description && <p className="text-sm text-muted-foreground mt-0.5">{log.description}</p>}
                     {changedFields.length > 0 && (
-                      <div className="mt-2 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2 text-xs space-y-1">
+                      <div className="mt-2 rounded-lg bg-muted/50 border px-3 py-2 text-xs space-y-1">
                         {changedFields.map((field) => {
                           const change = log.changes[field];
                           const isObj = change !== null && typeof change === "object" && !Array.isArray(change);
@@ -139,10 +139,10 @@ export function ActivityLogModal({ open, onClose, bookingId, customerName }: Pro
                           const label = FIELD_LABEL[field] ?? field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
                           return (
                             <div key={field} className="flex gap-1 flex-wrap">
-                              <span className="font-medium text-gray-700">{label}:</span>
+                              <span className="font-medium text-foreground">{label}:</span>
                               {from !== undefined && <span className="text-red-500 line-through">{formatValue(field, from)}</span>}
                               {to !== undefined && <span className="text-green-600">{formatValue(field, to)}</span>}
-                              {direct !== undefined && <span className="text-gray-600">{formatValue(field, direct)}</span>}
+                              {direct !== undefined && <span className="text-muted-foreground">{formatValue(field, direct)}</span>}
                             </div>
                           );
                         })}
