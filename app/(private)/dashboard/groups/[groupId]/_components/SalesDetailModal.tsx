@@ -111,8 +111,8 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 mt-0.5 h-8 w-8 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20"
-            aria-label="Close"
+            className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20"
+            aria-label="Tutup detail sales"
           >
             <X size={18} className="text-destructive" />
           </button>
@@ -121,7 +121,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
         {/* Table */}
         <div className="flex-1 overflow-y-auto relative">
           {loading ? (
-            <div className="p-6 space-y-3">
+            <div className="p-6 space-y-3" role="status" aria-label="Memuat data booking...">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
@@ -199,7 +199,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
                     </TableCell>
 
                     <TableCell className="px-4 sm:px-8 py-2.5 text-right">
-                      <Button size="xs" variant="outline" className="gap-1 text-[10px]" onClick={() => { setApproveTarget(b.id); }}>
+                      <Button size="xs" variant="outline" className="h-9 gap-1 text-xs min-w-20" onClick={() => { setApproveTarget(b.id); }}>
                         <Check className="h-3 w-3" /> Approve
                       </Button>
                     </TableCell>

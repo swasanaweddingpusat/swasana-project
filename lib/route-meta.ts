@@ -162,14 +162,44 @@ export interface Breadcrumb {
   title: string;
 }
 
+/**
+ * Resolve a runtime pathname (e.g. /dashboard/groups/abc-123) to its
+ * ROUTE_META entry by matching dynamic segments ([param]).
+ *
+ * Returns { template, meta } where `template` is the matched key, or
+ * undefined if no match found.
+ */
+export function resolveRouteMeta(
+  pathname: string,
+): { template: string; meta: RouteMeta } | undefined {
+  // 1. Exact match first (most common path, no regex overhead)
+  const exact = ROUTE_META[pathname];
+  if (exact) return { template: pathname, meta: exact };
+
+  // 2. Pattern match — convert template keys with [param] to regex
+  for (const template of Object.keys(ROUTE_META)) {
+    if (!template.includes("[")) continue;
+    // Replace each [xxx] segment with a non-empty, non-slash capture
+    const pattern = template.replace(/\[[^\]]+\]/g, "[^/]+");
+    const regex = new RegExp(`^${pattern}$`);
+    if (regex.test(pathname)) {
+      return { template, meta: ROUTE_META[template] };
+    }
+  }
+
+  return undefined;
+}
+
 export function getBreadcrumbs(pathname: string): Breadcrumb[] {
   const crumbs: Breadcrumb[] = [];
   let current: string | undefined = pathname;
+
   while (current) {
-    const meta: RouteMeta | undefined = ROUTE_META[current];
-    if (!meta) break;
-    crumbs.unshift({ href: current, title: meta.title });
-    current = meta.parent;
+    const resolved = resolveRouteMeta(current);
+    if (!resolved) break;
+    crumbs.unshift({ href: current, title: resolved.meta.title });
+    current = resolved.meta.parent;
   }
+
   return crumbs;
 }

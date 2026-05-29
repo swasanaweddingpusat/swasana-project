@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Menu, Plus } from "lucide-react";
-import { ROUTE_META } from "@/lib/route-meta";
+import { resolveRouteMeta } from "@/lib/route-meta";
 import { useSidebar } from "../sidebar/sidebar-context";
 import { UserMenu } from "./user-menu";
 import { NotificationBell } from "./notification-bell";
@@ -15,7 +15,7 @@ import { cn } from "../../../../../lib/utils";
 
 export function Header() {
   const pathname = usePathname();
-  const meta = ROUTE_META[pathname];
+  const meta = resolveRouteMeta(pathname)?.meta;
   const { toggleMobile } = useSidebar();
   const { action } = useHeaderAction();
   const { openBookingDrawer } = useBookingDrawer();

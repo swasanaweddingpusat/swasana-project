@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
@@ -5,7 +6,16 @@ import {
   getGroupDetail,
   getGroupPerformance,
   getAvailableSalesProfiles,
+  getEligibleLeaders,
 } from "@/lib/queries/groups";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { GroupDetailClient } from "./_components/GroupDetailClient";
 import type { GroupDetail } from "@/lib/queries/groups";
 
@@ -36,23 +46,38 @@ export default async function GroupDetailPage({ params }: Props) {
     isLeader ||
     (await hasPermission(session.user.roleId, "groups", "edit"));
 
-  const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-  const [performance, availableProfiles] = await Promise.all([
-    getGroupPerformance(group.id, startDate, endDate),
+  const [performance, availableProfiles, eligibleLeaders] = await Promise.all([
+    getGroupPerformance(group.id),
     canManage
       ? getAvailableSalesProfiles(group.members.map((m) => m.userId))
       : Promise.resolve([]),
+    isAdmin ? getEligibleLeaders() : Promise.resolve([]),
   ]);
 
   return (
+    // TODO(page-bg): dashboard/layout.tsx uses hardcoded bg-gray-100 on the outer shell.
+    // Adding a warm amber tint here would clash with that. Rely on card gradients for warmth.
     <div className="px-2 pb-6">
+      <div className="px-4 pt-4 pb-2">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/dashboard/groups" />}>
+                Groups
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{group.name}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
       <GroupDetailClient
         group={group as NonNullable<GroupDetail>}
         initialPerformance={performance}
         availableProfiles={availableProfiles}
+        eligibleLeaders={eligibleLeaders}
         currentProfileId={profileId}
         canManage={canManage}
         isSuperAdmin={isAdmin}

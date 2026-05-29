@@ -1,8 +1,9 @@
-import type { GroupsQueryResult, GroupQueryItem, GroupWithPerformance } from "@/lib/queries/groups";
+import type { GroupsQueryResult, GroupQueryItem, GroupWithPerformance, SalesBookingItem } from "@/lib/queries/groups";
 
 export interface GroupsPerformanceSummary {
   totalGroups: number;
   totalSales: number;
+  totalTarget: number;
   avgAchievement: number;
   totalConfirmed: number;
 }
@@ -24,12 +25,23 @@ export async function fetchGroupById(id: string): Promise<GroupQueryItem> {
   return res.json();
 }
 
-export async function fetchGroupsPerformance(
-  startDate: string,
-  endDate: string,
-): Promise<GroupsPerformanceResponse> {
-  const params = new URLSearchParams({ startDate, endDate });
-  const res = await fetch(`/api/groups/performance?${params}`);
+export async function fetchGroupsPerformance(): Promise<GroupsPerformanceResponse> {
+  const res = await fetch("/api/groups/performance");
   if (!res.ok) throw new Error("Failed to fetch groups performance");
+  return res.json();
+}
+
+export async function fetchSalesBookings(
+  salesId: string,
+  take = 5,
+  skip = 0,
+): Promise<SalesBookingItem[]> {
+  const params = new URLSearchParams({
+    salesId,
+    take: take.toString(),
+    skip: skip.toString(),
+  });
+  const res = await fetch(`/api/sales-bookings?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch sales bookings");
   return res.json();
 }

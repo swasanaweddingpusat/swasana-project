@@ -155,7 +155,7 @@ export async function getGroupDetail(groupId: string) {
 
 // ─── Performance queries ──────────────────────────────────────────────────────
 
-export async function getGroupPerformance(groupId: string, startDate: Date, endDate: Date) {
+export async function getGroupPerformance(groupId: string, startDate?: Date, endDate?: Date) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
@@ -179,7 +179,7 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
           where: {
             salesId: profileId,
             bookingStatus: { not: BookingStatus.Canceled },
-            bookingDate: { gte: startDate, lte: endDate },
+            ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
           },
           select: {
             bookingStatus: true,
@@ -191,10 +191,12 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
           where: {
             profileId,
             type: "sales",
-            startDate: { lte: endDate },
-            endDate: { gte: startDate },
+            ...(startDate && endDate
+              ? { startDate: { lte: endDate }, endDate: { gte: startDate } }
+              : {}),
           },
-          select: { amount: true },
+          orderBy: { endDate: "desc" },
+          select: { amount: true, startDate: true, endDate: true },
         }),
       ]);
 
@@ -210,6 +212,8 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
         avatarUrl: profile.avatarUrl,
         actual,
         target: targetAmount,
+        targetStartDate: target?.startDate?.toISOString() ?? null,
+        targetEndDate: target?.endDate?.toISOString() ?? null,
         achievement,
         bookings: bookingRevenues.length,
         confirmed: confirmed.length,
@@ -223,8 +227,8 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
 
 export async function getGroupsWithPerformance(
   profileId: string | undefined,
-  startDate: Date,
-  endDate: Date,
+  startDate?: Date,
+  endDate?: Date,
 ) {
   "use cache";
   cacheTag("groups", "bookings");
@@ -267,7 +271,7 @@ export async function getGroupsWithPerformance(
     where: {
       salesId: { in: allSalesIds },
       bookingStatus: { not: BookingStatus.Canceled },
-      bookingDate: { gte: startDate, lte: endDate },
+      ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
     },
     select: {
       salesId: true,
@@ -278,13 +282,16 @@ export async function getGroupsWithPerformance(
   });
 
   // ── Query 3: all relevant targets in one shot ────────────────────────────────
+  // Fetch latest target per sales profile (no date overlap filter for all-time view)
   const allTargets = await db.userTarget.findMany({
     where: {
       profileId: { in: allSalesIds },
       type: "sales",
-      startDate: { lte: endDate },
-      endDate: { gte: startDate },
+      ...(startDate && endDate
+        ? { startDate: { lte: endDate }, endDate: { gte: startDate } }
+        : {}),
     },
+    orderBy: { endDate: "desc" },
     select: { profileId: true, amount: true },
   });
 
@@ -301,14 +308,18 @@ export async function getGroupsWithPerformance(
     bookingsBySalesId.set(b.salesId, list);
   }
 
-  // Map target by profileId (latest wins if multiple overlap)
+  // Map target by profileId — first-write-wins because allTargets is ordered by endDate desc
+  // so the first entry per profileId is the latest (most recent) target
   const targetBySalesId = new Map<string, number>();
   for (const t of allTargets) {
-    targetBySalesId.set(t.profileId, Number(t.amount));
+    if (!targetBySalesId.has(t.profileId)) {
+      targetBySalesId.set(t.profileId, Number(t.amount));
+    }
   }
 
   return groupsWithMembers.map((g) => {
     let revenue = 0;
+    let target = 0;
     let confirmedCount = 0;
     let totalAchievement = 0;
     let memberCount = 0;
@@ -321,6 +332,7 @@ export async function getGroupsWithPerformance(
       const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
 
       revenue += actual;
+      target += targetAmount;
       confirmedCount += confirmed.length;
       totalAchievement += achievement;
       memberCount += 1;
@@ -330,7 +342,7 @@ export async function getGroupsWithPerformance(
 
     // Spread g without members (keep shape: id, name, description, leaderId, leader, _count)
     const { members: _members, ...groupBase } = g;
-    return { ...groupBase, revenue, avgAchievement, confirmedCount };
+    return { ...groupBase, revenue, target, avgAchievement, confirmedCount };
   });
 }
 
@@ -377,6 +389,25 @@ export async function getAvailableSalesProfiles(excludeIds: string[]) {
   });
 }
 
+export async function getEligibleLeaders() {
+  "use cache";
+  cacheTag("groups", "users");
+  cacheLife("minutes");
+
+  return db.profile.findMany({
+    where: { status: "active" },
+    select: {
+      id: true,
+      fullName: true,
+      avatarUrl: true,
+      email: true,
+      role: { select: { name: true } },
+    },
+    orderBy: { fullName: "asc" },
+    take: 500,
+  });
+}
+
 // ─── Return types ─────────────────────────────────────────────────────────────
 
 export type GroupsQueryResult = Awaited<ReturnType<typeof getGroups>>;
@@ -387,3 +418,4 @@ export type GroupPerformanceItem = Awaited<ReturnType<typeof getGroupPerformance
 export type GroupWithPerformance = Awaited<ReturnType<typeof getGroupsWithPerformance>>[number];
 export type SalesBookingItem = Awaited<ReturnType<typeof getSalesBookings>>[number];
 export type AvailableSalesProfile = Awaited<ReturnType<typeof getAvailableSalesProfiles>>[number];
+export type EligibleLeader = Awaited<ReturnType<typeof getEligibleLeaders>>[number];
