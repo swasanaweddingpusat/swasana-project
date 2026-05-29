@@ -40,22 +40,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePoll } from "@/hooks/use-poll";
+import { MiceBookingDrawer } from "./MiceBookingDrawer";
+import { MiceDetailModal } from "./MiceDetailModal";
+import type { MiceBookingItem } from "./types";
 
-interface MiceBookingItem {
-  id: string;
-  clientName: string;
-  clientPhone: string;
-  bookingDate: string;
-  poNumber: string | null;
-  hasQuotation: boolean;
-  venueName: string;
-  status: "Pending" | "Confirmed" | "Uploaded" | "Rejected" | "Canceled" | "Lost";
-  eventDate: string;
-  eventType: string;
-  fullPayment: number;
-  bookingFee: number;
-  salesName: string;
-}
+export type { MiceBookingItem };
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-green-500",
@@ -164,6 +153,9 @@ export function MiceTable() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<MiceBookingItem | null>(null);
 
   const filtered = DUMMY_MICE.filter((item) => {
     if (statusFilter !== "all" && item.status !== statusFilter) return false;
@@ -242,7 +234,10 @@ export function MiceTable() {
             </div>
 
             {/* Add button */}
-            <Button className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer">
+            <Button
+              className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer"
+              onClick={() => { setSelectedBooking(null); setDrawerOpen(true); }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Tambah Booking
             </Button>
@@ -369,11 +364,17 @@ export function MiceTable() {
                           <EllipsisVertical className="w-4 h-4 text-muted-foreground" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="gap-2 cursor-pointer">
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => { setSelectedBooking(item); setDetailOpen(true); }}
+                          >
                             <Eye className="w-4 h-4" />
                             View Detail
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2 cursor-pointer">
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => { setSelectedBooking(item); setDrawerOpen(true); }}
+                          >
                             <Pencil className="w-4 h-4" />
                             Edit
                           </DropdownMenuItem>
@@ -423,6 +424,18 @@ export function MiceTable() {
           </div>
         )}
       </CardContent>
+
+      <MiceBookingDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        booking={selectedBooking}
+      />
+      <MiceDetailModal
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        booking={selectedBooking}
+        onEdit={(b) => { setSelectedBooking(b); setDrawerOpen(true); }}
+      />
     </Card>
   );
 }
