@@ -25,13 +25,6 @@ export async function approveStep(stepId: string, signature?: string | null) {
     const canApprove = await checkApprover(step, session.user.profileId, session.user.roleId);
     if (!canApprove) return { success: false as const, error: "Anda tidak berhak approve step ini" };
 
-    // Check previous steps are all approved
-    const prevSteps = await db.approvalRecordStep.findMany({
-      where: { recordId: step.recordId, stepOrder: { lt: step.stepOrder } },
-    });
-    const allPrevApproved = prevSteps.every((s) => s.status === "approved");
-    if (!allPrevApproved) return { success: false as const, error: "Step sebelumnya belum disetujui" };
-
     const allSteps = await db.approvalRecordStep.findMany({ where: { recordId: step.recordId }, orderBy: { stepOrder: "asc" } });
 
     // Super Admin: approve all pending non-client steps at once
