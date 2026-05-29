@@ -94,11 +94,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
 
   // ─── Bookings ───────────────────────────────────────────────────────────────
-  "/dashboard/bookings": {
+  "/dashboard/booking-weddings": {
     title: "Booking Weddings",
     subtitle: "Kelola data booking weddings",
   },
-  "/dashboard/bookings/mice": {
+  "/dashboard/booking-mice": {
     title: "Booking MICE",
     subtitle: "Kelola data booking MICE",
   },
@@ -138,8 +138,8 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
 
   // ─── Calendar Events ──────────────────────────────────────────────────────
-  "/dashboard/bookings/calendar-events": {
-    title: "Calendar Event",
+  "/dashboard/calendar-events": {
+    title: "Calendar Events",
     subtitle: "Lihat jadwal event di kalender",
   },
   "/dashboard/groups": {

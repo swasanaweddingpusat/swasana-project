@@ -140,6 +140,7 @@ model Profile {
   bookingRevisions         BookingRevision[]
   userTargets              UserTarget[]               @relation("UserTargets")
   userTargetsSet           UserTarget[]               @relation("UserTargetsSetBy")
+  leadsCreated             Lead[]
 
   @@index([roleId])
   @@index([managerId])
@@ -274,6 +275,7 @@ model Venue {
   packages        Package[]
   paymentMethods  PaymentMethod[]
   bookings        Booking[]
+  leads           Lead[]
 
   @@index([brandId])
   @@map("venues")
@@ -365,6 +367,7 @@ model Package {
   venue          Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
   variants       PackageVariant[]
   bookings       Booking[]
+  leads          Lead[]
 
   @@index([venueId])
   @@map("packages")
@@ -479,6 +482,7 @@ model SourceOfInformation {
   createdAt DateTime   @default(now())
   bookings  Booking[]
   customers Customer[]
+  leads     Lead[]
 
   @@map("source_of_informations")
 }
@@ -1076,6 +1080,7 @@ model EventType {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  leads     Lead[]
 
   @@map("event_types")
 }
@@ -1085,6 +1090,67 @@ model Counter {
   value Int    @default(0)
 
   @@map("counters")
+}
+
+// ─── CRM: Leads ──────────────────────────────────────────────────────────────
+
+enum LeadCategory {
+  WEDDINGS
+  MICE
+}
+
+model LeadStatus {
+  id          String       @id @default(uuid())
+  name        String
+  color       String       @default("#6b7280")
+  category    LeadCategory
+  sortOrder   Int          @default(0)
+  isPipeline  Boolean      @default(true)
+  isDefault   Boolean      @default(false)
+  isSystem    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  leads       Lead[]
+
+  @@index([category, sortOrder])
+  @@map("lead_statuses")
+}
+
+model Lead {
+  id             String       @id @default(uuid())
+  name           String
+  contactNumbers Json         @default("[]") // Array of { label: string, number: string }
+  email          String?
+  category       LeadCategory
+  eventDate      DateTime?
+  estimatedPax   Int?
+  budgetRange    String?
+  notes          String?
+
+  // FK relations
+  venueId               String?
+  packageId             String?
+  eventTypeId           String?
+  sourceOfInformationId String?
+  statusId              String
+  createdById           String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venue               Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  package             Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  eventType           EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  status              LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  createdBy           Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([statusId])
+  @@index([createdById])
+  @@index([category])
+  @@index([eventDate])
+  @@index([venueId])
+  @@map("leads")
 }
 
 model UserTarget {

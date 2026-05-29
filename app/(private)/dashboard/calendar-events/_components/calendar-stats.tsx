@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import type { CalendarEventsResult } from '@/lib/queries/calendar-events';
 import { CalendarCheck, CalendarClock, CalendarDays, CalendarRange } from 'lucide-react';
-import { cn } from "../../../../../../lib/utils";
+import { cn } from "@/lib/utils";
 
 interface CalendarStatsProps {
   events: CalendarEventsResult;

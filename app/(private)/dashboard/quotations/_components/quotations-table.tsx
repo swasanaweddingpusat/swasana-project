@@ -1,16 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,13 +15,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  PencilIcon,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Plus,
   ArrowLeft,
   ArrowRight,
   Search,
   FileText,
   CalendarCheck,
+  MoreHorizontal,
+  PencilIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuotationDrawer } from "./quotation-drawer";
@@ -157,21 +157,42 @@ const DUMMY_QUOTATIONS: QuotationItem[] = [
   },
 ];
 
-const ROWS_PER_PAGE = 10;
+const CARDS_PER_PAGE = 8;
 
 type QuotationStatus = QuotationItem["status"];
 
 interface StatusMeta {
   label: string;
-  dotColor: string;
+  dotClass: string;
+  badgeVariant: "outline" | "secondary" | "default" | "destructive";
 }
 
 const STATUS_META: Record<QuotationStatus, StatusMeta> = {
-  draft: { label: "Draft", dotColor: "#9ca3af" },
-  sent: { label: "Sent", dotColor: "#3b82f6" },
-  revised: { label: "Revised", dotColor: "#f59e0b" },
-  accepted: { label: "Accepted", dotColor: "#22c55e" },
-  rejected: { label: "Rejected", dotColor: "#ef4444" },
+  draft: {
+    label: "Draft",
+    dotClass: "bg-transparent border border-muted-foreground/60",
+    badgeVariant: "outline",
+  },
+  sent: {
+    label: "Sent",
+    dotClass: "bg-muted-foreground/60 border border-muted-foreground/60",
+    badgeVariant: "outline",
+  },
+  revised: {
+    label: "Revised",
+    dotClass: "bg-foreground/50 border border-foreground/50",
+    badgeVariant: "secondary",
+  },
+  accepted: {
+    label: "Accepted",
+    dotClass: "bg-foreground border border-foreground",
+    badgeVariant: "default",
+  },
+  rejected: {
+    label: "Rejected",
+    dotClass: "bg-destructive border border-destructive",
+    badgeVariant: "destructive",
+  },
 };
 
 const ALL_STATUSES: QuotationStatus[] = [
@@ -191,19 +212,29 @@ function formatRupiah(amount: number): string {
   });
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+function formatCurrencyShort(n: number): string {
+  if (n >= 1_000_000_000) {
+    const val = n / 1_000_000_000;
+    const rounded = Math.round(val * 10) / 10;
+    return `Rp ${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}M`;
+  }
+  if (n >= 1_000_000) {
+    const val = n / 1_000_000;
+    const rounded = Math.round(val * 10) / 10;
+    return `Rp ${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}jt`;
+  }
+  return formatRupiah(n);
 }
 
-function StatusDot({ color }: { color: string }) {
+function formatDate(dateStr: string): string {
+  return format(new Date(dateStr), "d MMM yyyy");
+}
+
+function StatusDot({ className }: { className: string }) {
   return (
     <span
-      className="inline-block w-2 h-2 rounded-full shrink-0"
-      style={{ backgroundColor: color }}
+      aria-hidden="true"
+      className={cn("inline-block w-2 h-2 rounded-full shrink-0", className)}
     />
   );
 }
@@ -212,12 +243,113 @@ function StatusBadge({ status }: { status: QuotationStatus }) {
   const meta = STATUS_META[status];
   return (
     <Badge
-      variant="outline"
-      className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-gray-700 border-gray-200"
+      variant={meta.badgeVariant}
+      className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium"
     >
-      <StatusDot color={meta.dotColor} />
+      <StatusDot
+        className={
+          meta.badgeVariant === "default"
+            ? "bg-primary-foreground border border-primary-foreground"
+            : meta.badgeVariant === "destructive"
+              ? "bg-destructive-foreground border border-destructive-foreground"
+              : meta.dotClass
+        }
+      />
       {meta.label}
     </Badge>
+  );
+}
+
+interface QuotationCardProps {
+  q: QuotationItem;
+  onEdit: (q: QuotationItem) => void;
+  onConvert: (q: QuotationItem) => void;
+}
+
+function QuotationCard({ q, onEdit, onConvert }: QuotationCardProps) {
+  return (
+    <Card className="group transition-colors hover:border-foreground/20 hover:bg-accent/30">
+      <CardContent className="p-4 flex flex-col gap-3">
+        {/* Row 1: name + status + action menu */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p
+              className="font-semibold text-foreground truncate leading-tight"
+              title={q.leadName}
+            >
+              {q.leadName}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {q.leadPhone}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <StatusBadge status={q.status} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  aria-label={`Aksi untuk quotation ${q.leadName}`}
+                >
+                  <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onEdit(q)}>
+                  <PencilIcon aria-hidden="true" className="h-3.5 w-3.5 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                {q.status === "accepted" && (
+                  <DropdownMenuItem onClick={() => onConvert(q)}>
+                    <CalendarCheck
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 mr-2"
+                    />
+                    Convert ke Booking
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Row 2: total price */}
+        <div>
+          <p className="text-xl font-bold text-foreground leading-tight">
+            {formatRupiah(q.totalPrice)}
+          </p>
+          {q.discount > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              was {formatCurrencyShort(q.price)}, hemat{" "}
+              {formatCurrencyShort(q.discount)}
+            </p>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-border" />
+
+        {/* Row 3: venue · package · variant */}
+        <p className="text-sm text-foreground/80 truncate" title={`${q.venue} · ${q.packageName} ${q.variantName}`}>
+          {q.venue} &middot; {q.packageName} {q.variantName}
+        </p>
+
+        {/* Row 4: event date */}
+        <div className="flex items-center gap-1.5 text-sm text-foreground/80">
+          <CalendarCheck aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span>Event: {formatDate(q.eventDate)}</span>
+        </div>
+
+        {/* Row 5: sales · valid until */}
+        <p className="text-xs text-muted-foreground">
+          Sales: {q.salesName}
+          <span className="mx-1.5 text-border">|</span>
+          Exp: {formatDate(q.validUntil)}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -249,10 +381,10 @@ export function QuotationsTable() {
     return true;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CARDS_PER_PAGE));
   const paginated = filtered.slice(
-    (currentPage - 1) * ROWS_PER_PAGE,
-    currentPage * ROWS_PER_PAGE
+    (currentPage - 1) * CARDS_PER_PAGE,
+    currentPage * CARDS_PER_PAGE
   );
 
   function handleAdd() {
@@ -270,7 +402,11 @@ export function QuotationsTable() {
   }
 
   function handleStatusBadgeClick(status: QuotationStatus) {
-    setStatusFilter((prev) => (prev === status ? "all" : status));
+    if (statusFilter === status) {
+      setStatusFilter("all");
+    } else {
+      setStatusFilter(status);
+    }
     setCurrentPage(1);
   }
 
@@ -282,7 +418,7 @@ export function QuotationsTable() {
   const statusCounts = ALL_STATUSES.map((s) => ({
     status: s,
     label: STATUS_META[s].label,
-    dotColor: STATUS_META[s].dotColor,
+    dotClass: STATUS_META[s].dotClass,
     count: DUMMY_QUOTATIONS.filter((q) => q.status === s).length,
   }));
 
@@ -291,22 +427,28 @@ export function QuotationsTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b flex-wrap gap-3">
+          <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
             <div className="flex items-center gap-3">
               <h2 className="text-base font-bold text-foreground">
                 List Quotations
               </h2>
-              <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
+              <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
                 {filtered.length}
                 {search || statusFilter !== "all"
                   ? ` dari ${DUMMY_QUOTATIONS.length}`
                   : " quotations"}
               </span>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
               {/* Status filter */}
-              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-                <SelectTrigger className="h-9 w-40 text-sm">
+              <Select
+                value={statusFilter}
+                onValueChange={handleStatusFilterChange}
+              >
+                <SelectTrigger
+                  className="h-9 w-full sm:w-40 text-sm"
+                  aria-label="Filter status quotation"
+                >
                   <SelectValue placeholder="Semua Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -314,7 +456,7 @@ export function QuotationsTable() {
                   {ALL_STATUSES.map((s) => (
                     <SelectItem key={s} value={s}>
                       <span className="flex items-center gap-2">
-                        <StatusDot color={STATUS_META[s].dotColor} />
+                        <StatusDot className={STATUS_META[s].dotClass} />
                         {STATUS_META[s].label}
                       </span>
                     </SelectItem>
@@ -324,72 +466,92 @@ export function QuotationsTable() {
 
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search
+                  aria-hidden="true"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                />
                 <Input
+                  type="search"
+                  aria-label="Cari quotation"
                   placeholder="Cari quotation..."
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="pl-9 w-52"
+                  className="pl-9 w-full sm:w-52"
                 />
               </div>
 
               {/* Add button */}
-              <Button
-                onClick={handleAdd}
-                className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer"
-              >
-                <Plus className="h-4 w-4 mr-2" />
+              <Button onClick={handleAdd}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 Tambah Quotation
               </Button>
             </div>
           </div>
 
           {/* Status summary badges */}
-          <div className="flex items-center gap-2 px-6 py-3 border-b flex-wrap">
-            {statusCounts.map((s) => (
-              <button
-                key={s.status}
-                type="button"
-                onClick={() => handleStatusBadgeClick(s.status)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-colors cursor-pointer",
-                  statusFilter === s.status
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                )}
-              >
-                <StatusDot
-                  color={statusFilter === s.status ? "#ffffff" : s.dotColor}
-                />
-                {s.label}
-                <span
+          <div
+            role="group"
+            aria-label="Filter quotation berdasarkan status"
+            className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b overflow-x-auto sm:flex-wrap"
+          >
+            {statusCounts.map((s) => {
+              const selected = statusFilter === s.status;
+              return (
+                <button
+                  key={s.status}
+                  type="button"
+                  onClick={() => handleStatusBadgeClick(s.status)}
+                  aria-pressed={selected}
                   className={cn(
-                    "ml-0.5 font-bold",
-                    statusFilter === s.status ? "text-white" : "text-gray-500"
+                    "flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-colors whitespace-nowrap shrink-0",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    selected
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover:bg-muted"
                   )}
                 >
-                  ({s.count})
-                </span>
-              </button>
-            ))}
+                  <StatusDot
+                    className={
+                      selected
+                        ? "bg-primary-foreground border border-primary-foreground"
+                        : s.dotClass
+                    }
+                  />
+                  {s.label}
+                  <span
+                    className={cn(
+                      "ml-0.5 font-bold",
+                      selected
+                        ? "text-primary-foreground"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    ({s.count})
+                  </span>
+                </button>
+              );
+            })}
             {statusFilter !== "all" && (
               <button
                 type="button"
                 onClick={() => setStatusFilter("all")}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground cursor-pointer ml-1"
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground ml-1 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 Reset
               </button>
             )}
           </div>
 
-          {/* Table */}
+          {/* Card grid / empty state */}
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-              <FileText className="h-10 w-10 mb-3 opacity-40" />
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <FileText
+                aria-hidden="true"
+                className="h-10 w-10 mb-3 opacity-40"
+              />
               <p className="text-sm">
                 {search
                   ? `Tidak ada hasil untuk "${search}"`
@@ -397,196 +559,56 @@ export function QuotationsTable() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[1400px] text-sm">
-                <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Lead
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Venue
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Kategori
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Event
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Tanggal
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Paket / Varian
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap text-right">
-                      Harga
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap text-right">
-                      Diskon
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap text-right">
-                      Total
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Status
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Valid Sampai
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap">
-                      Sales
-                    </TableHead>
-                    <TableHead className="px-4 whitespace-nowrap w-28" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginated.map((q) => (
-                    <TableRow key={q.id} className="hover:bg-gray-50">
-                      {/* Lead */}
-                      <TableCell className="px-4 font-medium">
-                        <div className="truncate max-w-40" title={q.leadName}>
-                          {q.leadName}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {q.leadPhone}
-                        </div>
-                      </TableCell>
-
-                      {/* Venue */}
-                      <TableCell className="px-4 whitespace-nowrap text-gray-700">
-                        {q.venue}
-                      </TableCell>
-
-                      {/* Kategori */}
-                      <TableCell className="px-4">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs capitalize",
-                            q.category === "weddings"
-                              ? "border-gray-300 text-gray-700"
-                              : "border-gray-400 bg-gray-100 text-gray-800"
-                          )}
-                        >
-                          {q.category === "weddings" ? "Weddings" : "MICE"}
-                        </Badge>
-                      </TableCell>
-
-                      {/* Event */}
-                      <TableCell className="px-4 whitespace-nowrap text-gray-700">
-                        {q.eventType}
-                      </TableCell>
-
-                      {/* Tanggal */}
-                      <TableCell className="px-4 whitespace-nowrap text-gray-700">
-                        {formatDate(q.eventDate)}
-                      </TableCell>
-
-                      {/* Paket / Varian */}
-                      <TableCell className="px-4 whitespace-nowrap">
-                        <div className="font-medium text-gray-800">
-                          {q.packageName}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {q.variantName}
-                        </div>
-                      </TableCell>
-
-                      {/* Harga */}
-                      <TableCell className="px-4 text-right whitespace-nowrap text-gray-700">
-                        {formatRupiah(q.price)}
-                      </TableCell>
-
-                      {/* Diskon */}
-                      <TableCell className="px-4 text-right whitespace-nowrap text-gray-700">
-                        {q.discount > 0 ? (
-                          <span className="text-destructive">
-                            -{formatRupiah(q.discount)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-
-                      {/* Total */}
-                      <TableCell className="px-4 text-right whitespace-nowrap font-semibold text-gray-900">
-                        {formatRupiah(q.totalPrice)}
-                      </TableCell>
-
-                      {/* Status */}
-                      <TableCell className="px-4">
-                        <StatusBadge status={q.status} />
-                      </TableCell>
-
-                      {/* Valid Sampai */}
-                      <TableCell className="px-4 whitespace-nowrap text-gray-700">
-                        {formatDate(q.validUntil)}
-                      </TableCell>
-
-                      {/* Sales */}
-                      <TableCell className="px-4 text-gray-600 whitespace-nowrap">
-                        {q.salesName}
-                      </TableCell>
-
-                      {/* Aksi */}
-                      <TableCell className="px-4">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(q)}
-                            title="Edit quotation"
-                            className="cursor-pointer"
-                          >
-                            <PencilIcon className="h-4 w-4" />
-                          </Button>
-                          {q.status === "accepted" && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleConvertToBooking(q)}
-                              title="Convert ke Booking"
-                              className="text-gray-700 hover:text-gray-900 cursor-pointer"
-                            >
-                              <CalendarCheck className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {paginated.map((q) => (
+                  <QuotationCard
+                    key={q.id}
+                    q={q}
+                    onEdit={handleEdit}
+                    onConvert={handleConvertToBooking}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center px-6 py-4 border-t">
+            <nav
+              aria-label="Navigasi halaman quotation"
+              className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-t sm:flex-row sm:justify-between sm:items-center"
+            >
               <Button
                 variant="outline"
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
+                aria-label="Halaman sebelumnya"
               >
-                <ArrowLeft className="w-4 h-4 mr-2" /> Previous
+                <ArrowLeft aria-hidden="true" className="w-4 h-4" /> Previous
               </Button>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 overflow-x-auto justify-center">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={cn(
-                        "px-3 py-1 rounded-md text-sm font-medium cursor-pointer",
-                        currentPage === page
-                          ? "bg-gray-200 text-gray-900"
-                          : "text-gray-700 hover:bg-gray-100"
-                      )}
-                    >
-                      {page}
-                    </button>
-                  )
+                  (page) => {
+                    const isCurrent = currentPage === page;
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        aria-label={`Halaman ${page}`}
+                        aria-current={isCurrent ? "page" : undefined}
+                        className={cn(
+                          "px-3 py-1 rounded-md text-sm font-medium shrink-0",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                          isCurrent
+                            ? "bg-primary text-primary-foreground"
+                            : "text-foreground hover:bg-muted"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    );
+                  }
                 )}
               </div>
               <Button
@@ -595,10 +617,11 @@ export function QuotationsTable() {
                   setCurrentPage((p) => Math.min(p + 1, totalPages))
                 }
                 disabled={currentPage === totalPages}
+                aria-label="Halaman berikutnya"
               >
-                Next <ArrowRight className="w-4 h-4 ml-2" />
+                Next <ArrowRight aria-hidden="true" className="w-4 h-4" />
               </Button>
-            </div>
+            </nav>
           )}
         </CardContent>
       </Card>

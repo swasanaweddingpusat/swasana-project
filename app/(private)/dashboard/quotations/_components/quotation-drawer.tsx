@@ -267,7 +267,7 @@ export function QuotationDrawer({
               />
 
               {/* Auto-filled fields from lead */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Venue (read-only) */}
                 <FormField
                   control={form.control}
@@ -278,10 +278,11 @@ export function QuotationDrawer({
                       <FormControl>
                         <Input
                           {...field}
-                          disabled
+                          readOnly
                           placeholder="—"
+                          aria-readonly="true"
                           className={cn(
-                            "bg-muted text-muted-foreground cursor-not-allowed",
+                            "bg-muted text-muted-foreground",
                             !field.value && "italic"
                           )}
                         />
@@ -306,10 +307,11 @@ export function QuotationDrawer({
                                 ] ?? field.value
                               : ""
                           }
-                          disabled
+                          readOnly
                           placeholder="—"
+                          aria-readonly="true"
                           className={cn(
-                            "bg-muted text-muted-foreground cursor-not-allowed",
+                            "bg-muted text-muted-foreground",
                             !field.value && "italic"
                           )}
                         />
@@ -319,7 +321,7 @@ export function QuotationDrawer({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Event Type (read-only) */}
                 <FormField
                   control={form.control}
@@ -330,10 +332,11 @@ export function QuotationDrawer({
                       <FormControl>
                         <Input
                           {...field}
-                          disabled
+                          readOnly
                           placeholder="—"
+                          aria-readonly="true"
                           className={cn(
-                            "bg-muted text-muted-foreground cursor-not-allowed",
+                            "bg-muted text-muted-foreground",
                             !field.value && "italic"
                           )}
                         />
@@ -352,10 +355,11 @@ export function QuotationDrawer({
                       <FormControl>
                         <Input
                           {...field}
-                          disabled
+                          readOnly
                           placeholder="—"
+                          aria-readonly="true"
                           className={cn(
-                            "bg-muted text-muted-foreground cursor-not-allowed",
+                            "bg-muted text-muted-foreground",
                             !field.value && "italic"
                           )}
                         />
@@ -371,7 +375,7 @@ export function QuotationDrawer({
                 </p>
 
                 {/* Paket & Varian */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="packageName"
@@ -501,7 +505,12 @@ export function QuotationDrawer({
                 {/* Total (read-only, auto-calculated) */}
                 <div className="mt-4">
                   <p className="text-sm font-medium mb-1.5">Total</p>
-                  <div className="flex items-center h-10 px-3 rounded-md border bg-muted text-sm font-semibold text-gray-900">
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    aria-label={`Total quotation ${formatTotal()}`}
+                    className="flex items-center h-10 px-3 rounded-md border border-border bg-muted text-sm font-semibold text-foreground"
+                  >
                     {formatTotal()}
                   </div>
                 </div>
@@ -546,18 +555,18 @@ export function QuotationDrawer({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white pt-4">
+        <div className="sticky bottom-0 bg-background pt-4">
           <div className="flex gap-2">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="flex-1 cursor-pointer"
+              className="flex-1"
             >
               Batal
             </Button>
             <Button
               onClick={form.handleSubmit(onSubmit)}
-              className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer"
+              className="flex-1"
             >
               {isEdit ? "Simpan" : "Tambah"}
             </Button>

@@ -103,30 +103,22 @@ export const navItems: NavItem[] = [
     permission: { module: "groups", action: "view" },
   },
   {
-    name: "Bookings",
-    href: "/dashboard/bookings",
+    name: "Booking Weddings",
+    href: "/dashboard/booking-weddings",
     icon: Ticket,
     permission: { module: "booking", action: "view" },
-    submenu: [
-      {
-        name: "Calendar Event",
-        href: "/dashboard/bookings/calendar-events",
-        icon: CalendarRange,
-        permission: { module: "booking", action: "view" },
-      },
-      {
-        name: "Weddings",
-        href: "/dashboard/bookings",
-        icon: Ticket,
-        permission: { module: "booking", action: "view" },
-      },
-      {
-        name: "MICE",
-        href: "/dashboard/bookings/mice",
-        icon: TicketCheck,
-        permission: { module: "booking", action: "view" },
-      },
-    ],
+  },
+  {
+    name: "Booking MICE",
+    href: "/dashboard/booking-mice",
+    icon: TicketCheck,
+    permission: { module: "booking", action: "view" },
+  },
+  {
+    name: "Calendar Events",
+    href: "/dashboard/calendar-events",
+    icon: CalendarRange,
+    permission: { module: "booking", action: "view" },
   },
   {
     name: "Purchase Order",

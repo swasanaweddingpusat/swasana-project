@@ -261,41 +261,26 @@ export function LeadStatusManager() {
         <Card>
           <CardContent className="p-0">
             {/* Header */}
-            <div
-              className={cn(
-                "flex",
-                "items-start",
-                "justify-between",
-                "px-6",
-                "py-4",
-                "border-b"
-              )}
-            >
-              <div className={cn("flex", "flex-col", "gap-0.5")}>
-                <div className={cn("flex", "items-center", "gap-2")}>
-                  <h2 className={cn("text-base", "font-bold", "text-[#1D1D1D]")}>
+            <div className="flex items-start justify-between px-6 py-4 border-b">
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-foreground">
                     Lead Pipeline Status
                   </h2>
-                  <span className={cn("text-sm", "text-muted-foreground")}>
+                  <span className="text-sm text-muted-foreground">
                     ({items.length})
                   </span>
                 </div>
-                <p className={cn("text-sm", "text-muted-foreground")}>
+                <p className="text-sm text-muted-foreground">
                   Kelola status pipeline lead. Status bisa diubah, ditambah, dan
                   diurutkan.
                 </p>
               </div>
               <Button
                 onClick={handleOpenAdd}
-                className={cn(
-                  "bg-gray-900",
-                  "hover:bg-gray-800",
-                  "text-white",
-                  "cursor-pointer",
-                  "shrink-0"
-                )}
+                className="cursor-pointer shrink-0"
               >
-                <Plus className={cn("w-4", "h-4", "mr-2")} />
+                <Plus className="w-4 h-4 mr-2" />
                 Tambah Status
               </Button>
             </div>
@@ -304,11 +289,11 @@ export function LeadStatusManager() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className={cn("w-16", "px-6")}>Urutan</TableHead>
+                  <TableHead className="w-16 px-6">Urutan</TableHead>
                   <TableHead>Nama</TableHead>
                   <TableHead className="w-20">Warna</TableHead>
                   <TableHead className="w-28">Label</TableHead>
-                  <TableHead className={cn("w-36", "text-right", "pr-6")}>
+                  <TableHead className="w-36 text-right pr-6">
                     Aksi
                   </TableHead>
                 </TableRow>
@@ -318,11 +303,7 @@ export function LeadStatusManager() {
                   <TableRow>
                     <TableCell
                       colSpan={5}
-                      className={cn(
-                        "text-center",
-                        "py-8",
-                        "text-muted-foreground"
-                      )}
+                      className="text-center py-8 text-muted-foreground"
                     >
                       Belum ada data.
                     </TableCell>
@@ -334,24 +315,15 @@ export function LeadStatusManager() {
                       className={cn(item.isSystem && "bg-muted/30")}
                     >
                       {/* Sort order */}
-                      <TableCell
-                        className={cn(
-                          "px-6",
-                          "text-muted-foreground",
-                          "font-mono",
-                          "text-sm"
-                        )}
-                      >
+                      <TableCell className="px-6 text-muted-foreground font-mono text-sm">
                         {item.sortOrder}
                       </TableCell>
 
                       {/* Name + color circle */}
                       <TableCell>
-                        <div
-                          className={cn("flex", "items-center", "gap-2.5")}
-                        >
+                        <div className="flex items-center gap-2.5">
                           <span
-                            className={cn("inline-block", "w-3", "h-3", "rounded-full", "shrink-0")}
+                            className="inline-block w-3 h-3 rounded-full shrink-0"
                             style={{ backgroundColor: item.color }}
                           />
                           <span
@@ -363,14 +335,7 @@ export function LeadStatusManager() {
                             {item.name}
                           </span>
                           {item.isSystem && (
-                            <Lock
-                              className={cn(
-                                "w-3",
-                                "h-3",
-                                "text-muted-foreground",
-                                "shrink-0"
-                              )}
-                            />
+                            <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
                           )}
                         </div>
                       </TableCell>
@@ -378,13 +343,7 @@ export function LeadStatusManager() {
                       {/* Color swatch */}
                       <TableCell>
                         <div
-                          className={cn(
-                            "w-6",
-                            "h-6",
-                            "rounded",
-                            "border",
-                            "border-border"
-                          )}
+                          className="w-6 h-6 rounded border border-border"
                           style={{ backgroundColor: item.color }}
                           title={item.color}
                         />
@@ -392,11 +351,11 @@ export function LeadStatusManager() {
 
                       {/* Badges */}
                       <TableCell>
-                        <div className={cn("flex", "items-center", "gap-1", "flex-wrap")}>
+                        <div className="flex items-center gap-1 flex-wrap">
                           {item.isDefault && (
                             <Badge
                               variant="secondary"
-                              className={cn("text-xs", "px-1.5", "py-0")}
+                              className="text-xs px-1.5 py-0"
                             >
                               Default
                             </Badge>
@@ -404,7 +363,7 @@ export function LeadStatusManager() {
                           {item.isFinal && (
                             <Badge
                               variant="outline"
-                              className={cn("text-xs", "px-1.5", "py-0")}
+                              className="text-xs px-1.5 py-0"
                             >
                               Final
                             </Badge>
@@ -412,13 +371,7 @@ export function LeadStatusManager() {
                           {item.isSystem && (
                             <Badge
                               variant="secondary"
-                              className={cn(
-                                "text-xs",
-                                "px-1.5",
-                                "py-0",
-                                "bg-muted",
-                                "text-muted-foreground"
-                              )}
+                              className="text-xs px-1.5 py-0 bg-muted text-muted-foreground"
                             >
                               System
                             </Badge>
@@ -428,89 +381,45 @@ export function LeadStatusManager() {
 
                       {/* Actions */}
                       <TableCell>
-                        <div
-                          className={cn(
-                            "flex",
-                            "items-center",
-                            "gap-1",
-                            "justify-end",
-                            "pr-2"
-                          )}
-                        >
+                        <div className="flex items-center gap-1 justify-end pr-2">
                           {/* Move Up */}
                           <button
                             onClick={() => handleMoveUp(item.id)}
                             disabled={idx === 0}
-                            className={cn(
-                              "p-1.5",
-                              "rounded-md",
-                              "hover:bg-muted",
-                              "cursor-pointer",
-                              "disabled:opacity-30",
-                              "disabled:cursor-not-allowed"
-                            )}
+                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                             aria-label="Pindah ke atas"
                           >
-                            <ChevronUp
-                              className={cn("w-4", "h-4", "text-muted-foreground")}
-                            />
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
                           </button>
 
                           {/* Move Down */}
                           <button
                             onClick={() => handleMoveDown(item.id)}
                             disabled={idx === sortedItems.length - 1}
-                            className={cn(
-                              "p-1.5",
-                              "rounded-md",
-                              "hover:bg-muted",
-                              "cursor-pointer",
-                              "disabled:opacity-30",
-                              "disabled:cursor-not-allowed"
-                            )}
+                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                             aria-label="Pindah ke bawah"
                           >
-                            <ChevronDown
-                              className={cn("w-4", "h-4", "text-muted-foreground")}
-                            />
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
                           </button>
 
                           {/* Edit */}
                           <button
                             onClick={() => handleOpenEdit(item)}
                             disabled={item.isSystem}
-                            className={cn(
-                              "p-1.5",
-                              "rounded-md",
-                              "hover:bg-muted",
-                              "cursor-pointer",
-                              "disabled:opacity-30",
-                              "disabled:cursor-not-allowed"
-                            )}
+                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                             aria-label="Edit"
                           >
-                            <PenLine
-                              className={cn("w-4", "h-4", "text-muted-foreground")}
-                            />
+                            <PenLine className="w-4 h-4 text-muted-foreground" />
                           </button>
 
                           {/* Delete */}
                           <button
                             onClick={() => setDeleteTarget(item)}
                             disabled={item.isSystem}
-                            className={cn(
-                              "p-1.5",
-                              "rounded-md",
-                              "hover:bg-muted",
-                              "cursor-pointer",
-                              "disabled:opacity-30",
-                              "disabled:cursor-not-allowed"
-                            )}
+                            className="p-1.5 rounded-md hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                             aria-label="Hapus"
                           >
-                            <Trash2
-                              className={cn("w-4", "h-4", "text-destructive")}
-                            />
+                            <Trash2 className="w-4 h-4 text-destructive" />
                           </button>
                         </div>
                       </TableCell>
@@ -529,9 +438,9 @@ export function LeadStatusManager() {
           <DialogTitle>
             {editingItem ? "Edit Status" : "Tambah Status"}
           </DialogTitle>
-          <div className={cn("space-y-5", "pt-2")}>
+          <div className="space-y-5 pt-2">
             {/* Nama Status */}
-            <div className={cn("space-y-1.5")}>
+            <div className="space-y-1.5">
               <Label htmlFor="status-name">Nama Status</Label>
               <Input
                 id="status-name"
@@ -547,30 +456,22 @@ export function LeadStatusManager() {
             </div>
 
             {/* Warna */}
-            <div className={cn("space-y-1.5")}>
+            <div className="space-y-1.5">
               <Label>Warna</Label>
-              <div className={cn("flex", "items-center", "gap-2", "flex-wrap")}>
+              <div className="flex items-center gap-2 flex-wrap">
                 {PRESET_COLORS.map((preset) => (
                   <button
                     key={preset.value}
                     type="button"
                     onClick={() => setFormColor(preset.value)}
-                    className={cn(
-                      "w-7",
-                      "h-7",
-                      "rounded-full",
-                      "border-2",
-                      "cursor-pointer",
-                      "transition-transform",
-                      "hover:scale-110"
-                    )}
+                    className="w-7 h-7 rounded-full border-2 cursor-pointer transition-transform hover:scale-110"
                     style={{
                       backgroundColor: preset.value,
                       borderColor:
-                        formColor === preset.value ? "#1D1D1D" : "transparent",
+                        formColor === preset.value ? "currentColor" : "transparent",
                       outline:
                         formColor === preset.value
-                          ? "2px solid #1D1D1D"
+                          ? "2px solid currentColor"
                           : "2px solid transparent",
                       outlineOffset: "2px",
                     }}
@@ -579,23 +480,9 @@ export function LeadStatusManager() {
                   />
                 ))}
                 {/* Preview selected color */}
-                <div
-                  className={cn(
-                    "ml-2",
-                    "flex",
-                    "items-center",
-                    "gap-1.5",
-                    "text-sm",
-                    "text-muted-foreground"
-                  )}
-                >
+                <div className="ml-2 flex items-center gap-1.5 text-sm text-muted-foreground">
                   <span
-                    className={cn(
-                      "inline-block",
-                      "w-4",
-                      "h-4",
-                      "rounded-full"
-                    )}
+                    className="inline-block w-4 h-4 rounded-full"
                     style={{ backgroundColor: formColor }}
                   />
                   <span className="font-mono text-xs">{formColor}</span>
@@ -604,25 +491,15 @@ export function LeadStatusManager() {
             </div>
 
             {/* Set sebagai Default */}
-            <div
-              className={cn(
-                "flex",
-                "items-center",
-                "justify-between",
-                "rounded-lg",
-                "border",
-                "px-4",
-                "py-3"
-              )}
-            >
-              <div className={cn("space-y-0.5")}>
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+              <div className="space-y-0.5">
                 <Label
                   htmlFor="form-is-default"
-                  className={cn("text-sm", "font-medium", "cursor-pointer")}
+                  className="text-sm font-medium cursor-pointer"
                 >
                   Set sebagai Default
                 </Label>
-                <p className={cn("text-xs", "text-muted-foreground")}>
+                <p className="text-xs text-muted-foreground">
                   Status ini otomatis dipilih untuk lead baru
                 </p>
               </div>
@@ -634,25 +511,15 @@ export function LeadStatusManager() {
             </div>
 
             {/* Status Final */}
-            <div
-              className={cn(
-                "flex",
-                "items-center",
-                "justify-between",
-                "rounded-lg",
-                "border",
-                "px-4",
-                "py-3"
-              )}
-            >
-              <div className={cn("space-y-0.5")}>
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+              <div className="space-y-0.5">
                 <Label
                   htmlFor="form-is-final"
-                  className={cn("text-sm", "font-medium", "cursor-pointer")}
+                  className="text-sm font-medium cursor-pointer"
                 >
                   Status Final
                 </Label>
-                <p className={cn("text-xs", "text-muted-foreground")}>
+                <p className="text-xs text-muted-foreground">
                   Tandai sebagai akhir pipeline (contoh: Lost, Converted)
                 </p>
               </div>
@@ -664,24 +531,18 @@ export function LeadStatusManager() {
             </div>
 
             {/* Actions */}
-            <div className={cn("flex", "gap-3")}>
+            <div className="flex gap-3">
               <Button
                 variant="outline"
                 onClick={() => setFormOpen(false)}
-                className={cn("flex-1", "cursor-pointer")}
+                className="flex-1 cursor-pointer"
               >
                 Batal
               </Button>
               <Button
                 onClick={handleSave}
                 disabled={!formName.trim()}
-                className={cn(
-                  "flex-1",
-                  "bg-gray-900",
-                  "hover:bg-gray-800",
-                  "text-white",
-                  "cursor-pointer"
-                )}
+                className="flex-1 cursor-pointer"
               >
                 {editingItem ? "Simpan" : "Tambah"}
               </Button>
@@ -712,11 +573,7 @@ export function LeadStatusManager() {
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className={cn(
-                "bg-destructive",
-                "text-destructive-foreground",
-                "hover:bg-destructive/90"
-              )}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Hapus
             </AlertDialogAction>

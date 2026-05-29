@@ -49,7 +49,7 @@ export default function NotificationsPage() {
 
   const handleClick = (n: typeof notifications[number]) => {
     if (!n.isRead) markRead.mutate(n.id);
-    if (n.entityType === "booking") router.push("/dashboard/bookings");
+    if (n.entityType === "booking") router.push("/dashboard/booking-weddings");
   };
 
   return (

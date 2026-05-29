@@ -32,7 +32,7 @@ export function RecentBookingsTable({ bookings, loading }: RecentBookingsTablePr
     <div className={cn('flex', 'flex-col', 'gap-4', 'bg-card', 'rounded-xl', 'border', 'p-4')}>
       <div className={cn('flex', 'items-center', 'justify-between')}>
         <h3 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Recently Bookings</h3>
-        <Link href="/dashboard/bookings" className={cn('text-sm', 'font-medium', 'text-muted-foreground', 'hover:text-foreground')}>
+        <Link href="/dashboard/booking-weddings" className={cn('text-sm', 'font-medium', 'text-muted-foreground', 'hover:text-foreground')}>
           See all bookings
         </Link>
       </div>

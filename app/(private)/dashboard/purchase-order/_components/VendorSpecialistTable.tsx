@@ -24,7 +24,7 @@ import { useBookings } from "@/hooks/use-bookings";
 import { SetVendorDrawer } from "./SetVendorDrawer";
 import { CateringSelectionDrawer } from "./CateringSelectionDrawer";
 import { DecorationSelectionDrawer } from "./DecorationSelectionDrawer";
-import { BookingDetailModal } from "@/app/(private)/dashboard/bookings/_components/booking-detail-modal";
+import { BookingDetailModal } from "@/app/(private)/dashboard/booking-weddings/_components/booking-detail-modal";
 import type { BookingsResult, BookingListItem, BookingDetail } from "@/lib/queries/bookings";
 
 const STATUS_DOT: Record<string, string> = {

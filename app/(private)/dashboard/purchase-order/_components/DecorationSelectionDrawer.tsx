@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Save, Package, Printer } from "lucide-react";
 import { toast } from "sonner";
 import type { BookingDetail } from "@/lib/queries/bookings";
-import { POCateringEditorV2 } from "@/app/(private)/dashboard/bookings/_components/po-catering-editor";
+import { POCateringEditorV2 } from "@/app/(private)/dashboard/booking-weddings/_components/po-catering-editor";
 import type { POCateringV2, PORow } from "@/types/po-catering";
 import { createDefaultPOV2 } from "@/types/po-catering";
 

@@ -195,20 +195,20 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
 
               {/* Contact Person (multi) */}
               <div>
-                <FormLabel className={cn("text-sm", "font-medium")}>No. HP/WA *</FormLabel>
-                <div className={cn("mt-1", "rounded-lg", "bg-muted", "p-3", "space-y-2")}>
+                <FormLabel className="text-sm font-medium">No. HP/WA *</FormLabel>
+                <div className="mt-1 rounded-lg bg-muted p-3 space-y-2">
                   {contactNumbers.map((entry, idx) => (
-                    <div key={idx} className={cn("flex", "items-center", "gap-2", "rounded-md", "bg-white", "border", "px-3", "py-2")}>
-                      <div className={cn("flex-1", "min-w-0")}>
-                        {entry.name && <p className={cn("text-xs", "text-muted-foreground")}>{entry.name}</p>}
-                        <p className={cn("text-sm", "font-medium")}>+{entry.number}</p>
+                    <div key={idx} className="flex items-center gap-2 rounded-md bg-background border px-3 py-2">
+                      <div className="flex-1 min-w-0">
+                        {entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}
+                        <p className="text-sm font-medium">+{entry.number}</p>
                       </div>
                       <button
                         type="button"
-                        className={cn("shrink-0", "text-destructive", "hover:bg-destructive/10", "rounded-full", "p-1")}
+                        className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1"
                         onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))}
                       >
-                        <X className={cn("w-3.5", "h-3.5")} />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -220,7 +220,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                     }}
                   >
                     <PopoverTrigger render={
-                      <Button type="button" variant="outline" className="w-full text-xs h-8 bg-white">
+                      <Button type="button" variant="outline" className="w-full text-xs h-8">
                         Tambah Nomor
                       </Button>
                     } />
@@ -508,7 +508,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
         </div>
 
         {/* Footer actions */}
-        <div className="sticky bottom-0 bg-white pt-4">
+        <div className="sticky bottom-0 bg-background pt-4">
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -519,7 +519,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
             </Button>
             <Button
               onClick={form.handleSubmit(onSubmit)}
-              className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer"
+              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
             >
               {isEdit ? "Simpan" : "Tambah"}
             </Button>

@@ -43,7 +43,7 @@ export function NotificationBell() {
 
   const handleClick = (n: typeof notifications[number]) => {
     if (!n.isRead) markRead.mutate(n.id);
-    router.push("/dashboard/bookings");
+    router.push("/dashboard/booking-weddings");
     setOpen(false);
   };
 
