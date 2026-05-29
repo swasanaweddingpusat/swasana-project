@@ -25,7 +25,7 @@ export function Header() {
     <header className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-4")}>
       <div className={cn("flex items-center gap-2 min-w-0")}>
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mx-1 h-4 self-center" />
+        <Separator orientation="vertical" className="mx-1 h-4 self-center! data-vertical:self-center" />
         {meta && (
           <div className="min-w-0">
             <h1 className={cn("text-sm font-semibold truncate text-foreground")}>
