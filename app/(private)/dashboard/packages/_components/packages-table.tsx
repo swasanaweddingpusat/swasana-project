@@ -207,8 +207,8 @@ export function PackagesTable() {
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <SearchBar placeholder="Search packages..." />
               {selectedIds.size > 0 && can("package", "delete") && (
-                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                  <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} /> Delete ({selectedIds.size})
+                <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
+                  <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Delete ({selectedIds.size})
                 </Button>
               )}
               {canCreate("package") && (

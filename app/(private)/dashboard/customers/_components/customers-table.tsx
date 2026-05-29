@@ -161,8 +161,8 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
             <div className={cn('flex', 'items-center', 'gap-2')}>
               {selectedIds.size > 0 && (
                 <PermissionGate module="customers" action="delete">
-                  <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                    <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} /> Hapus ({selectedIds.size})
+                  <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+                    <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Hapus ({selectedIds.size})
                   </Button>
                 </PermissionGate>
               )}
