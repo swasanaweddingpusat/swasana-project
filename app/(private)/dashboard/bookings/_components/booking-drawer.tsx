@@ -46,6 +46,7 @@ interface PackageData {
     variantName: string;
     pax: number;
     margin: number;
+    sellingPrice: number;
     categoryPrices: CategoryPriceEntry[];
   }[];
 }
@@ -83,6 +84,7 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
 }
 
 function getVariantPrice(v: PackageData["variants"][number]) {
+  if (v.sellingPrice > 0) return v.sellingPrice;
   const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
   return base + Math.round(base * ((v.margin ?? 0) / 100));
 }
@@ -339,6 +341,10 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const margin = selectedVariantData?.margin ?? 0;
 
   const step2Price = (() => {
+    const hasTakeout = visibleCategories.some((c) => categoryToggles[c.categoryName]);
+    if (!hasTakeout && selectedVariantData?.sellingPrice && selectedVariantData.sellingPrice > 0) {
+      return selectedVariantData.sellingPrice;
+    }
     const visibleBase = visibleCategories.reduce(
       (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
       0,
@@ -1029,7 +1035,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     control={form.control}
                     name="withMaterai"
                     render={({ field }) => (
-                      <FormItem className="rounded-lg border p-3 space-y-2 hidden">
+                      <FormItem className="rounded-lg border p-3 space-y-2">
                         <div className="flex flex-row items-center justify-between gap-3">
                           <FormLabel className="text-sm font-medium">E-Meterai <span className="font-normal text-muted-foreground">(opsional)</span></FormLabel>
                           <FormControl>

@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Settings2, ClipboardCheck, RefreshCw, FileText } from "lucide-react";
+import { Trash2, ArrowLeft, ArrowRight, PenLine, Eye, Plus, Settings2, ClipboardCheck, RefreshCw, FileText, ScanText, MoreVertical } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable } from "@/hooks/use-packages";
-import type { PackageQueryItem } from "@/lib/queries/packages";
+import type { PackageQueryItem, PackagesQueryResult } from "@/lib/queries/packages";
 import { toast } from "sonner";
 import SearchBar from "@/components/shared/search-bar";
 import { DrawerPackage } from "./drawer-package";
@@ -24,6 +24,7 @@ import { DrawerFinance } from "./drawer-finance";
 import { ApprovalDialog } from "./approval-dialog";
 import { ApproveModal } from "./approve-modal";
 import { VariantTCDrawer } from "./variant-tc-drawer";
+import { POPreviewModal } from "./po-preview-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 const formatCurrency = (amount: number) =>
@@ -81,6 +82,13 @@ export function PackagesTable() {
   const { user } = useCurrentUser();
   const [tcDrawerOpen, setTcDrawerOpen] = useState(false);
   const [tcPkg, setTcPkg] = useState<PackageQueryItem | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTarget, setPreviewTarget] = useState<{
+    packageId: string;
+    variantId: string;
+    packageName: string;
+    variantName: string;
+  } | null>(null);
   const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals();
 
   // Map approvals by entityId for quick lookup
@@ -113,6 +121,7 @@ export function PackagesTable() {
     if (!pkg.variants?.length) return "-";
     const prices = pkg.variants
       .map((v) => {
+        if (v.sellingPrice > 0) return v.sellingPrice;
         const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
         return base + Math.round(base * ((v.margin ?? 0) / 100));
       })
@@ -296,22 +305,22 @@ export function PackagesTable() {
                     </TableCell>
                     <TableCell>
                       <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
-                        {can("package", "view") && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                              onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
-                            >
-                              <Eye className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                            </TooltipTrigger>
-                            <TooltipContent>Lihat Detail</TooltipContent>
-                          </Tooltip>
-                        )}
                         {can("package", "term-&-condition") && (
                           <Tooltip>
                             <TooltipTrigger
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                              onClick={() => { setTcPkg(pkg); setTcDrawerOpen(true); }}
+                              onClick={async () => {
+                                try {
+                                  await qc.refetchQueries({ queryKey: ["packages"] });
+                                  const fresh = qc.getQueryData<PackagesQueryResult>(["packages", undefined]);
+                                  const freshPkg = fresh?.data.find((p) => p.id === pkg.id) ?? pkg;
+                                  setTcPkg(freshPkg);
+                                } catch {
+                                  toast.error("Gagal memuat data terbaru");
+                                  setTcPkg(pkg);
+                                }
+                                setTcDrawerOpen(true);
+                              }}
                             >
                               <FileText className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                             </TooltipTrigger>
@@ -388,16 +397,68 @@ export function PackagesTable() {
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
                         )}
-                        {can("package", "delete") && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                              onClick={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
-                            >
-                              <Trash2 className={cn('h-4', 'w-4', 'text-red-500')} />
-                            </TooltipTrigger>
-                            <TooltipContent>Hapus</TooltipContent>
-                          </Tooltip>
+                        {(can("package", "view") || can("package", "delete")) && (
+                          <DropdownMenu>
+                            <Tooltip>
+                              <DropdownMenuTrigger asChild>
+                                <TooltipTrigger
+                                  className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                                >
+                                  <MoreVertical className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                                </TooltipTrigger>
+                              </DropdownMenuTrigger>
+                              <TooltipContent>Lainnya</TooltipContent>
+                            </Tooltip>
+                            <DropdownMenuContent align="end">
+                              {can("package", "view") && (
+                                <DropdownMenuItem
+                                  onSelect={() => { setDetailPkg(pkg); setDetailOpen(true); }}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  Lihat Detail
+                                </DropdownMenuItem>
+                              )}
+                              {can("package", "view") && Boolean(pkg.variants?.length) && (
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger>
+                                    <ScanText className="mr-2 h-4 w-4" />
+                                    Preview PO
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    {pkg.variants?.map((v) => (
+                                      <DropdownMenuItem
+                                        key={v.id}
+                                        onSelect={() => {
+                                          setPreviewTarget({
+                                            packageId: pkg.id,
+                                            variantId: v.id,
+                                            packageName: pkg.packageName,
+                                            variantName: v.variantName,
+                                          });
+                                          setPreviewOpen(true);
+                                        }}
+                                      >
+                                        {v.variantName}
+                                        <span className="ml-2 text-muted-foreground">({v.pax} pax)</span>
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                              )}
+                              {can("package", "delete") && (
+                                <>
+                                  {can("package", "view") && <DropdownMenuSeparator />}
+                                  <DropdownMenuItem
+                                    onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Hapus
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                     </TableCell>
@@ -478,6 +539,12 @@ export function PackagesTable() {
         open={tcDrawerOpen}
         onClose={() => { setTcDrawerOpen(false); setTcPkg(null); }}
         pkg={tcPkg}
+      />
+
+      <POPreviewModal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        target={previewTarget}
       />
 
       {/* Delete Confirm */}

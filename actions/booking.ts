@@ -202,12 +202,15 @@ export async function createBooking(data: unknown) {
         (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
       // Hidden categories (isShow=false) always included; visible ones respect isTakeout toggle
+      const hasTakeout = (input.categoryToggles ?? []).some((t) => t.isTakeout);
       const variantBase = variant.categoryPrices.reduce((sum, c) => {
         if (!c.isShow) return sum + c.basePrice;
         const isTakeout = toggleMap.get(c.categoryName) ?? false;
         return isTakeout ? sum : sum + c.basePrice;
       }, 0);
-      const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
+      const variantPrice = (!hasTakeout && variant.sellingPrice > 0)
+        ? variant.sellingPrice
+        : variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
       ops.push(
         db.snapPackageVariant.create({
           data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
@@ -303,6 +306,17 @@ export async function createBooking(data: unknown) {
       );
     }
 
+    ops.push(
+      db.clientAgreement.create({
+        data: {
+          bookingId,
+          token: crypto.randomUUID(),
+          accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      })
+    );
+
     await db.$transaction(ops);
 
     await logAudit({
@@ -314,8 +328,12 @@ export async function createBooking(data: unknown) {
       description: `Created booking for ${customerData.name}`,
     });
 
-    // Create initial PO revision snapshot
-    await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
+    // Create initial PO revision snapshot + link approval steps
+    const revisionId = await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
+    await db.approvalRecordStep.updateMany({
+      where: { record: { module: "booking", entityId: bookingId } },
+      data: { revisionId },
+    });
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
@@ -617,12 +635,15 @@ export async function editBooking(data: unknown) {
         const toggleMap = new Map(
           (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
         );
+        const hasTakeout = (parsed.data.categoryToggles ?? []).some((t) => t.isTakeout);
         const variantBase = variant.categoryPrices.reduce((sum, c) => {
           if (!c.isShow) return sum + c.basePrice;
           const isTakeout = toggleMap.get(c.categoryName) ?? false;
           return isTakeout ? sum : sum + c.basePrice;
         }, 0);
-        const variantPrice = variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
+        const variantPrice = (!hasTakeout && variant.sellingPrice > 0)
+          ? variant.sellingPrice
+          : variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
 
         // Upsert variant snapshot
         ops.push(
@@ -692,16 +713,19 @@ export async function editBooking(data: unknown) {
 
     await db.$transaction(ops);
 
-    // Append new approval round — only when package/venue/variant changed
+    // Reset approval + create revision — only when package/venue/variant changed
     if (venueChanged || packageChanged || variantChanged) {
+    const reasons: string[] = [];
+    if (venueChanged) reasons.push("venue");
+    if (packageChanged) reasons.push("package");
+    if (variantChanged) reasons.push("variant");
+    const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
+
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: id } },
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
     if (approvalRecord) {
-      const maxStepOrder = approvalRecord.steps.reduce((max, s) => Math.max(max, s.stepOrder), 0);
-
-      // Get flow template for new steps
       const flow = await db.approvalFlow.findUnique({
         where: { module: "booking" },
         include: { steps: { orderBy: { sortOrder: "asc" } } },
@@ -714,7 +738,6 @@ export async function editBooking(data: unknown) {
         );
 
         const newStepOps: Prisma.PrismaPromise<unknown>[] = flow.steps.map((flowStep, i) => {
-          const stepOrder = maxStepOrder + 1 + i;
           const shouldAutoApprove = flowStep.approverType !== "client" && (
             creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
           );
@@ -722,7 +745,7 @@ export async function editBooking(data: unknown) {
           return db.approvalRecordStep.create({
             data: {
               recordId: approvalRecord.id,
-              stepOrder,
+              stepOrder: i + 1,
               approverType: flowStep.approverType,
               approverRoleId: flowStep.approverRoleId,
               approverUserId: flowStep.approverUserId,
@@ -730,11 +753,13 @@ export async function editBooking(data: unknown) {
               decidedById: shouldAutoApprove ? session!.user.profileId : null,
               decidedAt: shouldAutoApprove ? new Date() : null,
               signature: isCreatorStep ? (rest.signatureSales ?? null) : null,
+              revisionId,
             },
           });
         });
 
         await db.$transaction([
+          db.approvalRecordStep.deleteMany({ where: { recordId: approvalRecord.id } }),
           db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
           db.booking.update({ where: { id }, data: { bookingStatus: "Pending" } }),
           ...newStepOps,
@@ -797,15 +822,6 @@ export async function editBooking(data: unknown) {
       })(),
       description: `Edited booking for ${customerName}`,
     });
-
-    // Create new revision if package/venue/variant changed
-    if (venueChanged || packageChanged || variantChanged) {
-      const reasons: string[] = [];
-      if (venueChanged) reasons.push("venue");
-      if (packageChanged) reasons.push("package");
-      if (variantChanged) reasons.push("variant");
-      await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
-    }
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");

@@ -1,14 +1,22 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Plus } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Plus, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Drawer } from "@/components/shared/drawer";
 import { updateVariantTC } from "@/actions/package";
@@ -75,9 +83,11 @@ interface Props {
 }
 
 export function VariantTCDrawer({ open, onClose, pkg }: Props) {
+  const qc = useQueryClient();
   const variants = pkg?.variants ?? [];
   const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [draftMap, setDraftMap] = useState<Record<string, string>>({});
 
   const selectedVariant = variants.find((v) => v.id === selectedVariantId);
   const initialTC = (selectedVariant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
@@ -110,7 +120,7 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     setSelectedVariantId(first.id); // eslint-disable-line react-hooks/set-state-in-effect
     const tc = (first as { termAndCondition?: string | null }).termAndCondition ?? "";
     editor?.commands.setContent(tc);
-  }, [open, pkg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, pkg, variants, editor]);
 
   const insertVariable = useCallback(
     (key: string) => {
@@ -120,11 +130,21 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     [editor]
   );
 
+  function handleCopyFromVariant(sourceId: string) {
+    const source = variants.find((v) => v.id === sourceId);
+    const tc = (source as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
+    editor?.commands.setContent(tc);
+    setDraftMap((prev) => ({ ...prev, [selectedVariantId]: tc }));
+  }
+
   function handleVariantChange(id: string) {
+    if (editor && selectedVariantId) {
+      setDraftMap((prev) => ({ ...prev, [selectedVariantId]: editor.getHTML() }));
+    }
     setSelectedVariantId(id);
     const variant = variants.find((v) => v.id === id);
-    const tc = (variant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
-    editor?.commands.setContent(tc);
+    const dbTC = (variant as { termAndCondition?: string | null } | undefined)?.termAndCondition ?? "";
+    editor?.commands.setContent(draftMap[id] ?? dbTC);
   }
 
   async function handleSave() {
@@ -136,15 +156,26 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
     setSaving(false);
     if (res.success) {
       toast.success("T&C berhasil disimpan.");
+      setDraftMap((prev) => {
+        const next = { ...prev };
+        delete next[selectedVariantId];
+        return next;
+      });
+      await qc.invalidateQueries({ queryKey: ["packages"] });
     } else {
       toast.error(res.error);
     }
   }
 
+  function handleClose() {
+    setDraftMap({});
+    onClose();
+  }
+
   return (
     <Drawer
       isOpen={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={`Term & Condition — ${pkg?.packageName ?? ""}`}
       maxWidth="sm:max-w-full"
       childrenClassName="overflow-hidden flex flex-col"
@@ -163,18 +194,40 @@ export function VariantTCDrawer({ open, onClose, pkg }: Props) {
         {/* Variant Selector */}
         <div className="shrink-0">
           <Label className="text-sm font-medium mb-1 block">Variant</Label>
-          <Select value={selectedVariantId} onValueChange={handleVariantChange}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Pilih variant" />
-            </SelectTrigger>
-            <SelectContent>
-              {variants.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.variantName} — {v.pax} PAX
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedVariantId} onValueChange={handleVariantChange}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih variant" />
+              </SelectTrigger>
+              <SelectContent>
+                {variants.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.variantName} — {v.pax} PAX
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {variants.length > 1 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0">
+                    <Copy className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel className="text-xs">Salin dari varian</DropdownMenuLabel>
+                  {variants
+                    .filter((v) => v.id !== selectedVariantId)
+                    .map((v) => (
+                      <DropdownMenuItem key={v.id} onSelect={() => handleCopyFromVariant(v.id)}>
+                        {v.variantName} — {v.pax} PAX
+                      </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
 
         {/* Editor + Variable Panel */}

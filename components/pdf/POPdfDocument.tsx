@@ -459,12 +459,17 @@ interface POPdfDocumentProps {
   logoBase64?: string | null;
   termAndConditionHtml?: string | null;
   ematerai?: { sn: string; qrBase64: string } | null;
+  previewMode?: boolean;
 }
 
-export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, ematerai }: POPdfDocumentProps) {
+export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, ematerai, previewMode }: POPdfDocumentProps) {
   const tableRows = buildTableRows(booking);
   const termsList = getTerms(booking);
-  const resolvedTcHtml = termAndConditionHtml ? replaceVariables(termAndConditionHtml, booking) : null;
+  const resolvedTcHtml = termAndConditionHtml
+    ? previewMode
+      ? termAndConditionHtml
+      : replaceVariables(termAndConditionHtml, booking)
+    : null;
   const brandName = booking.snapVenue?.brandName ?? "";
   const venueName = booking.snapVenue?.venueName ?? "";
   const varSnap = booking.snapPackageVariant;

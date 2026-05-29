@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { buildResetApprovalOps } from "@/lib/approval-helpers";
+import { createNotifications } from "@/lib/notifications";
 import {
   createPackageSchema,
   updatePackageSchema,
@@ -221,52 +223,228 @@ export async function deleteBulkPackages(ids: string[]) {
 
 // ─── Variant CRUD ────────────────────────────────────────────────────────────
 
-export async function createVariant(data: unknown) {
+export async function createVariant(data: unknown): Promise<
+  { success: true; data: { id: string } } | { success: false; error: string }
+> {
   const permResult = await requirePermission({ module: "package", action: "create" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
-  if (!mutationLimiter.check(`variant-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`variant-create:${session.user.id}`))
+    return { success: false, ...rateLimitError() };
 
   const parsed = createVariantSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
+  const { packageId } = parsed.data;
+
   try {
-    const variant = await db.packageVariant.create({ data: parsed.data });
+    const pkg = await db.package.findUnique({
+      where: { id: packageId },
+      select: { approvalStatus: true },
+    });
+    if (!pkg) return { success: false, error: "Package tidak ditemukan." };
+
+    const variantId = crypto.randomUUID();
+
+    if (pkg.approvalStatus === "approved") {
+      const resetOps = await buildResetApprovalOps(packageId, {
+        profileId: session.user.profileId,
+        roleId: session.user.roleId,
+      });
+
+      await db.$transaction([
+        db.packageVariant.create({ data: { id: variantId, ...parsed.data } }),
+        ...resetOps,
+      ]);
+
+      await logAudit({
+        userId: session.user.id,
+        action: "package.approval_reset",
+        entityType: "package",
+        entityId: packageId,
+        description: `Approval reset: variant baru ditambahkan ke approved package`,
+      });
+    } else {
+      await db.$transaction([
+        db.packageVariant.create({ data: { id: variantId, ...parsed.data } }),
+      ]);
+    }
+
+    await logAudit({
+      userId: session.user.id,
+      action: "packages.variant_create",
+      entityType: "packageVariant",
+      entityId: variantId,
+      description: `Created variant for package ${packageId}`,
+    });
+
     revalidateTag("packages", "max");
-    return { success: true, data: variant };
+    return { success: true, data: { id: variantId } };
   } catch (e) {
     console.error("[createVariant]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }
 
-export async function updateVariant(id: string, data: unknown) {
+export async function updateVariant(id: string, data: unknown): Promise<
+  { success: true; data: { id: string } } | { success: false; error: string }
+> {
   const permResult = await requirePermission({ module: "package", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
-  if (!mutationLimiter.check(`variant-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`variant-update:${session.user.id}`))
+    return { success: false, ...rateLimitError() };
 
   const parsed = updateVariantSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
-    const variant = await db.packageVariant.update({ where: { id }, data: parsed.data });
+    const existing = await db.packageVariant.findUnique({
+      where: { id },
+      select: {
+        variantName: true,
+        pax: true,
+        packageId: true,
+        package: { select: { approvalStatus: true } },
+      },
+    });
+    if (!existing) return { success: false, error: "Variant tidak ditemukan." };
+
+    const { packageId } = existing;
+    const approvalStatus = existing.package.approvalStatus;
+
+    const incomingName = parsed.data.variantName?.trim();
+    const incomingPax = parsed.data.pax;
+    const nameChanged =
+      incomingName !== undefined && incomingName !== existing.variantName.trim();
+    const paxChanged =
+      incomingPax !== undefined && incomingPax !== existing.pax;
+    const shouldReset = approvalStatus === "approved" && (nameChanged || paxChanged);
+
+    if (shouldReset) {
+      const resetOps = await buildResetApprovalOps(packageId, {
+        profileId: session.user.profileId,
+        roleId: session.user.roleId,
+      });
+
+      await db.$transaction([
+        db.packageVariant.update({ where: { id }, data: parsed.data }),
+        ...resetOps,
+      ]);
+
+      await logAudit({
+        userId: session.user.id,
+        action: "package.approval_reset",
+        entityType: "package",
+        entityId: packageId,
+        description: `Approval reset: name/pax variant berubah pada approved package`,
+      });
+    } else {
+      await db.$transaction([
+        db.packageVariant.update({ where: { id }, data: parsed.data }),
+      ]);
+    }
+
+    await logAudit({
+      userId: session.user.id,
+      action: "packages.variant_update",
+      entityType: "packageVariant",
+      entityId: id,
+      description: `Updated variant ${id}`,
+    });
+
     revalidateTag("packages", "max");
-    return { success: true, data: variant };
+    return { success: true, data: { id } };
   } catch (e) {
     console.error("[updateVariant]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }
 
-export async function deleteVariant(id: string) {
+export async function deleteVariant(id: string): Promise<
+  { success: true } | { success: false; error: string }
+> {
   const permResult = await requirePermission({ module: "package", action: "delete" });
   if (permResult.error) return { success: false, error: permResult.error };
   const session = permResult.session!;
-  if (!mutationLimiter.check(`variant-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`variant-delete:${session.user.id}`))
+    return { success: false, ...rateLimitError() };
 
   try {
-    await db.packageVariant.delete({ where: { id } });
+    const variant = await db.packageVariant.findUnique({
+      where: { id },
+      select: {
+        variantName: true,
+        packageId: true,
+        package: {
+          select: {
+            approvalStatus: true,
+            packageName: true,
+          },
+        },
+      },
+    });
+    if (!variant) return { success: false, error: "Variant tidak ditemukan." };
+
+    const { packageId } = variant;
+    const approvalStatus = variant.package.approvalStatus;
+
+    if (approvalStatus === "approved") {
+      await db.$transaction([
+        db.packageVariant.update({
+          where: { id },
+          data: { deletedAt: new Date() },
+        }),
+      ]);
+
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "package", entityId: packageId } },
+        select: {
+          steps: {
+            where: { status: "approved" },
+            select: { decidedById: true },
+          },
+        },
+      });
+
+      const decidedByIds = (approvalRecord?.steps ?? [])
+        .map((s) => s.decidedById)
+        .filter((profileId): profileId is string => profileId !== null);
+
+      if (decidedByIds.length > 0) {
+        void createNotifications(
+          decidedByIds.map((userId) => ({
+            userId,
+            title: "Variant Paket Dihapus",
+            message: `Variant "${variant.variantName}" dari package "${variant.package.packageName}" telah dihapus.`,
+            type: "package",
+            entityType: "package",
+            entityId: packageId,
+          }))
+        );
+      }
+
+      await logAudit({
+        userId: session.user.id,
+        action: "package.variant_soft_deleted",
+        entityType: "packageVariant",
+        entityId: id,
+        description: `Soft deleted variant "${variant.variantName}" dari package ${packageId}`,
+      });
+    } else {
+      await db.$transaction([
+        db.packageVariant.delete({ where: { id } }),
+      ]);
+
+      await logAudit({
+        userId: session.user.id,
+        action: "packages.variant_delete",
+        entityType: "packageVariant",
+        entityId: id,
+        description: `Deleted variant ${id}`,
+      });
+    }
+
     revalidateTag("packages", "max");
     return { success: true };
   } catch (e) {
@@ -346,7 +524,8 @@ export async function saveInternalItems(
 export async function saveVariantPrices(
   variantId: string,
   categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[],
-  margin: number
+  margin: number,
+  sellingPrice: number
 ) {
   const permResult = await requirePermission({ module: "package", action: "set-harga" });
   if (permResult.error) return { success: false, error: permResult.error };
@@ -365,7 +544,7 @@ export async function saveVariantPrices(
           isShow: c.isShow,
         })),
       }),
-      db.packageVariant.update({ where: { id: variantId }, data: { margin } }),
+      db.packageVariant.update({ where: { id: variantId }, data: { margin, sellingPrice } }),
     ]);
 
     revalidateTag("packages", "max");

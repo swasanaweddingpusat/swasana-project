@@ -15,6 +15,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { cn } from "@/lib/utils";
 import { editBooking } from "@/actions/booking";
@@ -28,7 +29,8 @@ interface Props {
 }
 
 interface VenueOption { id: string; name: string }
-interface PackageVariant { id: string; variantName: string; pax: number; margin: number; categoryPrices: { basePrice: number }[] }
+interface CategoryPriceEntry { id: string; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }
+interface PackageVariant { id: string; variantName: string; pax: number; margin: number; sellingPrice: number; categoryPrices: CategoryPriceEntry[] }
 interface PackageOption { id: string; packageName: string; variants: PackageVariant[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
@@ -45,6 +47,7 @@ function fmtRp(n: number) {
 }
 
 function getVariantPrice(v: PackageVariant) {
+  if (v.sellingPrice > 0) return v.sellingPrice;
   const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
   return base + Math.round(base * ((v.margin ?? 0) / 100));
 }
@@ -95,14 +98,17 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [weddingType, setWeddingType] = useState("");
   const [sourceOfInformationId, setSourceOfInformationId] = useState("");
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
+  const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({});
 
-  // Step 2 state
+  // Step 2 state (Kategori Harga) is managed via categoryToggles above
+
+  // Step 3 state (Term of Payments)
   const [specialBonusName, setSpecialBonusName] = useState("Discount");
   const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [terms, setTerms] = useState<TermRow[]>([]);
 
-  // Step 3 state
+  // Step 4 state (Signature)
   const [signingLocation, setSigningLocation] = useState("");
   const [signatureSales, setSignatureSales] = useState("");
   const sigSalesRef = useRef<SignatureCanvas>(null);
@@ -135,6 +141,26 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const selectedPkg = packages.find((p) => p.id === packageId);
   const variants = useMemo(() => selectedPkg?.variants ?? [], [selectedPkg]);
 
+  // Computed: selected variant's category prices
+  const selectedVariantData = variants.find((v) => v.id === variantId);
+  const allCategoryPrices = selectedVariantData?.categoryPrices ?? [];
+  const visibleCategories = allCategoryPrices.filter((c) => c.isShow);
+  const hiddenCategoriesBase = allCategoryPrices.filter((c) => !c.isShow).reduce((sum, c) => sum + c.basePrice, 0);
+  const variantMargin = selectedVariantData?.margin ?? 0;
+
+  const step2Price = (() => {
+    const visibleBase = visibleCategories.reduce(
+      (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
+      0,
+    );
+    const base = visibleBase + hiddenCategoriesBase;
+    return base + Math.round(base * (variantMargin / 100));
+  })();
+
+  const isStep2Complete =
+    visibleCategories.length === 0 ||
+    visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
+
   // Initialize state from booking
   useEffect(() => {
     if (!open || !booking) return;
@@ -158,12 +184,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setSpecialBonusAmount(Number((booking as Record<string, unknown>).discountAmount) || 0);
     setSignatureSales("");
     sigSalesRef.current?.clear();
+    setCategoryToggles({});
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
     setTerms(bTerms.length > 0 ? bTerms : [{ name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0 }]);
     // Variant price
     setSelectedVariantPrice(Number(booking.snapPackageVariant?.price ?? 0));
-  }, [open, booking]);  
+  }, [open, booking]);
 
   // Init detail fields
   useEffect(() => {
@@ -174,6 +201,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setContactBitrixId(detail.customer?.bitrixId ?? "");
     if (detail.snapBonuses?.length && bonuses.length === 0) {
       setBonuses(detail.snapBonuses.map((b: Record<string, unknown>) => ({ vendorId: b.vendorId as string, vendorCategoryId: b.vendorCategoryId as string, vendorName: b.vendorName as string, description: (b.description as string) ?? "", qty: Number(b.qty) || 1, nominal: Number(b.nominal) || 0 })));
+    }
+    // Load existing category toggles from saved snapPackageCategoryPrices
+    if (detail.snapPackageCategoryPrices?.length) {
+      const toggleMap: Record<string, boolean> = {};
+      for (const cp of detail.snapPackageCategoryPrices as Array<{ categoryName: string; isTakeout: boolean; isShow: boolean }>) {
+        if (cp.isShow) toggleMap[cp.categoryName] = cp.isTakeout;
+      }
+      setCategoryToggles(toggleMap);
     }
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -247,19 +282,24 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     paymentMethodId !== (booking.paymentMethodId ?? "") ||
     signingLocation !== (booking.signingLocation ?? "")
   );
-  const totalSteps = hasSignificantChange ? 3 : 1;
+  const totalSteps = hasSignificantChange ? 4 : 1;
 
   // Validation
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && venueId && packageId && bookingDate && weddingSession && weddingType && (variants.length === 0 || variantId));
-  const isStep2Complete = getBasePrice() === 0 || getDifference() === 0;
-  const isStep3Complete = !!signatureSales && !!signingLocation.trim();
+  const isStep3Complete = getBasePrice() === 0 || getDifference() === 0;
+  const isStep4Complete = !!signatureSales && !!signingLocation.trim();
 
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi."); return; }
-    if (currentStep === 2 && getBasePrice() > 0 && getDifference() !== 0) { toast.error(`Selisih: Rp${fmtRp(Math.abs(getDifference()))}`); return; }
+    if (currentStep === 2 && !isStep2Complete) { toast.error("Minimal satu kategori harus tetap included."); return; }
+    if (currentStep === 2) {
+      setSelectedVariantPrice(step2Price);
+      allocatePrice(step2Price, specialBonusAmount);
+    }
+    if (currentStep === 3 && getBasePrice() > 0 && getDifference() !== 0) { toast.error(`Selisih: Rp${fmtRp(Math.abs(getDifference()))}`); return; }
     if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
   };
-  const handlePrevious = () => { if (currentStep > 1) { if (currentStep === 3) { sigSalesRef.current?.clear(); setSignatureSales(""); } setCurrentStep(currentStep - 1); } };
+  const handlePrevious = () => { if (currentStep > 1) { if (currentStep === 4) { sigSalesRef.current?.clear(); setSignatureSales(""); } setCurrentStep(currentStep - 1); } };
 
   const mut = useMutation({
     mutationFn: (data: Parameters<typeof editBooking>[0]) => editBooking(data),
@@ -280,12 +320,19 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       signingLocation: signingLocation || null,
       customerName, contactNumbers: JSON.stringify(contactNumbers), contactEmail, contactNik, contactKtpAddress, contactBitrixId,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
-      // Only include TOP + signature if significant change (step 2 & 3 were shown)
+      // Only include TOP + signature + categoryToggles if significant change (steps 2-4 were shown)
       ...(hasSignificantChange ? {
         termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ id: t.id, name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
         specialBonusName: specialBonusName || null,
         specialBonusAmount: specialBonusAmount || null,
         signatureSales: signatureSales || null,
+        categoryToggles: allCategoryPrices.map((c) => ({
+          categoryName: c.categoryName,
+          basePrice: c.basePrice,
+          sortOrder: c.sortOrder,
+          isShow: c.isShow,
+          isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
+        })),
       } : {}),
     });
     if (!r.success) { toast.error(r.error); return; }
@@ -293,7 +340,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     onOpenChange(false);
   }
 
-  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (currentStep === 1 && !hasSignificantChange && !hasAnyChange) || (hasSignificantChange && currentStep === 2 && !isStep2Complete) || (hasSignificantChange && currentStep === 3 && !isStep3Complete) || mut.isPending;
+  const isContinueDisabled = (currentStep === 1 && !isStep1Complete) || (currentStep === 1 && !hasSignificantChange && !hasAnyChange) || (hasSignificantChange && currentStep === 2 && !isStep2Complete) || (hasSignificantChange && currentStep === 3 && !isStep3Complete) || (hasSignificantChange && currentStep === 4 && !isStep4Complete) || mut.isPending;
 
   const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
 
@@ -332,14 +379,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div><label className={LBL}>Bitrix ID</label><Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" /></div>
 
               {/* Venue */}
-              <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setVariantId(""); setSelectedVariantPrice(0); setPaymentMethodId(""); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
+              <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setVariantId(""); setSelectedVariantPrice(0); setPaymentMethodId(""); setCategoryToggles({}); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
 
               {/* Package */}
-              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={packageId} onChange={(id) => { setPackageId(id); setVariantId(""); setSelectedVariantPrice(0); }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
+              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={packageId} onChange={(id) => { setPackageId(id); setVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
 
               {/* Variant */}
               {variants.length > 0 && (
-                <div><label className={LBL}>Pilih Tipe Paket *</label><SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={variantId} onChange={(id) => { setVariantId(id); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" /></div>
+                <div><label className={LBL}>Pilih Tipe Paket *</label><SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={variantId} onChange={(id) => { setVariantId(id); setCategoryToggles({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" /></div>
               )}
 
               {/* Event Date */}
@@ -390,8 +437,58 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             </div>
           )}
 
-          {/* ─── Step 2: Term of Payments ─── */}
+          {/* ─── Step 2: Kategori Harga Package ─── */}
           {currentStep === 2 && (
+            <div className="space-y-4">
+              <div>
+                <p className={cn("text-sm", "font-medium", "text-gray-700")}>Kategori Harga Package</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-3">
+                  Tandai kategori sebagai takeout jika klien menyediakan sendiri. Harga otomatis berkurang.
+                </p>
+              </div>
+              {visibleCategories.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  Tidak ada kategori harga untuk variant ini.
+                </p>
+              )}
+              <div className="space-y-2">
+                {visibleCategories.map((cat) => {
+                  const isTakeout = categoryToggles[cat.categoryName] ?? false;
+                  return (
+                    <div
+                      key={cat.categoryName}
+                      className={cn("flex", "items-center", "justify-between", "rounded-lg", "border", "p-3", isTakeout && "border-destructive/30 bg-destructive/5")}
+                    >
+                      <div>
+                        <p className={cn("text-sm font-medium", isTakeout && "line-through text-muted-foreground")}>{cat.categoryName}</p>
+                        <p className={cn("text-xs text-muted-foreground", isTakeout && "line-through")}>
+                          Rp{fmtRp(cat.basePrice)}
+                        </p>
+                      </div>
+                      <div className={cn("flex", "items-center", "gap-2")}>
+                        <span className={cn("text-xs", isTakeout ? "text-destructive font-medium" : "text-muted-foreground")}>Takeout</span>
+                        <Switch
+                          checked={isTakeout}
+                          onCheckedChange={(v) =>
+                            setCategoryToggles((prev) => ({ ...prev, [cat.categoryName]: v }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className={cn("rounded-lg", "bg-muted/30", "p-3", "space-y-1")}>
+                <div className={cn("flex", "justify-between", "text-sm")}>
+                  <span className="text-muted-foreground">Harga setelah takeout</span>
+                  <span className="font-semibold">Rp{fmtRp(step2Price)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Step 3: Term of Payments ─── */}
+          {currentStep === 3 && (
             <div className="space-y-4">
               <div><label className={LBL}>Total Harga Package</label><Input disabled value={`Rp${fmtRp(getPriceAfterDiscount())}`} className="mt-1" /></div>
 
@@ -441,8 +538,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             </div>
           )}
 
-          {/* ─── Step 3: Signature ─── */}
-          {currentStep === 3 && (
+          {/* ─── Step 4: Signature ─── */}
+          {currentStep === 4 && (
             <div className="space-y-6">
               <div><label className={cn(LBL, 'mb-2 block')}>Lokasi Tanda Tangan *</label><Input placeholder="Contoh: Jakarta, Bandung..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} /></div>
               <div>

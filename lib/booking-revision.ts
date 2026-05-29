@@ -19,7 +19,7 @@ export async function createBookingRevision(
   bookingId: string,
   createdById: string,
   reason?: string,
-): Promise<void> {
+): Promise<string> {
   const booking = await db.booking.findUniqueOrThrow({
     where: { id: bookingId },
     include: snapshotInclude,
@@ -55,7 +55,7 @@ export async function createBookingRevision(
     discountAmount: booking.discountAmount,
   };
 
-  await db.bookingRevision.create({
+  const revision = await db.bookingRevision.create({
     data: {
       bookingId,
       revisionNumber,
@@ -73,4 +73,6 @@ export async function createBookingRevision(
       createdById,
     },
   });
+
+  return revision.id;
 }

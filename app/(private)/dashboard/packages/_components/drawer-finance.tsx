@@ -7,8 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DndContext,
   closestCenter,
@@ -24,7 +30,14 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Package, Plus, X, GripVertical } from "lucide-react";
+import { Package, Plus, X, GripVertical, Copy } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { useSaveVariantPrices } from "@/hooks/use-packages";
 import { toast } from "sonner";
@@ -37,29 +50,29 @@ interface DrawerFinanceProps {
 }
 
 const DEFAULT_CATEGORIES = [
-  "Catering",
-  "Dekorasi",
-  "Rias Busana",
-  "Photography",
-  "Entertainment",
+  "CATERING",
+  "DEKORASI",
+  "RIAS BUSANA",
+  "PHOTOGRAPHY",
+  "ENTERTAINMENT",
   "MC",
   "WO",
-  "Adat",
-  "Siraman",
-  "LED Videotron",
-  "Lighting Ambiance / Effect Dry Ice",
-  "RAB Event",
-  "Izin Kepolisian",
-  "Bonus Sales",
-  "Bonus Manager",
-  "Bonus Direktur",
-  "Bonus Venue Specialist",
-  "Discount Client",
-  "Gedung (min 70 event/thn)",
-  "Usher",
-  "Digital Invitation & Guest Book",
-  "Hotel / Wisma",
-  "Wedding Content Creator",
+  "ADAT",
+  "SIRAMAN",
+  "LED VIDEOTRON",
+  "LIGHTING AMBIANCE / EFFECT DRY ICE",
+  "RAB EVENT",
+  "IZIN KEPOLISIAN",
+  "BONUS SALES",
+  "BONUS MANAGER",
+  "BONUS DIREKTUR",
+  "BONUS VENUE SPECIALIST",
+  "BONUS CLIENT",
+  "GEDUNG (MIN 70 EVENT/THN)",
+  "USHER",
+  "DIGITAL INVITATION & GUEST BOOK",
+  "HOTEL / WISMA",
+  "WEDDING CONTENT CREATOR",
 ];
 
 interface VariantFinance {
@@ -67,6 +80,7 @@ interface VariantFinance {
   basePrices: Record<string, number>;
   isShow: Record<string, boolean>;
   margin: number;
+  sellingPrice: number;
   newCat: string;
 }
 
@@ -82,7 +96,7 @@ function parse(value: string): number {
 function initVariantFinance(): VariantFinance {
   const isShow: Record<string, boolean> = {};
   for (const cat of DEFAULT_CATEGORIES) isShow[cat] = false;
-  return { categories: [...DEFAULT_CATEGORIES], basePrices: {}, isShow, margin: 0, newCat: "" };
+  return { categories: [...DEFAULT_CATEGORIES], basePrices: {}, isShow, margin: 0, sellingPrice: 0, newCat: "" };
 }
 
 function SortableCategoryRow({
@@ -138,10 +152,41 @@ function SortableCategoryRow({
   );
 }
 
+function SellingPriceInput({
+  sellingPrice,
+  onChange,
+}: {
+  sellingPrice: number;
+  onChange: (value: number) => void;
+}) {
+  const [localText, setLocalText] = useState("");
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <div className={cn('relative', 'w-48')}>
+      <span className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>Rp</span>
+      <Input
+        type="text"
+        inputMode="numeric"
+        placeholder="0"
+        value={focused ? localText : fmt(sellingPrice)}
+        onFocus={() => { setLocalText(fmt(sellingPrice)); setFocused(true); }}
+        onBlur={() => setFocused(false)}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/\D/g, "");
+          const num = parseInt(raw) || 0;
+          setLocalText(raw ? fmt(num) : "");
+          onChange(num);
+        }}
+        className={cn('h-9', 'text-sm', 'pl-8', 'text-right', 'font-bold')}
+      />
+    </div>
+  );
+}
+
 export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
   const [variantData, setVariantData] = useState<VariantFinance[]>([]);
-  const [syncAll, setSyncAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveVariantPricesMut = useSaveVariantPrices();
 
@@ -156,20 +201,26 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
             basePrices[c.categoryName] = Number(c.basePrice);
             isShowMap[c.categoryName] = c.isShow ?? true;
           }
-          return { categories: cats, basePrices, isShow: isShowMap, margin: v.margin ?? 0, newCat: "" };
+          const base = cats.reduce((s, c) => s + (basePrices[c] ?? 0), 0);
+          const margin = v.margin ?? 0;
+          const sp = (v.sellingPrice && v.sellingPrice > 0) ? v.sellingPrice : base + Math.round(base * (margin / 100));
+          return { categories: cats, basePrices, isShow: isShowMap, margin, sellingPrice: sp, newCat: "" };
         }
         return initVariantFinance();
       }));
       setActiveVariantIdx(0);
-      setSyncAll(false);
     }
   }, [isOpen, pkg]);
 
   function updateVariant(idx: number, updater: (v: VariantFinance) => VariantFinance) {
+    setVariantData((prev) => prev.map((v, i) => (i === idx ? updater(v) : v)));
+  }
+
+  function handleCopyFromVariant(targetIdx: number, sourceIdx: number) {
     setVariantData((prev) =>
-      syncAll
-        ? prev.map((v) => updater(v))
-        : prev.map((v, i) => (i === idx ? updater(v) : v))
+      prev.map((v, i) =>
+        i === targetIdx ? { ...prev[sourceIdx], newCat: "" } : v
+      )
     );
   }
 
@@ -197,7 +248,10 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
       const is = { ...v.isShow };
       delete bp[cat];
       delete is[cat];
-      return { ...v, categories: v.categories.filter((c) => c !== cat), basePrices: bp, isShow: is };
+      const newCats = v.categories.filter((c) => c !== cat);
+      const newBase = newCats.reduce((s, c) => s + (bp[c] ?? 0), 0);
+      const newSell = newBase + Math.round(newBase * (v.margin / 100));
+      return { ...v, categories: newCats, basePrices: bp, isShow: is, sellingPrice: newSell };
     });
   }
 
@@ -217,7 +271,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
           sortOrder: idx + 1,
           isShow: vd.isShow[cat] ?? true,
         }));
-        const res = await saveVariantPricesMut.mutateAsync({ variantId: variant.id, categories, margin: vd.margin });
+        const res = await saveVariantPricesMut.mutateAsync({ variantId: variant.id, categories, margin: vd.margin, sellingPrice: vd.sellingPrice });
         if (!res.success) { toast.error(res.error ?? "Gagal menyimpan"); setSaving(false); return; }
       }
       toast.success("Harga berhasil disimpan");
@@ -228,11 +282,6 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
       setSaving(false);
     }
   }
-
-  const active = variantData[activeVariantIdx];
-  const totalBase = active ? active.categories.reduce((s, c) => s + (active.basePrices[c] ?? 0), 0) : 0;
-  const profit = Math.round(totalBase * ((active?.margin ?? 0) / 100));
-  const totalSelling = totalBase + profit;
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} title="Set Harga Package" maxWidth="sm:max-w-130">
@@ -249,170 +298,204 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
               <p className={cn('text-xs', 'text-muted-foreground')}>{pkg.venue?.name ?? "-"}</p>
             </div>
           </div>
-
-          {/* Variant Dropdown */}
-          <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-semibold')}>Varian</Label>
-            <SearchableSelect
-              options={pkg.variants.map((v, idx) => ({
-                id: String(idx),
-                name: `${v.variantName}. ${v.pax} pax`,
-              }))}
-              value={String(activeVariantIdx)}
-              onChange={(val) => setActiveVariantIdx(Number(val))}
-              placeholder="Pilih varian..."
-              searchPlaceholder="Cari varian..."
-            />
-          </div>
-
-          {/* Sync All Toggle */}
-          {pkg.variants.length > 1 && (
-            <div className={cn('flex', 'items-center', 'justify-between', 'p-3', 'rounded-lg', 'border', 'border-border', 'bg-muted/30')}>
-              <div>
-                <p className={cn('text-sm', 'font-medium')}>Edit Semua Varian Sekaligus</p>
-                <p className={cn('text-xs', 'text-muted-foreground')}>Perubahan harga & margin berlaku untuk semua varian</p>
-              </div>
-              <Switch checked={syncAll} onCheckedChange={setSyncAll} />
-            </div>
-          )}
         </div>
 
-        {/* Scrollable Content */}
-        <div className={cn('flex-1', 'overflow-y-auto', 'space-y-4', 'px-1', 'pt-4')}>
-          {active && (
-            <>
-              <Separator />
+        {/* Variant Selector + Copy */}
+        <div className={cn('flex', 'flex-col', 'flex-1', 'min-h-0', 'pt-3')}>
+          {pkg.variants.length > 1 && (
+            <div className={cn('flex', 'items-center', 'gap-2', 'pb-3', 'shrink-0')}>
+              <Select
+                value={String(activeVariantIdx)}
+                onValueChange={(val) => setActiveVariantIdx(Number(val))}
+              >
+                <SelectTrigger className={cn('flex-1', 'h-9', 'text-sm')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pkg.variants.map((v, idx) => (
+                    <SelectItem key={v.id} value={String(idx)}>
+                      {v.variantName} ({v.pax} pax)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-              {/* Category List */}
-              <div className="space-y-3">
-                <div>
-                  <Label className={cn('text-sm', 'font-semibold')}>Harga Pokok per Kategori</Label>
-                  <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>Untuk varian <span className={cn('font-medium', 'text-foreground')}>{pkg.variants[activeVariantIdx]?.variantName}</span></p>
-                </div>
-
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={active.categories} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2">
-                      {active.categories.map((cat) => (
-                        <SortableCategoryRow
-                          key={cat}
-                          cat={cat}
-                          value={active.basePrices[cat] ?? 0}
-                          isShow={active.isShow[cat] ?? true}
-                          onChange={(val) =>
-                            updateVariant(activeVariantIdx, (v) => ({
-                              ...v,
-                              basePrices: { ...v.basePrices, [cat]: val },
-                            }))
-                          }
-                          onToggleShow={() =>
-                            updateVariant(activeVariantIdx, (v) => ({
-                              ...v,
-                              isShow: { ...v.isShow, [cat]: !(v.isShow[cat] ?? true) },
-                            }))
-                          }
-                          onRemove={() => removeCategory(activeVariantIdx, cat)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-
-                {/* Add Custom Category */}
-                <div className={cn('flex', 'items-center', 'gap-2')}>
-                  <Input
-                    placeholder="Tambah kategori..."
-                    value={active.newCat}
-                    onChange={(e) => updateVariant(activeVariantIdx, (v) => ({ ...v, newCat: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCategory(activeVariantIdx); } }}
-                    className={cn('h-9', 'text-sm', 'flex-1')}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addCategory(activeVariantIdx)}
-                    disabled={!active.newCat.trim() || active.categories.includes(active.newCat.trim())}
-                    className={cn('h-9', 'shrink-0')}
-                  >
-                    <Plus className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tambah
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className={cn('h-9', 'w-9', 'p-0', 'shrink-0')}>
+                    <Copy className="size-4" />
                   </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Total Harga Pokok */}
-              <div className={cn('flex', 'items-center', 'justify-between', 'px-1')}>
-                <span className={cn('text-sm', 'text-muted-foreground')}>Total Harga Pokok</span>
-                <span className={cn('text-sm', 'font-semibold')}>{totalBase > 0 ? `Rp ${fmt(totalBase)}` : "-"}</span>
-              </div>
-
-              <Separator />
-
-              {/* Margin */}
-              <div className={cn('flex', 'items-center', 'justify-between', 'px-1')}>
-                <div>
-                  <Label className={cn('text-sm', 'font-semibold')}>Margin</Label>
-                  <p className={cn('text-xs', 'text-muted-foreground')}>Persentase dari total harga pokok</p>
-                </div>
-                <div className={cn('relative', 'w-24')}>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={active.margin || ""}
-                    onChange={(e) =>
-                      updateVariant(activeVariantIdx, (v) => ({
-                        ...v,
-                        margin: Math.max(0, parseFloat(e.target.value) || 0),
-                      }))
-                    }
-                    className={cn('h-9', 'text-sm', 'pr-7', 'text-right')}
-                  />
-                  <span className={cn('absolute', 'right-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>%</span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Harga Jual */}
-              <div className={cn('space-y-2', 'px-1')}>
-                <div className={cn('flex', 'items-center', 'justify-between')}>
-                  <span className={cn('text-sm', 'text-muted-foreground')}>Keuntungan</span>
-                  <span className={cn('text-sm', 'text-muted-foreground')}>{profit > 0 ? `+ Rp ${fmt(profit)}` : "-"}</span>
-                </div>
-                <div className={cn('flex', 'items-center', 'justify-between', 'p-3', 'bg-muted/40', 'rounded-lg', 'border', 'border-border')}>
-                  <span className={cn('text-sm', 'font-bold')}>Harga Jual</span>
-                  <span className={cn('text-lg', 'font-bold')}>{totalSelling > 0 ? `Rp ${fmt(totalSelling)}` : "-"}</span>
-                </div>
-              </div>
-
-              {/* Summary semua variant */}
-              {pkg.variants.length > 1 && (
-                <>
-                  <Separator />
-                  <div className={cn('space-y-1.5', 'px-1')}>
-                    <p className={cn('text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Ringkasan Semua Varian</p>
-                    {pkg.variants.map((v, idx) => {
-                      const vd = variantData[idx];
-                      if (!vd) return null;
-                      const vBase = vd.categories.reduce((s, c) => s + (vd.basePrices[c] ?? 0), 0);
-                      const vSell = vBase + Math.round(vBase * (vd.margin / 100));
-                      return (
-                        <div key={v.id} className={cn('flex', 'items-center', 'justify-between', 'text-xs')}>
-                          <span className="text-muted-foreground">{v.variantName} ({v.pax} pax)</span>
-                          <div className={cn('flex', 'items-center', 'gap-2')}>
-                            {vd.margin > 0 && <Badge variant="secondary" className="text-xs">{vd.margin}%</Badge>}
-                            <span className="font-medium">{vSell > 0 ? `Rp ${fmt(vSell)}` : "-"}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel className="text-xs">Salin dari varian</DropdownMenuLabel>
+                  {pkg.variants.map((sv, sIdx) =>
+                    sIdx !== activeVariantIdx ? (
+                      <DropdownMenuItem key={sv.id} onSelect={() => handleCopyFromVariant(activeVariantIdx, sIdx)}>
+                        {sv.variantName} ({sv.pax} pax)
+                      </DropdownMenuItem>
+                    ) : null
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
+
+          {/* Scrollable Content — Active Variant */}
+          {(() => {
+            const idx = activeVariantIdx;
+            const v = pkg.variants[idx];
+            const vd = variantData[idx];
+            if (!v || !vd) return null;
+            const vBase = vd.categories.reduce((s, c) => s + (vd.basePrices[c] ?? 0), 0);
+            const vSell = vd.sellingPrice;
+            const vProfit = vSell - vBase;
+            const vMarginDisplay = vBase > 0 ? ((vProfit / vBase) * 100) : 0;
+            return (
+              <div className={cn('flex-1', 'overflow-y-auto', 'space-y-4', 'px-1')}>
+                <Separator />
+
+                {/* Category List */}
+                <div className="space-y-3">
+                  <div>
+                    <Label className={cn('text-sm', 'font-semibold')}>Harga Pokok per Kategori</Label>
+                    <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>Untuk varian <span className={cn('font-medium', 'text-foreground')}>{v.variantName}</span></p>
+                  </div>
+
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={vd.categories} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2">
+                        {vd.categories.map((cat) => (
+                          <SortableCategoryRow
+                            key={cat}
+                            cat={cat}
+                            value={vd.basePrices[cat] ?? 0}
+                            isShow={vd.isShow[cat] ?? true}
+                            onChange={(val) =>
+                              updateVariant(idx, (vv) => {
+                                const newBp = { ...vv.basePrices, [cat]: val };
+                                const newBase = vv.categories.reduce((s, c) => s + (newBp[c] ?? 0), 0);
+                                const newSell = newBase + Math.round(newBase * (vv.margin / 100));
+                                return { ...vv, basePrices: newBp, sellingPrice: newSell };
+                              })
+                            }
+                            onToggleShow={() =>
+                              updateVariant(idx, (vv) => ({
+                                ...vv,
+                                isShow: { ...vv.isShow, [cat]: !(vv.isShow[cat] ?? true) },
+                              }))
+                            }
+                            onRemove={() => removeCategory(idx, cat)}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+
+                  {/* Add Custom Category */}
+                  <div className={cn('flex', 'items-center', 'gap-2')}>
+                    <Input
+                      placeholder="Tambah kategori..."
+                      value={vd.newCat}
+                      onChange={(e) => updateVariant(idx, (vv) => ({ ...vv, newCat: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCategory(idx); } }}
+                      className={cn('h-9', 'text-sm', 'flex-1')}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addCategory(idx)}
+                      disabled={!vd.newCat.trim() || vd.categories.includes(vd.newCat.trim())}
+                      className={cn('h-9', 'shrink-0')}
+                    >
+                      <Plus className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tambah
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Total Harga Pokok */}
+                <div className={cn('flex', 'items-center', 'justify-between', 'px-1')}>
+                  <span className={cn('text-sm', 'text-muted-foreground')}>Total Harga Pokok</span>
+                  <span className={cn('text-sm', 'font-semibold')}>{vBase > 0 ? `Rp ${fmt(vBase)}` : "-"}</span>
+                </div>
+
+                <Separator />
+
+                {/* Margin + Harga Jual */}
+                <div className={cn('space-y-3', 'px-1')}>
+                  <div className={cn('flex', 'items-center', 'justify-between')}>
+                    <div>
+                      <Label className={cn('text-sm', 'font-semibold')}>Margin</Label>
+                      <p className={cn('text-xs', 'text-muted-foreground')}>Persentase dari harga pokok</p>
+                    </div>
+                    <div className={cn('relative', 'w-24')}>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        value={vd.margin || ""}
+                        onChange={(e) => {
+                          const margin = Math.max(0, parseFloat(e.target.value) || 0);
+                          const newSell = vBase + Math.round(vBase * (margin / 100));
+                          updateVariant(idx, (vv) => ({ ...vv, margin, sellingPrice: newSell }));
+                        }}
+                        className={cn('h-9', 'text-sm', 'pr-7', 'text-right')}
+                      />
+                      <span className={cn('absolute', 'right-3', 'top-1/2', '-translate-y-1/2', 'text-xs', 'text-muted-foreground')}>%</span>
+                    </div>
+                  </div>
+
+                  {vBase > 0 && vMarginDisplay !== vd.margin && (
+                    <p className={cn('text-xs', 'text-muted-foreground', 'text-right')}>
+                      Margin aktual: {vMarginDisplay.toFixed(2)}%
+                    </p>
+                  )}
+
+                  <div className={cn('flex', 'items-center', 'justify-between')}>
+                    <span className={cn('text-sm', 'text-muted-foreground')}>Keuntungan</span>
+                    <span className={cn('text-sm', 'text-muted-foreground')}>{vProfit > 0 ? `+ Rp ${fmt(vProfit)}` : "-"}</span>
+                  </div>
+
+                  <div className={cn('flex', 'items-center', 'justify-between', 'p-3', 'bg-muted/40', 'rounded-lg', 'border', 'border-border')}>
+                    <Label className={cn('text-sm', 'font-bold', 'shrink-0')}>Harga Jual</Label>
+                    <SellingPriceInput
+                      sellingPrice={vSell}
+                      onChange={(sell) => {
+                        const newMargin = vBase > 0 ? parseFloat((((sell - vBase) / vBase) * 100).toFixed(2)) : 0;
+                        updateVariant(idx, (vv) => ({ ...vv, sellingPrice: sell, margin: Math.max(0, newMargin) }));
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Summary semua variant */}
+                {pkg.variants.length > 1 && (
+                  <>
+                    <Separator />
+                    <div className={cn('space-y-1.5', 'px-1')}>
+                      <p className={cn('text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Ringkasan Semua Varian</p>
+                      {pkg.variants.map((sv, sIdx) => {
+                        const svd = variantData[sIdx];
+                        if (!svd) return null;
+                        const svBase = svd.categories.reduce((s, c) => s + (svd.basePrices[c] ?? 0), 0);
+                        const svMargin = svBase > 0 ? ((svd.sellingPrice - svBase) / svBase) * 100 : 0;
+                        return (
+                          <div key={sv.id} className={cn('flex', 'items-center', 'justify-between', 'text-xs')}>
+                            <span className="text-muted-foreground">{sv.variantName} ({sv.pax} pax)</span>
+                            <div className={cn('flex', 'items-center', 'gap-2')}>
+                              {svMargin > 0 && <Badge variant="secondary" className="text-xs">{svMargin.toFixed(1)}%</Badge>}
+                              <span className="font-medium">{svd.sellingPrice > 0 ? `Rp ${fmt(svd.sellingPrice)}` : "-"}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Footer */}

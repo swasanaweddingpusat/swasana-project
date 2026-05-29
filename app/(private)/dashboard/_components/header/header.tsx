@@ -10,6 +10,7 @@ import { useHeaderAction } from "@/components/providers/header-action-provider";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/hooks/use-permissions";
+import { usePoll } from "@/hooks/use-poll";
 import { cn } from "../../../../../lib/utils";
 
 export function Header() {
@@ -19,6 +20,7 @@ export function Header() {
   const { action } = useHeaderAction();
   const { openBookingDrawer } = useBookingDrawer();
   const { can } = usePermissions();
+  usePoll();
 
   return (
     <header className={cn('bg-white', 'border-b', 'border-gray-200', 'px-4', 'lg:px-6', 'h-16', 'flex', 'items-center', 'justify-between', 'shrink-0')}>

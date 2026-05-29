@@ -58,7 +58,7 @@ export interface EmateraiResult {
 interface GenerateSnResponse {
   statusCode: string;
   message?: string;
-  result?: { sn: string; Image: string };
+  result?: { sn: string; image: string };
 }
 
 async function callGenerateSn(token: string, poNumber: string, bookingDate: Date): Promise<EmateraiResult> {
@@ -86,9 +86,9 @@ async function callGenerateSn(token: string, poNumber: string, bookingDate: Date
 
   if (data.statusCode === "93") throw new Error("Kuota e-meterai tidak mencukupi. Hubungi administrator.");
   if (data.statusCode !== "00") throw new Error(`Peruri generate SN gagal: ${data.message ?? data.statusCode}`);
-  if (!data.result?.sn || !data.result?.Image) throw new Error("Peruri generate SN: response tidak valid");
+  if (!data.result?.sn || !data.result?.image) throw new Error("Peruri generate SN: response tidak valid");
 
-  return { sn: data.result.sn, qrBase64: data.result.Image };
+  return { sn: data.result.sn, qrBase64: data.result.image };
 }
 
 export async function generateEmaterai(poNumber: string, bookingDate: Date): Promise<EmateraiResult> {
