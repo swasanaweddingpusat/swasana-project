@@ -30,8 +30,8 @@ export function GroupsTable({ groups, canEdit, onEdit }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden bg-white">
-      <div className="grid grid-cols-[2fr_1.5fr_0.7fr_1.2fr_1.2fr_0.9fr_auto] px-4 py-2.5 bg-white text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">
+    <div className="rounded-lg border border-border overflow-hidden bg-card">
+      <div className="grid grid-cols-[2fr_1.5fr_0.7fr_1.2fr_1.2fr_0.9fr_auto] px-4 py-2.5 bg-card text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">
         <span>Nama Group</span>
         <span>Leader</span>
         <span className="text-center">Anggota</span>
@@ -44,7 +44,7 @@ export function GroupsTable({ groups, canEdit, onEdit }: Props) {
       {groups.map((group) => (
         <div
           key={group.id}
-          className="grid grid-cols-[2fr_1.5fr_0.7fr_1.2fr_1.2fr_0.9fr_auto] px-4 py-3 border-b border-border last:border-b-0 items-center bg-white hover:bg-secondary/30 transition-colors"
+          className="grid grid-cols-[2fr_1.5fr_0.7fr_1.2fr_1.2fr_0.9fr_auto] px-4 py-3 border-b border-border last:border-b-0 items-center bg-card hover:bg-secondary/30 transition-colors"
         >
           <div>
             <Link href={`/dashboard/groups/${group.id}`} className="text-sm font-semibold hover:underline">

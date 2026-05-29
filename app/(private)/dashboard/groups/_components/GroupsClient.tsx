@@ -8,7 +8,7 @@ import { GroupsStatsCards } from "./GroupsStatsCards";
 import { GroupsRevenueChart } from "./GroupsRevenueChart";
 import { GroupsTable } from "./GroupsTable";
 import { GroupFormDialog } from "./GroupFormDialog";
-import { useGroupsPerformance } from "@/hooks/useGroupsPerformance";
+import { useGroupsPerformance } from "@/hooks/use-groups-performance";
 import type { GroupWithPerformance } from "@/lib/queries/groups";
 
 const MONTHS = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];

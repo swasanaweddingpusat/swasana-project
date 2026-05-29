@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
@@ -828,6 +829,47 @@ export async function editBooking(data: unknown) {
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mengupdate booking." };
+  }
+}
+
+// ─── Approve Booking ──────────────────────────────────────────────────────────
+
+export async function approveBooking(bookingId: string) {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-approve:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const [booking] = await db.$transaction([
+      db.booking.update({
+        where: { id: bookingId },
+        data: { managerId: session!.user.profileId },
+      }),
+    ]);
+
+    revalidateTag("groups", "max");
+    revalidateTag("bookings", "max");
+
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "booking.approved",
+      entityType: "booking",
+      entityId: bookingId,
+      description: `Booking disetujui oleh manager`,
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    return { success: true, booking };
+  } catch (e) {
+    console.error("[approveBooking]", e);
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 

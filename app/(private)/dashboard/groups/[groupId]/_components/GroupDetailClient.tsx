@@ -1,5 +1,7 @@
 "use client";
 
+// TODO: split monolith into sub-components (P4 follow-up, tracked separately)
+
 import { useState, useTransition, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -310,7 +312,7 @@ export function GroupDetailClient({ group, initialPerformance, availableProfiles
                     <TableCell className="px-6 py-3">
                       <div className="flex items-center justify-center">
                         {isTop ? (
-                          <Crown className="h-5 w-5 text-yellow-400" />
+                          <Crown className="h-5 w-5 text-primary" />
                         ) : (
                           <span className={cn(
                             "text-sm font-semibold w-6 h-6 rounded-full flex items-center justify-center",
@@ -440,7 +442,7 @@ export function GroupDetailClient({ group, initialPerformance, availableProfiles
                 <Textarea className="mt-1" value={teamDesc} onChange={(e) => setTeamDesc(e.target.value)} placeholder="Deskripsi grup" rows={3} />
               </div>
             </div>
-            <div className="sticky bottom-0 bg-white z-10">
+            <div className="sticky bottom-0 bg-background z-10">
               <div className="flex py-4 gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setSettingsOpen(false)}>Batal</Button>
                 <Button className="flex-1" disabled={isPending} onClick={handleSaveSettings}>Simpan</Button>

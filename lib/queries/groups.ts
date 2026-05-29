@@ -230,25 +230,113 @@ export async function getGroupsWithPerformance(
   cacheTag("groups", "bookings");
   cacheLife("minutes");
 
-  const groups = profileId ? await getUserGroups(profileId) : await getAllGroups();
+  // ── Query 1: fetch groups + members in one shot ─────────────────────────────
+  const groupsWithMembers = await db.userGroup.findMany({
+    where: profileId
+      ? {
+          OR: [
+            { leaderId: profileId },
+            { members: { some: { userId: profileId } } },
+          ],
+        }
+      : undefined,
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      leaderId: true,
+      leader: { select: { fullName: true, avatarUrl: true } },
+      _count: { select: { members: true } },
+      members: {
+        select: { userId: true },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
 
-  return Promise.all(
-    groups.map(async (g) => {
-      const perf = await getGroupPerformance(g.id, startDate, endDate);
-      const revenue = perf.reduce((s, m) => s + m.actual, 0);
-      const avgAchievement =
-        perf.length > 0
-          ? Math.round(perf.reduce((s, m) => s + m.achievement, 0) / perf.length)
-          : 0;
-      const confirmedCount = perf.reduce((s, m) => s + m.confirmed, 0);
-      return { ...g, revenue, avgAchievement, confirmedCount };
-    }),
-  );
+  if (groupsWithMembers.length === 0) return [];
+
+  // Collect all unique salesIds across every group
+  const allSalesIds = [
+    ...new Set(groupsWithMembers.flatMap((g) => g.members.map((m) => m.userId))),
+  ];
+
+  // ── Query 2: all relevant bookings in one shot ───────────────────────────────
+  const allBookings = await db.booking.findMany({
+    where: {
+      salesId: { in: allSalesIds },
+      bookingStatus: { not: BookingStatus.Canceled },
+      bookingDate: { gte: startDate, lte: endDate },
+    },
+    select: {
+      salesId: true,
+      bookingStatus: true,
+      snapPackageVariant: { select: { price: true } },
+    },
+    take: 10000,
+  });
+
+  // ── Query 3: all relevant targets in one shot ────────────────────────────────
+  const allTargets = await db.userTarget.findMany({
+    where: {
+      profileId: { in: allSalesIds },
+      type: "sales",
+      startDate: { lte: endDate },
+      endDate: { gte: startDate },
+    },
+    select: { profileId: true, amount: true },
+  });
+
+  // ── In-memory aggregation ────────────────────────────────────────────────────
+  // Group bookings by salesId
+  const bookingsBySalesId = new Map<
+    string,
+    { bookingStatus: BookingStatus; price: number }[]
+  >();
+  for (const b of allBookings) {
+    if (!b.salesId) continue;
+    const list = bookingsBySalesId.get(b.salesId) ?? [];
+    list.push({ bookingStatus: b.bookingStatus, price: b.snapPackageVariant?.price ?? 0 });
+    bookingsBySalesId.set(b.salesId, list);
+  }
+
+  // Map target by profileId (latest wins if multiple overlap)
+  const targetBySalesId = new Map<string, number>();
+  for (const t of allTargets) {
+    targetBySalesId.set(t.profileId, Number(t.amount));
+  }
+
+  return groupsWithMembers.map((g) => {
+    let revenue = 0;
+    let confirmedCount = 0;
+    let totalAchievement = 0;
+    let memberCount = 0;
+
+    for (const member of g.members) {
+      const bookings = bookingsBySalesId.get(member.userId) ?? [];
+      const confirmed = bookings.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
+      const actual = confirmed.reduce((s, b) => s + b.price, 0);
+      const targetAmount = targetBySalesId.get(member.userId) ?? 0;
+      const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
+
+      revenue += actual;
+      confirmedCount += confirmed.length;
+      totalAchievement += achievement;
+      memberCount += 1;
+    }
+
+    const avgAchievement = memberCount > 0 ? Math.round(totalAchievement / memberCount) : 0;
+
+    // Spread g without members (keep shape: id, name, description, leaderId, leader, _count)
+    const { members: _members, ...groupBase } = g;
+    return { ...groupBase, revenue, avgAchievement, confirmedCount };
+  });
 }
 
 // ─── Member management helpers ────────────────────────────────────────────────
 
-export async function getSalesBookings(salesId: string) {
+export async function getSalesBookings(salesId: string, take = 100, skip = 0) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
@@ -268,6 +356,8 @@ export async function getSalesBookings(salesId: string) {
       paymentMethod: { select: { bankName: true } },
     },
     orderBy: { bookingDate: "desc" },
+    take,
+    skip,
   });
 }
 

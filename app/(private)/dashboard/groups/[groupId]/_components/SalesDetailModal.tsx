@@ -1,5 +1,7 @@
 "use client";
 
+// TODO: refactor to shadcn Dialog (P4 follow-up)
+
 import { useState, useTransition, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +14,7 @@ import {
 import { X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { approveBooking } from "@/actions/groups";
+import { approveBooking } from "@/actions/booking";
 import type { SalesBookingItem } from "@/lib/queries/groups";
 import { BookingStatus } from "@prisma/client";
 
@@ -57,7 +59,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
     void (async () => {
       setLoading(true);
       try {
-        const data: SalesBookingItem[] = await fetch(`/api/sales-bookings?salesId=${memberId}`).then((r) => r.json());
+        const data: SalesBookingItem[] = await fetch(`/api/sales-bookings?salesId=${memberId}&take=100`).then((r) => r.json());
         if (!cancelled) setBookings(data);
       } catch (e: unknown) {
         console.error("[SalesDetailModal]", e);
@@ -87,10 +89,10 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:bg-black/40">
-      <div className="bg-white w-full h-full flex flex-col sm:rounded-xl sm:shadow-lg sm:w-[70%] sm:max-w-[70%] overflow-hidden sm:h-auto sm:max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:bg-foreground/40">
+      <div className="bg-background w-full h-full flex flex-col sm:rounded-xl sm:shadow-lg sm:w-[70%] sm:max-w-[70%] overflow-hidden sm:h-auto sm:max-h-[90vh]">
         {/* Header */}
-        <div className="flex justify-between items-start px-4 sm:px-8 py-4 border-b border-border sticky top-0 bg-white z-10">
+        <div className="flex justify-between items-start px-4 sm:px-8 py-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center gap-3 flex-1 pr-4">
             <ProfileAvatar name={memberName} src={memberAvatarUrl ?? undefined} size="md" />
             <div>
@@ -153,7 +155,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
                         <p className="text-sm font-medium truncate">{b.snapCustomer?.name ?? "—"}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{b.snapCustomer?.mobileNumber ?? ""}</p>
                         <div className="flex flex-wrap items-center gap-1 mt-1">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border text-[10px] font-medium bg-white">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border text-[10px] font-medium bg-background">
                             <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[b.bookingStatus] ?? "bg-muted-foreground")} />
                             {b.bookingStatus}
                           </span>
