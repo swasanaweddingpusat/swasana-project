@@ -177,7 +177,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             select: {
               id: true,
               roleId: true,
-              role: { select: { name: true } },
+              role: { select: { name: true, isSystemRole: true } },
               mustChangePassword: true,
               fullName: true,
               avatarUrl: true,
@@ -189,6 +189,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.profileId = profile.id;
             token.roleId = profile.roleId;
             token.roleName = profile.role?.name ?? null;
+            token.isSuperAdmin = profile.role?.isSystemRole === true;
             token.mustChangePassword = profile.mustChangePassword;
             token.isEmailVerified = profile.isEmailVerified;
             token.status = profile.status;
@@ -218,6 +219,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.profileId = (token.profileId as string) ?? "";
         session.user.roleId = (token.roleId as string | null) ?? null;
         session.user.roleName = (token.roleName as string | null) ?? null;
+        session.user.isSuperAdmin = (token.isSuperAdmin as boolean) ?? false;
         session.user.mustChangePassword = (token.mustChangePassword as boolean) ?? false;
         session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
         session.user.status = (token.status as "active" | "inactive" | "suspended") ?? "active";

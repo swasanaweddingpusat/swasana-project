@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, isSuperAdmin as isSuperAdminFn } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
@@ -28,8 +28,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
     const allSteps = await db.approvalRecordStep.findMany({ where: { recordId: step.recordId }, orderBy: { stepOrder: "asc" } });
 
     // Super Admin: approve all pending non-client steps at once
-    const superAdminRole = await db.role.findUnique({ where: { name: "super-admin" }, select: { id: true } });
-    const isSuperAdmin = !!(superAdminRole && session.user.roleId === superAdminRole.id);
+    const isSuperAdmin = await isSuperAdminFn(session.user.roleId);
 
     const stepsToApprove = isSuperAdmin
       ? allSteps.filter((s) => s.status === "pending" && s.approverType !== "client")
@@ -151,8 +150,7 @@ async function checkApprover(
   roleId: string | null
 ): Promise<boolean> {
   // Super Admin can approve any step
-  const superAdminRole = await db.role.findUnique({ where: { name: "super-admin" }, select: { id: true } });
-  if (superAdminRole && roleId === superAdminRole.id) return true;
+  if (await isSuperAdminFn(roleId)) return true;
 
   if (step.approverType === "client") return false;
   if (step.approverType === "user") return step.approverUserId === profileId;

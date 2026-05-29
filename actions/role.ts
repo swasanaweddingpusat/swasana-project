@@ -94,14 +94,14 @@ export async function deleteRole(roleId: string) {
   if (!mutationLimiter.check(`role-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    const role = await db.role.findUnique({ where: { id: roleId } });
+    const role = await db.role.findUnique({ where: { id: roleId }, select: { name: true, isSystemRole: true } });
 
     if (!role) {
       return { success: false, error: "Role tidak ditemukan" };
     }
 
-    if (role.name === "super-admin") {
-      return { success: false, error: "Role Super Admin tidak dapat dihapus" };
+    if (role.isSystemRole) {
+      return { success: false, error: "Role sistem tidak dapat dihapus" };
     }
 
     await db.$transaction([db.role.delete({ where: { id: roleId } })]);
@@ -237,7 +237,7 @@ export async function createPermission(module: string, action: string) {
     const permission = await db.$transaction(async (tx) => {
       const perm = await tx.permission.create({ data: { module, action } });
       // Auto-assign to Super Admin
-      const superAdmin = await tx.role.findFirst({ where: { name: "super-admin" } });
+      const superAdmin = await tx.role.findFirst({ where: { isSystemRole: true } });
       if (superAdmin) {
         await tx.rolePermission.create({ data: { roleId: superAdmin.id, permissionId: perm.id } });
       }

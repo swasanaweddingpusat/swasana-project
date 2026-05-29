@@ -56,7 +56,7 @@ export async function notifyRole(roleId: string, notification: Omit<CreateNotifi
  */
 export async function notifySuperAdmins(notification: Omit<CreateNotificationInput, "userId">, excludeUserId?: string): Promise<void> {
   try {
-    const adminRole = await db.role.findFirst({ where: { name: "super-admin" } });
+    const adminRole = await db.role.findFirst({ where: { isSystemRole: true } });
     if (!adminRole) return;
     const profiles = await db.profile.findMany({
       where: { roleId: adminRole.id, status: "active", ...(excludeUserId ? { id: { not: excludeUserId } } : {}) },

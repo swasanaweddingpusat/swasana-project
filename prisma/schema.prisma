@@ -152,6 +152,7 @@ model Role {
   name                String               @unique
   description         String?
   sortOrder           Int                  @default(0)
+  isSystemRole        Boolean              @default(false)
   createdAt           DateTime             @default(now())
   profiles            Profile[]
   rolePermissions     RolePermission[]

@@ -15,9 +15,9 @@ export async function isSuperAdmin(roleId: string | null | undefined): Promise<b
   if (!roleId) return false;
   const role = await db.role.findUnique({
     where: { id: roleId },
-    select: { name: true },
+    select: { isSystemRole: true },
   });
-  return role?.name === "super-admin";
+  return role?.isSystemRole === true;
 }
 
 export async function hasPermission(

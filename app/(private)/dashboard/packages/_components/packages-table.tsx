@@ -521,7 +521,7 @@ export function PackagesTable() {
           packageName={approvalPkg.packageName}
           userProfileId={user.profileId}
           userRoleId={user.roleId}
-          isSuperAdmin={user.roleName === "super-admin"}
+          isSuperAdmin={user.isSuperAdmin}
         />
       )}
 
