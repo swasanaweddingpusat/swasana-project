@@ -80,6 +80,44 @@ const DEFAULT_VALUES: LeadFormValues = {
   notes: "",
 };
 
+// ── Draft persistence (create mode only) ──────────────────────────────────────
+const LEAD_DRAFT_KEY = "lead-draft-v1";
+
+type LeadDraft = { values: Partial<LeadFormValues>; contactNumbers: ContactNumber[] };
+
+function hasDraftContent(d: LeadDraft | null): boolean {
+  if (!d) return false;
+  const anyValue = Object.values(d.values ?? {}).some(
+    (x) => typeof x === "string" && x.trim() !== "",
+  );
+  return anyValue || (d.contactNumbers?.length ?? 0) > 0;
+}
+
+function readLeadDraft(): LeadDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LEAD_DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as LeadDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistLeadDraft(values: LeadFormValues, contactNumbers: ContactNumber[]) {
+  if (typeof window === "undefined") return;
+  const draft: LeadDraft = { values, contactNumbers };
+  if (hasDraftContent(draft)) {
+    localStorage.setItem(LEAD_DRAFT_KEY, JSON.stringify(draft));
+  } else {
+    localStorage.removeItem(LEAD_DRAFT_KEY);
+  }
+}
+
+function clearLeadDraft() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LEAD_DRAFT_KEY);
+}
+
 export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const isEdit = !!editLead;
   const qc = useQueryClient();
@@ -147,12 +185,34 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       });
       setContactNumbers(editLead.contactNumbers);
     } else {
-      form.reset(DEFAULT_VALUES);
-      setContactNumbers([]);
+      const draft = readLeadDraft();
+      if (hasDraftContent(draft)) {
+        form.reset({ ...DEFAULT_VALUES, ...draft!.values });
+        setContactNumbers(draft!.contactNumbers ?? []);
+        toast.info("Draft sebelumnya dipulihkan");
+      } else {
+        form.reset(DEFAULT_VALUES);
+        setContactNumbers([]);
+      }
     }
     setContactInput({ name: "", number: "" });
     setContactPopoverOpen(false);
   }, [open, editLead]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist draft on form field changes (create mode only)
+  useEffect(() => {
+    if (!open || isEdit) return;
+    const sub = form.watch((values) => {
+      persistLeadDraft(values as LeadFormValues, contactNumbers);
+    });
+    return () => sub.unsubscribe();
+  }, [open, isEdit, contactNumbers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist draft on contact-number changes (create mode only)
+  useEffect(() => {
+    if (!open || isEdit) return;
+    persistLeadDraft(form.getValues(), contactNumbers);
+  }, [contactNumbers, open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addContact() {
     const digits = contactInput.number.trim();
@@ -215,6 +275,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
         toast.error(result.error ?? "Gagal menyimpan lead.");
         return;
       }
+      clearLeadDraft();
       toast.success("Lead berhasil disimpan.");
     }
 
@@ -386,20 +447,14 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assigned To (Sales)</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih sales (opsional)..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {assignableUsers.map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.fullName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={assignableUsers.map((u) => ({ id: u.id, name: u.fullName }))}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Pilih sales (opsional)..."
+                      searchPlaceholder="Cari sales..."
+                      emptyText="Sales tidak ditemukan"
+                    />
                     <FormMessage />
                   </FormItem>
                 )}

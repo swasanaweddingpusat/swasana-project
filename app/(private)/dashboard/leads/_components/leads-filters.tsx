@@ -159,52 +159,6 @@ export function LeadsFilters({
           </Button>
         </div>
       </div>
-
-      {/* Status summary badges */}
-      <div
-        role="group"
-        aria-label="Filter lead berdasarkan status"
-        className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b overflow-x-auto flex-nowrap pb-2 sm:flex-wrap sm:pb-3"
-      >
-        {statusCounts.map((s) => {
-          const selected = statusFilter === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onStatusChange(selected ? "all" : s.id)}
-              aria-pressed={selected}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-colors whitespace-nowrap shrink-0",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                selected
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background text-foreground border-border hover:bg-muted"
-              )}
-            >
-              <StatusDot color={s.color} selected={selected} />
-              {s.name}
-              <span
-                className={cn(
-                  "ml-0.5 font-bold",
-                  selected ? "text-primary-foreground" : "text-muted-foreground"
-                )}
-              >
-                ({s.count})
-              </span>
-            </button>
-          );
-        })}
-        {statusFilter !== "all" && (
-          <button
-            type="button"
-            onClick={() => onStatusChange("all")}
-            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground ml-1 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            Reset
-          </button>
-        )}
-      </div>
     </>
   );
 }
