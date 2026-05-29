@@ -20,17 +20,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const end = endOfMonth(base);
 
     const excludeId = searchParams.get("exclude"); // booking ID to exclude (for edit mode)
-    const packageId = searchParams.get("packageId");
-    const variantId = searchParams.get("variantId");
 
+    // Availability is per-venue (1 venue = 1 physical space).
+    // We intentionally do NOT filter by packageId/variantId —
+    // any active booking at this venue blocks the slot, regardless of package.
     const bookings = await db.booking.findMany({
       where: {
         venueId: id,
         bookingDate: { gte: start, lte: end },
         bookingStatus: { notIn: ["Canceled", "Lost"] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
-        ...(packageId ? { packageId } : {}),
-        ...(variantId ? { packageVariantId: variantId } : {}),
       },
       select: { bookingDate: true, weddingSession: true },
     });

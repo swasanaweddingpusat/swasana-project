@@ -40,6 +40,32 @@ export async function createBooking(data: unknown) {
 
     if (!customerId) return { success: false, error: "Customer wajib diisi." };
 
+    // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
+    if (input.weddingSession) {
+      const bookingDateObj = new Date(input.bookingDate);
+      const conflictingBooking = await db.booking.findFirst({
+        where: {
+          venueId: input.venueId,
+          bookingDate: bookingDateObj,
+          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          OR: input.weddingSession === "fullday"
+            ? [
+                { weddingSession: "morning" },
+                { weddingSession: "evening" },
+                { weddingSession: "fullday" },
+              ]
+            : [
+                { weddingSession: input.weddingSession },
+                { weddingSession: "fullday" },
+              ],
+        },
+        select: { id: true },
+      });
+      if (conflictingBooking) {
+        return { success: false, error: "Slot venue di tanggal & sesi tersebut sudah dibooking." };
+      }
+    }
+
     let emateraiResult: { sn: string; qrBase64: string } | null = null;
 
     // Fetch data needed for transaction — for new customers, build from input
@@ -539,6 +565,34 @@ export async function editBooking(data: unknown) {
       select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
+
+    // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
+    // Exclude the current booking so it doesn't conflict with itself.
+    if (rest.weddingSession) {
+      const bookingDateObj = new Date(rest.bookingDate);
+      const conflictingBooking = await db.booking.findFirst({
+        where: {
+          id: { not: id },
+          venueId: rest.venueId,
+          bookingDate: bookingDateObj,
+          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          OR: rest.weddingSession === "fullday"
+            ? [
+                { weddingSession: "morning" },
+                { weddingSession: "evening" },
+                { weddingSession: "fullday" },
+              ]
+            : [
+                { weddingSession: rest.weddingSession },
+                { weddingSession: "fullday" },
+              ],
+        },
+        select: { id: true },
+      });
+      if (conflictingBooking) {
+        return { success: false, error: "Slot venue di tanggal & sesi tersebut sudah dibooking." };
+      }
+    }
 
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;

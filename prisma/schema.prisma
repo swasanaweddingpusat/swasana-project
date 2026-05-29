@@ -909,7 +909,6 @@ enum BookingStatus {
 
 enum WeddingSession {
   morning
-  afternoon
   evening
   fullday
 }
