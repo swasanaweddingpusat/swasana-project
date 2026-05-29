@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -59,16 +67,16 @@ const DUMMY_QUOTATIONS: QuotationItem[] = [
     id: "1",
     leadName: "Ahmad Fauzi",
     leadPhone: "081234567890",
-    venue: "Bringhall",
+    venue: "Menara Bripens",
     category: "weddings",
     eventType: "Akad & Resepsi",
     eventDate: "2026-08-15",
-    packageName: "Gold",
-    variantName: "500 Pax",
-    pax: 500,
-    price: 165000000,
-    discount: 10000000,
-    totalPrice: 155000000,
+    packageName: "MENARA BRIPENS PACKAGE",
+    variantName: "ALFA",
+    pax: 800,
+    price: 135000000,
+    discount: 5000000,
+    totalPrice: 130000000,
     status: "sent",
     validUntil: "2026-06-30",
     salesName: "Rina",
@@ -79,16 +87,16 @@ const DUMMY_QUOTATIONS: QuotationItem[] = [
     id: "2",
     leadName: "Ahmad Fauzi",
     leadPhone: "081234567890",
-    venue: "Bringhall",
+    venue: "Menara Bripens",
     category: "weddings",
     eventType: "Akad & Resepsi",
     eventDate: "2026-08-15",
-    packageName: "Platinum",
-    variantName: "500 Pax",
-    pax: 500,
-    price: 220000000,
+    packageName: "MENARA BRIPENS PACKAGE",
+    variantName: "SIGNATURE",
+    pax: 800,
+    price: 240000000,
     discount: 15000000,
-    totalPrice: 205000000,
+    totalPrice: 225000000,
     status: "revised",
     validUntil: "2026-06-30",
     salesName: "Rina",
@@ -99,16 +107,16 @@ const DUMMY_QUOTATIONS: QuotationItem[] = [
     id: "3",
     leadName: "Citra Dewi",
     leadPhone: "081355667788",
-    venue: "De Rivier Mansion",
+    venue: "BRIN Thamrin",
     category: "weddings",
-    eventType: "Tea Pai & Resepsi",
+    eventType: "Teapai & Resepsi",
     eventDate: "2026-10-05",
-    packageName: "Sapphire",
-    variantName: "400 Pax",
-    pax: 400,
-    price: 185000000,
+    packageName: "BRIN THAMRIN PACKAGE",
+    variantName: "SAPPHIRE",
+    pax: 800,
+    price: 180000000,
     discount: 0,
-    totalPrice: 185000000,
+    totalPrice: 180000000,
     status: "accepted",
     validUntil: "2026-07-15",
     salesName: "Rina",
@@ -119,45 +127,185 @@ const DUMMY_QUOTATIONS: QuotationItem[] = [
     id: "4",
     leadName: "PT Maju Jaya",
     leadPhone: "02112345678",
-    venue: "Sasana Esthi Sopo",
+    venue: "Grand Slipi",
     category: "mice",
     eventType: "Fullday Meeting 8hrs",
     eventDate: "2026-07-10",
-    packageName: "Gold",
-    variantName: "100 Pax",
-    pax: 100,
-    price: 45000000,
-    discount: 5000000,
-    totalPrice: 40000000,
+    packageName: "GRAND SLIPI PACKAGE",
+    variantName: "GOLD",
+    pax: 800,
+    price: 145000000,
+    discount: 10000000,
+    totalPrice: 135000000,
     status: "draft",
     validUntil: "2026-06-20",
     salesName: "Deni",
     createdAt: "2026-05-19",
-    notes: "Masih draft",
+    notes: "Masih menunggu konfirmasi anggaran",
   },
   {
     id: "5",
     leadName: "Budi Santoso",
     leadPhone: "081298765432",
-    venue: "Grand Puri 2",
+    venue: "Paramita",
     category: "weddings",
     eventType: "Resepsi",
     eventDate: "2026-09-20",
-    packageName: "Gold",
-    variantName: "300 Pax",
-    pax: 300,
-    price: 120000000,
+    packageName: "PARAMITA PACKAGE",
+    variantName: "CLASSIC",
+    pax: 800,
+    price: 140000000,
     discount: 0,
-    totalPrice: 120000000,
+    totalPrice: 140000000,
     status: "rejected",
     validUntil: "2026-06-10",
-    salesName: "Rina",
+    salesName: "Sari",
     createdAt: "2026-05-20",
     notes: "Budget tidak sesuai",
   },
+  {
+    id: "6",
+    leadName: "Dwi Prasetyo",
+    leadPhone: "081277889900",
+    venue: "Lippo Kuningan",
+    category: "weddings",
+    eventType: "Akad & Resepsi",
+    eventDate: "2026-11-22",
+    packageName: "LIPPO KUNINGAN PACKAGE",
+    variantName: "PLATINUM",
+    pax: 800,
+    price: 250000000,
+    discount: 10000000,
+    totalPrice: 240000000,
+    status: "sent",
+    validUntil: "2026-07-31",
+    salesName: "Tono",
+    createdAt: "2026-05-21",
+    notes: "",
+  },
+  {
+    id: "7",
+    leadName: "PT Global Teknologi",
+    leadPhone: "02198765432",
+    venue: "Samisara Sopodel",
+    category: "mice",
+    eventType: "Halfday Meeting 6hrs",
+    eventDate: "2026-06-25",
+    packageName: "SAMISARA SOPODEL PACKAGE",
+    variantName: "PRIORITY",
+    pax: 800,
+    price: 230000000,
+    discount: 5000000,
+    totalPrice: 225000000,
+    status: "draft",
+    validUntil: "2026-06-15",
+    salesName: "Deni",
+    createdAt: "2026-05-22",
+    notes: "",
+  },
+  {
+    id: "8",
+    leadName: "Eka Wulandari",
+    leadPhone: "081312345678",
+    venue: "Seskoad",
+    category: "weddings",
+    eventType: "Pemberkatan Resepsi",
+    eventDate: "2026-12-06",
+    packageName: "SESKOAD PACKAGE",
+    variantName: "GOLD",
+    pax: 800,
+    price: 133000000,
+    discount: 0,
+    totalPrice: 133000000,
+    status: "accepted",
+    validUntil: "2026-08-01",
+    salesName: "Rina",
+    createdAt: "2026-05-23",
+    notes: "Sudah deal, tunggu tanda tangan",
+  },
+  {
+    id: "9",
+    leadName: "PT Telkom Indonesia",
+    leadPhone: "02145678901",
+    venue: "BRIN Gatot Subroto",
+    category: "mice",
+    eventType: "Gala Dinner",
+    eventDate: "2026-09-18",
+    packageName: "BRIN GATOT SUBROTO PACKAGE",
+    variantName: "SAPPHIRE",
+    pax: 800,
+    price: 195000000,
+    discount: 15000000,
+    totalPrice: 180000000,
+    status: "sent",
+    validUntil: "2026-07-20",
+    salesName: "Sari",
+    createdAt: "2026-05-24",
+    notes: "",
+  },
+  {
+    id: "10",
+    leadName: "Fajar Nugroho",
+    leadPhone: "081356789012",
+    venue: "Dharmagati",
+    category: "weddings",
+    eventType: "Akad & Resepsi",
+    eventDate: "2026-07-26",
+    packageName: "DHARMAGATI PACKAGE",
+    variantName: "PLATINUM",
+    pax: 800,
+    price: 265000000,
+    discount: 0,
+    totalPrice: 265000000,
+    status: "revised",
+    validUntil: "2026-06-25",
+    salesName: "Tono",
+    createdAt: "2026-05-25",
+    notes: "Revisi paket dan harga",
+  },
+  {
+    id: "11",
+    leadName: "PT Astra Internasional",
+    leadPhone: "02167890123",
+    venue: "Patrajasa",
+    category: "mice",
+    eventType: "Corporate Event",
+    eventDate: "2026-08-07",
+    packageName: "PATRAJASA PACKAGE",
+    variantName: "GOLD",
+    pax: 800,
+    price: 160000000,
+    discount: 10000000,
+    totalPrice: 150000000,
+    status: "draft",
+    validUntil: "2026-07-01",
+    salesName: "Deni",
+    createdAt: "2026-05-26",
+    notes: "",
+  },
+  {
+    id: "12",
+    leadName: "Budi Santoso",
+    leadPhone: "081298765432",
+    venue: "Paramita",
+    category: "weddings",
+    eventType: "Resepsi",
+    eventDate: "2026-09-20",
+    packageName: "PARAMITA PACKAGE",
+    variantName: "ROYAL",
+    pax: 800,
+    price: 275000000,
+    discount: 5000000,
+    totalPrice: 270000000,
+    status: "sent",
+    validUntil: "2026-07-10",
+    salesName: "Sari",
+    createdAt: "2026-05-27",
+    notes: "Revisi naik tier dari CLASSIC",
+  },
 ];
 
-const CARDS_PER_PAGE = 8;
+const ROWS_PER_PAGE = 10;
 
 type QuotationStatus = QuotationItem["status"];
 
@@ -212,20 +360,6 @@ function formatRupiah(amount: number): string {
   });
 }
 
-function formatCurrencyShort(n: number): string {
-  if (n >= 1_000_000_000) {
-    const val = n / 1_000_000_000;
-    const rounded = Math.round(val * 10) / 10;
-    return `Rp ${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}M`;
-  }
-  if (n >= 1_000_000) {
-    const val = n / 1_000_000;
-    const rounded = Math.round(val * 10) / 10;
-    return `Rp ${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}jt`;
-  }
-  return formatRupiah(n);
-}
-
 function formatDate(dateStr: string): string {
   return format(new Date(dateStr), "d MMM yyyy");
 }
@@ -260,99 +394,6 @@ function StatusBadge({ status }: { status: QuotationStatus }) {
   );
 }
 
-interface QuotationCardProps {
-  q: QuotationItem;
-  onEdit: (q: QuotationItem) => void;
-  onConvert: (q: QuotationItem) => void;
-}
-
-function QuotationCard({ q, onEdit, onConvert }: QuotationCardProps) {
-  return (
-    <Card className="group transition-colors hover:border-foreground/20 hover:bg-accent/30">
-      <CardContent className="p-4 flex flex-col gap-3">
-        {/* Row 1: name + status + action menu */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p
-              className="font-semibold text-foreground truncate leading-tight"
-              title={q.leadName}
-            >
-              {q.leadName}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {q.leadPhone}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <StatusBadge status={q.status} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                  aria-label={`Aksi untuk quotation ${q.leadName}`}
-                >
-                  <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onEdit(q)}>
-                  <PencilIcon aria-hidden="true" className="h-3.5 w-3.5 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-                {q.status === "accepted" && (
-                  <DropdownMenuItem onClick={() => onConvert(q)}>
-                    <CalendarCheck
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 mr-2"
-                    />
-                    Convert ke Booking
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Row 2: total price */}
-        <div>
-          <p className="text-xl font-bold text-foreground leading-tight">
-            {formatRupiah(q.totalPrice)}
-          </p>
-          {q.discount > 0 && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              was {formatCurrencyShort(q.price)}, hemat{" "}
-              {formatCurrencyShort(q.discount)}
-            </p>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-border" />
-
-        {/* Row 3: venue · package · variant */}
-        <p className="text-sm text-foreground/80 truncate" title={`${q.venue} · ${q.packageName} ${q.variantName}`}>
-          {q.venue} &middot; {q.packageName} {q.variantName}
-        </p>
-
-        {/* Row 4: event date */}
-        <div className="flex items-center gap-1.5 text-sm text-foreground/80">
-          <CalendarCheck aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span>Event: {formatDate(q.eventDate)}</span>
-        </div>
-
-        {/* Row 5: sales · valid until */}
-        <p className="text-xs text-muted-foreground">
-          Sales: {q.salesName}
-          <span className="mx-1.5 text-border">|</span>
-          Exp: {formatDate(q.validUntil)}
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
 export function QuotationsTable() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<QuotationStatus | "all">(
@@ -381,10 +422,10 @@ export function QuotationsTable() {
     return true;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / CARDS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const paginated = filtered.slice(
-    (currentPage - 1) * CARDS_PER_PAGE,
-    currentPage * CARDS_PER_PAGE
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE
   );
 
   function handleAdd() {
@@ -399,15 +440,6 @@ export function QuotationsTable() {
 
   function handleConvertToBooking(q: QuotationItem) {
     toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
-  }
-
-  function handleStatusBadgeClick(status: QuotationStatus) {
-    if (statusFilter === status) {
-      setStatusFilter("all");
-    } else {
-      setStatusFilter(status);
-    }
-    setCurrentPage(1);
   }
 
   function handleStatusFilterChange(value: string) {
@@ -427,12 +459,12 @@ export function QuotationsTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
+          <div className="flex flex-col gap-3 px-4 sm:px-6 pb-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
             <div className="flex items-center gap-3">
               <h2 className="text-base font-bold text-foreground">
                 List Quotations
               </h2>
-              <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
+              <span className="text-sm font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
                 {filtered.length}
                 {search || statusFilter !== "all"
                   ? ` dari ${DUMMY_QUOTATIONS.length}`
@@ -452,12 +484,14 @@ export function QuotationsTable() {
                   <SelectValue placeholder="Semua Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  {ALL_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
+                  <SelectItem value="all">
+                    Semua Status ({DUMMY_QUOTATIONS.length})
+                  </SelectItem>
+                  {statusCounts.map((s) => (
+                    <SelectItem key={s.status} value={s.status}>
                       <span className="flex items-center gap-2">
-                        <StatusDot className={STATUS_META[s].dotClass} />
-                        {STATUS_META[s].label}
+                        <StatusDot className={s.dotClass} />
+                        {s.label} ({s.count})
                       </span>
                     </SelectItem>
                   ))}
@@ -479,99 +513,196 @@ export function QuotationsTable() {
                     setSearch(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="pl-9 w-full sm:w-52"
+                  className="h-9 pl-9 w-full sm:w-52"
                 />
               </div>
 
               {/* Add button */}
-              <Button onClick={handleAdd}>
+              <Button className="h-9" onClick={handleAdd}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Tambah Quotation
               </Button>
             </div>
           </div>
 
-          {/* Status summary badges */}
-          <div
-            role="group"
-            aria-label="Filter quotation berdasarkan status"
-            className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b overflow-x-auto sm:flex-wrap"
-          >
-            {statusCounts.map((s) => {
-              const selected = statusFilter === s.status;
-              return (
-                <button
-                  key={s.status}
-                  type="button"
-                  onClick={() => handleStatusBadgeClick(s.status)}
-                  aria-pressed={selected}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-colors whitespace-nowrap shrink-0",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    selected
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background text-foreground border-border hover:bg-muted"
-                  )}
-                >
-                  <StatusDot
-                    className={
-                      selected
-                        ? "bg-primary-foreground border border-primary-foreground"
-                        : s.dotClass
-                    }
-                  />
-                  {s.label}
-                  <span
-                    className={cn(
-                      "ml-0.5 font-bold",
-                      selected
-                        ? "text-primary-foreground"
-                        : "text-muted-foreground"
-                    )}
+          {/* Table */}
+          <Table className="w-full table-fixed">
+            <TableHeader>
+              <TableRow>
+                {/* # — 4% — always visible */}
+                <TableHead className="w-[4%] text-center">#</TableHead>
+                {/* Customer — 18% — always visible */}
+                <TableHead className="w-[18%]">Customer</TableHead>
+                {/* Venue — 14% — always visible */}
+                <TableHead className="w-[14%]">Venue</TableHead>
+                {/* Paket / Varian — 22% — hidden on xs, visible sm+ */}
+                <TableHead className="w-[22%] hidden sm:table-cell">
+                  Paket / Varian
+                </TableHead>
+                {/* Event — 14% — hidden until lg */}
+                <TableHead className="w-[14%] hidden lg:table-cell">
+                  Event
+                </TableHead>
+                {/* Total — 14% — always visible, right-aligned */}
+                <TableHead className="w-[14%] text-right">Total</TableHead>
+                {/* Status — 9% — always visible */}
+                <TableHead className="w-[9%]">Status</TableHead>
+                {/* Actions — 5% — always visible */}
+                <TableHead className="w-[5%]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={8}
+                    className="py-16 text-center text-muted-foreground"
                   >
-                    ({s.count})
-                  </span>
-                </button>
-              );
-            })}
-            {statusFilter !== "all" && (
-              <button
-                type="button"
-                onClick={() => setStatusFilter("all")}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground ml-1 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                Reset
-              </button>
-            )}
-          </div>
-
-          {/* Card grid / empty state */}
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <FileText
-                aria-hidden="true"
-                className="h-10 w-10 mb-3 opacity-40"
-              />
-              <p className="text-sm">
-                {search
-                  ? `Tidak ada hasil untuk "${search}"`
-                  : "Belum ada quotation."}
-              </p>
-            </div>
-          ) : (
-            <div className="p-4 sm:p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {paginated.map((q) => (
-                  <QuotationCard
+                    <div className="flex flex-col items-center gap-3">
+                      <FileText
+                        aria-hidden="true"
+                        className="h-10 w-10 opacity-40"
+                      />
+                      <p className="text-sm">
+                        {search
+                          ? `Tidak ada hasil untuk "${search}"`
+                          : "Belum ada quotation."}
+                      </p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginated.map((q, idx) => (
+                  <TableRow
                     key={q.id}
-                    q={q}
-                    onEdit={handleEdit}
-                    onConvert={handleConvertToBooking}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+                    onClick={() => handleEdit(q)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleEdit(q);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Edit quotation ${q.leadName}`}
+                    className="cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                  >
+                    {/* # */}
+                    <TableCell className="text-center text-sm text-muted-foreground tabular-nums">
+                      {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                    </TableCell>
+                    {/* Customer */}
+                    <TableCell className="min-w-0">
+                      <div className="min-w-0">
+                        <span
+                          title={q.leadName}
+                          className="block truncate font-medium text-sm text-foreground"
+                        >
+                          {q.leadName}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {q.leadPhone}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    {/* Venue */}
+                    <TableCell className="min-w-0">
+                      <span
+                        title={q.venue}
+                        className="block truncate text-sm"
+                      >
+                        {q.venue}
+                      </span>
+                    </TableCell>
+
+                    {/* Paket / Varian — hidden xs */}
+                    <TableCell className="min-w-0 hidden sm:table-cell">
+                      <div className="min-w-0">
+                        <span className="block truncate text-xs font-medium uppercase tracking-wide text-foreground">
+                          {q.variantName}
+                        </span>
+                        <span
+                          title={q.packageName}
+                          className="block truncate text-xs text-muted-foreground"
+                        >
+                          {q.packageName}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    {/* Event — hidden until lg */}
+                    <TableCell className="min-w-0 hidden lg:table-cell">
+                      <div className="min-w-0">
+                        <span className="block truncate text-sm">
+                          {formatDate(q.eventDate)}
+                        </span>
+                        <span
+                          title={q.eventType}
+                          className="block truncate text-xs text-muted-foreground"
+                        >
+                          {q.eventType}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    {/* Total */}
+                    <TableCell className="text-right tabular-nums font-semibold text-sm">
+                      {formatRupiah(q.totalPrice)}
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell>
+                      <StatusBadge status={q.status} />
+                    </TableCell>
+
+                    {/* Actions */}
+                    <TableCell
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-right"
+                    >
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Aksi untuk quotation ${q.leadName}`}
+                          >
+                            <MoreHorizontal
+                              aria-hidden="true"
+                              className="h-4 w-4"
+                            />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleEdit(q)}
+                          >
+                            <PencilIcon
+                              aria-hidden="true"
+                              className="h-4 w-4 mr-2"
+                            />
+                            Edit
+                          </DropdownMenuItem>
+                          {q.status === "accepted" && (
+                            <DropdownMenuItem
+                              onClick={() => handleConvertToBooking(q)}
+                            >
+                              <CalendarCheck
+                                aria-hidden="true"
+                                className="h-4 w-4 mr-2"
+                              />
+                              Convert ke Booking
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -581,6 +712,7 @@ export function QuotationsTable() {
             >
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
                 aria-label="Halaman sebelumnya"
@@ -613,6 +745,7 @@ export function QuotationsTable() {
               </div>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() =>
                   setCurrentPage((p) => Math.min(p + 1, totalPages))
                 }
