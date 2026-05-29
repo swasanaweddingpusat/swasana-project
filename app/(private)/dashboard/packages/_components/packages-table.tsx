@@ -356,14 +356,13 @@ export function PackagesTable() {
                                     (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
                                     (step.approverType === "user" && step.approverUserId === user?.profileId)
                                   );
-                                  const prevDone = steps.filter((s) => s.stepOrder < step.stepOrder).every((s) => s.status === "approved");
                                   return (
                                     <DropdownMenuItem
                                       key={step.id}
                                       className="cursor-pointer"
-                                      disabled={isApproved || isRejected || (isPending && (!canAct || !prevDone))}
+                                      disabled={isApproved || isRejected || (isPending && !canAct)}
                                       onClick={() => {
-                                        if (canAct && prevDone) {
+                                        if (canAct) {
                                           setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
                                         } else {
                                           setApprovalPkg(pkg);
