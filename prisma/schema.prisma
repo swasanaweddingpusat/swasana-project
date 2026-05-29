@@ -141,6 +141,7 @@ model Profile {
   userTargets              UserTarget[]               @relation("UserTargets")
   userTargetsSet           UserTarget[]               @relation("UserTargetsSetBy")
   leadsCreated             Lead[]
+  leadsAssigned            Lead[]          @relation("LeadAssignee")
 
   @@index([roleId])
   @@index([managerId])
@@ -459,6 +460,7 @@ model Customer {
   updatedAt             DateTime             @updatedAt
   bookings              Booking[]
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  convertedFromLeads    Lead[]               @relation("LeadConvertedCustomer")
 
   @@index([name])
   @@map("customers")
@@ -520,6 +522,7 @@ model Booking {
   bookingDate           DateTime
   bookingStatus         BookingStatus   @default(Pending)
   paymentStatus         String          @default("")
+  category              EventCategory   @default(WEDDINGS)
   weddingSession        WeddingSession?
   weddingType           String?
   poNumber              String?
@@ -571,6 +574,7 @@ model Booking {
   bookingComments   BookingComment[]
   commentReads      BookingCommentRead[]
   revisions         BookingRevision[]
+  convertedFromLeads Lead[]                    @relation("LeadConvertedBooking")
 
   @@index([salesId])
   @@index([managerId])
@@ -582,6 +586,7 @@ model Booking {
   @@index([sourceOfInformationId])
   @@index([bookingStatus])
   @@index([bookingDate])
+  @@index([category])
   @@map("bookings")
 }
 
@@ -1073,15 +1078,17 @@ model Notification {
 }
 
 model EventType {
-  id        String   @id @default(uuid())
-  name      String   // e.g. "Resepsi", "Akad & Resepsi", "Teapai & Resepsi"
-  code      String   @unique // e.g. "R", "AR", "TR" — used in PO number
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String        @id @default(uuid())
+  name      String        // e.g. "Resepsi", "Akad & Resepsi", "Halfday 6hrs"
+  code      String        @unique // e.g. "R", "AR", "H6" — used in PO number
+  category  EventCategory @default(WEDDINGS)
+  sortOrder Int           @default(0)
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
   leads     Lead[]
 
+  @@index([category])
   @@map("event_types")
 }
 
@@ -1094,34 +1101,33 @@ model Counter {
 
 // ─── CRM: Leads ──────────────────────────────────────────────────────────────
 
-enum LeadCategory {
+enum EventCategory {
   WEDDINGS
   MICE
 }
 
 model LeadStatus {
-  id          String       @id @default(uuid())
-  name        String
-  color       String       @default("#6b7280")
-  category    LeadCategory
-  sortOrder   Int          @default(0)
-  isPipeline  Boolean      @default(true)
-  isDefault   Boolean      @default(false)
-  isSystem    Boolean      @default(false)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  leads       Lead[]
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#6b7280")
+  sortOrder Int      @default(0)
+  isDefault Boolean  @default(false)
+  isFinal   Boolean  @default(false)
+  isSystem  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  leads     Lead[]
 
-  @@index([category, sortOrder])
+  @@index([sortOrder])
   @@map("lead_statuses")
 }
 
 model Lead {
-  id             String       @id @default(uuid())
+  id             String @id @default(uuid())
   name           String
-  contactNumbers Json         @default("[]") // Array of { label: string, number: string }
+  contactNumbers Json   @default("[]") // Array of { label: string, number: string }
   email          String?
-  category       LeadCategory
   eventDate      DateTime?
   estimatedPax   Int?
   budgetRange    String?
@@ -1134,20 +1140,29 @@ model Lead {
   sourceOfInformationId String?
   statusId              String
   createdById           String
+  assignedToId          String?
+
+  // Conversion tracking (populated when Deal status reached and lead is converted)
+  convertedAt            DateTime?
+  convertedToCustomerId  String?
+  convertedToBookingId   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  venue               Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  package             Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  eventType           EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
-  sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
-  status              LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  createdBy           Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  venue                 Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  package               Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  eventType             EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  status                LeadStatus           @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  createdBy             Profile              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo            Profile?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  convertedToCustomer   Customer?            @relation("LeadConvertedCustomer", fields: [convertedToCustomerId], references: [id], onDelete: SetNull)
+  convertedToBooking    Booking?             @relation("LeadConvertedBooking", fields: [convertedToBookingId], references: [id], onDelete: SetNull)
 
   @@index([statusId])
   @@index([createdById])
-  @@index([category])
+  @@index([assignedToId])
   @@index([eventDate])
   @@index([venueId])
   @@map("leads")

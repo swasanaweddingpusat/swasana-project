@@ -17,9 +17,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const raw = {
     search: searchParams.get("search") ?? undefined,
-    category: searchParams.get("category") ?? undefined,
     statusId: searchParams.get("statusId") ?? undefined,
     venueId: searchParams.get("venueId") ?? undefined,
+    assignedToId: searchParams.get("assignedToId") ?? undefined,
     page: searchParams.get("page") ?? "1",
     pageSize: searchParams.get("pageSize") ?? "20",
   };
@@ -64,7 +64,6 @@ export async function POST(req: Request) {
     name,
     contactNumbers,
     email,
-    category,
     eventDate,
     estimatedPax,
     budgetRange,
@@ -73,6 +72,7 @@ export async function POST(req: Request) {
     packageId,
     eventTypeId,
     sourceOfInformationId,
+    assignedToId,
     statusId,
   } = parsed.data;
 
@@ -85,7 +85,6 @@ export async function POST(req: Request) {
           name,
           contactNumbers,
           email: email || null,
-          category,
           eventDate: eventDate ? new Date(eventDate) : null,
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
@@ -94,6 +93,7 @@ export async function POST(req: Request) {
           packageId: packageId || null,
           eventTypeId: eventTypeId || null,
           sourceOfInformationId: sourceOfInformationId || null,
+          assignedToId: assignedToId || null,
           statusId,
           createdById: session.user.profileId,
         },

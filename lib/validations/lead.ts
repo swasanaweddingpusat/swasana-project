@@ -21,9 +21,6 @@ export const createLeadSchema = z.object({
     .min(1, "Minimal 1 nomor HP/WA wajib diisi")
     .max(10),
   email: z.string().trim().email("Format email tidak valid").optional().or(z.literal("")),
-  category: z.enum(["WEDDINGS", "MICE"], {
-    error: "Kategori wajib dipilih",
-  }),
   eventDate: z.string().optional().nullable(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
@@ -32,6 +29,7 @@ export const createLeadSchema = z.object({
   packageId: z.string().optional().nullable(),
   eventTypeId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
+  assignedToId: z.string().optional().nullable(),
   statusId: z.string().min(1, "Status wajib dipilih"),
 });
 
@@ -41,9 +39,9 @@ export const updateLeadSchema = createLeadSchema.partial().extend({
 
 export const leadFilterSchema = z.object({
   search: z.string().optional(),
-  category: z.enum(["WEDDINGS", "MICE", "all"]).optional(),
   statusId: z.string().optional(),
   venueId: z.string().optional(),
+  assignedToId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -61,10 +59,9 @@ export const createLeadStatusSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Format warna tidak valid (hex)")
     .default("#6b7280"),
-  category: z.enum(["WEDDINGS", "MICE"]),
   sortOrder: z.coerce.number().int().min(0).default(0),
-  isPipeline: z.boolean().default(true),
   isDefault: z.boolean().default(false),
+  isFinal: z.boolean().default(false),
 });
 
 export const updateLeadStatusSchema2 = createLeadStatusSchema.partial().extend({
@@ -78,3 +75,4 @@ export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
 export type LeadFilterInput = z.infer<typeof leadFilterSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
 export type CreateLeadStatusInput = z.infer<typeof createLeadStatusSchema>;
+export type UpdateLeadStatusInput2 = z.infer<typeof updateLeadStatusSchema2>;

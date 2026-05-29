@@ -37,9 +37,9 @@ export async function PATCH(
 
   const { id } = await params;
 
-  let body: unknown;
+  let body: Record<string, unknown>;
   try {
-    body = await req.json();
+    body = await req.json() as Record<string, unknown>;
   } catch {
     return Response.json({ error: "Request body tidak valid" }, { status: 400 });
   }
@@ -63,7 +63,6 @@ export async function PATCH(
           ...(fields.name !== undefined && { name: fields.name }),
           ...(fields.contactNumbers !== undefined && { contactNumbers: fields.contactNumbers }),
           ...(fields.email !== undefined && { email: fields.email || null }),
-          ...(fields.category !== undefined && { category: fields.category }),
           ...(fields.eventDate !== undefined && {
             eventDate: fields.eventDate ? new Date(fields.eventDate) : null,
           }),
@@ -76,6 +75,7 @@ export async function PATCH(
           ...(fields.sourceOfInformationId !== undefined && {
             sourceOfInformationId: fields.sourceOfInformationId || null,
           }),
+          ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
         },
         select: { id: true, name: true },

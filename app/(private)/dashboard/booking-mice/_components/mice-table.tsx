@@ -35,34 +35,32 @@ import {
   EllipsisVertical,
   Pencil,
   Eye,
-  Upload,
   CalendarDays,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePoll } from "@/hooks/use-poll";
 import { MiceBookingDrawer } from "./MiceBookingDrawer";
 import { MiceDetailModal } from "./MiceDetailModal";
-import type { MiceBookingItem } from "./types";
+import type { MiceBookingItem, MiceStatus } from "./types";
 
 export type { MiceBookingItem };
 
-const STATUS_DOT: Record<string, string> = {
-  Confirmed: "bg-green-500",
-  Uploaded: "bg-blue-500",
-  Pending: "bg-orange-400",
-  Rejected: "bg-destructive",
-  Canceled: "bg-muted-foreground",
-  Lost: "bg-muted-foreground",
+export const STATUS_DOT_CLASS: Record<MiceStatus, string> = {
+  Confirmed: "bg-foreground border border-foreground",
+  Pending: "bg-muted-foreground/60 border border-muted-foreground/60",
+  Rejected: "bg-destructive border border-destructive",
+  Canceled: "bg-muted-foreground/30 border border-muted-foreground/30",
+  Lost: "bg-transparent border border-muted-foreground/60",
 };
 
-const STATUS_TEXT: Record<string, string> = {
-  Confirmed: "text-green-600 border-border",
-  Uploaded: "text-blue-600 border-border",
-  Pending: "text-orange-500 border-border",
-  Rejected: "text-destructive border-destructive/30",
-  Canceled: "text-muted-foreground border-border",
-  Lost: "text-muted-foreground border-border",
-};
+const ALL_STATUSES: MiceStatus[] = [
+  "Confirmed",
+  "Pending",
+  "Rejected",
+  "Canceled",
+  "Lost",
+];
 
 const DUMMY_MICE: MiceBookingItem[] = [
   {
@@ -71,7 +69,13 @@ const DUMMY_MICE: MiceBookingItem[] = [
     clientPhone: "02112345678",
     bookingDate: "2026-05-10",
     poNumber: "PO-MICE-001",
-    hasQuotation: true,
+    quotation: {
+      id: "q-m1",
+      leadName: "PT Maju Jaya",
+      packageName: "Gold",
+      variantName: "100 Pax",
+      totalPrice: 40000000,
+    },
     venueName: "Sasana Esthi Sopo",
     status: "Confirmed",
     eventDate: "2026-07-10",
@@ -86,7 +90,7 @@ const DUMMY_MICE: MiceBookingItem[] = [
     clientPhone: "02198765432",
     bookingDate: "2026-05-12",
     poNumber: "PO-MICE-002",
-    hasQuotation: false,
+    quotation: null,
     venueName: "Bripensiunan",
     status: "Pending",
     eventDate: "2026-06-25",
@@ -101,9 +105,9 @@ const DUMMY_MICE: MiceBookingItem[] = [
     clientPhone: "02155667788",
     bookingDate: "2026-05-15",
     poNumber: null,
-    hasQuotation: false,
+    quotation: null,
     venueName: "Lippo Grand Ballroom",
-    status: "Uploaded",
+    status: "Pending",
     eventDate: "2026-08-20",
     eventType: "Fullday Meeting 12hrs",
     fullPayment: 75000000,
@@ -116,7 +120,13 @@ const DUMMY_MICE: MiceBookingItem[] = [
     clientPhone: "02133445566",
     bookingDate: "2026-05-18",
     poNumber: "PO-MICE-004",
-    hasQuotation: true,
+    quotation: {
+      id: "q-m4",
+      leadName: "Telkom Indonesia",
+      packageName: "Silver",
+      variantName: "150 Pax",
+      totalPrice: 28000000,
+    },
     venueName: "Grand Puri 2",
     status: "Confirmed",
     eventDate: "2026-09-05",
@@ -131,7 +141,13 @@ const DUMMY_MICE: MiceBookingItem[] = [
     clientPhone: "02177889900",
     bookingDate: "2026-04-28",
     poNumber: "PO-MICE-005",
-    hasQuotation: true,
+    quotation: {
+      id: "q-m5",
+      leadName: "Astra International",
+      packageName: "Platinum",
+      variantName: "200 Pax",
+      totalPrice: 55000000,
+    },
     venueName: "Bringhall",
     status: "Rejected",
     eventDate: "2026-06-15",
@@ -148,14 +164,39 @@ function fmtRp(n: number): string {
 
 const ROWS_PER_PAGE = 10;
 
+export function StatusDot({ status }: { status: MiceStatus }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "inline-block w-2 h-2 rounded-full shrink-0",
+        STATUS_DOT_CLASS[status]
+      )}
+    />
+  );
+}
+
+export function MiceStatusBadge({ status }: { status: MiceStatus }) {
+  return (
+    <Badge
+      variant="outline"
+      className="text-xs gap-1.5 font-medium whitespace-nowrap"
+    >
+      <StatusDot status={status} />
+      {status}
+    </Badge>
+  );
+}
+
 export function MiceTable() {
   usePoll();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<MiceStatus | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<MiceBookingItem | null>(null);
+  const [selectedBooking, setSelectedBooking] =
+    useState<MiceBookingItem | null>(null);
 
   const filtered = DUMMY_MICE.filter((item) => {
     if (statusFilter !== "all" && item.status !== statusFilter) return false;
@@ -179,39 +220,44 @@ export function MiceTable() {
     currentPage * ROWS_PER_PAGE
   );
 
-  const statuses = ["Confirmed", "Uploaded", "Pending", "Rejected", "Canceled", "Lost"];
+  function handleRowClick(item: MiceBookingItem) {
+    setSelectedBooking(item);
+    setDetailOpen(true);
+  }
 
   return (
     <Card>
       <CardContent className="p-0">
         {/* Header + Filters */}
-        <div className="flex items-center justify-between px-6 py-4 border-b flex-wrap gap-3">
+        <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-medium bg-gray-50 text-gray-600 px-3 py-1 border border-gray-200 rounded-full">
+            <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
               {filtered.length}
               {search || statusFilter !== "all"
                 ? ` dari ${DUMMY_MICE.length}`
                 : " bookings"}
             </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Status filter */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
             <Select
               value={statusFilter}
               onValueChange={(v) => {
-                setStatusFilter(v);
+                setStatusFilter(v as MiceStatus | "all");
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="h-9 w-38 text-sm">
+              <SelectTrigger
+                className="h-9 w-full sm:w-38 text-sm"
+                aria-label="Filter status booking MICE"
+              >
                 <SelectValue placeholder="Semua Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Status</SelectItem>
-                {statuses.map((s) => (
+                {ALL_STATUSES.map((s) => (
                   <SelectItem key={s} value={s}>
                     <span className="flex items-center gap-2">
-                      <span className={cn("inline-block w-2 h-2 rounded-full shrink-0", STATUS_DOT[s])} />
+                      <StatusDot status={s} />
                       {s}
                     </span>
                   </SelectItem>
@@ -219,26 +265,31 @@ export function MiceTable() {
               </SelectContent>
             </Select>
 
-            {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search
+                aria-hidden="true"
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              />
               <Input
+                type="search"
+                aria-label="Cari booking MICE"
                 placeholder="Cari booking MICE..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="pl-9 w-52"
+                className="pl-9 w-full sm:w-52"
               />
             </div>
 
-            {/* Add button */}
             <Button
-              className="bg-gray-900 hover:bg-gray-800 text-white cursor-pointer"
-              onClick={() => { setSelectedBooking(null); setDrawerOpen(true); }}
+              onClick={() => {
+                setSelectedBooking(null);
+                setDrawerOpen(true);
+              }}
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus aria-hidden="true" className="h-4 w-4" />
               Tambah Booking
             </Button>
           </div>
@@ -246,8 +297,11 @@ export function MiceTable() {
 
         {/* Table */}
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <CalendarDays className="h-10 w-10 mb-3 opacity-40" />
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <CalendarDays
+              aria-hidden="true"
+              className="h-10 w-10 mb-3 opacity-40"
+            />
             <p className="text-sm">
               {search
                 ? `Tidak ada hasil untuk "${search}"`
@@ -258,124 +312,163 @@ export function MiceTable() {
           <div className="overflow-x-auto">
             <Table className="min-w-250 text-sm">
               <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="px-4 whitespace-nowrap w-[3%] text-center">No</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Client</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Booking Date</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">No. Purchase Order</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Quotation</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Kediaman Venue</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Event Date</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap text-right">Full Payment</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap text-right">Booking Fee</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap">Sales</TableHead>
-                  <TableHead className="px-4 whitespace-nowrap w-12"></TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="px-4 whitespace-nowrap w-[3%] text-center">
+                    No
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Client
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Booking Date
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    No. Purchase Order
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Quotation
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Kediaman Venue
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Status
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Event Date
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap text-right">
+                    Full Payment
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap text-right">
+                    Booking Fee
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap">
+                    Sales
+                  </TableHead>
+                  <TableHead className="px-4 whitespace-nowrap w-12">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginated.map((item, idx) => (
-                  <TableRow key={item.id} className="hover:bg-gray-50">
-                    {/* No */}
+                  <TableRow
+                    key={item.id}
+                    onClick={() => handleRowClick(item)}
+                    className="cursor-pointer transition-colors hover:bg-muted/40"
+                  >
                     <TableCell className="px-4 text-center text-muted-foreground">
                       {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
                     </TableCell>
 
-                    {/* Client */}
                     <TableCell className="px-4">
                       <div className="min-w-0">
-                        <p className="font-medium truncate">{item.clientName}</p>
-                        <p className="text-xs text-muted-foreground">{item.clientPhone}</p>
+                        <p
+                          className="font-medium truncate text-foreground"
+                          title={item.clientName}
+                        >
+                          {item.clientName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.clientPhone}
+                        </p>
                       </div>
                     </TableCell>
 
-                    {/* Booking Date */}
-                    <TableCell className="px-4 whitespace-nowrap text-gray-700">
+                    <TableCell className="px-4 whitespace-nowrap text-foreground/80">
                       {format(new Date(item.bookingDate), "dd MMM yyyy")}
                     </TableCell>
 
-                    {/* PO Number */}
                     <TableCell className="px-4">
                       {item.poNumber ? (
-                        <span className="font-mono text-xs">{item.poNumber}</span>
+                        <span className="font-mono text-xs">
+                          {item.poNumber}
+                        </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">
+                          —
+                        </span>
                       )}
                     </TableCell>
 
-                    {/* Quotation */}
-                    <TableCell className="px-4">
-                      {item.hasQuotation ? (
+                    <TableCell className="px-4 whitespace-nowrap">
+                      {item.quotation ? (
                         <Badge variant="secondary" className="text-xs gap-1">
-                          <Upload className="w-3 h-3" />
-                          Uploaded
+                          <FileText
+                            aria-hidden="true"
+                            className="w-3 h-3"
+                          />
+                          {item.quotation.packageName}{" "}
+                          {item.quotation.variantName}
                         </Badge>
                       ) : (
-                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1 cursor-pointer">
-                          <Upload className="w-3 h-3" />
-                          Upload
-                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          —
+                        </span>
                       )}
                     </TableCell>
 
-                    {/* Kediaman Venue */}
-                    <TableCell className="px-4 whitespace-nowrap text-gray-700">
+                    <TableCell className="px-4 whitespace-nowrap text-foreground/80">
                       {item.venueName}
                     </TableCell>
 
-                    {/* Status */}
                     <TableCell className="px-4">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs gap-1.5 font-medium",
-                          STATUS_TEXT[item.status]
-                        )}
-                      >
-                        <span className={cn("w-1.5 h-1.5 rounded-full", STATUS_DOT[item.status])} />
-                        {item.status}
-                      </Badge>
+                      <MiceStatusBadge status={item.status} />
                     </TableCell>
 
-                    {/* Event Date */}
-                    <TableCell className="px-4 whitespace-nowrap text-gray-700">
+                    <TableCell className="px-4 whitespace-nowrap text-foreground/80">
                       {format(new Date(item.eventDate), "dd MMM yyyy")}
                     </TableCell>
 
-                    {/* Full Payment */}
-                    <TableCell className="px-4 text-right whitespace-nowrap font-medium">
+                    <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
                       {fmtRp(item.fullPayment)}
                     </TableCell>
 
-                    {/* Booking Fee */}
-                    <TableCell className="px-4 text-right whitespace-nowrap font-medium">
+                    <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
                       {fmtRp(item.bookingFee)}
                     </TableCell>
 
-                    {/* Sales */}
-                    <TableCell className="px-4 whitespace-nowrap text-gray-600">
+                    <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                       {item.salesName}
                     </TableCell>
 
-                    {/* Action */}
-                    <TableCell className="px-4">
+                    <TableCell
+                      className="px-4"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <DropdownMenu>
-                        <DropdownMenuTrigger className="p-1.5 rounded-md hover:bg-muted cursor-pointer">
-                          <EllipsisVertical className="w-4 h-4 text-muted-foreground" />
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Aksi untuk booking ${item.clientName}`}
+                          >
+                            <EllipsisVertical
+                              aria-hidden="true"
+                              className="w-4 h-4"
+                            />
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            className="gap-2 cursor-pointer"
-                            onClick={() => { setSelectedBooking(item); setDetailOpen(true); }}
+                            className="gap-2"
+                            onClick={() => {
+                              setSelectedBooking(item);
+                              setDetailOpen(true);
+                            }}
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye aria-hidden="true" className="w-4 h-4" />
                             View Detail
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="gap-2 cursor-pointer"
-                            onClick={() => { setSelectedBooking(item); setDrawerOpen(true); }}
+                            className="gap-2"
+                            onClick={() => {
+                              setSelectedBooking(item);
+                              setDrawerOpen(true);
+                            }}
                           >
-                            <Pencil className="w-4 h-4" />
+                            <Pencil aria-hidden="true" className="w-4 h-4" />
                             Edit
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -390,38 +483,53 @@ export function MiceTable() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex justify-between items-center px-6 py-4 border-t">
+          <nav
+            aria-label="Navigasi halaman booking MICE"
+            className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-t sm:flex-row sm:justify-between sm:items-center"
+          >
             <Button
               variant="outline"
               onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
               disabled={currentPage === 1}
+              aria-label="Halaman sebelumnya"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" /> Previous
+              <ArrowLeft aria-hidden="true" className="w-4 h-4" /> Previous
             </Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={cn(
-                    "px-3 py-1 rounded-md text-sm font-medium cursor-pointer",
-                    currentPage === page
-                      ? "bg-gray-200 text-gray-900"
-                      : "text-gray-700 hover:bg-gray-100"
-                  )}
-                >
-                  {page}
-                </button>
-              ))}
+            <div className="flex items-center gap-1 overflow-x-auto justify-center">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                (page) => {
+                  const isCurrent = currentPage === page;
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      aria-label={`Halaman ${page}`}
+                      aria-current={isCurrent ? "page" : undefined}
+                      className={cn(
+                        "px-3 py-1 rounded-md text-sm font-medium shrink-0",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isCurrent
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      {page}
+                    </button>
+                  );
+                }
+              )}
             </div>
             <Button
               variant="outline"
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+              onClick={() =>
+                setCurrentPage((p) => Math.min(p + 1, totalPages))
+              }
               disabled={currentPage === totalPages}
+              aria-label="Halaman berikutnya"
             >
-              Next <ArrowRight className="w-4 h-4 ml-2" />
+              Next <ArrowRight aria-hidden="true" className="w-4 h-4" />
             </Button>
-          </div>
+          </nav>
         )}
       </CardContent>
 
@@ -434,7 +542,10 @@ export function MiceTable() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         booking={selectedBooking}
-        onEdit={(b) => { setSelectedBooking(b); setDrawerOpen(true); }}
+        onEdit={(b) => {
+          setSelectedBooking(b);
+          setDrawerOpen(true);
+        }}
       />
     </Card>
   );

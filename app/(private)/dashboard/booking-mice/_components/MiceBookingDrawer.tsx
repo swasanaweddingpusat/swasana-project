@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
@@ -15,13 +15,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/ui/searchable-select";
 import type { MiceBookingItem } from "./types";
 
 interface VenueOption {
@@ -36,6 +32,7 @@ interface MiceBookingDrawerProps {
 }
 
 interface MiceFormValues {
+  quotationId: string;
   clientName: string;
   clientPhone: string;
   venueId: string;
@@ -48,6 +45,7 @@ interface MiceFormValues {
 }
 
 const DEFAULT_VALUES: MiceFormValues = {
+  quotationId: "",
   clientName: "",
   clientPhone: "",
   venueId: "",
@@ -75,13 +73,76 @@ const EVENT_TYPES = [
 
 const SALES = ["Deni", "Rina", "Budi", "Sari"];
 
+const EVENT_TYPE_OPTIONS: SearchableSelectOption[] = EVENT_TYPES.map((t) => ({
+  id: t,
+  name: t,
+}));
+
+const SALES_OPTIONS: SearchableSelectOption[] = SALES.map((s) => ({
+  id: s,
+  name: s,
+}));
+
+interface QuotationPickerOption {
+  id: string;
+  leadName: string;
+  packageName: string;
+  variantName: string;
+  venue: string;
+  eventType: string;
+  totalPrice: number;
+}
+
+const DUMMY_QUOTATIONS: QuotationPickerOption[] = [
+  {
+    id: "q-m1",
+    leadName: "PT Maju Jaya",
+    packageName: "Gold",
+    variantName: "100 Pax",
+    venue: "Sasana Esthi Sopo",
+    eventType: "Fullday Meeting 8hrs",
+    totalPrice: 40000000,
+  },
+  {
+    id: "q-m4",
+    leadName: "Telkom Indonesia",
+    packageName: "Silver",
+    variantName: "150 Pax",
+    venue: "Grand Puri 2",
+    eventType: "Halfday 6hrs",
+    totalPrice: 28000000,
+  },
+  {
+    id: "q-m5",
+    leadName: "Astra International",
+    packageName: "Platinum",
+    variantName: "200 Pax",
+    venue: "Bringhall",
+    eventType: "Fullday Meeting 8hrs",
+    totalPrice: 55000000,
+  },
+  {
+    id: "q-m6",
+    leadName: "Bank Mandiri",
+    packageName: "Gold",
+    variantName: "250 Pax",
+    venue: "Lippo Grand Ballroom",
+    eventType: "Fullday Meeting 12hrs",
+    totalPrice: 75000000,
+  },
+];
+
 function formatRp(raw: string): string {
   const digits = raw.replace(/\D/g, "");
   if (!digits) return "";
   return parseInt(digits, 10).toLocaleString("id-ID");
 }
 
-export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDrawerProps) {
+export function MiceBookingDrawer({
+  open,
+  onOpenChange,
+  booking,
+}: MiceBookingDrawerProps) {
   const isEdit = !!booking;
   const form = useForm<MiceFormValues>({ defaultValues: DEFAULT_VALUES });
 
@@ -89,13 +150,30 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
     queryKey: ["venues"],
     queryFn: () => fetchJson<VenueOption[]>("/api/venues"),
     staleTime: 5 * 60_000,
+    enabled: open,
   });
+
+  const venueOptions = useMemo<SearchableSelectOption[]>(
+    () => venues.map((v) => ({ id: v.id, name: v.name })),
+    [venues]
+  );
+
+  const quotationOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      DUMMY_QUOTATIONS.map((q) => ({
+        id: q.id,
+        name: `${q.packageName} ${q.variantName} — ${q.leadName}`,
+      })),
+    []
+  );
 
   useEffect(() => {
     if (!open) return;
     if (booking) {
-      const matchedVenueId = venues.find((v) => v.name === booking.venueName)?.id ?? "";
+      const matchedVenueId =
+        venues.find((v) => v.name === booking.venueName)?.id ?? "";
       form.reset({
+        quotationId: booking.quotation?.id ?? "",
         clientName: booking.clientName,
         clientPhone: booking.clientPhone,
         venueId: matchedVenueId,
@@ -111,6 +189,22 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
     }
   }, [open, booking]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function handleQuotationPick(quotationId: string) {
+    form.setValue("quotationId", quotationId);
+    if (!quotationId) return;
+    const q = DUMMY_QUOTATIONS.find((x) => x.id === quotationId);
+    if (!q) return;
+    if (!form.getValues("clientName")) {
+      form.setValue("clientName", q.leadName);
+    }
+    form.setValue("eventType", q.eventType);
+    form.setValue("fullPayment", q.totalPrice.toLocaleString("id-ID"));
+    const matchedVenue = venues.find((v) => v.name === q.venue);
+    if (matchedVenue) {
+      form.setValue("venueId", matchedVenue.id);
+    }
+  }
+
   function onSubmit(_values: MiceFormValues): void {
     onOpenChange(false);
   }
@@ -120,101 +214,144 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
       isOpen={open}
       onClose={() => onOpenChange(false)}
       title={isEdit ? "Edit Booking MICE" : "Tambah Booking MICE"}
-      maxWidth="sm:max-w-lg"
+      maxWidth="sm:max-w-2xl"
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto">
           <Form {...form}>
             <form className="space-y-5 pb-2">
-              {/* Client */}
+              {/* === Section: Quotation === */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Informasi Client
+                  Quotation
                 </p>
                 <FormField
                   control={form.control}
-                  name="clientName"
-                  rules={{ required: "Nama client wajib diisi" }}
+                  name="quotationId"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nama Client / Perusahaan *</FormLabel>
+                    <FormItem className="w-full">
+                      <FormLabel>Pilih Quotation</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="PT Maju Jaya" />
+                        <SearchableSelect
+                          options={quotationOptions}
+                          value={field.value}
+                          onChange={handleQuotationPick}
+                          placeholder="Pilih quotation (opsional)..."
+                          searchPlaceholder="Cari quotation..."
+                          emptyText="Tidak ada quotation"
+                          className="w-full"
+                        />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="clientPhone"
-                  rules={{ required: "No. telepon wajib diisi" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>No. Telepon *</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="0812345678" />
-                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Memilih quotation akan otomatis mengisi venue, tipe event, dan full payment.
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
 
-              {/* Event */}
-              <div className="space-y-3">
+              {/* === Section: Informasi Client === */}
+              <div className="border-t border-border pt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Informasi Client
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="clientName"
+                    rules={{ required: "Nama client wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel>Nama Client / Perusahaan *</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="PT Maju Jaya" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="clientPhone"
+                    rules={{ required: "No. telepon wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel>No. Telepon *</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="tel"
+                            inputMode="numeric"
+                            placeholder="0812345678"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {/* === Section: Detail Event === */}
+              <div className="border-t border-border pt-4 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Detail Event
                 </p>
+
                 <FormField
                   control={form.control}
                   name="venueId"
                   rules={{ required: "Venue wajib dipilih" }}
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="w-full">
                       <FormLabel>Venue *</FormLabel>
-                      <SearchableSelect
-                        options={venues}
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Pilih venue..."
-                        searchPlaceholder="Cari venue..."
-                        emptyText="Tidak ada venue"
-                      />
+                      <FormControl>
+                        <SearchableSelect
+                          options={venueOptions}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Pilih venue..."
+                          searchPlaceholder="Cari venue..."
+                          emptyText="Tidak ada venue"
+                          className="w-full"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="eventType"
                   rules={{ required: "Tipe event wajib dipilih" }}
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="w-full">
                       <FormLabel>Tipe & Durasi Event *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Pilih tipe event" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {EVENT_TYPES.map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={EVENT_TYPE_OPTIONS}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Pilih tipe event..."
+                          searchPlaceholder="Cari tipe event..."
+                          emptyText="Tidak ada tipe event"
+                          className="w-full"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-3">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField
                     control={form.control}
                     name="eventDate"
                     rules={{ required: "Tanggal event wajib diisi" }}
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="w-full">
                         <FormLabel>Tanggal Event *</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
@@ -228,10 +365,16 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
                     name="pax"
                     rules={{ required: "Jumlah pax wajib diisi" }}
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="w-full">
                         <FormLabel>Jumlah Pax *</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="100" type="number" min="1" />
+                          <Input
+                            {...field}
+                            placeholder="100"
+                            type="number"
+                            min="1"
+                            inputMode="numeric"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -240,63 +383,77 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
                 </div>
               </div>
 
-              {/* Payment */}
-              <div className="space-y-3">
+              {/* === Section: Informasi Pembayaran === */}
+              <div className="border-t border-border pt-4 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Informasi Pembayaran
                 </p>
-                <FormField
-                  control={form.control}
-                  name="fullPayment"
-                  rules={{ required: "Full payment wajib diisi" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Full Payment *</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                            Rp
-                          </span>
-                          <Input
-                            className="pl-9"
-                            value={field.value}
-                            onChange={(e) => field.onChange(formatRp(e.target.value))}
-                            placeholder="45.000.000"
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="bookingFee"
-                  rules={{ required: "Booking fee wajib diisi" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Booking Fee / DP *</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                            Rp
-                          </span>
-                          <Input
-                            className="pl-9"
-                            value={field.value}
-                            onChange={(e) => field.onChange(formatRp(e.target.value))}
-                            placeholder="15.000.000"
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="fullPayment"
+                    rules={{ required: "Full payment wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel>Full Payment *</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span
+                              aria-hidden="true"
+                              className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none"
+                            >
+                              Rp
+                            </span>
+                            <Input
+                              className="pl-9"
+                              value={field.value}
+                              onChange={(e) =>
+                                field.onChange(formatRp(e.target.value))
+                              }
+                              placeholder="45.000.000"
+                              inputMode="numeric"
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="bookingFee"
+                    rules={{ required: "Booking fee wajib diisi" }}
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel>Booking Fee / DP *</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span
+                              aria-hidden="true"
+                              className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none"
+                            >
+                              Rp
+                            </span>
+                            <Input
+                              className="pl-9"
+                              value={field.value}
+                              onChange={(e) =>
+                                field.onChange(formatRp(e.target.value))
+                              }
+                              placeholder="15.000.000"
+                              inputMode="numeric"
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
-              {/* Sales */}
-              <div className="space-y-3">
+              {/* === Section: Informasi Sales === */}
+              <div className="border-t border-border pt-4 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Informasi Sales
                 </p>
@@ -305,20 +462,19 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
                   name="salesName"
                   rules={{ required: "Sales wajib dipilih" }}
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="w-full">
                       <FormLabel>Sales *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Pilih sales" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {SALES.map((s) => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={SALES_OPTIONS}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Pilih sales..."
+                          searchPlaceholder="Cari sales..."
+                          emptyText="Tidak ada sales"
+                          className="w-full"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -329,20 +485,20 @@ export function MiceBookingDrawer({ open, onOpenChange, booking }: MiceBookingDr
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white pt-4">
+        <div className="sticky bottom-0 bg-background pt-4">
           <div className="flex gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="flex-1 cursor-pointer"
+              className="flex-1"
             >
               Batal
             </Button>
             <Button
               type="button"
               onClick={form.handleSubmit(onSubmit)}
-              className="flex-1 bg-black text-white hover:bg-gray-800 cursor-pointer"
+              className="flex-1"
             >
               {isEdit ? "Simpan" : "Tambah"}
             </Button>

@@ -8,15 +8,15 @@ const leadSelect = {
   name: true,
   contactNumbers: true,
   email: true,
-  category: true,
   eventDate: true,
   estimatedPax: true,
   budgetRange: true,
   notes: true,
+  convertedAt: true,
   createdAt: true,
   updatedAt: true,
   status: {
-    select: { id: true, name: true, color: true },
+    select: { id: true, name: true, color: true, isFinal: true, isSystem: true },
   },
   venue: {
     select: { id: true, name: true },
@@ -25,13 +25,22 @@ const leadSelect = {
     select: { id: true, packageName: true },
   },
   eventType: {
-    select: { id: true, name: true },
+    select: { id: true, name: true, category: true },
   },
   sourceOfInformation: {
     select: { id: true, name: true },
   },
   createdBy: {
     select: { id: true, fullName: true, nickName: true },
+  },
+  assignedTo: {
+    select: { id: true, fullName: true, nickName: true },
+  },
+  convertedToCustomer: {
+    select: { id: true, name: true },
+  },
+  convertedToBooking: {
+    select: { id: true },
   },
 } satisfies Prisma.LeadSelect;
 
@@ -40,7 +49,7 @@ export async function getLeads(filter: LeadFilterInput) {
   cacheTag("leads");
   cacheLife("seconds");
 
-  const { search, category, statusId, venueId, page, pageSize } = filter;
+  const { search, statusId, venueId, assignedToId, page, pageSize } = filter;
 
   const where: Prisma.LeadWhereInput = {
     ...(search?.trim() && {
@@ -49,9 +58,9 @@ export async function getLeads(filter: LeadFilterInput) {
         { email: { contains: search.trim(), mode: "insensitive" } },
       ],
     }),
-    ...(category && category !== "all" && { category }),
     ...(statusId && { statusId }),
     ...(venueId && { venueId }),
+    ...(assignedToId && { assignedToId }),
   };
 
   const skip = (page - 1) * pageSize;
@@ -87,24 +96,23 @@ export async function getLeadById(id: string) {
   });
 }
 
-export async function getLeadStatuses(category?: "WEDDINGS" | "MICE") {
+export async function getLeadStatuses() {
   "use cache";
   cacheTag("lead-statuses");
   cacheLife("minutes");
 
   return db.leadStatus.findMany({
-    where: category ? { category } : undefined,
     select: {
       id: true,
       name: true,
       color: true,
-      category: true,
       sortOrder: true,
-      isPipeline: true,
       isDefault: true,
+      isFinal: true,
       isSystem: true,
+      isActive: true,
     },
-    orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+    orderBy: { sortOrder: "asc" },
   });
 }
 

@@ -7,9 +7,9 @@ import type { LeadsResult } from "@/lib/queries/leads";
 
 interface LeadFilter {
   search?: string;
-  category?: string;
   statusId?: string;
   venueId?: string;
+  assignedToId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -17,9 +17,9 @@ interface LeadFilter {
 async function fetchLeads(filter: LeadFilter = {}): Promise<LeadsResult> {
   const params = new URLSearchParams();
   if (filter.search) params.set("search", filter.search);
-  if (filter.category && filter.category !== "all") params.set("category", filter.category);
   if (filter.statusId) params.set("statusId", filter.statusId);
   if (filter.venueId) params.set("venueId", filter.venueId);
+  if (filter.assignedToId) params.set("assignedToId", filter.assignedToId);
   if (filter.page) params.set("page", String(filter.page));
   if (filter.pageSize) params.set("pageSize", String(filter.pageSize));
 

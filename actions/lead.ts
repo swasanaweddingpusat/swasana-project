@@ -12,6 +12,7 @@ import {
   updateLeadStatusSchema,
 } from "@/lib/validations/lead";
 import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput } from "@/lib/validations/lead";
+import type { Prisma } from "@prisma/client";
 
 // ─── Create Lead ──────────────────────────────────────────────────────────────
 
@@ -36,7 +37,6 @@ export async function createLead(data: CreateLeadInput) {
     name,
     contactNumbers,
     email,
-    category,
     eventDate,
     estimatedPax,
     budgetRange,
@@ -45,6 +45,7 @@ export async function createLead(data: CreateLeadInput) {
     packageId,
     eventTypeId,
     sourceOfInformationId,
+    assignedToId,
     statusId,
   } = parsed.data;
 
@@ -55,7 +56,6 @@ export async function createLead(data: CreateLeadInput) {
           name,
           contactNumbers,
           email: email || null,
-          category,
           eventDate: eventDate ? new Date(eventDate) : null,
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
@@ -64,6 +64,7 @@ export async function createLead(data: CreateLeadInput) {
           packageId: packageId || null,
           eventTypeId: eventTypeId || null,
           sourceOfInformationId: sourceOfInformationId || null,
+          assignedToId: assignedToId || null,
           statusId,
           createdById: session.user.profileId,
         },
@@ -118,7 +119,6 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.name !== undefined && { name: fields.name }),
           ...(fields.contactNumbers !== undefined && { contactNumbers: fields.contactNumbers }),
           ...(fields.email !== undefined && { email: fields.email || null }),
-          ...(fields.category !== undefined && { category: fields.category }),
           ...(fields.eventDate !== undefined && {
             eventDate: fields.eventDate ? new Date(fields.eventDate) : null,
           }),
@@ -131,6 +131,7 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.sourceOfInformationId !== undefined && {
             sourceOfInformationId: fields.sourceOfInformationId || null,
           }),
+          ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
         },
         select: { id: true, name: true },
@@ -234,5 +235,122 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
   } catch (err) {
     console.error("[updateLeadStatus]", err);
     return { success: false as const, error: "Gagal mengupdate status lead." };
+  }
+}
+
+// ─── Update Lead Assignee ────────────────────────────────────────────────────
+
+export async function updateLeadAssignee(leadId: string, assignedToId: string | null) {
+  const permResult = await requirePermission({ module: "leads", action: "edit" });
+  if (permResult.error) return { success: false as const, error: permResult.error };
+  const session = permResult.session!;
+
+  if (!mutationLimiter.check(`update-lead-assignee:${session.user.id}`)) {
+    return { success: false as const, ...rateLimitError() };
+  }
+
+  const h = await headers();
+  const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
+
+  try {
+    await db.$transaction([
+      db.lead.update({
+        where: { id: leadId },
+        data: { assignedToId },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "lead.assignee_changed",
+      result: "success",
+      entityType: "Lead",
+      entityId: leadId,
+      ipAddress: ip,
+    });
+
+    revalidateTag("leads", "max");
+
+    return { success: true as const };
+  } catch (err) {
+    console.error("[updateLeadAssignee]", err);
+    return { success: false as const, error: "Gagal mengupdate assignee lead." };
+  }
+}
+
+// ─── Convert Lead to Customer ─────────────────────────────────────────────────
+// Called when lead reaches Deal status and admin clicks "Convert"
+
+export async function convertLead(leadId: string) {
+  const permResult = await requirePermission({ module: "leads", action: "edit" });
+  if (permResult.error) return { success: false as const, error: permResult.error };
+  const session = permResult.session!;
+
+  if (!mutationLimiter.check(`convert-lead:${session.user.id}`)) {
+    return { success: false as const, ...rateLimitError() };
+  }
+
+  const h = await headers();
+  const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
+
+  const lead = await db.lead.findUnique({
+    where: { id: leadId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      contactNumbers: true,
+      convertedAt: true,
+      status: { select: { isFinal: true, isSystem: true, name: true } },
+    },
+  });
+
+  if (!lead) return { success: false as const, error: "Lead tidak ditemukan." };
+  if (lead.convertedAt) return { success: false as const, error: "Lead sudah pernah dikonversi." };
+  if (!lead.status.isSystem || !lead.status.isFinal) {
+    return { success: false as const, error: "Lead harus berstatus Deal untuk dikonversi." };
+  }
+
+  try {
+    const mobileNumberJson = JSON.parse(JSON.stringify(lead.contactNumbers)) as Prisma.InputJsonValue;
+
+    const customer = await db.customer.create({
+      data: {
+        name: lead.name,
+        email: lead.email ?? "",
+        mobileNumber: mobileNumberJson,
+        type: "Personal",
+        memberStatus: "Non-Member",
+      },
+      select: { id: true },
+    });
+
+    await db.$transaction([
+      db.lead.update({
+        where: { id: leadId },
+        data: {
+          convertedAt: new Date(),
+          convertedToCustomerId: customer.id,
+        },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "lead.converted",
+      result: "success",
+      entityType: "Lead",
+      entityId: leadId,
+      changes: { customerId: customer.id },
+      ipAddress: ip,
+    });
+
+    revalidateTag("leads", "max");
+    revalidateTag("customers", "max");
+
+    return { success: true as const, data: { customerId: customer.id } };
+  } catch (err) {
+    console.error("[convertLead]", err);
+    return { success: false as const, error: "Gagal mengkonversi lead." };
   }
 }

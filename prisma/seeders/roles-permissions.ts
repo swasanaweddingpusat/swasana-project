@@ -35,6 +35,10 @@ const moduleActions: Record<string, string[]> = {
   "settings-payment-methods": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
+  // CRM modules
+  leads: ["view", "create", "edit", "delete"],
+  "settings-lead-status": ["view", "create", "edit", "delete"],
+  quotations: ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -61,6 +65,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     "finance-ar": ["view"],
     "settings-approval-flow": ["view"],
+    leads: ["view", "create", "edit", "delete"],
+    "settings-lead-status": ["view", "create", "edit", "delete"],
+    quotations: ["view", "create", "edit", "delete"],
   },
   manager: {
     booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -80,6 +87,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-payment-methods": ["view", "create", "edit", "delete"],
     "settings-role-permission": ["view", "edit"],
     "settings-source-of-information": ["view", "create", "edit", "delete"],
+    leads: ["view", "create", "edit", "delete"],
+    "settings-lead-status": ["view", "create", "edit", "delete"],
+    quotations: ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -107,6 +117,8 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit"],
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
+    leads: ["view", "create", "edit"],
+    quotations: ["view", "create", "edit"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
