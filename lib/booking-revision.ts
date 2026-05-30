@@ -55,12 +55,19 @@ export async function createBookingRevision(
     discountAmount: booking.discountAmount,
   };
 
+  // BookingRevision.packageId is non-nullable — revisions are only created for wedding
+  // bookings which always have a package (enforced by Zod at creation/edit time).
+  if (!booking.packageId) {
+    throw new Error(`[createBookingRevision] booking ${bookingId} has no packageId — only wedding bookings should create revisions`);
+  }
+  const packageId = booking.packageId;
+
   const revision = await db.bookingRevision.create({
     data: {
       bookingId,
       revisionNumber,
       reason: reason ?? (revisionNumber === 1 ? "Initial booking" : "Booking updated"),
-      packageId: booking.packageId,
+      packageId,
       packageName: booking.snapPackage?.packageName ?? "",
       pax: booking.snapPackagePricing?.pax ?? 0,
       price: booking.snapPackagePricing?.price ?? 0,
