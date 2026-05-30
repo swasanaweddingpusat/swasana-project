@@ -509,6 +509,9 @@ model Booking {
   weddingSession        WeddingSession?
   weddingType           String?
   poNumber              String?
+  eventDate             DateTime?
+  quotationId           String?
+  salesSignature        String?
   rejectionNotes        String?
   lostReason            String?
   signingLocation       String?
@@ -519,7 +522,7 @@ model Booking {
   managerId             String?
   customerId            String
   venueId               String
-  packageId             String
+  packageId             String?
   paymentMethodId       String?
   sourceOfInformationId String?
   createdAt             DateTime        @default(now())
@@ -529,7 +532,7 @@ model Booking {
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
   customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
   venue               Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  package             Package              @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  package             Package?             @relation(fields: [packageId], references: [id], onDelete: Restrict)
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
 
@@ -567,6 +570,7 @@ model Booking {
   @@index([bookingStatus])
   @@index([bookingDate])
   @@index([category])
+  @@index([eventDate])
   @@map("bookings")
 }
 
