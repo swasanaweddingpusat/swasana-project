@@ -69,7 +69,7 @@ const bookingDetailInclude = {
 } as const;
 
 import type { DataScope } from "@/types/user";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, BookingStatus } from "@prisma/client";
 
 export interface PaginatedBookings {
   data: Awaited<ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude }>>>;
@@ -79,12 +79,13 @@ export interface PaginatedBookings {
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE" },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
   const venueFilter: Prisma.BookingWhereInput = options?.venueId ? { venueId: options.venueId } : {};
-  const where: Prisma.BookingWhereInput = { ...scopeFilter, ...searchFilter, ...venueFilter };
+  const categoryFilter: Prisma.BookingWhereInput = options?.category ? { category: options.category } : {};
+  const where: Prisma.BookingWhereInput = { ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
@@ -180,3 +181,90 @@ export async function getSalesProfiles() {
 }
 
 export type SalesProfile = Awaited<ReturnType<typeof getSalesProfiles>>[number];
+
+// ─── MICE Queries ─────────────────────────────────────────────────────────────
+
+const miceListInclude = {
+  customer: { select: { id: true, name: true, mobileNumber: true } },
+  venue: { select: { id: true, name: true } },
+  sales: { select: { id: true, fullName: true } },
+  sourceOfInformation: { select: { id: true, name: true } },
+  termOfPayments: {
+    orderBy: { sortOrder: "asc" as const },
+    select: { id: true, name: true, amount: true, dueDate: true, paymentStatus: true },
+  },
+} as const;
+
+export interface PaginatedMiceBookings {
+  data: Awaited<ReturnType<typeof db.booking.findMany<{ include: typeof miceListInclude }>>>;
+  total: number;
+}
+
+export async function getMiceBookings(
+  options?: { page?: number; pageSize?: number; search?: string; status?: string },
+): Promise<PaginatedMiceBookings> {
+  const page = Math.max(1, options?.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
+  const q = options?.search?.trim();
+  const where: Prisma.BookingWhereInput = {
+    category: "MICE",
+    ...(options?.status && options.status !== "all"
+      ? { bookingStatus: options.status as BookingStatus }
+      : {}),
+    ...(q
+      ? {
+          OR: [
+            { customer: { name: { contains: q, mode: "insensitive" } } },
+            { venue: { name: { contains: q, mode: "insensitive" } } },
+            { sales: { fullName: { contains: q, mode: "insensitive" } } },
+            { poNumber: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const [data, total] = await Promise.all([
+    db.booking.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: miceListInclude,
+    }),
+    db.booking.count({ where }),
+  ]);
+
+  return { data, total };
+}
+
+export type MiceBookingsResult = PaginatedMiceBookings;
+export type MiceBookingRow = MiceBookingsResult["data"][number];
+
+export async function getMiceBookingById(id: string) {
+  return db.booking.findFirst({
+    where: { id, category: "MICE" },
+    include: {
+      customer: true,
+      venue: { select: { id: true, name: true } },
+      sales: { select: { id: true, fullName: true } },
+      sourceOfInformation: { select: { id: true, name: true } },
+      termOfPayments: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+}
+
+export type MiceBookingDetail = NonNullable<Awaited<ReturnType<typeof getMiceBookingById>>>;
+
+export async function getSalesMiceProfiles() {
+  "use cache";
+  cacheTag("users");
+  cacheLife("minutes");
+
+  return db.profile.findMany({
+    where: { status: "active", role: { name: "sales-mice" } },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: "asc" },
+  });
+}
+
+export type SalesMiceProfile = Awaited<ReturnType<typeof getSalesMiceProfiles>>[number];
