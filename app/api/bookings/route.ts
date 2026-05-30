@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId });
+  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId, category: "WEDDINGS" });
 
   const transformed = {
     ...result,
