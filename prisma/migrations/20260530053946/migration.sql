@@ -32,8 +32,21 @@ ALTER COLUMN "updatedAt" DROP DEFAULT;
 ALTER TABLE "leads" ALTER COLUMN "id" DROP DEFAULT,
 ALTER COLUMN "updatedAt" DROP DEFAULT;
 
--- AlterTable
-ALTER TABLE "package_category_prices" RENAME CONSTRAINT "package_variant_category_prices_pkey" TO "package_category_prices_pkey",
+-- AlterTable — rename constraint first (separate statement required by PostgreSQL)
+-- Only rename if the old name still exists (idempotent: prev migration may have already created it with new name)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'package_variant_category_prices_pkey'
+      AND conrelid = 'package_category_prices'::regclass
+  ) THEN
+    ALTER TABLE "package_category_prices" RENAME CONSTRAINT "package_variant_category_prices_pkey" TO "package_category_prices_pkey";
+  END IF;
+END $$;
+
+-- AlterTable — then alter columns
+ALTER TABLE "package_category_prices"
 ALTER COLUMN "isShow" SET DEFAULT false,
 ALTER COLUMN "packageId" SET NOT NULL;
 
