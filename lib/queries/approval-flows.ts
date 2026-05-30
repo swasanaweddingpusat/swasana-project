@@ -14,6 +14,7 @@ export async function getApprovalFlows() {
   return db.approvalFlow.findMany({
     orderBy: { createdAt: "asc" },
     include: approvalFlowInclude,
+    take: 200,
   });
 }
 

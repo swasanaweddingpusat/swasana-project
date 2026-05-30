@@ -42,7 +42,7 @@ async function getBookingStats(
     },
     select: {
       bookingStatus: true,
-      snapPackageVariant: { select: { price: true } },
+      snapPackagePricing: { select: { price: true } },
     },
     take: 10000,
   });
@@ -51,7 +51,7 @@ async function getBookingStats(
     totalBookings: bookings.length,
     totalRevenue: bookings
       .filter((b) => b.bookingStatus === BookingStatus.Confirmed)
-      .reduce((sum, b) => sum + (b.snapPackageVariant?.price ?? 0), 0),
+      .reduce((sum, b) => sum + (b.snapPackagePricing?.price ?? 0), 0),
     pendingBookings: bookings.filter(
       (b) => b.bookingStatus === BookingStatus.Pending,
     ).length,

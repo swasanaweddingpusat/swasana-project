@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle } from "lucide-react";
+import { DangerTriangle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 
 export default function GlobalError({
@@ -13,7 +13,7 @@ export default function GlobalError({
 }) {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center text-center px-4">
-      <AlertTriangle className="h-16 w-16 text-muted-foreground mb-4" />
+      <DangerTriangle weight="BoldDuotone" className="h-16 w-16 text-muted-foreground mb-4" />
       <h1 className="text-2xl font-bold">Terjadi Kesalahan</h1>
       <p className="text-muted-foreground text-sm max-w-md mt-2">
         Maaf, terjadi kesalahan yang tidak terduga. Silakan coba lagi atau kembali ke dashboard.

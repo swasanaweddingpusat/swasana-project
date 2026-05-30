@@ -1,45 +1,64 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "../../../../lib/utils";
 
 export default function PackagesLoading() {
   return (
-    <div className={cn('flex', 'flex-col', 'mb-6', 'px-2')}>
+    <div className="flex flex-col mb-6 px-2">
       <Card>
         <CardContent className="p-0">
-          {/* Header */}
-          <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'pb-4', 'border-b')}>
-            <div className={cn('flex', 'items-center', 'gap-3')}>
-              <Skeleton className={cn('h-5', 'w-28')} />
-              <Skeleton className={cn('h-6', 'w-20', 'rounded-full')} />
+          {/* Header: title + count + search + btn */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-4 border-b">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-4 w-8 rounded-full" />
             </div>
-            <div className={cn('flex', 'items-center', 'gap-2')}>
-              <Skeleton className={cn('h-9', 'w-55')} />
-              <Skeleton className={cn('h-9', 'w-32')} />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-52 rounded-xl" />
+              <Skeleton className="h-9 w-36 rounded-xl" />
             </div>
           </div>
+
+          {/* Table header */}
+          <div className="grid grid-cols-[2.5rem_2.5rem_1fr_1fr_5rem_7rem_6rem_7rem_6rem] items-center gap-3 px-6 py-3 border-b">
+            <Skeleton className="h-4 w-4 rounded-sm" />
+            <Skeleton className="h-4 w-5" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-8" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-12" />
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-14" />
+          </div>
+
           {/* Table rows */}
-          <div className={cn('px-6', 'space-y-3', 'py-4')}>
+          <div className="divide-y">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className={cn('flex', 'items-center', 'gap-4', 'py-3')}>
-                <Skeleton className={cn('h-4', 'w-4')} />
-                <Skeleton className={cn('h-4', 'w-8')} />
-                <Skeleton className={cn('h-4', 'w-36')} />
-                <Skeleton className={cn('h-4', 'w-24')} />
-                <Skeleton className={cn('h-4', 'w-32')} />
-                <Skeleton className={cn('h-4', 'w-20')} />
-                <div className="flex-1" />
-                <Skeleton className={cn('h-7', 'w-16')} />
+              <div
+                key={i}
+                className="grid grid-cols-[2.5rem_2.5rem_1fr_1fr_5rem_7rem_6rem_7rem_6rem] items-center gap-3 px-6 py-3.5"
+              >
+                <Skeleton className="h-4 w-4 rounded-sm" />
+                <Skeleton className="h-4 w-5" />
+                {/* Package name — sedikit varied biar natural */}
+                <Skeleton className="h-4 rounded" style={{ width: `${55 + (i % 5) * 10}%` }} />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-10" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-8 w-8 rounded-lg" />
               </div>
             ))}
           </div>
+
           {/* Pagination */}
-          <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
-            <Skeleton className={cn('h-4', 'w-32')} />
-            <div className={cn('flex', 'items-center', 'gap-2')}>
-              <Skeleton className={cn('h-8', 'w-8')} />
-              <Skeleton className={cn('h-4', 'w-20')} />
-              <Skeleton className={cn('h-8', 'w-8')} />
+          <div className="flex items-center justify-between px-6 py-3 border-t">
+            <Skeleton className="h-4 w-36" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 w-8 rounded-lg" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-8 rounded-lg" />
             </div>
           </div>
         </CardContent>

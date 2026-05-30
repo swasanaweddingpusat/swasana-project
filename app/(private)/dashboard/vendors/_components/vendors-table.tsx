@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight } from "lucide-react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useVendorCategories, useDeleteVendor } from "@/hooks/use-vendors";
@@ -80,7 +80,7 @@ export function VendorsTable() {
       <div className={cn('flex', 'justify-end', 'items-center', 'mb-4', 'gap-2')}>
         {(can("vendor", "create") || isAdmin) && (
           <Button variant="outline" onClick={() => { setEditingVendor(null); setVendorDrawerOpen(true); }}>
-            <Plus className={cn('w-4', 'h-4', 'mr-1')} /> Add Vendor
+            <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Add Vendor
           </Button>
         )}
       </div>
@@ -139,12 +139,12 @@ export function VendorsTable() {
                       <div className={cn('flex', 'gap-1', 'justify-end')}>
                         {(can("vendor", "edit") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setEditingVendor(vendor); setVendorDrawerOpen(true); }}>
-                            <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                           </button>
                         )}
                         {(can("vendor", "delete") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setVendorToDelete(vendor); setDeleteOpen(true); }}>
-                            <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
                           </button>
                         )}
                       </div>
@@ -158,7 +158,7 @@ export function VendorsTable() {
           {filtered.length > 0 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className={cn('text-xs', 'h-8')}>
-                <ArrowLeft className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
+                <ArrowLeft weight="BoldDuotone" className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
               </Button>
               <div className={cn('flex', 'items-center', 'gap-1')}>
                 {(() => {
@@ -183,7 +183,7 @@ export function VendorsTable() {
                 })()}
               </div>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className={cn('text-xs', 'h-8')}>
-                Next <ArrowRight className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
+                Next <ArrowRight weight="BoldDuotone" className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
               </Button>
             </div>
           )}

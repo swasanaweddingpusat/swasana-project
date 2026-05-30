@@ -1,43 +1,32 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { AddCircle } from "@solar-icons/react";
 import { GroupsStatsCards } from "./GroupsStatsCards";
-import { GroupsRevenueChart } from "./GroupsRevenueChart";
 import { GroupsTable } from "./GroupsTable";
 import { GroupFormDialog } from "./GroupFormDialog";
-import { useGroupsPerformance } from "@/hooks/useGroupsPerformance";
-import type { GroupWithPerformance } from "@/lib/queries/groups";
-
-const MONTHS = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+import { useGroupsPerformance } from "@/hooks/use-groups-performance";
+import type { GroupWithPerformance, EligibleLeader } from "@/lib/queries/groups";
 
 interface Props {
   initialGroups: GroupWithPerformance[];
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  eligibleLeaders?: EligibleLeader[];
 }
 
-export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _canDelete }: Props) {
-  const now = new Date();
-  const [filterMonth, setFilterMonth] = useState(now.getMonth());
-  const [filterYear, setFilterYear] = useState(now.getFullYear());
+export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _canDelete, eligibleLeaders = [] }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<GroupWithPerformance | null>(null);
 
-  const { startDate, endDate } = useMemo(() => {
-    const s = new Date(filterYear, filterMonth, 1);
-    const e = new Date(filterYear, filterMonth + 1, 0, 23, 59, 59);
-    return { startDate: s.toISOString(), endDate: e.toISOString() };
-  }, [filterMonth, filterYear]);
-
-  const { data } = useGroupsPerformance(startDate, endDate);
+  const { data } = useGroupsPerformance();
   const groups = data?.groups ?? initialGroups;
   const summary = data?.summary ?? {
     totalGroups: initialGroups.length,
     totalSales: initialGroups.reduce((s, g) => s + g.revenue, 0),
+    totalTarget: initialGroups.reduce((s, g) => s + g.target, 0),
     avgAchievement: initialGroups.length > 0
       ? Math.round(initialGroups.reduce((s, g) => s + g.avgAchievement, 0) / initialGroups.length)
       : 0,
@@ -46,47 +35,32 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _ca
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-base font-bold text-foreground">Groups</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Kelola tim dan pantau kinerja penjualan</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={filterMonth.toString()} onValueChange={(v) => setFilterMonth(Number(v))}>
-            <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => <SelectItem key={i} value={i.toString()}>{m}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterYear.toString()} onValueChange={(v) => setFilterYear(Number(v))}>
-            <SelectTrigger className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => (
-                <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <GroupsStatsCards {...summary} />
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">Daftar Groups</h2>
           {canCreate && (
-            <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> New Group
+            <Button size="sm" className="h-9 gap-1.5" onClick={() => setCreateOpen(true)}>
+              <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> New Group
             </Button>
           )}
         </div>
-      </div>
-
-      <GroupsStatsCards {...summary} />
-      <GroupsRevenueChart groups={groups} />
-
-      <div>
-        <h2 className="text-sm font-semibold mb-3">Daftar Groups</h2>
         <GroupsTable groups={groups} canEdit={canEdit} onEdit={setEditGroup} />
       </div>
 
-      <GroupFormDialog open={createOpen} onOpenChange={setCreateOpen} />
       <GroupFormDialog
+        key="create"
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        eligibleLeaders={eligibleLeaders}
+      />
+      <GroupFormDialog
+        key={editGroup?.id ?? "edit-empty"}
         open={!!editGroup}
         onOpenChange={(o) => { if (!o) setEditGroup(null); }}
         group={editGroup}
+        eligibleLeaders={eligibleLeaders}
       />
     </div>
   );

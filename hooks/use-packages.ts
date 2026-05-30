@@ -7,12 +7,10 @@ import {
   updatePackage,
   deletePackage,
   deleteBulkPackages,
-  createVariant,
-  updateVariant,
-  deleteVariant,
   saveVendorItems,
   saveInternalItems,
-  saveVariantPrices,
+  savePackagePrices,
+  updatePackageTC,
   togglePackageAvailable,
 } from "@/actions/package";
 import type { PackagesQueryResult } from "@/lib/queries/packages";
@@ -67,36 +65,11 @@ export function useTogglePackageAvailable() {
   });
 }
 
-export function useCreateVariant() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Parameters<typeof createVariant>[0]) => createVariant(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
-  });
-}
-
-export function useUpdateVariant() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateVariant>[1] }) =>
-      updateVariant(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
-  });
-}
-
-export function useDeleteVariant() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => deleteVariant(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
-  });
-}
-
 export function useSaveVendorItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ variantId, items }: { variantId: string; items: { categoryName: string; itemText: string }[] }) =>
-      saveVendorItems(variantId, items),
+    mutationFn: ({ packageId, items }: { packageId: string; items: { categoryName: string; itemText: string }[] }) =>
+      saveVendorItems(packageId, items),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }
@@ -104,8 +77,8 @@ export function useSaveVendorItems() {
 export function useSaveInternalItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ variantId, items }: { variantId: string; items: { itemName: string; itemDescription: string }[] }) =>
-      saveInternalItems(variantId, items),
+    mutationFn: ({ packageId, items }: { packageId: string; items: { itemName: string; itemDescription: string }[] }) =>
+      saveInternalItems(packageId, items),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }
@@ -123,11 +96,29 @@ export function usePackageApprovals() {
   });
 }
 
-export function useSaveVariantPrices() {
+export function useSavePackagePrices() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ variantId, categories, margin, sellingPrice }: { variantId: string; categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[]; margin: number; sellingPrice: number }) =>
-      saveVariantPrices(variantId, categories, margin, sellingPrice),
+    mutationFn: ({
+      packageId,
+      categories,
+      margin,
+      sellingPrice,
+    }: {
+      packageId: string;
+      categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[];
+      margin: number;
+      sellingPrice: number;
+    }) => savePackagePrices(packageId, categories, margin, sellingPrice),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function useUpdatePackageTC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ packageId, termAndCondition }: { packageId: string; termAndCondition: string | null }) =>
+      updatePackageTC(packageId, termAndCondition),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }

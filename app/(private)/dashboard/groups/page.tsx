@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
-import { getGroupsWithPerformance } from "@/lib/queries/groups";
+import { getGroupsWithPerformance, getEligibleLeaders } from "@/lib/queries/groups";
 import { GroupsClient } from "./_components/GroupsClient";
 
 export default async function GroupsPage() {
@@ -16,27 +16,26 @@ export default async function GroupsPage() {
   const hasView = isViewAll || (await hasPermission(session.user.roleId, "groups", "view"));
   if (!hasView) redirect("/dashboard?error=forbidden");
 
-  const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
   const groups = await getGroupsWithPerformance(
     isViewAll ? undefined : profileId,
-    startDate,
-    endDate,
   );
 
   const canCreate = isAdmin || (await hasPermission(session.user.roleId, "groups", "create"));
   const canEdit = isAdmin || (await hasPermission(session.user.roleId, "groups", "edit"));
   const canDelete = isAdmin || (await hasPermission(session.user.roleId, "groups", "delete"));
 
+  const eligibleLeaders = isAdmin ? await getEligibleLeaders() : [];
+
   return (
+    // TODO(page-bg): dashboard/layout.tsx uses hardcoded bg-gray-100 on the outer shell.
+    // Adding a warm amber tint here would clash with that. Rely on card gradients for warmth.
     <div className="px-2 pb-6">
       <GroupsClient
         initialGroups={groups}
         canCreate={canCreate}
         canEdit={canEdit}
         canDelete={canDelete}
+        eligibleLeaders={eligibleLeaders}
       />
     </div>
   );

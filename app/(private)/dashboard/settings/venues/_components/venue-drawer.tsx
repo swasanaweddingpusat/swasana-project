@@ -174,7 +174,7 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
             <Button variant="outline" onClick={onClose} className={cn('flex-1', 'cursor-pointer', 'text-red-600', 'border-red-600', 'hover:bg-red-50')} disabled={saving}>
               Batal
             </Button>
-            <Button onClick={handleSubmit} className={cn('flex-1', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')} disabled={saving}>
+            <Button onClick={handleSubmit} className={cn('flex-1', 'cursor-pointer')} disabled={saving}>
               {saving ? "Menyimpan..." : isEdit ? "Simpan" : "Buat Venue"}
             </Button>
           </div>

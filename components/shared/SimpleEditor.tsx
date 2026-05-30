@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered } from "lucide-react";
+import { TextBold, TextItalic, TextUnderline as UnderlineIcon, List } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useEffect } from "react";
 
@@ -22,7 +22,7 @@ function ToolbarBtn({ active, onClick, children, title }: { active: boolean; onC
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       title={title}
-      className={cn("p-1.5 rounded hover:bg-gray-200 transition-colors", active && "bg-gray-200 text-black")}
+      className={cn("p-1.5 rounded hover:bg-muted transition-colors", active && "bg-muted text-foreground")}
     >
       {children}
     </button>
@@ -65,23 +65,23 @@ export function SimpleEditor({ value, onChange, placeholder, className }: Simple
   if (!editor) return null;
 
   return (
-    <div className={cn("border border-[#CCCCCC] rounded-md bg-[#F9F9F9] overflow-hidden", className)}>
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[#CCCCCC] bg-white">
+    <div className={cn("border border-border rounded-md bg-muted overflow-hidden", className)}>
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-card">
         <ToolbarBtn active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold">
-          <Bold className="h-4 w-4" />
+          <TextBold weight="BoldDuotone" className="h-4 w-4" />
         </ToolbarBtn>
         <ToolbarBtn active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic">
-          <Italic className="h-4 w-4" />
+          <TextItalic weight="BoldDuotone" className="h-4 w-4" />
         </ToolbarBtn>
         <ToolbarBtn active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline">
-          <UnderlineIcon className="h-4 w-4" />
+          <UnderlineIcon weight="BoldDuotone" className="h-4 w-4" />
         </ToolbarBtn>
-        <div className="w-px h-5 bg-gray-300 mx-1" />
+        <div className="w-px h-5 bg-border mx-1" />
         <ToolbarBtn active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet List">
-          <List className="h-4 w-4" />
+          <List weight="BoldDuotone" className="h-4 w-4" />
         </ToolbarBtn>
         <ToolbarBtn active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numbered List">
-          <ListOrdered className="h-4 w-4" />
+          <List weight="BoldDuotone" className="h-4 w-4" />
         </ToolbarBtn>
       </div>
       <EditorContent editor={editor} />

@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { UsersGroupRounded } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
 export interface GroupAchievementData {
@@ -28,7 +28,7 @@ function GroupAchievementCard({ group }: { group: GroupAchievementData }) {
           <p className={cn("text-xs", "text-muted-foreground", "mt-0.5")}>{group.leaderName}</p>
         </div>
         <div className={cn("flex", "items-center", "gap-1", "text-xs", "text-muted-foreground")}>
-          <Users className={cn("h-3.5", "w-3.5")} />
+          <UsersGroupRounded weight="BoldDuotone" className={cn("h-3.5", "w-3.5")} />
           <span>{group.memberCount}</span>
         </div>
       </div>

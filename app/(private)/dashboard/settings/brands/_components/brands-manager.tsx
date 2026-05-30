@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, PenLine, Trash2, ArrowLeft, ArrowRight } from "lucide-react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight } from "@solar-icons/react";
 import { createBrand, updateBrand, deleteBrand } from "@/actions/brand";
 import type { BrandsQueryResult, BrandQueryItem } from "@/lib/queries/venues";
 import { cn } from "../../../../../../lib/utils";
@@ -83,8 +83,8 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
               <span className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Brand Management</span>
               <span className={cn('text-sm', 'text-muted-foreground')}>({brands.length})</span>
             </div>
-            <Button onClick={handleOpenAdd} className={cn('cursor-pointer', 'bg-gray-900', 'hover:bg-gray-800', 'text-white')}>
-              <Plus className={cn('w-4', 'h-4', 'mr-2')} /> Add Brand
+            <Button onClick={handleOpenAdd} className={cn('cursor-pointer')}>
+              <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Add Brand
             </Button>
           </div>
 
@@ -114,10 +114,10 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
                     <TableCell>
                       <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
                         <button onClick={() => handleOpenEdit(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
-                          <PenLine className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                          <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                         </button>
                         <button onClick={() => setDeleteTarget(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                          <Trash2 className={cn('w-4', 'h-4', 'text-red-500')} />
+                          <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
                         </button>
                       </div>
                     </TableCell>
@@ -133,10 +133,10 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
               <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
               <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft className={cn('h-4', 'w-4')} />
+                  <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </Button>
                 <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight className={cn('h-4', 'w-4')} />
+                  <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </Button>
               </div>
             </div>
@@ -167,7 +167,7 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
               <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className={cn('flex-1', 'cursor-pointer')}>
                 Batal
               </Button>
-              <Button onClick={handleSave} disabled={saving || !formName.trim() || !formCode.trim()} className={cn('flex-1', 'bg-gray-900', 'hover:bg-gray-800', 'text-white', 'cursor-pointer')}>
+              <Button onClick={handleSave} disabled={saving || !formName.trim() || !formCode.trim()} className={cn('flex-1', 'cursor-pointer')}>
                 {saving ? "Menyimpan..." : editingBrand ? "Simpan" : "Tambah"}
               </Button>
             </div>

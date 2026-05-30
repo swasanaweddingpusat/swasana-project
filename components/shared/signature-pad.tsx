@@ -3,7 +3,7 @@
 import { useRef, useCallback } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { Button } from "@/components/ui/button";
-import { Eraser } from "lucide-react";
+import { Eraser } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
 interface SignaturePadProps {
@@ -33,7 +33,7 @@ export function SignaturePad({ onSignature, label = "Tanda Tangan", className }:
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{label}</span>
         <Button type="button" variant="ghost" size="sm" onClick={handleClear} className="h-7 text-xs text-muted-foreground">
-          <Eraser className="h-3.5 w-3.5 mr-1" />Hapus
+          <Eraser weight="BoldDuotone" className="h-3.5 w-3.5 mr-1" />Hapus
         </Button>
       </div>
       <div className="border-2 border-dashed border-gray-300 rounded-lg bg-white">

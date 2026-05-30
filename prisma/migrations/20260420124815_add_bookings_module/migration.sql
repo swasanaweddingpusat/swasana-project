@@ -84,16 +84,16 @@ CREATE TABLE "snap_packages" (
 );
 
 -- CreateTable
-CREATE TABLE "snap_package_variants" (
+CREATE TABLE "snap_package_pricing" (
     "id" TEXT NOT NULL,
     "bookingId" TEXT NOT NULL,
-    "variantId" TEXT NOT NULL,
-    "variantName" TEXT NOT NULL,
+    "packageId" TEXT NOT NULL,
+    "packageName" TEXT NOT NULL,
     "pax" INTEGER NOT NULL,
     "price" BIGINT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "snap_package_variants_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "snap_package_pricing_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -242,7 +242,7 @@ CREATE UNIQUE INDEX "snap_venues_bookingId_key" ON "snap_venues"("bookingId");
 CREATE UNIQUE INDEX "snap_packages_bookingId_key" ON "snap_packages"("bookingId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "snap_package_variants_bookingId_key" ON "snap_package_variants"("bookingId");
+CREATE UNIQUE INDEX "snap_package_pricing_bookingId_key" ON "snap_package_pricing"("bookingId");
 
 -- CreateIndex
 CREATE INDEX "snap_package_internal_items_bookingId_idx" ON "snap_package_internal_items"("bookingId");
@@ -299,7 +299,7 @@ ALTER TABLE "snap_venues" ADD CONSTRAINT "snap_venues_bookingId_fkey" FOREIGN KE
 ALTER TABLE "snap_packages" ADD CONSTRAINT "snap_packages_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "snap_package_variants" ADD CONSTRAINT "snap_package_variants_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "snap_package_pricing" ADD CONSTRAINT "snap_package_pricing_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "snap_package_internal_items" ADD CONSTRAINT "snap_package_internal_items_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, CalendarCheck, CheckCircle, type LucideIcon } from "lucide-react";
+import { ChatRound, CalendarMark, CheckCircle } from "@solar-icons/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ActivityItem } from "@/types/finance";
 import { cn } from "../../../../../lib/utils";
@@ -10,9 +10,9 @@ interface WeeklyActivityProps {
   loading: boolean;
 }
 
-const iconMap: Record<ActivityItem["icon"], LucideIcon> = {
-  inquiry: MessageSquare,
-  meeting: CalendarCheck,
+const iconMap: Record<ActivityItem["icon"], typeof ChatRound> = {
+  inquiry: ChatRound,
+  meeting: CalendarMark,
   confirmation: CheckCircle,
 };
 
@@ -43,7 +43,7 @@ export function WeeklyActivity({ activities, loading }: WeeklyActivityProps) {
             const Icon = iconMap[activity.icon];
             return (
               <div key={activity.id} className={cn('flex', 'items-start', 'gap-3')}>
-                <Icon className={cn('h-5', 'w-5', 'shrink-0', 'text-muted-foreground', 'mt-0.5')} />
+                <Icon weight="BoldDuotone" className={cn('h-5', 'w-5', 'shrink-0', 'text-muted-foreground', 'mt-0.5')} />
                 <div className={cn('flex', 'flex-col')}>
                   <span className={cn('text-sm', 'font-medium', 'text-foreground')}>{activity.title}</span>
                   <span className={cn('text-sm', 'text-muted-foreground')}>{activity.description}</span>

@@ -9,6 +9,7 @@ export async function getOrderStatuses() {
   return db.orderStatus.findMany({
     select: { id: true, name: true, sortOrder: true, createdAt: true },
     orderBy: { sortOrder: "asc" },
+    take: 500,
   });
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, CheckCheck, CalendarPlus, CalendarCheck, CalendarX, AlertTriangle, ArrowLeftRight, FileSignature, Eye, UserPlus, Store, UtensilsCrossed, RefreshCw } from "lucide-react";
+import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, Refresh, MentionCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
 import { formatDistanceToNow } from "date-fns";
@@ -9,17 +9,18 @@ import { id as localeId } from "date-fns/locale";
 import { useRouter } from "next/navigation";
 import { cn } from "../../../../../lib/utils";
 
-const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  booking_created: CalendarPlus,
-  booking_approved: CalendarCheck,
-  booking_rejected: CalendarX,
-  booking_lost: AlertTriangle,
-  booking_transferred: ArrowLeftRight,
-  agreement_signed: FileSignature,
+const TYPE_ICON: Record<string, typeof Bell> = {
+  booking_created: CalendarAdd,
+  booking_approved: CalendarMark,
+  booking_rejected: Calendar,
+  booking_lost: DangerTriangle,
+  booking_transferred: TransferHorizontal,
+  agreement_signed: FileText,
   agreement_viewed: Eye,
   user_invited: UserPlus,
-  vendor_updated: Store,
-  catering_updated: UtensilsCrossed,
+  vendor_updated: Shop,
+  catering_updated: ChefHat,
+  comment_mention: MentionCircle,
 };
 
 export function NotificationBell() {
@@ -43,14 +44,14 @@ export function NotificationBell() {
 
   const handleClick = (n: typeof notifications[number]) => {
     if (!n.isRead) markRead.mutate(n.id);
-    router.push("/dashboard/bookings");
+    router.push("/dashboard/booking-weddings");
     setOpen(false);
   };
 
   return (
     <div className="relative" ref={ref}>
       <Button variant="ghost" size="icon" className={cn('relative', 'cursor-pointer')} onClick={() => setOpen(!open)}>
-        <Bell className={cn('h-5', 'w-5')} />
+        <Bell weight="BoldDuotone" className={cn('h-5', 'w-5')} />
         {unreadCount > 0 && (
           <span className={cn('absolute', '-top-0.5', '-right-0.5', 'h-4', 'min-w-4', 'px-1', 'flex', 'items-center', 'justify-center', 'rounded-full', 'bg-red-500', 'text-white', 'text-[10px]', 'font-bold')}>
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -64,11 +65,11 @@ export function NotificationBell() {
             <p className={cn('text-sm', 'font-semibold', 'text-gray-900')}>Notifikasi</p>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <button type="button" onClick={() => refetch()} className={cn('p-1', 'rounded-md', 'hover:bg-gray-100', 'cursor-pointer', 'transition-colors')} title="Refresh">
-                <RefreshCw className={`h-3.5 w-3.5 text-gray-500 ${isFetching ? "animate-spin" : ""}`} />
+                <Refresh weight="BoldDuotone" className={`h-3.5 w-3.5 text-gray-500 ${isFetching ? "animate-spin" : ""}`} />
               </button>
               {unreadCount > 0 && (
                 <button type="button" onClick={() => markAll.mutate()} className={cn('text-xs', 'text-blue-600', 'hover:text-blue-800', 'flex', 'items-center', 'gap-1', 'cursor-pointer')}>
-                  <CheckCheck className={cn('h-3.5', 'w-3.5')} /> Tandai semua dibaca
+                  <CheckRead weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} /> Tandai semua dibaca
                 </button>
               )}
             </div>
@@ -77,7 +78,7 @@ export function NotificationBell() {
           <div className={cn('max-h-80', 'overflow-y-auto')}>
             {notifications.length === 0 ? (
               <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-10', 'text-center')}>
-                <Bell className={cn('h-8', 'w-8', 'text-gray-300', 'mb-2')} />
+                <Bell weight="BoldDuotone" className={cn('h-8', 'w-8', 'text-gray-300', 'mb-2')} />
                 <p className={cn('text-sm', 'text-gray-400')}>Belum ada notifikasi</p>
               </div>
             ) : (
@@ -87,7 +88,7 @@ export function NotificationBell() {
                   <button key={n.id} type="button" onClick={() => handleClick(n)}
                     className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 ${!n.isRead ? "bg-blue-50/50" : ""}`}>
                     <div className={cn('shrink-0', 'mt-0.5', 'h-7', 'w-7', 'rounded-full', 'bg-gray-100', 'flex', 'items-center', 'justify-center')}>
-                      <Icon className={cn('h-3.5', 'w-3.5', 'text-gray-600')} />
+                      <Icon weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-gray-600')} />
                     </div>
                     <div className={cn('flex-1', 'min-w-0')}>
                       <p className={`text-sm truncate ${!n.isRead ? "font-semibold text-gray-900" : "text-gray-700"}`}>{n.title}</p>

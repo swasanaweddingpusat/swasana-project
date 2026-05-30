@@ -1,14 +1,19 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 
-export async function getEventTypes() {
+export async function getEventTypes(category?: "WEDDINGS" | "MICE") {
   "use cache";
   cacheTag("event-types");
   cacheLife("minutes");
 
   return db.eventType.findMany({
-    select: { id: true, name: true, code: true, sortOrder: true, isActive: true, createdAt: true },
+    where: {
+      ...(category && { category }),
+      isActive: true,
+    },
+    select: { id: true, name: true, code: true, category: true, sortOrder: true, isActive: true, createdAt: true },
     orderBy: { sortOrder: "asc" },
+    take: 500,
   });
 }
 

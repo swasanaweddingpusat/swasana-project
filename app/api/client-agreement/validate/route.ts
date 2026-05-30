@@ -23,7 +23,7 @@ export async function POST(req: Request) {
             snapCustomer: true,
             snapVenue: true,
             snapPackage: true,
-            snapPackageVariant: true,
+            snapPackagePricing: true,
             snapPackageVendorItems: { orderBy: { sortOrder: "asc" } },
             snapVendorItems: true,
             snapPackageInternalItems: true,

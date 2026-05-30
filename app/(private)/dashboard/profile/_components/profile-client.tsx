@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Lock, User, Eye, EyeOff, Loader2, AlertTriangle, CreditCard, Users, Briefcase } from "lucide-react"
+import { Lock, User, Eye, EyeClosed, Refresh, DangerTriangle, Card as CardIcon, UsersGroupRounded, Case } from "@solar-icons/react"
 import { cn } from "@/lib/utils"
 import { updateMyProfile } from "@/actions/profile"
 import { createEducationLevel } from "@/actions/education-level"
@@ -63,7 +63,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
   return (
     <div className={cn('flex', 'items-center', 'gap-2', 'mb-4')}>
       <div className={cn('flex', 'items-center', 'justify-center', 'w-7', 'h-7', 'rounded-md', 'bg-primary/8', 'text-primary')}>
-        <Icon className={cn('h-3.5', 'w-3.5')} />
+        <Icon weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
       </div>
       <span className={cn('text-sm', 'font-semibold', 'text-foreground')}>{title}</span>
     </div>
@@ -186,7 +186,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
     <div className={cn('space-y-6', 'sm:p-6')}>
       {user.mustChangePassword && (
         <div className={cn('flex', 'items-start', 'gap-3', 'p-4', 'bg-amber-50', 'border', 'border-amber-200', 'rounded-lg', 'text-amber-800')}>
-          <AlertTriangle className={cn('h-5', 'w-5', 'shrink-0', 'mt-0.5')} />
+          <DangerTriangle weight="BoldDuotone" className={cn('h-5', 'w-5', 'shrink-0', 'mt-0.5')} />
           <div>
             <p className={cn('font-semibold', 'text-sm')}>Ganti Password Diperlukan</p>
             <p className={cn('text-sm', 'mt-0.5')}>Anda menggunakan kata sandi sementara. Silakan ganti sebelum melanjutkan.</p>
@@ -235,7 +235,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
               user.mustChangePassword && tab.id !== "security" && "opacity-40 cursor-not-allowed"
             )}
           >
-            <tab.icon className={cn('h-4', 'w-4')} />
+            <tab.icon weight="BoldDuotone" className={cn('h-4', 'w-4')} />
             {tab.label}
           </button>
         ))}
@@ -247,7 +247,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
           {/* Data Karyawan */}
           <Card className="border-border/60">
             <CardContent className="">
-              <SectionHeader icon={Briefcase} title="Data Pribadi" />
+              <SectionHeader icon={Case} title="Data Pribadi" />
               <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-2', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama Lengkap *">
                   <Input value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="Nama lengkap" />
@@ -309,7 +309,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
           {/* Rekening */}
           <Card className="border-border/60">
             <CardContent className="">
-              <SectionHeader icon={CreditCard} title="Rekening" />
+              <SectionHeader icon={CardIcon} title="Rekening" />
               <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-3', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama Bank">
                   <Input value={form.bankName} onChange={(e) => set("bankName", e.target.value)} placeholder="BCA, BNI, Mandiri, dll" />
@@ -350,7 +350,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
 
               <Separator className="my-5" />
 
-              <SectionHeader icon={Users} title="Kontak Darurat" />
+              <SectionHeader icon={UsersGroupRounded} title="Kontak Darurat" />
               <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-3', 'gap-x-6', 'gap-y-4')}>
                 <Field label="Nama">
                   <Input value={form.emergencyContactName} onChange={(e) => set("emergencyContactName", e.target.value)} placeholder="Nama kontak darurat" />
@@ -365,7 +365,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
 
               <div className={cn('mt-6', 'flex', 'justify-end')}>
                 <Button onClick={handleSaveProfile} disabled={savingProfile} className="min-w-32">
-                  {savingProfile ? <><Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Profil"}
+                  {savingProfile ? <><Refresh weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Profil"}
                 </Button>
               </div>
             </CardContent>
@@ -379,7 +379,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
           <CardContent className="">
             <div className={cn('flex', 'items-center', 'gap-2', 'mb-6')}>
               <div className={cn('flex', 'items-center', 'justify-center', 'w-7', 'h-7', 'rounded-md', 'bg-primary/8', 'text-primary')}>
-                <Lock className={cn('h-3.5', 'w-3.5')} />
+                <Lock weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
               </div>
               <span className={cn('text-sm', 'font-semibold')}>
                 {user.mustChangePassword ? "Buat Kata Sandi Baru" : "Ubah Kata Sandi"}
@@ -392,7 +392,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                   <div className="relative">
                     <Input type={showCurrentPw ? "text" : "password"} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Password saat ini" required disabled={isPending} />
                     <Button type="button" variant="ghost" size="sm" className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'hover:bg-transparent')} onClick={() => setShowCurrentPw(!showCurrentPw)}>
-                      {showCurrentPw ? <EyeOff className={cn('h-4', 'w-4')} /> : <Eye className={cn('h-4', 'w-4')} />}
+                      {showCurrentPw ? <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} /> : <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />}
                     </Button>
                   </div>
                 </Field>
@@ -401,7 +401,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                 <div className="relative">
                   <Input type={showNewPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimal 12 karakter" required minLength={12} disabled={isPending} />
                   <Button type="button" variant="ghost" size="sm" className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'hover:bg-transparent')} onClick={() => setShowNewPw(!showNewPw)}>
-                    {showNewPw ? <EyeOff className={cn('h-4', 'w-4')} /> : <Eye className={cn('h-4', 'w-4')} />}
+                    {showNewPw ? <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} /> : <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />}
                   </Button>
                 </div>
               </Field>
@@ -409,13 +409,13 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                 <div className="relative">
                   <Input type={showConfirmPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Ulangi password baru" required minLength={12} disabled={isPending} />
                   <Button type="button" variant="ghost" size="sm" className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'hover:bg-transparent')} onClick={() => setShowConfirmPw(!showConfirmPw)}>
-                    {showConfirmPw ? <EyeOff className={cn('h-4', 'w-4')} /> : <Eye className={cn('h-4', 'w-4')} />}
+                    {showConfirmPw ? <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} /> : <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />}
                   </Button>
                 </div>
               </Field>
               </div>
               <Button type="submit" className={cn('w-full', 'sm:w-auto')} disabled={isPending}>
-                {isPending ? <><Loader2 className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Password Baru"}
+                {isPending ? <><Refresh weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Password Baru"}
               </Button>
             </form>
           </CardContent>

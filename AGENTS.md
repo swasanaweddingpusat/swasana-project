@@ -461,6 +461,9 @@ Permission `(module, action)` tuples — kebab-case format:
 | `settings-payment-methods` | `view`, `create`, `edit`, `delete` |
 | `settings-role-permission` | `view`, `create`, `edit`, `delete` |
 | `settings-source-of-information` | `view`, `create`, `edit`, `delete` |
+| `leads` | `view`, `create`, `edit`, `delete` |
+| `settings-lead-status` | `view`, `create`, `edit`, `delete` |
+| `quotations` | `view`, `create`, `edit`, `delete` |
 
 ---
 
@@ -594,35 +597,77 @@ Secrets never land in git. `.env` is gitignored; `.env.example` ships placeholde
 
 ---
 
-## 12. Design System — Monochrome (STRICT)
+## 12. Design System — Monochrome Chrome + Brand Accents
 
-swasana-project = strict monochrome. Semua warna grayscale (oklch chroma 0).
+swasana-project = monochrome chrome (gray surfaces) + brand accents via token. Hardcoded hex tetep dilarang kecuali `var(--brand-*)` syntax.
+
+### Brand Palette
+| Token | Hex | Pemakaian |
+|---|---|---|
+| `--brand-ink` | `#0F4159` | Foreground text (auto via `text-foreground`), heading, icon color |
+| `--brand-gold` | `#D4A547` | Focus ring (auto via `ring`), CTA accent, highlight |
+| `--brand-cream` | `#FAF7F2` | Foreground dark mode, soft section background |
 
 ### shadcn Config
 - Style: base-nova (base-ui primitives, BUKAN radix)
 - Base color: neutral
 - Tailwind v4 (`@import` syntax)
-- Icon: Lucide
-- Font: Open Sans (sans), Geist Mono (mono)
+- **Icon: Solar Icons (@solar-icons/react) — weight="BoldDuotone"**
+- Font: Plus Jakarta Sans (body), Fraunces (display/heading), Quicksand (logo), Geist Mono (mono)
 
 ### Color Tokens — HANYA pake ini:
 | Token | Kapan Pake |
 |---|---|
-| `primary` | CTA utama, button default, text emphasis |
+| `primary` | CTA utama, button default — Ink `#0F4159` (BUKAN gold, BUKAN near-black) |
 | `secondary` | Button secondary, background subtle |
 | `muted` / `muted-foreground` | Disabled state, placeholder, helper text |
 | `accent` | Hover state, active background |
-| `destructive` | Error, delete, danger — SATU-SATUNYA warna non-gray |
+| `destructive` | Error, delete, danger — SATU-SATUNYA warna non-gray non-brand |
 | `border` | Borders, dividers |
-| `foreground` | Body text |
+| `foreground` | Body text (otomatis = Ink) |
 | `background` | Page background |
 | `card` / `card-foreground` | Card surfaces |
+| `ring` | Focus ring (otomatis = Gold) |
+
+### Font Tokens
+| Class | Kapan Pake |
+|---|---|
+| `font-sans` (default) | Body text — Plus Jakarta Sans |
+| `font-display` / `font-heading` | Heading editorial — Fraunces (boleh italic) |
+| `font-logo` | Logo / brand identifier — Quicksand |
+| `font-mono` | Code, ID, monospace data — Geist Mono |
+
+### Icon Usage (Solar BoldDuotone)
+```tsx
+import { Magnifer, Pen, TrashBinTrash } from "@solar-icons/react";
+
+<Magnifer weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+<Pen weight="BoldDuotone" className="h-5 w-5" />
+```
+Size via Tailwind className (h-N w-N). Color via Tailwind `text-*` (uses currentColor for both duotone paths).
+
+### Layout & Component Style — Bank Jago Vibe (REFRESH)
+Layouting & komponen ngikut gaya **Bank Jago** (modern neobank) — warna TETEP brand ink/gold/cream, cuma layout-nya naik kelas:
+
+- **Card-based** — konten dikelompokin di card `rounded-2xl`, bukan flat list polos
+- **Rounded generous** — card `rounded-2xl`; button/input/badge `rounded-xl` atau `rounded-full` (pill)
+- **Spacing lega** — padding card `p-5`/`p-6`, gap section `gap-4`/`gap-6` — jangan sumpek
+- **Soft shadow** — elevation halus (`shadow-sm` → hover `shadow-md`), bukan border tebel doang
+- **Pill buttons & chips** — CTA & filter chip bentuk pill (`rounded-full`)
+- **Hierarchy jelas** — angka/metric gede & bold pakai `font-heading` (Fraunces), label kecil `muted-foreground` di atasnya
+- **Airy & breathable** — whitespace itu fitur, jangan rapetin semua
+- **Hover feedback halus** — `transition-colors`/`transition-shadow`, hover subtle pakai `accent`/`muted`
+
+Prinsip: aturan "no hardcode color" tetep STRICT, tapi layout clean, rounded, spacious, friendly kayak app neobank.
 
 ### DILARANG:
 - ❌ Hardcode warna (bg-blue-500, text-green-600, dll) — pake CSS variable tokens
-- ❌ Warna selain grayscale + destructive red
+- ❌ Hardcode hex `#0F4159` / `#D4A547` di tsx — pake `var(--brand-*)` atau token foreground/ring
+- ❌ Ganti `--primary` ke gold — primary button = Ink `#0F4159`, gold cuma accent/ring
+- ❌ Warna selain grayscale + destructive red + brand (ink/gold/cream)
 - ❌ Edit file di `components/ui/` — itu shadcn generated
 - ❌ Bikin component baru kalau shadcn udah provide
+- ❌ Pakai `lucide-react` di file baru — pakai Solar BoldDuotone
 
 ---
 

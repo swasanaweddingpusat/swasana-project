@@ -18,7 +18,7 @@ export async function getAgreementByToken(token: string) {
           snapCustomer: true,
           snapVenue: true,
           snapPackage: true,
-          snapPackageVariant: true,
+          snapPackagePricing: true,
           snapPackageVendorItems: true,
           snapVendorItems: true,
           termOfPayments: { orderBy: { dueDate: "asc" } },

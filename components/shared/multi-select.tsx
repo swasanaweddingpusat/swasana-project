@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, ChevronDown, Search } from "lucide-react";
+import { CloseCircle, AltArrowDown, Magnifer } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
 export interface MultiSelectOption {
@@ -71,18 +71,18 @@ export function MultiSelect({
             <span key={o.id} className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 text-xs">
               {o.name}
               <button type="button" onClick={(e) => remove(o.id, e)} className="hover:text-destructive">
-                <X className="h-3 w-3" />
+                <CloseCircle weight="BoldDuotone" className="h-3 w-3" />
               </button>
             </span>
           ))
         )}
-        <ChevronDown className={cn("h-4 w-4 text-muted-foreground ml-auto shrink-0 transition-transform", open && "rotate-180")} />
+        <AltArrowDown weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground ml-auto shrink-0 transition-transform", open && "rotate-180")} />
       </div>
 
       {open && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
           <div className="flex items-center border-b px-2">
-            <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Magnifer weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <input
               autoFocus
               className="flex-1 bg-transparent py-2 px-2 text-sm outline-none placeholder:text-muted-foreground"
@@ -102,7 +102,7 @@ export function MultiSelect({
                   onClick={() => toggle(o.id)}
                 >
                   <div className={cn("h-4 w-4 rounded border flex items-center justify-center shrink-0", value.includes(o.id) ? "bg-primary border-primary" : "border-input")}>
-                    {value.includes(o.id) && <X className="h-2.5 w-2.5 text-primary-foreground" style={{ transform: "rotate(45deg)" }} />}
+                    {value.includes(o.id) && <CloseCircle weight="BoldDuotone" className="h-2.5 w-2.5 text-primary-foreground" style={{ transform: "rotate(45deg)" }} />}
                   </div>
                   {o.name}
                 </div>

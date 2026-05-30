@@ -33,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { X, UserPlus } from "lucide-react";
+import { CloseCircle, UserPlus } from "@solar-icons/react";
 import { createGroupSchema, updateGroupSchema } from "@/lib/validations/user";
 import { createGroup, updateGroup, addGroupMember, removeGroupMember } from "@/actions/groups";
 import type { GroupQueryItem } from "@/lib/queries/groups";
@@ -273,7 +273,7 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
                           className={cn('h-7', 'w-7', 'text-destructive', 'hover:text-destructive')}
                           onClick={() => handleRemoveMember(profile.id)}
                         >
-                          <X className={cn('h-3.5', 'w-3.5')} />
+                          <CloseCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                         </Button>
                       </div>
                     ))}
@@ -306,7 +306,7 @@ export function GroupDrawer({ open, onOpenChange, editGroup, users, onSaved }: G
                             disabled={addingMemberId === u.profile!.id}
                             onClick={() => handleAddMember(u.profile!.id)}
                           >
-                            <UserPlus className={cn('h-3.5', 'w-3.5')} />
+                            <UserPlus weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                           </Button>
                         </div>
                       ))}

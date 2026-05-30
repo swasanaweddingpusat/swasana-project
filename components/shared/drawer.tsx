@@ -6,7 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import { CloseCircle } from "@solar-icons/react";
 import React from "react";
 import { Stepper } from "@/components/ui/stepper";
 
@@ -62,32 +62,32 @@ export function Drawer({
         {/* Header with title, close button, and steps */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-base sm:text-[22px] font-semibold px-2 m-0 text-[#121417] truncate max-w-[60%]">
+            <SheetTitle className="text-base sm:text-[22px] font-semibold px-2 m-0 text-foreground truncate max-w-[60%]">
               {title}
             </SheetTitle>
             <div className="flex items-center gap-3">
               {steps && stepperType === "short" && (
                 <>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-muted-foreground">
                     Step {steps} / {totalSteps}
                   </span>
                   <button
-                    className="p-1 rounded-full bg-red-100 hover:bg-red-200 cursor-pointer"
+                    className="p-1 rounded-full bg-destructive/10 hover:bg-destructive/20 cursor-pointer"
                     onClick={onClose}
                     aria-label="Close"
                   >
-                    <X className="h-6 w-6 text-red-500" />
+                    <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
                   </button>
                 </>
               )}
               {headerActions}
               {isCloseButton && !steps && (
                 <button
-                  className="p-1 rounded-full bg-red-100 hover:bg-red-200 cursor-pointer"
+                  className="p-1 rounded-full bg-destructive/10 hover:bg-destructive/20 cursor-pointer"
                   onClick={onClose}
                   aria-label="Close"
                 >
-                  <X className="h-6 w-6 text-red-500" />
+                  <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
                 </button>
               )}
             </div>
@@ -98,7 +98,7 @@ export function Drawer({
               <button
                 type="button"
                 onClick={onBack}
-                className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

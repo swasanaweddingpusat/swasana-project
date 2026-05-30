@@ -28,9 +28,9 @@ import type { UserFilters } from "@/types/user";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  Trash2, PenLine, Mail, MoreHorizontal, ArrowLeft, ArrowRight,
-  X, UserPlus, SlidersHorizontal, RefreshCw,
-} from "lucide-react";
+  TrashBinTrash, PenNewSquare, Letter, MenuDots, ArrowLeft, ArrowRight,
+  CloseCircle, UserPlus, Filter, Refresh,
+} from "@solar-icons/react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -170,15 +170,15 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                 {selectedUsers.size > 1 && (
                   <>
                     <Button variant="outline" size="sm" className={cn('flex', 'items-center', 'gap-1.5', 'h-8', 'text-xs')} onClick={() => setBulkEditOpen(true)}>
-                      <PenLine className={cn('w-3.5', 'h-3.5')} /> Edit ({selectedUsers.size})
+                      <PenNewSquare weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} /> Edit ({selectedUsers.size})
                     </Button>
                     <Button variant="destructive" size="sm" className={cn('flex', 'items-center', 'gap-1.5', 'h-8', 'text-xs')} onClick={() => setBulkDeleteOpen(true)}>
-                      <Trash2 className={cn('w-3.5', 'h-3.5')} /> Delete ({selectedUsers.size})
+                      <TrashBinTrash weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} /> Delete ({selectedUsers.size})
                     </Button>
                   </>
                 )}
                 <Button size="sm" onClick={handleAddNew} className={cn('flex', 'items-center', 'gap-1.5', 'text-xs', 'h-8')}>
-                  <UserPlus className={cn('w-3.5', 'h-3.5')} /> Invite User
+                  <UserPlus weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} /> Invite User
                 </Button>
               </div>
             </div>
@@ -215,19 +215,19 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                   className={cn('h-8', 'px-2', 'border-border', 'bg-secondary', 'hover:bg-accent')}
                   title="Refresh data"
                 >
-                  <RefreshCw className={cn("h-3.5 w-3.5 text-muted-foreground", isRefetching && "animate-spin")} />
+                  <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5 text-muted-foreground", isRefetching && "animate-spin")} />
                 </Button>
                 {hasFilters && (
                   <Button variant="ghost" size="sm" onClick={clearFilters} className={cn('h-8', 'px-2', 'text-muted-foreground', 'hover:text-foreground')}>
-                    <X className={cn('h-3.5', 'w-3.5')} />
+                    <CloseCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                   </Button>
                 )}
               </div>
 
               {/* Mobile filter */}
               <div className="lg:hidden">
-                <Button variant="outline" size="sm" className={cn("h-8 w-8 p-0 border-gray-200", hasFilters && "border-[#1D1D1D] bg-[#1D1D1D] text-white hover:bg-[#333] hover:text-white")}>
-                  <SlidersHorizontal className={cn('h-3.5', 'w-3.5')} />
+                <Button variant="outline" size="sm" className={cn("h-8 w-8 p-0 border-gray-200", hasFilters && "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}>
+                  <Filter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                 </Button>
               </div>
             </div>
@@ -309,19 +309,19 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                           <div className={cn('flex', 'items-center', 'justify-end', 'gap-1')}>
                             <DropdownMenu>
                               <DropdownMenuTrigger className={cn('p-1', 'hover:bg-gray-100', 'rounded', 'cursor-pointer', 'outline-none')} title="Actions">
-                                <MoreHorizontal className={cn('h-3.5', 'w-3.5', 'text-gray-700')} />
+                                <MenuDots weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-gray-700')} />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleEdit(user)}>
-                                  <PenLine className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit
+                                  <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit
                                 </DropdownMenuItem>
                                 {!isVerified && (
                                   <DropdownMenuItem onClick={() => handleResend(user)} disabled={resendingId === user.profile?.id}>
-                                    <Mail className={cn('h-3.5', 'w-3.5', 'mr-2')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
+                                    <Letter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }} className="text-red-600">
-                                  <Trash2 className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Delete
+                                  <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -339,7 +339,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
           {total > 0 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
               <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(p - 1, 1))} disabled={page === 1} className={cn('text-xs', 'h-8')}>
-                <ArrowLeft className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
+                <ArrowLeft weight="BoldDuotone" className={cn('w-3.5', 'h-3.5', 'mr-1.5')} /> Previous
               </Button>
               <div className={cn('flex', 'items-center', 'gap-1')}>
                 {(() => {
@@ -364,7 +364,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                 })()}
               </div>
               <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(p + 1, totalPages))} disabled={page === totalPages} className={cn('text-xs', 'h-8')}>
-                Next <ArrowRight className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
+                Next <ArrowRight weight="BoldDuotone" className={cn('w-3.5', 'h-3.5', 'ml-1.5')} />
               </Button>
             </div>
           )}

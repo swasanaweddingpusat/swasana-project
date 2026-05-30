@@ -9,6 +9,7 @@ export async function getEducationLevels() {
   return db.educationLevel.findMany({
     select: { id: true, name: true, order: true, createdAt: true },
     orderBy: { order: "asc" },
+    take: 500,
   });
 }
 

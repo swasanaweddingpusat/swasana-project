@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, X, Clock, PenLine } from "lucide-react";
+import { CheckCircle, CloseCircle, ClockCircle, PenNewSquare } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -109,7 +109,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
             {/* Creator info */}
             <div className={cn('flex', 'items-center', 'gap-3', 'p-3', 'rounded-lg', 'border', 'bg-muted/30')}>
               <div className={cn('flex', 'items-center', 'justify-center', 'h-7', 'w-7', 'rounded-full', 'bg-black', 'text-white', 'shrink-0')}>
-                <PenLine className={cn('h-3.5', 'w-3.5')} />
+                <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
               </div>
               <div className={cn('flex-1', 'min-w-0')}>
                 <p className={cn('text-sm', 'font-medium')}>Dibuat oleh {record.createdBy.fullName}</p>
@@ -141,7 +141,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                     step.status === "rejected" && "bg-destructive text-white",
                     step.status === "pending" && "bg-muted text-muted-foreground",
                   )}>
-                    {step.status === "approved" ? <Check className={cn('h-4', 'w-4')} /> : step.status === "rejected" ? <X className={cn('h-4', 'w-4')} /> : <Clock className={cn('h-3.5', 'w-3.5')} />}
+                    {step.status === "approved" ? <CheckCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /> : step.status === "rejected" ? <CloseCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /> : <ClockCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />}
                   </div>
                   <div className={cn('flex-1', 'min-w-0')}>
                     <p className={cn('text-sm', 'font-medium')}>

@@ -2,21 +2,20 @@
 
 import { cn } from "@/lib/utils";
 import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  ArrowDown,
+  AltArrowLeft,
+  AltArrowRight,
+  AltArrowDown,
   Eye,
-  CreditCard,
+  Card,
   Bell,
-  Check,
-  RefreshCw,
-  Ban,
-  Minus,
-  FileDown,
-  FilePlus,
-  ClipboardList,
-} from "lucide-react";
+  CheckCircle,
+  Refresh,
+  Forbidden,
+  MinusCircle,
+  DownloadMinimalistic,
+  FileSend,
+  ClipboardCheck,
+} from "@solar-icons/react";
 import {
   Table,
   TableBody,
@@ -69,7 +68,7 @@ interface BadgeConfig {
   bg: string;
   border: string;
   text: string;
-  Icon: typeof Check;
+  Icon: typeof CheckCircle;
 }
 
 function getTerminBadge(status: ARTerminStatus): BadgeConfig {
@@ -79,35 +78,35 @@ function getTerminBadge(status: ARTerminStatus): BadgeConfig {
       bg: "bg-primary",
       border: "border-primary",
       text: "text-primary-foreground",
-      Icon: Check,
+      Icon: CheckCircle,
     },
     partial: {
       label: "Partial",
       bg: "bg-secondary",
       border: "border-border",
       text: "text-foreground",
-      Icon: RefreshCw,
+      Icon: Refresh,
     },
     overdue: {
       label: "Aging",
       bg: "bg-destructive/10",
       border: "border-destructive/20",
       text: "text-destructive",
-      Icon: Ban,
+      Icon: Forbidden,
     },
     unpaid: {
       label: "Unpaid",
       bg: "bg-destructive/10",
       border: "border-destructive/20",
       text: "text-destructive",
-      Icon: Ban,
+      Icon: Forbidden,
     },
     not_due_yet: {
       label: "Not Due Yet",
       bg: "bg-secondary",
       border: "border-border",
       text: "text-muted-foreground",
-      Icon: Minus,
+      Icon: MinusCircle,
     },
   };
   return map[status];
@@ -120,28 +119,28 @@ function getInvoiceBadge(status: ARInvoiceStatus): BadgeConfig {
       bg: "bg-primary",
       border: "border-primary",
       text: "text-primary-foreground",
-      Icon: Check,
+      Icon: CheckCircle,
     },
     partial: {
       label: "Partial",
       bg: "bg-secondary",
       border: "border-border",
       text: "text-foreground",
-      Icon: RefreshCw,
+      Icon: Refresh,
     },
     unpaid: {
       label: "Unpaid",
       bg: "bg-destructive/10",
       border: "border-destructive/20",
       text: "text-destructive",
-      Icon: Ban,
+      Icon: Forbidden,
     },
     unissued: {
       label: "Unissued",
       bg: "bg-secondary",
       border: "border-border",
       text: "text-muted-foreground",
-      Icon: ClipboardList,
+      Icon: ClipboardCheck,
     },
   };
   return map[status] ?? map.unissued;
@@ -158,7 +157,7 @@ function StatusBadge({ config }: { config: BadgeConfig }) {
         text
       )}
     >
-      <Icon className="size-3" />
+      <Icon weight="BoldDuotone" className="size-3" />
       {label}
     </span>
   );
@@ -238,7 +237,7 @@ export function ARTable({
             <TableRow className="bg-secondary hover:bg-secondary">
               <TableHead className="h-11 min-w-44 px-6 py-3 text-xs font-semibold text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
-                  Customer Event <ArrowDown className="size-3" />
+                  Customer Event <AltArrowDown weight="BoldDuotone" className="size-3" />
                 </span>
               </TableHead>
               <TableHead className="h-11 w-37.75 min-w-37.75 px-6 py-3 text-xs font-semibold text-muted-foreground">
@@ -296,7 +295,7 @@ export function ARTable({
               disabled={currentPage <= 1}
               className="gap-1"
             >
-              <ChevronLeft className="size-5" />
+              <AltArrowLeft weight="BoldDuotone" className="size-5" />
               Previous
             </Button>
           </div>
@@ -336,7 +335,7 @@ export function ARTable({
               className="gap-1"
             >
               Next
-              <ChevronRight className="size-5" />
+              <AltArrowRight weight="BoldDuotone" className="size-5" />
             </Button>
           </div>
         </div>
@@ -368,7 +367,8 @@ function BookingRow({
       >
         <TableCell className="px-6 py-4">
           <div className="flex items-start gap-2">
-            <ChevronDown
+            <AltArrowDown
+              weight="BoldDuotone"
               className={cn(
                 "size-4 shrink-0 mt-0.5 text-muted-foreground transition-transform duration-200",
                 isExpanded && "rotate-180"
@@ -410,19 +410,19 @@ function BookingRow({
               onClick={onDetail}
               title="Detail"
             >
-              <Eye className="size-4" />
+              <Eye weight="BoldDuotone" className="size-4" />
             </button>
             <button
               className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
               title="Payment"
             >
-              <CreditCard className="size-4" />
+              <Card weight="BoldDuotone" className="size-4" />
             </button>
             <button
               className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
               title="Reminder"
             >
-              <Bell className="size-4" />
+              <Bell weight="BoldDuotone" className="size-4" />
             </button>
           </div>
         </TableCell>
@@ -533,7 +533,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
           title="Download"
         >
-          <FileDown className="size-4" />
+          <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
         </button>
       </div>
     );
@@ -546,7 +546,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
           title="Payment"
         >
-          <CreditCard className="size-4" />
+          <Card weight="BoldDuotone" className="size-4" />
         </button>
         <button
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
@@ -565,7 +565,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
           title="Create Invoice"
         >
-          <FilePlus className="size-4" />
+          <FileSend weight="BoldDuotone" className="size-4" />
         </button>
         <button
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
@@ -583,7 +583,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
         className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
         title="Payment"
       >
-        <CreditCard className="size-4" />
+        <Card weight="BoldDuotone" className="size-4" />
       </button>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, ExternalLink, X } from "lucide-react";
+import { Refresh, ArrowRightUp, CloseCircle } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,7 @@ import { Button } from "@/components/ui/button";
 
 interface POPreviewTarget {
   packageId: string;
-  variantId: string;
   packageName: string;
-  variantName: string;
 }
 
 interface POPreviewModalProps {
@@ -46,7 +44,6 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             packageId: target!.packageId,
-            variantId: target!.variantId,
           }),
         });
         if (!res.ok) {
@@ -85,14 +82,14 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
       <DialogContent className="flex h-[85vh] w-[70vw] max-w-[70vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[70vw]">
         <DialogHeader className="shrink-0 border-b p-4">
           <DialogTitle>
-            Preview PO — {target.packageName} ({target.variantName})
+            Preview PO — {target.packageName}
           </DialogTitle>
         </DialogHeader>
 
         <div className="relative min-h-0 flex-1 overflow-hidden bg-muted">
           {loading && (
             <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Refresh weight="BoldDuotone" className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           )}
           {error && !loading && (
@@ -113,11 +110,11 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
 
         <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none border-t p-4">
           <Button variant="outline" onClick={handleOpenNewTab} disabled={!blobUrl}>
-            <ExternalLink className="mr-2 h-4 w-4" />
+            <ArrowRightUp weight="BoldDuotone" className="mr-2 h-4 w-4" />
             Buka di Tab Baru
           </Button>
           <Button variant="default" onClick={() => onOpenChange(false)}>
-            <X className="mr-2 h-4 w-4" />
+            <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
             Tutup
           </Button>
         </DialogFooter>

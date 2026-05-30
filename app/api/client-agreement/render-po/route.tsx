@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         snapCustomer: true,
         snapVenue: true,
         snapPackage: true,
-        snapPackageVariant: true,
+        snapPackagePricing: true,
         snapPackageInternalItems: { orderBy: { sortOrder: "asc" } },
         snapPackageVendorItems: { orderBy: { sortOrder: "asc" } },
         snapPackageCategoryPrices: { select: { categoryName: true, basePrice: true, isTakeout: true } },
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       snapCustomer: booking.snapCustomer,
       snapVenue: booking.snapVenue,
       snapPackage: booking.snapPackage,
-      snapPackageVariant: booking.snapPackageVariant,
+      snapPackagePricing: booking.snapPackagePricing,
       snapPackageInternalItems: booking.snapPackageInternalItems,
       snapPackageVendorItems: booking.snapPackageVendorItems,
       snapPackageCategoryPrices: booking.snapPackageCategoryPrices,
@@ -88,13 +88,7 @@ export async function POST(req: Request) {
     };
 
 
-    let termAndConditionHtml: string | null;
-    if (booking.packageVariantId) {
-      const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
-      termAndConditionHtml = pv?.termAndCondition ?? null;
-    } else {
-      termAndConditionHtml = null;
-    }
+    const termAndConditionHtml: string | null = booking.snapPackagePricing?.termAndCondition ?? null;
 
     let emateraiData: { sn: string; qrBase64: string } | null = null;
     const approvalRecord = await db.approvalRecord.findUnique({

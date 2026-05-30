@@ -155,7 +155,7 @@ export async function getGroupDetail(groupId: string) {
 
 // ─── Performance queries ──────────────────────────────────────────────────────
 
-export async function getGroupPerformance(groupId: string, startDate: Date, endDate: Date) {
+export async function getGroupPerformance(groupId: string, startDate?: Date, endDate?: Date) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
@@ -179,11 +179,11 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
           where: {
             salesId: profileId,
             bookingStatus: { not: BookingStatus.Canceled },
-            bookingDate: { gte: startDate, lte: endDate },
+            ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
           },
           select: {
             bookingStatus: true,
-            snapPackageVariant: { select: { price: true } },
+            snapPackagePricing: { select: { price: true } },
           },
           take: 1000,
         }),
@@ -191,16 +191,18 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
           where: {
             profileId,
             type: "sales",
-            startDate: { lte: endDate },
-            endDate: { gte: startDate },
+            ...(startDate && endDate
+              ? { startDate: { lte: endDate }, endDate: { gte: startDate } }
+              : {}),
           },
-          select: { amount: true },
+          orderBy: { endDate: "desc" },
+          select: { amount: true, startDate: true, endDate: true },
         }),
       ]);
 
       const confirmed = bookingRevenues.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
       const pendingApproval = bookingRevenues.filter((b) => b.bookingStatus === BookingStatus.Pending);
-      const actual = confirmed.reduce((sum, b) => sum + (b.snapPackageVariant?.price ?? 0), 0);
+      const actual = confirmed.reduce((sum, b) => sum + (b.snapPackagePricing?.price ?? 0), 0);
       const targetAmount = target ? Number(target.amount) : 0;
       const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
 
@@ -210,6 +212,8 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
         avatarUrl: profile.avatarUrl,
         actual,
         target: targetAmount,
+        targetStartDate: target?.startDate?.toISOString() ?? null,
+        targetEndDate: target?.endDate?.toISOString() ?? null,
         achievement,
         bookings: bookingRevenues.length,
         confirmed: confirmed.length,
@@ -223,32 +227,128 @@ export async function getGroupPerformance(groupId: string, startDate: Date, endD
 
 export async function getGroupsWithPerformance(
   profileId: string | undefined,
-  startDate: Date,
-  endDate: Date,
+  startDate?: Date,
+  endDate?: Date,
 ) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
 
-  const groups = profileId ? await getUserGroups(profileId) : await getAllGroups();
+  // ── Query 1: fetch groups + members in one shot ─────────────────────────────
+  const groupsWithMembers = await db.userGroup.findMany({
+    where: profileId
+      ? {
+          OR: [
+            { leaderId: profileId },
+            { members: { some: { userId: profileId } } },
+          ],
+        }
+      : undefined,
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      leaderId: true,
+      leader: { select: { fullName: true, avatarUrl: true } },
+      _count: { select: { members: true } },
+      members: {
+        select: { userId: true },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
 
-  return Promise.all(
-    groups.map(async (g) => {
-      const perf = await getGroupPerformance(g.id, startDate, endDate);
-      const revenue = perf.reduce((s, m) => s + m.actual, 0);
-      const avgAchievement =
-        perf.length > 0
-          ? Math.round(perf.reduce((s, m) => s + m.achievement, 0) / perf.length)
-          : 0;
-      const confirmedCount = perf.reduce((s, m) => s + m.confirmed, 0);
-      return { ...g, revenue, avgAchievement, confirmedCount };
-    }),
-  );
+  if (groupsWithMembers.length === 0) return [];
+
+  // Collect all unique salesIds across every group
+  const allSalesIds = [
+    ...new Set(groupsWithMembers.flatMap((g) => g.members.map((m) => m.userId))),
+  ];
+
+  // ── Query 2: all relevant bookings in one shot ───────────────────────────────
+  const allBookings = await db.booking.findMany({
+    where: {
+      salesId: { in: allSalesIds },
+      bookingStatus: { not: BookingStatus.Canceled },
+      ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
+    },
+    select: {
+      salesId: true,
+      bookingStatus: true,
+      snapPackagePricing: { select: { price: true } },
+    },
+    take: 10000,
+  });
+
+  // ── Query 3: all relevant targets in one shot ────────────────────────────────
+  // Fetch latest target per sales profile (no date overlap filter for all-time view)
+  const allTargets = await db.userTarget.findMany({
+    where: {
+      profileId: { in: allSalesIds },
+      type: "sales",
+      ...(startDate && endDate
+        ? { startDate: { lte: endDate }, endDate: { gte: startDate } }
+        : {}),
+    },
+    orderBy: { endDate: "desc" },
+    select: { profileId: true, amount: true },
+  });
+
+  // ── In-memory aggregation ────────────────────────────────────────────────────
+  // Group bookings by salesId
+  const bookingsBySalesId = new Map<
+    string,
+    { bookingStatus: BookingStatus; price: number }[]
+  >();
+  for (const b of allBookings) {
+    if (!b.salesId) continue;
+    const list = bookingsBySalesId.get(b.salesId) ?? [];
+    list.push({ bookingStatus: b.bookingStatus, price: b.snapPackagePricing?.price ?? 0 });
+    bookingsBySalesId.set(b.salesId, list);
+  }
+
+  // Map target by profileId — first-write-wins because allTargets is ordered by endDate desc
+  // so the first entry per profileId is the latest (most recent) target
+  const targetBySalesId = new Map<string, number>();
+  for (const t of allTargets) {
+    if (!targetBySalesId.has(t.profileId)) {
+      targetBySalesId.set(t.profileId, Number(t.amount));
+    }
+  }
+
+  return groupsWithMembers.map((g) => {
+    let revenue = 0;
+    let target = 0;
+    let confirmedCount = 0;
+    let totalAchievement = 0;
+    let memberCount = 0;
+
+    for (const member of g.members) {
+      const bookings = bookingsBySalesId.get(member.userId) ?? [];
+      const confirmed = bookings.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
+      const actual = confirmed.reduce((s, b) => s + b.price, 0);
+      const targetAmount = targetBySalesId.get(member.userId) ?? 0;
+      const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
+
+      revenue += actual;
+      target += targetAmount;
+      confirmedCount += confirmed.length;
+      totalAchievement += achievement;
+      memberCount += 1;
+    }
+
+    const avgAchievement = memberCount > 0 ? Math.round(totalAchievement / memberCount) : 0;
+
+    // Spread g without members (keep shape: id, name, description, leaderId, leader, _count)
+    const { members: _members, ...groupBase } = g;
+    return { ...groupBase, revenue, target, avgAchievement, confirmedCount };
+  });
 }
 
 // ─── Member management helpers ────────────────────────────────────────────────
 
-export async function getSalesBookings(salesId: string) {
+export async function getSalesBookings(salesId: string, take = 100, skip = 0) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
@@ -264,10 +364,12 @@ export async function getSalesBookings(salesId: string) {
       snapCustomer: { select: { name: true, mobileNumber: true } },
       snapVenue: { select: { venueName: true } },
       snapPackage: { select: { packageName: true } },
-      snapPackageVariant: { select: { price: true } },
+      snapPackagePricing: { select: { price: true } },
       paymentMethod: { select: { bankName: true } },
     },
     orderBy: { bookingDate: "desc" },
+    take,
+    skip,
   });
 }
 
@@ -287,6 +389,25 @@ export async function getAvailableSalesProfiles(excludeIds: string[]) {
   });
 }
 
+export async function getEligibleLeaders() {
+  "use cache";
+  cacheTag("groups", "users");
+  cacheLife("minutes");
+
+  return db.profile.findMany({
+    where: { status: "active" },
+    select: {
+      id: true,
+      fullName: true,
+      avatarUrl: true,
+      email: true,
+      role: { select: { name: true } },
+    },
+    orderBy: { fullName: "asc" },
+    take: 500,
+  });
+}
+
 // ─── Return types ─────────────────────────────────────────────────────────────
 
 export type GroupsQueryResult = Awaited<ReturnType<typeof getGroups>>;
@@ -297,3 +418,4 @@ export type GroupPerformanceItem = Awaited<ReturnType<typeof getGroupPerformance
 export type GroupWithPerformance = Awaited<ReturnType<typeof getGroupsWithPerformance>>[number];
 export type SalesBookingItem = Awaited<ReturnType<typeof getSalesBookings>>[number];
 export type AvailableSalesProfile = Awaited<ReturnType<typeof getAvailableSalesProfiles>>[number];
+export type EligibleLeader = Awaited<ReturnType<typeof getEligibleLeaders>>[number];

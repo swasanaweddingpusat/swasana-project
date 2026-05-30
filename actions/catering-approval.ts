@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, isSuperAdmin as isSuperAdminFn } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { revalidateTag } from "next/cache";
@@ -86,8 +86,7 @@ export async function approveCategoryPO(
     );
 
     // Super-admin can approve any pending step
-    const superAdminRole = await db.role.findUnique({ where: { name: "super-admin" }, select: { id: true } });
-    const isSuperAdmin = !!(superAdminRole && userRoleId === superAdminRole.id);
+    const isSuperAdmin = await isSuperAdminFn(userRoleId);
 
     const stepToApprove = pendingStep ?? (isSuperAdmin ? record.steps.find((s) => s.status === "pending") : null);
     if (!stepToApprove) return { success: false, error: "Tidak ada step yang bisa di-approve." };

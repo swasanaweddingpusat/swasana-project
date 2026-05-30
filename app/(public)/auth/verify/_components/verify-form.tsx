@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Loader2, CheckCircle2, XCircle } from "lucide-react"
+import { Refresh, CheckCircle, CloseCircle } from "@solar-icons/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
@@ -56,23 +56,23 @@ export function VerifyForm() {
       <CardContent className={cn('flex', 'flex-col', 'items-center', 'gap-4', 'text-center')}>
         {state === "loading" && (
           <>
-            <Loader2 className={cn('h-10', 'w-10', 'animate-spin', 'text-blue-600')} />
+            <Refresh weight="BoldDuotone" className={cn('h-10', 'w-10', 'animate-spin', 'text-blue-600')} />
             <p className="text-muted-foreground">Memverifikasi email...</p>
           </>
         )}
 
         {state === "verified" && (
           <>
-            <CheckCircle2 className={cn('h-10', 'w-10', 'text-green-600')} />
+            <CheckCircle weight="BoldDuotone" className={cn('h-10', 'w-10', 'text-green-600')} />
             <p className="font-semibold">Email berhasil diverifikasi!</p>
             <p className={cn('text-sm', 'text-muted-foreground')}>Mengarahkan ke halaman buat password...</p>
-            <Loader2 className={cn('h-5', 'w-5', 'animate-spin', 'text-muted-foreground')} />
+            <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin', 'text-muted-foreground')} />
           </>
         )}
 
         {state === "error" && (
           <>
-            <XCircle className={cn('h-10', 'w-10', 'text-red-600')} />
+            <CloseCircle weight="BoldDuotone" className={cn('h-10', 'w-10', 'text-red-600')} />
             <p className={cn('font-semibold', 'text-red-600')}>Verifikasi Gagal</p>
             <p className={cn('text-sm', 'text-muted-foreground')}>{errorMessage}</p>
             <Link href="/auth/login">

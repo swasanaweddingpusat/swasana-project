@@ -31,7 +31,6 @@ function sanitizeFilename(value: string): string {
 
 const renderPOPackageSchema = z.object({
   packageId: z.string().min(1, "packageId required"),
-  variantId: z.string().min(1, "variantId required"),
 });
 
 // ─── Route Handler ───────────────────────────────────────────────────────────
@@ -54,21 +53,16 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const { packageId, variantId } = parsed.data;
+    const { packageId } = parsed.data;
 
-    // 4. Query — read package with the specified variant
+    // 4. Query — read package directly
     const pkg = await db.package.findUnique({
       where: { id: packageId },
       include: {
         venue: { include: { brand: true } },
-        variants: {
-          where: { id: variantId },
-          include: {
-            internalItems: { orderBy: { sortOrder: "asc" } },
-            vendorItems: { orderBy: { sortOrder: "asc" } },
-            categoryPrices: { orderBy: { sortOrder: "asc" } },
-          },
-        },
+        internalItems: { orderBy: { sortOrder: "asc" } },
+        vendorItems: { orderBy: { sortOrder: "asc" } },
+        categoryPrices: { orderBy: { sortOrder: "asc" } },
       },
     });
 
@@ -76,16 +70,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }
 
-    const variant = pkg.variants[0];
-    if (!variant) {
-      return NextResponse.json({ error: "Variant not found" }, { status: 404 });
-    }
-
     // 5. Map to POPdfBooking
     // BLANK fills all customer string fields to render as printable form lines
     const BLANK = "___________________";
     // placeholder is the literal "{}" the user requested for TOP section & other stub fields
     const PLACEHOLDER = "{}";
+
+    const pkgSellingPrice = pkg.sellingPrice > 0
+      ? pkg.sellingPrice
+      : pkg.categoryPrices.reduce((s, c) => s + c.basePrice, 0) + Math.round(
+          pkg.categoryPrices.reduce((s, c) => s + c.basePrice, 0) * ((pkg.margin ?? 0) / 100)
+        );
 
     const pdfBooking: POPdfBooking = {
       // ── Booking-level stub fields ───────────────────────────────────────────
@@ -118,30 +113,30 @@ export async function POST(req: Request) {
         notes: pkg.notes ?? null,
       },
 
-      // ── Variant ─────────────────────────────────────────────────────────────
-      snapPackageVariant: {
-        variantName: variant.variantName,
-        pax: variant.pax,
-        price: variant.sellingPrice,
+      // ── Package pricing snapshot (price/pax directly from Package) ──────────
+      snapPackagePricing: {
+        packageName: pkg.packageName,
+        pax: pkg.pax,
+        price: pkgSellingPrice,
       },
 
-      // ── Items — from live DB, sorted by sortOrder asc (already in query) ───
-      snapPackageInternalItems: variant.internalItems.map((i) => ({
+      // ── Items — from live DB ─────────────────────────────────────────────────
+      snapPackageInternalItems: pkg.internalItems.map((i) => ({
         id: i.id,
         itemName: i.itemName,
         itemDescription: i.itemDescription,
         sortOrder: i.sortOrder,
       })),
 
-      snapPackageVendorItems: variant.vendorItems.map((i) => ({
+      snapPackageVendorItems: pkg.vendorItems.map((i) => ({
         id: i.id,
         categoryName: i.categoryName,
         itemText: i.itemText,
         sortOrder: i.sortOrder,
       })),
 
-      // ── Category Prices — isTakeout defaults false (field not on live model) ─
-      snapPackageCategoryPrices: variant.categoryPrices.map((c) => ({
+      // ── Category Prices — isTakeout defaults false ─────────────────────────
+      snapPackageCategoryPrices: pkg.categoryPrices.map((c) => ({
         categoryName: c.categoryName,
         basePrice: c.basePrice,
         isTakeout: false,
@@ -151,11 +146,6 @@ export async function POST(req: Request) {
       snapVendorItems: [],
       snapBonuses: [],
 
-      // ── Term of Payments — 1 dummy row with "{}" string stubs ──────────────
-      // TYPE NOTE: amount must be number per POPdfBooking type.
-      // Using 0 (not string "{}") to stay type-safe. name field is string → "{}" is valid.
-      // The TOP section body text is rendered from getTerms() (hardcoded) — not from this array.
-      // The payment calculation section will show Rp0 / empty, which is correct for a preview.
       termOfPayments: [
         {
           id: "preview-dummy",
@@ -175,8 +165,8 @@ export async function POST(req: Request) {
       discountAmount: 0,
     };
 
-    // 6. Load T&C from variant (may be null for preview — falls back to hardcoded termsList)
-    const termAndConditionHtml: string | null = variant.termAndCondition ?? null;
+    // 6. Load T&C from package
+    const termAndConditionHtml: string | null = pkg.termAndCondition ?? null;
 
     // 7. Logo
     const logoBase64 = await loadLogoBase64("swasana-logo.png");
@@ -192,10 +182,9 @@ export async function POST(req: Request) {
       />,
     );
 
-    // 9. Build filename — sanitize non-alphanumeric chars
+    // 9. Build filename
     const safePkgName = sanitizeFilename(pkg.packageName);
-    const safeVariantName = sanitizeFilename(variant.variantName);
-    const fileName = `PO_PREVIEW_${safePkgName}_${safeVariantName}.pdf`;
+    const fileName = `PO_PREVIEW_${safePkgName}.pdf`;
 
     return new NextResponse(stream as unknown as ReadableStream, {
       headers: {

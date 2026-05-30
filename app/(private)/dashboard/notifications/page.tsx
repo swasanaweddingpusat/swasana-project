@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, CalendarPlus, CalendarCheck, CalendarX, AlertTriangle, ArrowLeftRight, FileSignature, Eye, UserPlus, Store, UtensilsCrossed } from "lucide-react";
+import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, MentionCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from "@/hooks/use-notifications";
@@ -10,17 +10,18 @@ import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
-const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  booking_created: CalendarPlus,
-  booking_approved: CalendarCheck,
-  booking_rejected: CalendarX,
-  booking_lost: AlertTriangle,
-  booking_transferred: ArrowLeftRight,
-  agreement_signed: FileSignature,
+const TYPE_ICON: Record<string, typeof Bell> = {
+  booking_created: CalendarAdd,
+  booking_approved: CalendarMark,
+  booking_rejected: Calendar,
+  booking_lost: DangerTriangle,
+  booking_transferred: TransferHorizontal,
+  agreement_signed: FileText,
   agreement_viewed: Eye,
   user_invited: UserPlus,
-  vendor_updated: Store,
-  catering_updated: UtensilsCrossed,
+  vendor_updated: Shop,
+  catering_updated: ChefHat,
+  comment_mention: MentionCircle,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -34,6 +35,7 @@ const TYPE_LABEL: Record<string, string> = {
   user_invited: "User Invited",
   vendor_updated: "Vendor Updated",
   catering_updated: "Catering Updated",
+  comment_mention: "Disebut di Komentar",
 };
 
 export default function NotificationsPage() {
@@ -49,7 +51,7 @@ export default function NotificationsPage() {
 
   const handleClick = (n: typeof notifications[number]) => {
     if (!n.isRead) markRead.mutate(n.id);
-    if (n.entityType === "booking") router.push("/dashboard/bookings");
+    if (n.entityType === "booking") router.push("/dashboard/booking-weddings");
   };
 
   return (
@@ -68,17 +70,17 @@ export default function NotificationsPage() {
           {/* Filter tabs */}
           <div className={cn('flex', 'border', 'border-gray-200', 'rounded-lg', 'overflow-hidden')}>
             <button type="button" onClick={() => setFilter("all")}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer", filter === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50")}>
+              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer", filter === "all" ? "bg-primary text-primary-foreground" : "bg-white text-gray-600 hover:bg-gray-50")}>
               Semua
             </button>
             <button type="button" onClick={() => setFilter("unread")}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer border-l border-gray-200", filter === "unread" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50")}>
+              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer border-l border-gray-200", filter === "unread" ? "bg-primary text-primary-foreground" : "bg-white text-gray-600 hover:bg-gray-50")}>
               Belum Dibaca
             </button>
           </div>
           {unreadCount > 0 && (
             <Button variant="outline" size="sm" onClick={() => markAll.mutate()} className={cn('text-xs', 'cursor-pointer')}>
-              <CheckCheck className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tandai Semua Dibaca
+              <CheckRead weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Tandai Semua Dibaca
             </Button>
           )}
         </div>
@@ -89,7 +91,7 @@ export default function NotificationsPage() {
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-center')}>
-              <Bell className={cn('h-10', 'w-10', 'text-gray-300', 'mb-3')} />
+              <Bell weight="BoldDuotone" className={cn('h-10', 'w-10', 'text-gray-300', 'mb-3')} />
               <p className={cn('text-sm', 'text-gray-500')}>{filter === "unread" ? "Semua notifikasi sudah dibaca." : "Belum ada notifikasi."}</p>
             </div>
           ) : (
@@ -100,7 +102,7 @@ export default function NotificationsPage() {
                   <button key={n.id} type="button" onClick={() => handleClick(n)}
                     className={cn("w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-4", !n.isRead && "bg-blue-50/40")}>
                     <div className={cn("shrink-0 h-9 w-9 rounded-full flex items-center justify-center", !n.isRead ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500")}>
-                      <Icon className={cn('h-4', 'w-4')} />
+                      <Icon weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                     </div>
                     <div className={cn('flex-1', 'min-w-0')}>
                       <div className={cn('flex', 'items-center', 'gap-2')}>

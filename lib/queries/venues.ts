@@ -14,6 +14,7 @@ export async function getVenues() {
         select: { id: true, name: true, code: true },
       },
     },
+    take: 500,
   });
 }
 
@@ -31,6 +32,7 @@ export async function getBrands() {
         select: { id: true, name: true, code: true },
       },
     },
+    take: 500,
   });
 }
 

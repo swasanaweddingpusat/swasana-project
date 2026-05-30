@@ -4,18 +4,21 @@ import { requirePagePermission } from "@/lib/require-page-permission";
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
-  UsersRound,
+  UsersGroupRounded,
   ShieldCheck,
-  MapPinHouse,
+  MapPoint,
   Palette,
-  CreditCard,
-  Info,
-  ListOrdered,
-  GraduationCap,
-  GitPullRequestArrow,
-  CalendarCheck,
-  type LucideIcon,
-} from "lucide-react";
+  Card as CardIcon,
+  InfoCircle,
+  List,
+  Diploma,
+  BranchingPathsDown,
+  CalendarMark,
+  type IconProps,
+} from "@solar-icons/react";
+import type { ComponentType } from "react";
+
+type LucideIcon = ComponentType<IconProps>;
 
 interface SettingItem {
   title: string;
@@ -39,7 +42,7 @@ const GROUPS: SettingGroup[] = [
       {
         title: "Users",
         description: "Kelola data user, undangan, dan akses.",
-        icon: UsersRound,
+        icon: UsersGroupRounded,
         href: "/dashboard/settings/users",
         module: "settings-users",
       },
@@ -53,7 +56,7 @@ const GROUPS: SettingGroup[] = [
       {
         title: "Approval Flow",
         description: "Atur alur persetujuan untuk setiap modul.",
-        icon: GitPullRequestArrow,
+        icon: BranchingPathsDown,
         href: "/dashboard/settings/approval-flow",
         module: "settings-approval-flow",
       },
@@ -66,7 +69,7 @@ const GROUPS: SettingGroup[] = [
       {
         title: "Venue Management",
         description: "Kelola daftar venue dan alamat.",
-        icon: MapPinHouse,
+        icon: MapPoint,
         href: "/dashboard/settings/venues",
         module: "settings-venues",
       },
@@ -80,35 +83,35 @@ const GROUPS: SettingGroup[] = [
       {
         title: "Payment Methods",
         description: "Atur metode pembayaran dan rekening.",
-        icon: CreditCard,
+        icon: CardIcon,
         href: "/dashboard/settings/payment-methods",
         module: "settings-payment-methods",
       },
       {
         title: "Source of Information",
         description: "Sumber informasi customer untuk tracking lead.",
-        icon: Info,
+        icon: InfoCircle,
         href: "/dashboard/settings/source-of-information",
         module: "settings-source-of-information",
       },
       {
         title: "Tingkat Pendidikan",
         description: "Kelola daftar tingkat pendidikan karyawan.",
-        icon: GraduationCap,
+        icon: Diploma,
         href: "/dashboard/settings/education-level",
         module: "settings-education-level",
       },
       {
         title: "Order Status",
         description: "Kelola status order vendor (belum diorder, sudah diajukan, dll).",
-        icon: ListOrdered,
+        icon: List,
         href: "/dashboard/settings/order-status",
         module: "settings-order-status",
       },
       {
         title: "Event Types",
         description: "Kelola tipe acara (Resepsi, Akad & Resepsi, dll) untuk nomor PO.",
-        icon: CalendarCheck,
+        icon: CalendarMark,
         href: "/dashboard/settings/event-types",
         module: "settings-event-types",
       },
@@ -166,7 +169,7 @@ export default async function SettingsHubPage() {
                     className={cn('group', 'flex', 'items-start', 'gap-3', 'p-4', 'bg-white', 'border-b', 'sm:border-r', 'border-gray-200', 'hover:bg-gray-50', 'transition-colors')}
                   >
                     <div className={cn('flex', 'items-center', 'justify-center', 'h-10', 'w-10', 'rounded-lg', 'bg-gray-100', 'group-hover:bg-gray-200', 'transition-colors', 'shrink-0')}>
-                      <Icon className={cn('h-4', 'w-4', 'text-gray-700')} />
+                      <Icon weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-700')} />
                     </div>
                     <div className="min-w-0">
                       <h3 className={cn('text-sm', 'font-semibold', 'text-gray-900')}>

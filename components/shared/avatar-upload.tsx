@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Camera, ImageUp, Pencil, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { Camera, Gallery, Pen, MagniferZoomIn, MagniferZoomOut, Refresh } from "@solar-icons/react";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
 import { getCroppedBlob, compressToWebP } from "@/lib/image-utils";
@@ -109,16 +109,16 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full shadow cursor-pointer hover:bg-primary/90 transition-colors">
-              <Pencil className="h-3 w-3" />
+              <Pen weight="BoldDuotone" className="h-3 w-3" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="bottom" className="w-44">
             <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-              <ImageUp className="h-4 w-4 mr-2" />
+              <Gallery weight="BoldDuotone" className="h-4 w-4 mr-2" />
               Pilih dari Galeri
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => cameraInputRef.current?.click()}>
-              <Camera className="h-4 w-4 mr-2" />
+              <Camera weight="BoldDuotone" className="h-4 w-4 mr-2" />
               Ambil Selfie
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -153,7 +153,7 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
 
           {/* Zoom slider */}
           <div className="flex items-center gap-3 px-4 py-3 border-t">
-            <ZoomOut className="h-4 w-4 text-muted-foreground shrink-0" />
+            <MagniferZoomOut weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
               type="range"
               min={1}
@@ -163,7 +163,7 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
               onChange={(e) => setZoom(Number(e.target.value))}
               className="flex-1 accent-gray-900"
             />
-            <ZoomIn className="h-4 w-4 text-muted-foreground shrink-0" />
+            <MagniferZoomIn weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
           </div>
 
           {/* Actions */}
@@ -172,7 +172,7 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
               Batal
             </Button>
             <Button className="flex-1" onClick={handleCropAndUpload} disabled={uploading}>
-              {uploading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Uploading...</> : "Simpan Foto"}
+              {uploading ? <><Refresh weight="BoldDuotone" className="h-4 w-4 animate-spin mr-2" /> Uploading...</> : "Simpan Foto"}
             </Button>
           </div>
         </DialogContent>

@@ -10,6 +10,7 @@ declare module "next-auth" {
       profileId: string;
       roleId: string | null;
       roleName: string | null;
+      isSuperAdmin: boolean;
       mustChangePassword: boolean;
       isEmailVerified: boolean;
       status: ProfileStatus;
@@ -31,6 +32,7 @@ declare module "next-auth/jwt" {
     profileId?: string;
     roleId?: string | null;
     roleName?: string | null;
+    isSuperAdmin?: boolean;
     mustChangePassword?: boolean;
     isEmailVerified?: boolean;
     status?: ProfileStatus;

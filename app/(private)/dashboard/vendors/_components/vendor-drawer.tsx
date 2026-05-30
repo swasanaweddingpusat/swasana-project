@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Trash2 } from "lucide-react";
+import { AddCircle, TrashBinTrash } from "@solar-icons/react";
 import { toast } from "sonner";
 import { useCreateVendor, useUpdateVendor, useCreateVendorCategory } from "@/hooks/use-vendors";
 import type { VendorCategoryItem } from "@/lib/queries/vendors";
@@ -156,7 +156,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
             <div className={cn('flex', 'items-center', 'justify-between')}>
               <Label className={cn('text-sm', 'font-medium')}>Rekening Bank</Label>
               <Button type="button" variant="outline" size="sm" onClick={() => setPaymentMethods((p) => [...p, { bankName: "", bankAccountNumber: "", bankRecipient: "" }])} className={cn('h-7', 'px-2', 'text-xs')}>
-                <Plus className={cn('h-3', 'w-3', 'mr-1')} /> Tambah
+                <AddCircle weight="BoldDuotone" className={cn('h-3', 'w-3', 'mr-1')} /> Tambah
               </Button>
             </div>
 
@@ -169,7 +169,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
                 <div className={cn('flex', 'items-center', 'justify-between')}>
                   <span className={cn('text-xs', 'font-medium', 'text-muted-foreground')}>Rekening {idx + 1}</span>
                   <button className={cn('p-1', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => setPaymentMethods((p) => p.filter((_, i) => i !== idx))}>
-                    <Trash2 className={cn('h-3.5', 'w-3.5', 'text-red-500')} />
+                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-red-500')} />
                   </button>
                 </div>
                 <Input value={pm.bankName} onChange={(e) => updatePM(idx, "bankName", e.target.value)} placeholder="Nama Bank (BCA, Mandiri, dll)" className={cn('h-8', 'text-xs')} />
@@ -181,7 +181,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
         </div>
 
         <div className={cn('sticky', 'bottom-0', 'bg-white', 'border-t', 'pt-4', 'mt-4')}>
-          <Button onClick={handleSave} disabled={saving || !name.trim() || !categoryId} className={cn('w-full', 'bg-black', 'text-white', 'hover:bg-gray-800', 'cursor-pointer')}>
+          <Button onClick={handleSave} disabled={saving || !name.trim() || !categoryId} className={cn('w-full', 'cursor-pointer')}>
             {saving ? "Menyimpan..." : isEdit ? "Simpan Perubahan" : "Tambah Vendor"}
           </Button>
         </div>

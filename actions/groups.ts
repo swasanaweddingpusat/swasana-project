@@ -13,7 +13,6 @@ import {
   setMemberTargetSchema,
   updateGroupLeaderSchema,
 } from "@/lib/validations/user";
-import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
 // ─── Create Group ─────────────────────────────────────────────────────────────
 
@@ -37,8 +36,8 @@ export async function createGroup(data: unknown) {
       },
     });
 
-    revalidateTag("groups", { expire: 0 });
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
@@ -83,8 +82,8 @@ export async function updateGroup(data: unknown) {
       }),
     ]);
 
-    revalidateTag("groups", { expire: 0 });
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
@@ -117,7 +116,7 @@ export async function deleteGroup(groupId: string) {
 
     await db.$transaction([db.userGroup.delete({ where: { id: groupId } })]);
 
-    revalidateTag("groups", { expire: 0 });
+    revalidateTag("groups", "max");
 
     const h = await headers();
     await logAudit({
@@ -155,8 +154,20 @@ export async function addGroupMember(groupId: string, profileId: string) {
       data: { groupId, userId: profileId, sortOrder: (last?.sortOrder ?? 0) + 1 },
     });
 
-    revalidateTag("groups", { expire: 0 });
-    revalidateTag("users", { expire: 0 });
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "group.member_added",
+      entityType: "UserGroupMember",
+      entityId: groupId,
+      description: `Member ditambahkan ke grup`,
+      changes: { after: { groupId, profileId } },
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
     return { success: true };
   } catch (e) {
     console.error("[addGroupMember]", e);
@@ -176,8 +187,20 @@ export async function removeGroupMember(groupId: string, profileId: string) {
       db.userGroupMember.delete({ where: { groupId_userId: { groupId, userId: profileId } } }),
     ]);
 
-    revalidateTag("groups", { expire: 0 });
-    revalidateTag("users", { expire: 0 });
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "group.member_removed",
+      entityType: "UserGroupMember",
+      entityId: groupId,
+      description: `Member dihapus dari grup`,
+      changes: { before: { groupId, profileId } },
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
     return { success: true };
   } catch (e) {
     console.error("[removeGroupMember]", e);
@@ -196,7 +219,7 @@ export async function reorderGroups(orderedIds: string[]) {
     await db.$transaction(
       orderedIds.map((id, index) => db.userGroup.update({ where: { id }, data: { sortOrder: index + 1 } }))
     );
-    revalidateTag("groups", { expire: 0 });
+    revalidateTag("groups", "max");
     return { success: true };
   } catch (e) {
     console.error("[reorderGroups]", e);
@@ -220,7 +243,7 @@ export async function reorderGroupMembers(groupId: string, orderedUserIds: strin
         })
       )
     );
-    revalidateTag("groups", { expire: 0 });
+    revalidateTag("groups", "max");
     return { success: true };
   } catch (e) {
     console.error("[reorderGroupMembers]", e);
@@ -264,7 +287,19 @@ export async function setMemberTarget(data: unknown) {
       }),
     ]);
 
-    revalidateTag("groups", { expire: 0 });
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "group.member_target_set",
+      entityType: "UserTarget",
+      entityId: profileId,
+      description: `Target sales anggota ditetapkan`,
+      changes: { after: { profileId, amount, startDate, endDate } },
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("groups", "max");
     return { success: true };
   } catch (e) {
     console.error("[setMemberTarget]", e);
@@ -289,7 +324,7 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
       db.userGroup.update({ where: { id: groupId }, data: { leaderId } }),
     ]);
 
-    revalidateTag("groups", { expire: 0 });
+    revalidateTag("groups", "max");
 
     const h = await headers();
     await logAudit({
@@ -309,44 +344,3 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
   }
 }
 
-// ─── Approve Booking ──────────────────────────────────────────────────────────
-
-export async function approveBooking(bookingId: string) {
-  const permResult = await requirePermission({ module: "booking", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`booking-approve:${session.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const scope = await getProfileDataScope(session.user.profileId);
-  if (!(await canAccessBooking(session.user.profileId, scope, bookingId))) {
-    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
-  }
-
-  try {
-    const [booking] = await db.$transaction([
-      db.booking.update({
-        where: { id: bookingId },
-        data: { managerId: session.user.profileId },
-      }),
-    ]);
-
-    revalidateTag("groups", { expire: 0 });
-    revalidateTag("bookings", { expire: 0 });
-
-    const h = await headers();
-    await logAudit({
-      userId: session.user.profileId,
-      action: "booking.approved",
-      entityType: "booking",
-      entityId: bookingId,
-      description: `Booking disetujui oleh manager`,
-      ipAddress: h.get("x-forwarded-for") ?? undefined,
-      userAgent: h.get("user-agent") ?? undefined,
-    });
-
-    return { success: true, booking };
-  } catch (e) {
-    console.error("[approveBooking]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}

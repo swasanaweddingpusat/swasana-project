@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
@@ -39,19 +40,42 @@ export async function createBooking(data: unknown) {
 
     if (!customerId) return { success: false, error: "Customer wajib diisi." };
 
+    // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
+    if (input.weddingSession) {
+      const bookingDateObj = new Date(input.bookingDate);
+      const conflictingBooking = await db.booking.findFirst({
+        where: {
+          venueId: input.venueId,
+          bookingDate: bookingDateObj,
+          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          OR: input.weddingSession === "fullday"
+            ? [
+                { weddingSession: "morning" },
+                { weddingSession: "evening" },
+                { weddingSession: "fullday" },
+              ]
+            : [
+                { weddingSession: input.weddingSession },
+                { weddingSession: "fullday" },
+              ],
+        },
+        select: { id: true },
+      });
+      if (conflictingBooking) {
+        return { success: false, error: "Slot venue di tanggal & sesi tersebut sudah dibooking." };
+      }
+    }
+
     let emateraiResult: { sn: string; qrBase64: string } | null = null;
 
     // Fetch data needed for transaction — for new customers, build from input
-    const [existingCustomer, venue, pkg, variant] = await Promise.all([
+    const [existingCustomer, venue, pkg] = await Promise.all([
       isNewCustomer ? null : db.customer.findUniqueOrThrow({ where: { id: customerId } }),
       db.venue.findUniqueOrThrow({ where: { id: input.venueId }, include: { brand: true } }),
-      db.package.findUniqueOrThrow({ where: { id: input.packageId } }),
-      input.packageVariantId
-        ? db.packageVariant.findUniqueOrThrow({
-            where: { id: input.packageVariantId },
-            include: { vendorItems: true, internalItems: true, categoryPrices: true },
-          })
-        : null,
+      db.package.findUniqueOrThrow({
+        where: { id: input.packageId },
+        include: { vendorItems: true, internalItems: true, categoryPrices: true },
+      }),
     ]);
 
     // Build customer data (from input for new, from DB for existing)
@@ -151,7 +175,6 @@ export async function createBooking(data: unknown) {
           customerId,
           venueId: input.venueId,
           packageId: input.packageId,
-          packageVariantId: input.packageVariantId ?? null,
           paymentMethodId: input.paymentMethodId ?? null,
           sourceOfInformationId: input.sourceOfInformationId ?? null,
           weddingSession: input.weddingSession ?? null,
@@ -197,42 +220,52 @@ export async function createBooking(data: unknown) {
       }),
     );
 
-    if (variant) {
+    // Snapshot package pax + pricing (with takeout toggle support)
+    {
       const toggleMap = new Map(
         (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
       // Hidden categories (isShow=false) always included; visible ones respect isTakeout toggle
       const hasTakeout = (input.categoryToggles ?? []).some((t) => t.isTakeout);
-      const variantBase = variant.categoryPrices.reduce((sum, c) => {
+      const pkgBase = pkg.categoryPrices.reduce((sum, c) => {
         if (!c.isShow) return sum + c.basePrice;
         const isTakeout = toggleMap.get(c.categoryName) ?? false;
         return isTakeout ? sum : sum + c.basePrice;
       }, 0);
-      const variantPrice = (!hasTakeout && variant.sellingPrice > 0)
-        ? variant.sellingPrice
-        : variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
+      const pkgPrice = (!hasTakeout && pkg.sellingPrice > 0)
+        ? pkg.sellingPrice
+        : pkgBase + Math.round(pkgBase * ((pkg.margin ?? 0) / 100));
+
       ops.push(
-        db.snapPackageVariant.create({
-          data: { bookingId, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
+        db.snapPackagePricing.create({
+          data: {
+            bookingId,
+            packageId: pkg.id,
+            packageName: pkg.packageName,
+            pax: pkg.pax,
+            price: pkgPrice,
+            margin: pkg.margin ?? 0,
+            termAndCondition: pkg.termAndCondition ?? null,
+          },
         })
       );
-      if (variant.internalItems.length > 0) {
+      if (pkg.internalItems.length > 0) {
         ops.push(
-          ...variant.internalItems.map((item, i) =>
+          ...pkg.internalItems.map((item, i) =>
             db.snapPackageInternalItem.create({ data: { bookingId, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
           )
         );
       }
-      if (variant.vendorItems.length > 0) {
+      if (pkg.vendorItems.length > 0) {
         ops.push(
-          ...variant.vendorItems.map((item, i) =>
+          ...pkg.vendorItems.map((item, i) =>
             db.snapPackageVendorItem.create({ data: { bookingId, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
           )
         );
       }
-      if (variant.categoryPrices.length > 0) {
+      if (pkg.categoryPrices.length > 0) {
         ops.push(
-          ...variant.categoryPrices.map((cp) =>
+          ...pkg.categoryPrices.map((cp) =>
             db.snapPackageCategoryPrice.create({
               data: {
                 bookingId,
@@ -535,19 +568,46 @@ export async function editBooking(data: unknown) {
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, venueId: true, packageId: true, packageVariantId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
+      select: { customerId: true, venueId: true, packageId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
+    // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
+    // Exclude the current booking so it doesn't conflict with itself.
+    if (rest.weddingSession) {
+      const bookingDateObj = new Date(rest.bookingDate);
+      const conflictingBooking = await db.booking.findFirst({
+        where: {
+          id: { not: id },
+          venueId: rest.venueId,
+          bookingDate: bookingDateObj,
+          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          OR: rest.weddingSession === "fullday"
+            ? [
+                { weddingSession: "morning" },
+                { weddingSession: "evening" },
+                { weddingSession: "fullday" },
+              ]
+            : [
+                { weddingSession: rest.weddingSession },
+                { weddingSession: "fullday" },
+              ],
+        },
+        select: { id: true },
+      });
+      if (conflictingBooking) {
+        return { success: false, error: "Slot venue di tanggal & sesi tersebut sudah dibooking." };
+      }
+    }
+
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
-    const variantChanged = rest.packageVariantId !== booking.packageVariantId;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
       db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
       db.snapPackage.findUnique({ where: { bookingId: id }, select: { packageName: true } }),
-      db.snapPackageVariant.findUnique({ where: { bookingId: id }, select: { variantName: true, pax: true, price: true } }),
+      db.snapPackagePricing.findUnique({ where: { bookingId: id }, select: { packageName: true, pax: true, price: true } }),
     ]);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -558,7 +618,6 @@ export async function editBooking(data: unknown) {
           bookingDate: new Date(rest.bookingDate),
           venueId: rest.venueId,
           packageId: rest.packageId,
-          packageVariantId: rest.packageVariantId ?? null,
           paymentMethodId: rest.paymentMethodId ?? null,
           sourceOfInformationId: rest.sourceOfInformationId ?? null,
           weddingSession: rest.weddingSession ?? null,
@@ -615,76 +674,76 @@ export async function editBooking(data: unknown) {
       );
     }
 
-    // Update package + variant snapshots if changed
-    if (packageChanged || variantChanged) {
-      const pkg = await db.package.findUniqueOrThrow({ where: { id: rest.packageId } });
+    // Update package snapshots if package changed
+    if (packageChanged) {
+      const newPkg = await db.package.findUniqueOrThrow({
+        where: { id: rest.packageId },
+        include: { vendorItems: true, internalItems: true, categoryPrices: true },
+      });
       ops.push(
         db.snapPackage.update({
           where: { bookingId: id },
-          data: { packageId: pkg.id, packageName: pkg.packageName, notes: pkg.notes },
+          data: { packageId: newPkg.id, packageName: newPkg.packageName, notes: newPkg.notes },
         })
       );
 
-      if (rest.packageVariantId) {
-        const variant = await db.packageVariant.findUniqueOrThrow({
-          where: { id: rest.packageVariantId },
-          include: { vendorItems: true, internalItems: true, categoryPrices: true },
-        });
+      // Apply takeout toggles to price calculation
+      const toggleMap = new Map(
+        (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
+      );
+      const hasTakeout = (parsed.data.categoryToggles ?? []).some((t) => t.isTakeout);
+      const pkgBase = newPkg.categoryPrices.reduce((sum, c) => {
+        if (!c.isShow) return sum + c.basePrice;
+        const isTakeout = toggleMap.get(c.categoryName) ?? false;
+        return isTakeout ? sum : sum + c.basePrice;
+      }, 0);
+      const pkgPrice = (!hasTakeout && newPkg.sellingPrice > 0)
+        ? newPkg.sellingPrice
+        : pkgBase + Math.round(pkgBase * ((newPkg.margin ?? 0) / 100));
 
-        // Apply takeout toggles to price calculation (same logic as createBooking)
-        const toggleMap = new Map(
-          (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
-        );
-        const hasTakeout = (parsed.data.categoryToggles ?? []).some((t) => t.isTakeout);
-        const variantBase = variant.categoryPrices.reduce((sum, c) => {
-          if (!c.isShow) return sum + c.basePrice;
-          const isTakeout = toggleMap.get(c.categoryName) ?? false;
-          return isTakeout ? sum : sum + c.basePrice;
-        }, 0);
-        const variantPrice = (!hasTakeout && variant.sellingPrice > 0)
-          ? variant.sellingPrice
-          : variantBase + Math.round(variantBase * ((variant.margin ?? 0) / 100));
-
-        // Upsert variant snapshot
-        ops.push(
-          db.snapPackageVariant.upsert({
-            where: { bookingId: id },
-            create: { bookingId: id, variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
-            update: { variantId: variant.id, variantName: variant.variantName, pax: variant.pax, price: variantPrice, margin: variant.margin ?? 0, termAndCondition: variant.termAndCondition ?? null },
+      ops.push(
+        db.snapPackagePricing.upsert({
+          where: { bookingId: id },
+          create: {
+            bookingId: id,
+            packageId: newPkg.id,
+            packageName: newPkg.packageName,
+            pax: newPkg.pax,
+            price: pkgPrice,
+            margin: newPkg.margin ?? 0,
+            termAndCondition: newPkg.termAndCondition ?? null,
+          },
+          update: {
+            packageId: newPkg.id,
+            packageName: newPkg.packageName,
+            pax: newPkg.pax,
+            price: pkgPrice,
+            margin: newPkg.margin ?? 0,
+            termAndCondition: newPkg.termAndCondition ?? null,
+          },
+        }),
+        db.snapPackageInternalItem.deleteMany({ where: { bookingId: id } }),
+        db.snapPackageVendorItem.deleteMany({ where: { bookingId: id } }),
+        db.snapPackageCategoryPrice.deleteMany({ where: { bookingId: id } }),
+        ...newPkg.internalItems.map((item, i) =>
+          db.snapPackageInternalItem.create({ data: { bookingId: id, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
+        ),
+        ...newPkg.vendorItems.map((item, i) =>
+          db.snapPackageVendorItem.create({ data: { bookingId: id, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
+        ),
+        ...newPkg.categoryPrices.map((cp) =>
+          db.snapPackageCategoryPrice.create({
+            data: {
+              bookingId: id,
+              categoryName: cp.categoryName,
+              basePrice: cp.basePrice,
+              sortOrder: cp.sortOrder,
+              isShow: cp.isShow,
+              isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
+            },
           })
-        );
-
-        // Replace internal + vendor items + category prices
-        ops.push(
-          db.snapPackageInternalItem.deleteMany({ where: { bookingId: id } }),
-          db.snapPackageVendorItem.deleteMany({ where: { bookingId: id } }),
-          db.snapPackageCategoryPrice.deleteMany({ where: { bookingId: id } }),
-          ...variant.internalItems.map((item, i) =>
-            db.snapPackageInternalItem.create({ data: { bookingId: id, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
-          ),
-          ...variant.vendorItems.map((item, i) =>
-            db.snapPackageVendorItem.create({ data: { bookingId: id, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
-          ),
-          ...variant.categoryPrices.map((cp) =>
-            db.snapPackageCategoryPrice.create({
-              data: {
-                bookingId: id,
-                categoryName: cp.categoryName,
-                basePrice: cp.basePrice,
-                sortOrder: cp.sortOrder,
-                isShow: cp.isShow,
-                isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
-              },
-            })
-          )
-        );
-      } else {
-        // No variant — delete variant + category price snapshots
-        ops.push(
-          db.snapPackageVariant.deleteMany({ where: { bookingId: id } }),
-          db.snapPackageCategoryPrice.deleteMany({ where: { bookingId: id } }),
-        );
-      }
+        )
+      );
     }
 
     // Bonuses — replace existing atomically within transaction
@@ -698,7 +757,7 @@ export async function editBooking(data: unknown) {
     }
 
     // Term of payments — upsert atomically within transaction
-    if ((venueChanged || packageChanged || variantChanged) && rest.termOfPayments && rest.termOfPayments.length > 0) {
+    if ((venueChanged || packageChanged) && rest.termOfPayments && rest.termOfPayments.length > 0) {
       const existingTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
       ops.push(
         db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: existingTermIds } } }),
@@ -713,12 +772,11 @@ export async function editBooking(data: unknown) {
 
     await db.$transaction(ops);
 
-    // Reset approval + create revision — only when package/venue/variant changed
-    if (venueChanged || packageChanged || variantChanged) {
+    // Reset approval + create revision — only when package or venue changed
+    if (venueChanged || packageChanged) {
     const reasons: string[] = [];
     if (venueChanged) reasons.push("venue");
     if (packageChanged) reasons.push("package");
-    if (variantChanged) reasons.push("variant");
     const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
     const approvalRecord = await db.approvalRecord.findUnique({
@@ -774,7 +832,7 @@ export async function editBooking(data: unknown) {
         data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
       });
     }
-    } // end if venueChanged || packageChanged || variantChanged
+    } // end if venueChanged || packageChanged
 
     await logAudit({
       userId: session!.user.id,
@@ -795,19 +853,23 @@ export async function editBooking(data: unknown) {
         if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
         if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
 
-        if (venueChanged || packageChanged || variantChanged) {
+        if (venueChanged || packageChanged) {
           // New snap values (already updated by transaction)
           const [newSnapV, newSnapP, newSnapPV] = await Promise.all([
             db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
             db.snapPackage.findUnique({ where: { bookingId: id }, select: { packageName: true } }),
-            db.snapPackageVariant.findUnique({ where: { bookingId: id }, select: { variantName: true, pax: true, price: true } }),
+            db.snapPackagePricing.findUnique({ where: { bookingId: id }, select: { packageName: true, pax: true, price: true } }),
           ]);
           if (venueChanged) diff.venue = `${oldSnapVenue?.venueName ?? "—"} → ${newSnapV?.venueName ?? rest.venueId}`;
-          if (packageChanged) diff.package = `${oldSnapPackage?.packageName ?? "—"} → ${newSnapP?.packageName ?? rest.packageId}`;
-          if (variantChanged) {
-            const oldV = oldSnapVariant ? `${oldSnapVariant.variantName} · ${oldSnapVariant.pax} PAX · ${fmtNum(oldSnapVariant.price)}` : "—";
-            const newV = newSnapPV ? `${newSnapPV.variantName} · ${newSnapPV.pax} PAX · ${fmtNum(newSnapPV.price)}` : "—";
-            diff.variant = `${oldV} → ${newV}`;
+          if (packageChanged) {
+            const oldP = oldSnapPackage?.packageName ?? "—";
+            const newP = newSnapP?.packageName ?? rest.packageId;
+            diff.package = `${oldP} → ${newP}`;
+            if (newSnapPV) {
+              const oldPV = oldSnapVariant ? `${oldSnapVariant.pax} PAX · ${fmtNum(oldSnapVariant.price)}` : "—";
+              const newPV = `${newSnapPV.pax} PAX · ${fmtNum(newSnapPV.price)}`;
+              diff.packagePricing = `${oldPV} → ${newPV}`;
+            }
           }
           const discount = rest.specialBonusAmount ?? 0;
           const oldDiscount = booking.discountAmount ?? 0;
@@ -828,6 +890,47 @@ export async function editBooking(data: unknown) {
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mengupdate booking." };
+  }
+}
+
+// ─── Approve Booking ──────────────────────────────────────────────────────────
+
+export async function approveBooking(bookingId: string) {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-approve:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const [booking] = await db.$transaction([
+      db.booking.update({
+        where: { id: bookingId },
+        data: { managerId: session!.user.profileId },
+      }),
+    ]);
+
+    revalidateTag("groups", "max");
+    revalidateTag("bookings", "max");
+
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "booking.approved",
+      entityType: "booking",
+      entityId: bookingId,
+      description: `Booking disetujui oleh manager`,
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    return { success: true, booking };
+  } catch (e) {
+    console.error("[approveBooking]", e);
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 

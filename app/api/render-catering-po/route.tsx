@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         snapCustomer: true,
         snapVenue: true,
         snapPackage: true,
-        snapPackageVariant: true,
+        snapPackagePricing: true,
         snapVendorItems: true,
       },
     });
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
           bookingDate: format(booking.bookingDate, "dd MMM yyyy"),
           weddingSession: booking.weddingSession,
           packageName: booking.snapPackage?.packageName ?? "-",
-          pax: booking.snapPackageVariant?.pax ?? 0,
+          pax: booking.snapPackagePricing?.pax ?? 0,
         }}
         vendorName={cateringItem.vendorName}
         poData={poData}

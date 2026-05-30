@@ -6,11 +6,13 @@ import { fetchGroups } from "@/services/group-service";
 import {
   createGroup,
   updateGroup,
+  updateGroupLeader,
   deleteGroup,
   addGroupMember,
   removeGroupMember,
+  setMemberTarget,
 } from "@/actions/groups";
-import type { CreateGroupInput, UpdateGroupInput } from "@/lib/validations/user";
+import type { CreateGroupInput, UpdateGroupInput, SetMemberTargetInput } from "@/lib/validations/user";
 
 export function useGroups(initialData?: GroupsQueryResult) {
   return useQuery({
@@ -67,6 +69,27 @@ export function useRemoveGroupMember() {
   return useMutation({
     mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
       removeGroupMember(groupId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+    },
+  });
+}
+
+export function useSetMemberTarget() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SetMemberTargetInput) => setMemberTarget(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+    },
+  });
+}
+
+export function useUpdateGroupLeader() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, leaderId }: { groupId: string; leaderId: string }) =>
+      updateGroupLeader(groupId, leaderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
     },

@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { ShieldX } from "lucide-react";
+import { ShieldCross } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/auth";
 import { isSuperAdmin } from "@/lib/permissions";
@@ -41,7 +41,7 @@ export default async function DashboardPage({
     <div className={cn("flex", "flex-col", "gap-6", "py-6")}>
       {params.error === "forbidden" && (
         <div className={cn("flex", "items-center", "gap-3", "p-4", "bg-destructive/10", "border", "border-destructive/20", "rounded-lg", "text-destructive")}>
-          <ShieldX className={cn("h-5", "w-5", "shrink-0")} />
+          <ShieldCross weight="BoldDuotone" className={cn("h-5", "w-5", "shrink-0")} />
           <div>
             <p className={cn("font-semibold", "text-sm")}>Akses Ditolak</p>
             <p className={cn("text-sm", "mt-0.5")}>Anda tidak memiliki izin untuk mengakses halaman tersebut.</p>

@@ -2,15 +2,9 @@ import { db } from "@/lib/db";
 
 const packageInclude = {
   venue: { select: { id: true, name: true, address: true, brandId: true } },
-  variants: {
-    where: { deletedAt: null },
-    orderBy: { pax: "asc" as const },
-    include: {
-      vendorItems: true,
-      internalItems: true,
-      categoryPrices: { orderBy: { sortOrder: "asc" as const } },
-    },
-  },
+  vendorItems: { orderBy: { sortOrder: "asc" as const } },
+  internalItems: { orderBy: { sortOrder: "asc" as const } },
+  categoryPrices: { orderBy: { sortOrder: "asc" as const } },
 } as const;
 
 export async function getPackages(venueId?: string, page = 1, limit = 10) {
@@ -39,20 +33,12 @@ export async function getPackagesForBooking(venueId?: string) {
       ...(venueId ? { venueId } : {}),
     },
     orderBy: { createdAt: "desc" },
-    include: {
-      ...packageInclude,
-      variants: {
-        ...packageInclude.variants,
-        where: { available: true, deletedAt: null },
-      },
-    },
+    include: packageInclude,
   });
 
-  // Filter: only packages with at least 1 variant that has total price > 0
+  // Filter: only packages with at least 1 category price with total > 0
   return packages.filter((pkg) =>
-    pkg.variants.some((v) =>
-      (v.categoryPrices ?? []).reduce((sum, c) => sum + Number(c.basePrice), 0) > 0
-    )
+    (pkg.categoryPrices ?? []).reduce((sum, c) => sum + Number(c.basePrice), 0) > 0
   );
 }
 

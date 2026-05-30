@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
-import { ShieldCheck, Plus, Loader2, PenLine, Trash2, GripVertical, MoreHorizontal, ChevronDown } from "lucide-react";
+import { ShieldCheck, AddCircle, Refresh, PenNewSquare, TrashBinTrash, MenuDots, AltArrowDown } from "@solar-icons/react";
 import { toast } from "sonner";
 import {
   useRoles, useCreateRole, useUpdateRole, useDeleteRole,
@@ -356,7 +356,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
             <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-gray-100')}>
               <h2 className={cn('text-sm', 'font-semibold', 'text-gray-900')}>Roles</h2>
               <button onClick={() => setShowAddRole(!showAddRole)} className={cn('p-1.5', 'rounded-lg', 'hover:bg-gray-100', 'transition-colors')}>
-                <Plus className={cn('h-4', 'w-4', 'text-gray-500')} />
+                <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-500')} />
               </button>
             </div>
             <div className="p-2">
@@ -366,7 +366,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                   <Input placeholder="Deskripsi (opsional)" value={newRoleDesc} onChange={(e) => setNewRoleDesc(e.target.value)} className={cn('text-sm', 'h-8')} />
                   <div className={cn('flex', 'gap-2')}>
                     <Button size="sm" onClick={handleCreateRole} disabled={!newRoleName.trim() || createRoleMut.isPending} className={cn('flex-1', 'h-7', 'text-xs')}>
-                      {createRoleMut.isPending && <Loader2 className={cn('h-3', 'w-3', 'animate-spin', 'mr-1')} />} Tambah
+                      {createRoleMut.isPending && <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin', 'mr-1')} />} Tambah
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => { setShowAddRole(false); setNewRoleName(""); setNewRoleDesc(""); }} className={cn('h-7', 'text-xs')}>Batal</Button>
                   </div>
@@ -388,11 +388,11 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               } ${snapshot.isDragging ? "shadow-md bg-white" : ""}`}
                             >
                               <div {...drag.dragHandleProps} className={cn('cursor-grab', 'opacity-0', 'group-hover:opacity-40', 'hover:opacity-70!', 'shrink-0')}>
-                                <GripVertical className={cn('h-4', 'w-4', 'text-gray-400')} />
+                                <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-400')} />
                               </div>
                               <button onClick={() => { setSelectedRoleId(role.id); setIsDirty(false); }} className={cn('flex', 'items-center', 'gap-2', 'flex-1', 'min-w-0', 'text-left')}>
                                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${roleColors[role.name.toLowerCase()] ?? "bg-gray-300 text-white"}`}>
-                                  <ShieldCheck className={cn('h-3.5', 'w-3.5')} />
+                                  <ShieldCheck weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                                 </div>
                                 <div className={cn('flex-1', 'min-w-0')}>
                                   <p className={cn('text-sm', 'font-medium', 'truncate')}>{role.name}</p>
@@ -401,11 +401,11 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               </button>
                               <div className={cn('flex', 'gap-0.5', 'opacity-0', 'group-hover:opacity-100', 'shrink-0')}>
                                 <button className={cn('p-1', 'hover:bg-gray-200', 'rounded', 'cursor-pointer')} onClick={() => { setEditingRole(role); setEditName(role.name); setEditDesc(role.description ?? ""); }}>
-                                  <PenLine className={cn('h-3', 'w-3', 'text-gray-500')} />
+                                  <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-gray-500')} />
                                 </button>
                                 {role.name !== "super-admin" && (
                                   <button className={cn('p-1', 'hover:bg-red-100', 'rounded', 'cursor-pointer')} onClick={() => setDeletingRole(role)}>
-                                    <Trash2 className={cn('h-3', 'w-3', 'text-red-400')} />
+                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-red-400')} />
                                   </button>
                                 )}
                               </div>
@@ -434,11 +434,11 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
               </div>
               <div className={cn('flex', 'gap-2')}>
                 <Button size="sm" variant="outline" onClick={() => setShowAddModule(true)} className={cn('h-7', 'text-xs', 'gap-1')}>
-                  <Plus className={cn('h-3', 'w-3')} /> Add Module
+                  <AddCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} /> Add Module
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleReset} disabled={!isDirty || isSuperAdmin} className={cn('h-7', 'text-xs')}>Reset</Button>
                 <Button size="sm" onClick={handleSave} disabled={!isDirty || isSuperAdmin || updatePermsMut.isPending} className={cn('h-7', 'text-xs', 'gap-1')}>
-                  {updatePermsMut.isPending && <Loader2 className={cn('h-3', 'w-3', 'animate-spin')} />} Save
+                  {updatePermsMut.isPending && <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin')} />} Save
                 </Button>
               </div>
             </div>
@@ -456,7 +456,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                     onKeyDown={(e) => { if (e.key === "Enter") handleAddModule(); if (e.key === "Escape") { setShowAddModule(false); setNewModuleName(""); } }}
                   />
                   <Button size="sm" onClick={handleAddModule} disabled={!newModuleName.trim() || createPermMut.isPending} className={cn('h-8', 'text-xs')}>
-                    {createPermMut.isPending ? <Loader2 className={cn('h-3', 'w-3', 'animate-spin')} /> : "Add"}
+                    {createPermMut.isPending ? <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin')} /> : "Add"}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => { setShowAddModule(false); setNewModuleName(""); }} className={cn('h-8', 'text-xs')}>Cancel</Button>
                 </div>
@@ -482,7 +482,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                     <div className={cn('flex', 'items-center', 'gap-3', 'px-4', 'py-3', 'bg-gray-50', 'hover:bg-gray-100', 'transition-colors')}>
                       {/* Drag handle */}
                       <div {...drag.dragHandleProps} className={cn('cursor-grab', 'opacity-40', 'hover:opacity-70', 'shrink-0')}>
-                        <GripVertical className={cn('h-4', 'w-4', 'text-gray-400')} />
+                        <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-400')} />
                       </div>
                       {/* Toggle All */}
                       <Switch
@@ -503,23 +503,24 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button className={cn('p-1', 'hover:bg-gray-200', 'rounded', 'cursor-pointer')}>
-                            <MoreHorizontal className={cn('h-4', 'w-4', 'text-gray-400')} />
+                            <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-400')} />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
                           <DropdownMenuItem onClick={() => { setEditModuleKey(mod); setEditModuleName(MODULE_LABELS[mod] ?? mod); }}>
-                            <PenLine className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit Label
+                            <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit Label
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setAddPermModule(mod); setNewAction(""); setOpenModules((p) => new Set([...p, mod])); }}>
-                            <Plus className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Tambah Permission
+                            <AddCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Tambah Permission
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteModule(mod)} className={cn('text-red-600', 'focus:text-red-600', 'focus:bg-red-50')}>
-                            <Trash2 className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Hapus Module
+                            <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Hapus Module
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      <ChevronDown
+                      <AltArrowDown
+                        weight="BoldDuotone"
                         className={`h-4 w-4 text-gray-400 transition-transform cursor-pointer shrink-0 ${isOpen ? "rotate-180" : ""}`}
                         onClick={() => setOpenModules((prev) => { const n = new Set(prev); if (n.has(mod)) { n.delete(mod); } else { n.add(mod); } return n; })}
                       />
@@ -564,10 +565,10 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               {!isEditing && pid && (
                                 <div className={cn('opacity-0', 'group-hover/perm:opacity-100', 'flex', 'items-center', 'gap-1', 'transition-opacity')}>
                                   <button onClick={() => { setEditPermId(pid); setEditPermAction(action); }} className={cn('p-1', 'hover:bg-gray-100', 'rounded', 'cursor-pointer')}>
-                                    <PenLine className={cn('h-3', 'w-3', 'text-gray-400')} />
+                                    <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-gray-400')} />
                                   </button>
                                   <button onClick={() => handleDeletePermission(pid, mod, action)} className={cn('p-1', 'hover:bg-red-50', 'rounded', 'cursor-pointer')}>
-                                    <Trash2 className={cn('h-3', 'w-3', 'text-red-400')} />
+                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-red-400')} />
                                   </button>
                                 </div>
                               )}
@@ -581,8 +582,8 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                           <div className={cn('flex', 'items-center', 'gap-2', 'pt-2', 'mt-1', 'border-t', 'border-gray-100')}>
                             <Input value={newAction} onChange={(e) => setNewAction(e.target.value)} placeholder="nama action baru" className={cn('h-7', 'text-xs', 'flex-1')} autoFocus
                               onKeyDown={(e) => { if (e.key === "Enter") handleAddPermission(mod); if (e.key === "Escape") { setAddPermModule(null); setNewAction(""); } }} />
-                            <button onClick={() => handleAddPermission(mod)} disabled={!newAction.trim() || createPermMut.isPending} className={cn('px-2', 'py-1', 'text-xs', 'bg-gray-900', 'text-white', 'rounded', 'hover:bg-gray-800', 'cursor-pointer', 'disabled:opacity-50')}>
-                              {createPermMut.isPending ? <Loader2 className={cn('h-3', 'w-3', 'animate-spin')} /> : "Add"}
+                            <button onClick={() => handleAddPermission(mod)} disabled={!newAction.trim() || createPermMut.isPending} className={cn('px-2', 'py-1', 'text-xs', 'bg-primary', 'text-primary-foreground', 'rounded', 'hover:bg-primary/90', 'cursor-pointer', 'disabled:opacity-50')}>
+                              {createPermMut.isPending ? <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin')} /> : "Add"}
                             </button>
                             <button onClick={() => { setAddPermModule(null); setNewAction(""); }} className={cn('px-2', 'py-1', 'text-xs', 'border', 'rounded', 'hover:bg-gray-50', 'cursor-pointer')}>Cancel</button>
                           </div>
@@ -617,7 +618,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
           <div className={cn('flex', 'gap-2', 'mt-4')}>
             <Button variant="outline" className="flex-1" onClick={() => setEditingRole(null)}>Batal</Button>
             <Button className="flex-1" onClick={handleUpdateRole} disabled={!editName.trim() || updateRoleMut.isPending}>
-              {updateRoleMut.isPending && <Loader2 className={cn('h-3', 'w-3', 'animate-spin', 'mr-1')} />} Simpan
+              {updateRoleMut.isPending && <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin', 'mr-1')} />} Simpan
             </Button>
           </div>
         </DialogContent>
@@ -631,7 +632,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
           <div className={cn('flex', 'gap-2', 'mt-4')}>
             <Button variant="outline" className="flex-1" onClick={() => setDeletingRole(null)}>Batal</Button>
             <Button variant="destructive" className="flex-1" onClick={handleDeleteRole} disabled={deleteRoleMut.isPending}>
-              {deleteRoleMut.isPending && <Loader2 className={cn('h-3', 'w-3', 'animate-spin', 'mr-1')} />} Hapus
+              {deleteRoleMut.isPending && <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin', 'mr-1')} />} Hapus
             </Button>
           </div>
         </DialogContent>
