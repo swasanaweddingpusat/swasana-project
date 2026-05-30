@@ -11,6 +11,7 @@ const roleData = [
   { name: "sales", description: "Access to sales data and customer management", sortOrder: 7 },
   { name: "vendor-specialist", description: "Manage Data Vendor Specialist", sortOrder: 8 },
   { name: "human-resource", description: "Access to human resource", sortOrder: 9 },
+  { name: "sales-mice", description: "Sales access for MICE bookings", sortOrder: 10 },
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
@@ -20,13 +21,13 @@ const moduleActions: Record<string, string[]> = {
   approval: ["edit"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
+  groups: ["view", "view-all", "create", "edit", "delete"],
   package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
   vendor: ["view", "create", "edit", "delete"],
   "vendor-specialist": ["view", "create", "edit", "delete"],
   // Settings sub-modules
   "settings-brands": ["view", "create", "edit", "delete"],
   "settings-venues": ["view", "create", "edit", "delete"],
-  "settings-groups": ["view", "create", "edit", "delete"],
   "settings-users": ["view", "create", "edit", "delete"],
   "settings-education-level": ["view", "create", "edit", "delete"],
   "settings-event-types": ["view", "create", "edit", "delete"],
@@ -39,6 +40,7 @@ const moduleActions: Record<string, string[]> = {
   leads: ["view", "create", "edit", "delete"],
   "settings-lead-status": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
+  "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
 };
 
 // Modules removed (not used in code):
@@ -61,6 +63,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "comment", "print", "client-agreement"],
     approval: ["edit"],
     customers: ["view", "create", "edit"],
+    groups: ["view", "view-all", "create", "edit", "delete"],
     package: ["view"],
     vendor: ["view"],
     "finance-ar": ["view"],
@@ -73,12 +76,12 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     approval: ["edit"],
     customers: ["view", "create", "edit", "delete"],
+    groups: ["view", "view-all", "create", "edit", "delete"],
     package: ["view", "create", "edit", "delete", "term-&-condition"],
     vendor: ["view", "create", "edit", "delete"],
     "finance-ar": ["view"],
     "settings-brands": ["view", "create", "edit", "delete"],
     "settings-venues": ["view", "create", "edit", "delete"],
-    "settings-groups": ["view", "create", "edit", "delete"],
     "settings-users": ["view", "create", "edit", "delete"],
     "settings-education-level": ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
@@ -115,6 +118,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement"],
     customers: ["view", "create", "edit"],
+    groups: ["view", "create", "edit"],
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
     leads: ["view", "create", "edit"],
@@ -129,6 +133,13 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "human-resource": {
     "settings-users": ["view"],
     "settings-education-level": ["view"],
+  },
+  "sales-mice": {
+    "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
+    customers: ["view", "create", "edit"],
+    package: ["view"],
+    vendor: ["view"],
+    quotations: ["view", "create", "edit"],
   },
 };
 
@@ -145,6 +156,7 @@ const REMOVED_MODULES = [
   "dashboard", "decoration", "finance", "finance_ap", "finance_ar", "hr", "notification",
   "user_management", "venue_management", "client_agreement", "settlement",
   "settings", "payment_methods", "role_permission", "source_of_information",
+  "settings-groups", // renamed → "groups" (code uses module "groups", not "settings-groups")
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────
