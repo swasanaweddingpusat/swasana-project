@@ -254,19 +254,15 @@ export async function deleteMiceBooking(
 
   try {
     await db.$transaction([
-      // Remove non-cascade relations first (module+entityId pattern)
-      db.approvalRecordStep.deleteMany({
-        where: { record: { module: "booking", entityId: id } },
-      }),
+      // Remove non-cascade relations first (module+entityId pattern, no FK)
       db.approvalRecord.deleteMany({
         where: { module: "booking", entityId: id },
+        // ApprovalRecordStep cascades from ApprovalRecord (onDelete: Cascade in schema)
       }),
       db.notification.deleteMany({
         where: { entityType: "booking", entityId: id },
       }),
-      db.activityLog.deleteMany({
-        where: { entityType: "booking", entityId: id },
-      }),
+      // ActivityLog is the audit trail — intentionally preserved after entity deletion
       // Cascade handles TermOfPayment, BookingDocument, ClientAgreement, etc.
       db.booking.delete({ where: { id } }),
     ]);
