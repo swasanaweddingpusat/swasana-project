@@ -183,7 +183,7 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
           },
           select: {
             bookingStatus: true,
-            snapPackageVariant: { select: { price: true } },
+            snapPackagePricing: { select: { price: true } },
           },
           take: 1000,
         }),
@@ -202,7 +202,7 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
 
       const confirmed = bookingRevenues.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
       const pendingApproval = bookingRevenues.filter((b) => b.bookingStatus === BookingStatus.Pending);
-      const actual = confirmed.reduce((sum, b) => sum + (b.snapPackageVariant?.price ?? 0), 0);
+      const actual = confirmed.reduce((sum, b) => sum + (b.snapPackagePricing?.price ?? 0), 0);
       const targetAmount = target ? Number(target.amount) : 0;
       const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
 
@@ -276,7 +276,7 @@ export async function getGroupsWithPerformance(
     select: {
       salesId: true,
       bookingStatus: true,
-      snapPackageVariant: { select: { price: true } },
+      snapPackagePricing: { select: { price: true } },
     },
     take: 10000,
   });
@@ -304,7 +304,7 @@ export async function getGroupsWithPerformance(
   for (const b of allBookings) {
     if (!b.salesId) continue;
     const list = bookingsBySalesId.get(b.salesId) ?? [];
-    list.push({ bookingStatus: b.bookingStatus, price: b.snapPackageVariant?.price ?? 0 });
+    list.push({ bookingStatus: b.bookingStatus, price: b.snapPackagePricing?.price ?? 0 });
     bookingsBySalesId.set(b.salesId, list);
   }
 
@@ -364,7 +364,7 @@ export async function getSalesBookings(salesId: string, take = 100, skip = 0) {
       snapCustomer: { select: { name: true, mobileNumber: true } },
       snapVenue: { select: { venueName: true } },
       snapPackage: { select: { packageName: true } },
-      snapPackageVariant: { select: { price: true } },
+      snapPackagePricing: { select: { price: true } },
       paymentMethod: { select: { bankName: true } },
     },
     orderBy: { bookingDate: "desc" },

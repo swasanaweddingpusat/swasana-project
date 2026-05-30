@@ -9,6 +9,7 @@ export async function getSourceOfInformations() {
   return db.sourceOfInformation.findMany({
     select: { id: true, name: true, createdAt: true },
     orderBy: { createdAt: "desc" },
+    take: 500,
   });
 }
 

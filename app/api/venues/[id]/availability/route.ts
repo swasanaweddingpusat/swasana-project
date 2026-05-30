@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const excludeId = searchParams.get("exclude"); // booking ID to exclude (for edit mode)
 
     // Availability is per-venue (1 venue = 1 physical space).
-    // We intentionally do NOT filter by packageId/variantId —
+    // We intentionally do NOT filter by packageId —
     // any active booking at this venue blocks the slot, regardless of package.
     const bookings = await db.booking.findMany({
       where: {

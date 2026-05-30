@@ -9,21 +9,17 @@ import { getPackageCreatedBy } from "@/actions/package";
 import { cn } from "@/lib/utils";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 
-type PackageVariant = PackageQueryItem["variants"][number];
-type VendorItem = PackageVariant["vendorItems"][number];
-type InternalItem = PackageVariant["internalItems"][number];
-type CategoryPrice = PackageVariant["categoryPrices"][number];
+type VendorItem = PackageQueryItem["vendorItems"][number];
+type InternalItem = PackageQueryItem["internalItems"][number];
+type CategoryPrice = PackageQueryItem["categoryPrices"][number];
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 
-const variantBasePrice = (v: PackageVariant) =>
-  (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
-
-const variantSellingPrice = (v: PackageVariant) => {
-  if (v.sellingPrice > 0) return v.sellingPrice;
-  const base = variantBasePrice(v);
-  return base + Math.round(base * ((v.margin ?? 0) / 100));
+const getSellingPrice = (pkg: PackageQueryItem) => {
+  if (pkg.sellingPrice > 0) return pkg.sellingPrice;
+  const base = (pkg.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+  return base + Math.round(base * ((pkg.margin ?? 0) / 100));
 };
 
 const formatDate = (d: Date | string | null) => {
@@ -40,7 +36,6 @@ interface DetailModalProps {
 
 export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
   const [createdByName, setCreatedByName] = useState<string | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState("");
 
   useEffect(() => {
     if (!open || !pkg) return;
@@ -50,25 +45,13 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
 
   if (!pkg) return null;
 
-  const priceRange = () => {
-    if (!pkg.variants?.length) return "-";
-    const prices = pkg.variants.map((v: PackageVariant) => variantSellingPrice(v));
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    return min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`;
-  };
-
-  const variants = pkg.variants ?? [];
-  // Derive active variant without setState-in-effect: fall back to first when the
-  // stored id isn't part of the current package (e.g. after switching packages).
-  const activeId = variants.some((v) => v.id === selectedVariantId)
-    ? selectedVariantId
-    : variants[0]?.id ?? "";
-  const activeVariant = variants.find((v) => v.id === activeId) ?? null;
+  const sellingPrice = getSellingPrice(pkg);
+  const basePrice = (pkg.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+  const categoryPrices = [...(pkg.categoryPrices ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-5xl! max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" showCloseButton={false}>
+      <DialogContent className="w-full max-w-4xl! max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" showCloseButton={false}>
         {/* Header */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b">
           <div className="flex items-start justify-between gap-4">
@@ -79,7 +62,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
                   <MapPoint weight="BoldDuotone" className="h-3 w-3" />{pkg.venue?.name ?? "No venue"}
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <Tag weight="BoldDuotone" className="h-3 w-3" />{variants.length} variant
+                  <Tag weight="BoldDuotone" className="h-3 w-3" />{pkg.pax ?? 0} PAX
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <Calendar weight="BoldDuotone" className="h-3 w-3" />Updated {formatDate(pkg.updatedAt)}
@@ -91,7 +74,7 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
                 )}
               </div>
               <div className="flex items-center gap-2 pt-0.5">
-                <p className="text-sm font-semibold text-foreground">{priceRange()}</p>
+                <p className="text-sm font-semibold text-foreground">{sellingPrice > 0 ? formatCurrency(sellingPrice) : "-"}</p>
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <span className={cn(
                     "h-1.5 w-1.5 rounded-full",
@@ -126,153 +109,71 @@ export function DetailModal({ open, onClose, pkg, onEdit }: DetailModalProps) {
           </div>
         )}
 
-        {/* Variant master-detail: rail (left) + content (right) */}
-        {variants.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center py-12">
-            <div className="text-center text-muted-foreground">
-              <Box weight="BoldDuotone" className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No variants yet</p>
+        {/* Package Detail */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 min-w-0">
+          {categoryPrices.length === 0 && (pkg.vendorItems ?? []).length === 0 && (pkg.internalItems ?? []).length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center text-muted-foreground">
+                <Box weight="BoldDuotone" className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No detail yet</p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
-            {/* Variant rail */}
-            <div
-              role="tablist"
-              aria-label="Pilih variant"
-              className="flex md:flex-col gap-1.5 p-3 shrink-0 overflow-x-auto md:w-56 md:overflow-y-auto border-b md:border-b-0 md:border-r bg-muted/20"
-            >
-              {variants.map((v) => {
-                const isActive = v.id === activeId;
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => setSelectedVariantId(v.id)}
-                    className={cn(
-                      "text-left rounded-xl border px-3 py-2.5 transition-colors shrink-0 min-w-40 md:min-w-0 md:w-full",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      isActive
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card border-border hover:bg-muted",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold truncate">{v.variantName}</span>
-                      {!v.available && (
-                        <span
-                          className={cn(
-                            "text-[10px] shrink-0",
-                            isActive ? "text-primary-foreground/70" : "text-muted-foreground",
-                          )}
-                        >
-                          N/A
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      className={cn(
-                        "text-xs mt-0.5",
-                        isActive ? "text-primary-foreground/70" : "text-muted-foreground",
-                      )}
-                    >
-                      {v.pax} PAX
-                    </div>
-                    <div className="text-sm font-bold mt-1 tabular-nums">
-                      {formatCurrency(variantSellingPrice(v))}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+          ) : (
+            <>
+              {/* Price Breakdown */}
+              {categoryPrices.length > 0 && (
+                <SectionBlock title="Price Breakdown" icon={<Tag weight="BoldDuotone" className="h-3.5 w-3.5" />}>
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {categoryPrices.map((cp: CategoryPrice) => (
+                          <tr key={cp.id} className="border-b last:border-0">
+                            <td className="px-3 py-2 text-muted-foreground">{cp.categoryName}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(Number(cp.basePrice))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-muted/30 border-t-2">
+                        <tr>
+                          <td className="px-3 py-2 font-medium">Base Price</td>
+                          <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(basePrice)}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-3 py-2 text-muted-foreground">Margin ({pkg.margin ?? 0}%)</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                            +{formatCurrency(sellingPrice - basePrice)}
+                          </td>
+                        </tr>
+                        <tr className="border-t bg-primary/5">
+                          <td className="px-3 py-2 font-semibold">Selling Price</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatCurrency(sellingPrice)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </SectionBlock>
+              )}
 
-            {/* Variant content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5 min-w-0">
-              {activeVariant && <VariantContent variant={activeVariant} />}
-            </div>
-          </div>
-        )}
+              {/* Vendor Items */}
+              <VendorItemsSection items={pkg.vendorItems ?? []} />
+
+              {/* Internal Items */}
+              <InternalItemsSection items={pkg.internalItems ?? []} />
+
+              {/* Term & Condition */}
+              {pkg.termAndCondition && (
+                <SectionBlock title="Term & Condition" icon={<FileText weight="BoldDuotone" className="h-3.5 w-3.5" />}>
+                  <div
+                    className="text-xs leading-relaxed rounded-md border bg-muted/20 p-3 max-h-64 overflow-y-auto [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:my-0.5 [&_strong]:font-semibold"
+                    dangerouslySetInnerHTML={{ __html: pkg.termAndCondition }}
+                  />
+                </SectionBlock>
+              )}
+            </>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ─── Variant Content ──────────────────────────────────────────────────────────
-
-function VariantContent({ variant: v }: { variant: PackageVariant }) {
-  const basePrice = variantBasePrice(v);
-  const sellingPrice = variantSellingPrice(v);
-  const categoryPrices = [...(v.categoryPrices ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
-
-  return (
-    <>
-      {/* Status summary bar */}
-      <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-4 py-2.5">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="font-medium">{v.variantName}</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">{v.pax} PAX</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">{formatCurrency(sellingPrice)}</span>
-          <Badge variant={v.available ? "default" : "secondary"} className="text-xs">
-            {v.available ? "Available" : "N/A"}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Price Breakdown */}
-      {categoryPrices.length > 0 && (
-        <SectionBlock title="Price Breakdown" icon={<Tag weight="BoldDuotone" className="h-3.5 w-3.5" />}>
-          <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
-              <tbody>
-                {categoryPrices.map((cp: CategoryPrice) => (
-                  <tr key={cp.id} className="border-b last:border-0">
-                    <td className="px-3 py-2 text-muted-foreground">{cp.categoryName}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(Number(cp.basePrice))}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-muted/30 border-t-2">
-                <tr>
-                  <td className="px-3 py-2 font-medium">Base Price</td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(basePrice)}</td>
-                </tr>
-                <tr className="border-t">
-                  <td className="px-3 py-2 text-muted-foreground">Margin ({v.margin ?? 0}%)</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                    +{formatCurrency(sellingPrice - basePrice)}
-                  </td>
-                </tr>
-                <tr className="border-t bg-primary/5">
-                  <td className="px-3 py-2 font-semibold">Selling Price</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatCurrency(sellingPrice)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </SectionBlock>
-      )}
-
-      {/* Vendor Items */}
-      <VendorItemsSection items={v.vendorItems ?? []} />
-
-      {/* Internal Items */}
-      <InternalItemsSection items={v.internalItems ?? []} />
-
-      {/* Term & Condition */}
-      {v.termAndCondition && (
-        <SectionBlock title="Term & Condition" icon={<FileText weight="BoldDuotone" className="h-3.5 w-3.5" />}>
-          <div
-            className="text-xs leading-relaxed rounded-md border bg-muted/20 p-3 max-h-64 overflow-y-auto [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:my-0.5 [&_strong]:font-semibold"
-            dangerouslySetInnerHTML={{ __html: v.termAndCondition }}
-          />
-        </SectionBlock>
-      )}
-    </>
   );
 }
 

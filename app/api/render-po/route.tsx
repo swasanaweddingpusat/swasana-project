@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         snapCustomer: snap.snapCustomer as POPdfBooking["snapCustomer"],
         snapVenue: snap.snapVenue as POPdfBooking["snapVenue"],
         snapPackage: snap.snapPackage as POPdfBooking["snapPackage"],
-        snapPackageVariant: snap.snapPackageVariant as POPdfBooking["snapPackageVariant"],
+        snapPackagePricing: snap.snapPackagePricing as POPdfBooking["snapPackagePricing"],
         snapPackageInternalItems: (snap.snapPackageInternalItems ?? []) as POPdfBooking["snapPackageInternalItems"],
         snapPackageVendorItems: (snap.snapPackageVendorItems ?? []) as POPdfBooking["snapPackageVendorItems"],
         snapPackageCategoryPrices: (snap.snapPackageCategoryPrices ?? []) as POPdfBooking["snapPackageCategoryPrices"],
@@ -66,13 +66,8 @@ export async function POST(req: Request) {
       customerName = ((snap.snapCustomer as Record<string, unknown> | null)?.name as string ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (revision.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = new Date(snap.bookingDate as string).toISOString().split("T")[0];
-      const bookingForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { snapPackageVariant: { select: { termAndCondition: true } }, packageVariantId: true } });
-      termAndConditionHtml = bookingForTc?.snapPackageVariant?.termAndCondition ?? null;
-      // Fallback to live variant T&C if snapshot doesn't have it (old bookings)
-      if (!termAndConditionHtml && bookingForTc?.packageVariantId) {
-        const pv = await db.packageVariant.findUnique({ where: { id: bookingForTc.packageVariantId }, select: { termAndCondition: true } });
-        termAndConditionHtml = pv?.termAndCondition ?? null;
-      }
+      const bookingForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { snapPackagePricing: { select: { termAndCondition: true } } } });
+      termAndConditionHtml = bookingForTc?.snapPackagePricing?.termAndCondition ?? null;
     } else {
       // Render from live booking data (backward compatible)
       const booking = await db.booking.findUnique({
@@ -81,7 +76,7 @@ export async function POST(req: Request) {
           snapCustomer: true,
           snapVenue: true,
           snapPackage: true,
-          snapPackageVariant: true,
+          snapPackagePricing: true,
           snapPackageInternalItems: { orderBy: { sortOrder: "asc" } },
           snapPackageVendorItems: { orderBy: { sortOrder: "asc" } },
           snapPackageCategoryPrices: { select: { categoryName: true, basePrice: true, isTakeout: true } },
@@ -104,7 +99,7 @@ export async function POST(req: Request) {
         snapCustomer: booking.snapCustomer,
         snapVenue: booking.snapVenue,
         snapPackage: booking.snapPackage,
-        snapPackageVariant: booking.snapPackageVariant,
+        snapPackagePricing: booking.snapPackagePricing,
         snapPackageInternalItems: booking.snapPackageInternalItems,
         snapPackageVendorItems: booking.snapPackageVendorItems,
         snapPackageCategoryPrices: booking.snapPackageCategoryPrices,
@@ -121,12 +116,7 @@ export async function POST(req: Request) {
       customerName = (booking.snapCustomer?.name ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (booking.snapVenue?.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = booking.bookingDate.toISOString().split("T")[0];
-      termAndConditionHtml = booking.snapPackageVariant?.termAndCondition ?? null;
-      // Fallback to live variant T&C if snapshot doesn't have it (old bookings)
-      if (!termAndConditionHtml && booking.packageVariantId) {
-        const pv = await db.packageVariant.findUnique({ where: { id: booking.packageVariantId }, select: { termAndCondition: true } });
-        termAndConditionHtml = pv?.termAndCondition ?? null;
-      }
+      termAndConditionHtml = booking.snapPackagePricing?.termAndCondition ?? null;
     }
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
@@ -30,8 +30,7 @@ interface Props {
 
 interface VenueOption { id: string; name: string }
 interface CategoryPriceEntry { id: string; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }
-interface PackageVariant { id: string; variantName: string; pax: number; margin: number; sellingPrice: number; categoryPrices: CategoryPriceEntry[] }
-interface PackageOption { id: string; packageName: string; variants: PackageVariant[] }
+interface PackageOption { id: string; packageName: string; pax: number; margin: number; sellingPrice: number; categoryPrices: CategoryPriceEntry[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number }
@@ -48,10 +47,10 @@ function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
 }
 
-function getVariantPrice(v: PackageVariant) {
-  if (v.sellingPrice > 0) return v.sellingPrice;
-  const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
-  return base + Math.round(base * ((v.margin ?? 0) / 100));
+function getPackagePrice(p: PackageOption) {
+  if (p.sellingPrice > 0) return p.sellingPrice;
+  const base = (p.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+  return base + Math.round(base * ((p.margin ?? 0) / 100));
 }
 
 function toLocalISO(date: Date): string {
@@ -93,8 +92,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [venueId, setVenueId] = useState("");
   const [packageId, setPackageId] = useState("");
-  const [variantId, setVariantId] = useState("");
-  const [selectedVariantPrice, setSelectedVariantPrice] = useState(0);
+  const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
   const [bookingDate, setBookingDate] = useState("");
   const [weddingSession, setWeddingSession] = useState("");
   const [weddingType, setWeddingType] = useState("");
@@ -119,7 +117,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Track original values to detect significant changes
   const [originalVenueId, setOriginalVenueId] = useState("");
   const [originalPackageId, setOriginalPackageId] = useState("");
-  const [originalVariantId, setOriginalVariantId] = useState("");
 
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -142,16 +139,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id })));
   const selectedPkg = packages.find((p) => p.id === packageId);
-  const variants = useMemo(() => selectedPkg?.variants ?? [], [selectedPkg]);
 
-  // Computed: selected variant's category prices
-  const selectedVariantData = variants.find((v) => v.id === variantId);
-  const allCategoryPrices = selectedVariantData?.categoryPrices ?? [];
+  // Computed: selected package's category prices (flat — no variants)
+  const allCategoryPrices = selectedPkg?.categoryPrices ?? [];
   const visibleCategories = allCategoryPrices.filter((c) => c.isShow);
   const hiddenCategoriesBase = allCategoryPrices.filter((c) => !c.isShow).reduce((sum, c) => sum + c.basePrice, 0);
-  const variantMargin = selectedVariantData?.margin ?? 0;
+  const variantMargin = selectedPkg?.margin ?? 0;
 
   const step2Price = (() => {
+    const hasTakeout = visibleCategories.some((c) => categoryToggles[c.categoryName]);
+    if (!hasTakeout && selectedPkg && selectedPkg.sellingPrice > 0) return selectedPkg.sellingPrice;
     const visibleBase = visibleCategories.reduce(
       (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
       0,
@@ -173,10 +170,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     try { const arr = JSON.parse(raw); if (Array.isArray(arr)) setContactNumbers(arr); else throw 0; } catch { setContactNumbers(raw.split(",").map((s) => s.trim()).filter(Boolean).map((n) => ({ name: "", number: n }))); }
     setVenueId(booking.venueId ?? "");
     setPackageId(booking.packageId ?? "");
-    setVariantId(booking.packageVariantId ?? "");
     setOriginalVenueId(booking.venueId ?? "");
     setOriginalPackageId(booking.packageId ?? "");
-    setOriginalVariantId(booking.packageVariantId ?? "");
     setBookingDate(booking.bookingDate ? new Date(booking.bookingDate).toISOString() : "");
     setWeddingSession(booking.weddingSession ?? "");
     setWeddingType(booking.weddingType ?? "");
@@ -192,8 +187,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
     setTerms(bTerms.length > 0 ? bTerms : [{ name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0 }]);
-    // Variant price
-    setSelectedVariantPrice(Number(booking.snapPackageVariant?.price ?? 0));
+    // Package price from snapshot
+    setSelectedPackagePrice(Number(booking.snapPackagePricing?.price ?? 0));
   }, [open, booking]);
 
   // Init detail fields
@@ -216,12 +211,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     }
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update variant price when variant changes via packages data
+  // Update package price when package changes via packages data
   useEffect(() => {
-    if (!variantId || !variants.length) return;
-    const v = variants.find((x) => x.id === variantId);
-    if (v) setSelectedVariantPrice(getVariantPrice(v));
-  }, [variantId, variants]);
+    if (!packageId || !packages.length) return;
+    const pkg = packages.find((x) => x.id === packageId);
+    if (pkg) setSelectedPackagePrice(getPackagePrice(pkg));
+  }, [packageId, packages]);
 
   // Venue availability — per-venue, not per-package.
   // Passing `exclude` so the current booking doesn't block its own slot in edit mode.
@@ -259,7 +254,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   }, [bookingDate]);  
 
   // Price helpers
-  const getBasePrice = () => selectedVariantPrice;
+  const getBasePrice = () => selectedPackagePrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
   const getDifference = () => getTotalTerms() - getPriceAfterDiscount();
@@ -273,7 +268,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   };
 
   // Detect significant changes
-  const hasSignificantChange = venueId !== originalVenueId || packageId !== originalPackageId || variantId !== originalVariantId;
+  const hasSignificantChange = venueId !== originalVenueId || packageId !== originalPackageId;
   const hasAnyChange = !booking ? false : (
     hasSignificantChange ||
     customerName !== (booking.snapCustomer?.name ?? "") ||
@@ -288,7 +283,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const totalSteps = hasSignificantChange ? 4 : 1;
 
   // Validation
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && venueId && packageId && bookingDate && weddingSession && weddingType && (variants.length === 0 || variantId));
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && venueId && packageId && bookingDate && weddingSession && weddingType);
   const isStep3Complete = getBasePrice() === 0 || getDifference() === 0;
   const isStep4Complete = !!signatureSales && !!signingLocation.trim();
 
@@ -296,7 +291,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (currentStep === 1 && !isStep1Complete) { toast.error("Lengkapi field yang wajib diisi."); return; }
     if (currentStep === 2 && !isStep2Complete) { toast.error("Minimal satu kategori harus tetap included."); return; }
     if (currentStep === 2) {
-      setSelectedVariantPrice(step2Price);
+      setSelectedPackagePrice(step2Price);
       allocatePrice(step2Price, specialBonusAmount);
     }
     if (currentStep === 3) {
@@ -322,7 +317,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       id: booking.id,
       bookingDate: bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : "",
       venueId, packageId,
-      packageVariantId: variantId || null,
       paymentMethodId: paymentMethodId || null,
       sourceOfInformationId: sourceOfInformationId || null,
       weddingSession: (weddingSession as "morning" | "evening" | "fullday") || null,
@@ -389,15 +383,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div><label className={LBL}>Bitrix ID</label><Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" /></div>
 
               {/* Venue */}
-              <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setVariantId(""); setSelectedVariantPrice(0); setPaymentMethodId(""); setCategoryToggles({}); setTakeoutPrices({}); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
+              <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setSelectedPackagePrice(0); setPaymentMethodId(""); setCategoryToggles({}); setTakeoutPrices({}); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
 
               {/* Package */}
-              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={packageId} onChange={(id) => { setPackageId(id); setVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); setTakeoutPrices({}); }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
-
-              {/* Variant */}
-              {variants.length > 0 && (
-                <div><label className={LBL}>Pilih Tipe Paket *</label><SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={variantId} onChange={(id) => { setVariantId(id); setCategoryToggles({}); setTakeoutPrices({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" /></div>
-              )}
+              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} · ${p.pax} PAX` }))} value={packageId} onChange={(id) => { setPackageId(id); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
 
               {/* Event Date */}
               <div>

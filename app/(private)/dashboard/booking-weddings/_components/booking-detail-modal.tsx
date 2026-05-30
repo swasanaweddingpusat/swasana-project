@@ -212,9 +212,9 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <p className={val}>-</p>
                     )}
                     <p className={lbl + " mt-4"}>Package Price</p>
-                    <p className={val}>{fmtPrice(booking.snapPackageVariant?.price)}</p>
-                    <p className={lbl + " mt-4"}>Variant</p>
-                    <p className={val}>{booking.snapPackageVariant?.variantName ?? "-"} ({booking.snapPackageVariant?.pax ?? 0} PAX)</p>
+                    <p className={val}>{fmtPrice(booking.snapPackagePricing?.price)}</p>
+                    <p className={lbl + " mt-4"}>Package</p>
+                    <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)</p>
                     <p className={lbl + " mt-4"}>Manager</p>
                     <p className={val}>{booking.manager?.fullName ?? "-"}</p>
                   </div>

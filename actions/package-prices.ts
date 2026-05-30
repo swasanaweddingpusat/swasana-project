@@ -46,7 +46,7 @@ export async function updatePackagePrices(
 
   try {
     const [snapVariant, allCategories, currentTerms] = await Promise.all([
-      db.snapPackageVariant.findUnique({
+      db.snapPackagePricing.findUnique({
         where: { bookingId },
         select: { price: true, margin: true },
       }),
@@ -101,8 +101,8 @@ export async function updatePackagePrices(
           data: { isTakeout: t.isTakeout },
         }),
       ),
-      // Update snapPackageVariant.price
-      db.snapPackageVariant.update({
+      // Update snapPackagePricing.price
+      db.snapPackagePricing.update({
         where: { bookingId },
         data: { price: newPrice },
       }),

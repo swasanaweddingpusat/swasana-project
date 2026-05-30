@@ -13,6 +13,7 @@ export async function getEventTypes(category?: "WEDDINGS" | "MICE") {
     },
     select: { id: true, name: true, code: true, category: true, sortOrder: true, isActive: true, createdAt: true },
     orderBy: { sortOrder: "asc" },
+    take: 500,
   });
 }
 

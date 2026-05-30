@@ -28,11 +28,12 @@ type PaymentMethodItem = {
 
 type VenueOption = { id: string; name: string };
 
-const rowsPerPage = 10;
+const ROWS_PER_PAGE = 10;
 
 export default function PaymentMethodsPage() {
   const { can, isAdmin } = usePermissions();
   const [items, setItems] = useState<PaymentMethodItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [venues, setVenues] = useState<VenueOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -48,19 +49,21 @@ export default function PaymentMethodsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<PaymentMethodItem | null>(null);
 
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async (page: number, venueId: string) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({ page: String(page), limit: String(ROWS_PER_PAGE) });
+      if (venueId !== "all") params.set("venueId", venueId);
       const [pmRes, venueRes] = await Promise.all([
-        fetch("/api/payment-methods"),
+        fetch(`/api/payment-methods?${params.toString()}`),
         fetch("/api/venues"),
       ]);
       if (!pmRes.ok) throw new Error();
-      const pmJson = await pmRes.json();
-      const data: PaymentMethodItem[] = pmJson.data ?? pmJson;
-      setItems(data);
+      const pmJson = await pmRes.json() as { data: PaymentMethodItem[]; total: number; page: number; limit: number };
+      setItems(pmJson.data ?? []);
+      setTotal(pmJson.total ?? 0);
       if (venueRes.ok) {
-        const venueData: VenueOption[] = await venueRes.json();
+        const venueData: VenueOption[] = await venueRes.json() as VenueOption[];
         setVenues(venueData);
       }
     } catch {
@@ -70,11 +73,10 @@ export default function PaymentMethodsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEffect(() => { void fetchItems(currentPage, venueFilter); }, [fetchItems, currentPage, venueFilter]);
 
-  const filtered = venueFilter === "all" ? items : items.filter((i) => i.venueId === venueFilter);
-  const totalPages = Math.ceil(filtered.length / rowsPerPage);
-  const paginated = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const totalPages = Math.ceil(total / ROWS_PER_PAGE);
+  const paginated = items;
 
   const openAdd = () => {
     setEditingItem(null);
@@ -101,7 +103,7 @@ export default function PaymentMethodsPage() {
       if (res.success) {
         toast.success(editingItem ? "Payment method updated" : "Payment method added");
         setFormOpen(false);
-        fetchItems();
+        void fetchItems(currentPage, venueFilter);
       } else {
         toast.error(res.error ?? "Failed");
       }
@@ -117,7 +119,7 @@ export default function PaymentMethodsPage() {
       toast.success("Deleted");
       setDeleteOpen(false);
       setItemToDelete(null);
-      fetchItems();
+      void fetchItems(currentPage, venueFilter);
     } else {
       toast.error(res.error ?? "Failed");
     }
@@ -168,7 +170,7 @@ export default function PaymentMethodsPage() {
           <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <span className={cn('text-base', 'font-semibold', 'text-gray-900')}>Payment Methods</span>
-              <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
             </div>
             <div className={cn('flex', 'items-center', 'gap-3')}>
               <SearchableSelect
@@ -188,7 +190,7 @@ export default function PaymentMethodsPage() {
           </div>
 
           {/* Table */}
-          {filtered.length === 0 ? (
+          {!loading && total === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'py-12', 'text-muted-foreground')}>
               <CardIcon weight="BoldDuotone" className={cn('h-12', 'w-12', 'mb-3', 'opacity-30')} />
               <p>No payment methods yet</p>
@@ -208,7 +210,7 @@ export default function PaymentMethodsPage() {
               <TableBody>
                 {paginated.map((item, idx) => (
                   <TableRow key={item.id}>
-                    <TableCell className="text-muted-foreground">{(currentPage - 1) * rowsPerPage + idx + 1}</TableCell>
+                    <TableCell className="text-muted-foreground">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
                     <TableCell>{item.venue?.name ?? "-"}</TableCell>
                     <TableCell>{item.bankName}</TableCell>
                     <TableCell>{item.bankAccountNumber}</TableCell>
@@ -234,15 +236,20 @@ export default function PaymentMethodsPage() {
           )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {total > 0 && (
             <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
-              <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Previous
-              </Button>
-              <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                Next <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'ml-1')} />
-              </Button>
+              <span className={cn('text-sm', 'text-muted-foreground')}>
+                Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, total)} of {total}
+              </span>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                  <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Previous
+                </Button>
+                <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages || 1}</span>
+                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                  Next <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'ml-1')} />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

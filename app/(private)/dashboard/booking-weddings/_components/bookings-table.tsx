@@ -134,7 +134,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
-  const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; variantName: string | null; createdAt: string }[]>>({});
+  const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
   const [pkgPricesTarget, setPkgPricesTarget] = useState<BookingListItem | null>(null);
@@ -298,7 +298,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
                   {(revisionCache[booking.id] ?? []).map((rev) => (
                     <DropdownMenuItem key={rev.id} className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id, rev.id)}>
-                      <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.variantName ? ` (${rev.variantName})` : ""}</span>
+                      <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.pax ? ` · ${rev.pax} PAX` : ""}</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuSubContent>
@@ -500,10 +500,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
                         <div className="leading-tight">
                           <span className={cn('truncate', 'block')}>{booking.snapPackage?.packageName ?? "—"}</span>
-                          {booking.snapPackageVariant && (
+                          {booking.snapPackagePricing && (
                             <>
-                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackageVariant.variantName}</span>
-                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackageVariant.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackageVariant.price) - (booking.discountAmount ?? 0)))}</span>
+                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.packageName}</span>
+                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
                             </>
                           )}
                         </div>
@@ -562,7 +562,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
               {bookings.map((booking: BookingListItem, idx: number) => {
                 const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
-                const variant = booking.snapPackageVariant;
+                const variant = booking.snapPackagePricing;
                 return (
                   <div
                     key={booking.id}
@@ -955,7 +955,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             paymentEvidence: t.paymentEvidence ?? null, notes: t.notes,
             partialPayments: "partialPayments" in t ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments : undefined,
           }))}
-          packagePrice={Number(topTarget.snapPackageVariant?.price ?? 0)}
+          packagePrice={Number(topTarget.snapPackagePricing?.price ?? 0)}
           discountName={topTarget.discountName ?? null}
           discountAmount={topTarget.discountAmount ?? 0}
         />
@@ -975,7 +975,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             isShow: c.isShow,
             isTakeout: c.isTakeout,
           }))}
-          margin={pkgPricesTarget.snapPackageVariant?.margin ?? 0}
+          margin={pkgPricesTarget.snapPackagePricing?.margin ?? 0}
         />
       )}
 

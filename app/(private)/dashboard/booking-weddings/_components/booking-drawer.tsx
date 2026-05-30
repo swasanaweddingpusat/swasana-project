@@ -41,14 +41,10 @@ interface CategoryPriceEntry {
 interface PackageData {
   id: string;
   packageName: string;
-  variants: {
-    id: string;
-    variantName: string;
-    pax: number;
-    margin: number;
-    sellingPrice: number;
-    categoryPrices: CategoryPriceEntry[];
-  }[];
+  pax: number;
+  margin: number;
+  sellingPrice: number;
+  categoryPrices: CategoryPriceEntry[];
 }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
@@ -85,10 +81,10 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
 
-function getVariantPrice(v: PackageData["variants"][number]) {
-  if (v.sellingPrice > 0) return v.sellingPrice;
-  const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
-  return base + Math.round(base * ((v.margin ?? 0) / 100));
+function getPackagePrice(p: PackageData) {
+  if (p.sellingPrice > 0) return p.sellingPrice;
+  const base = (p.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+  return base + Math.round(base * ((p.margin ?? 0) / 100));
 }
 
 
@@ -142,7 +138,7 @@ interface BookingDraft {
   specialBonusAmount: number;
   selectedVenueId: string;
   selectedPackageId: string;
-  selectedVariantPrice: number;
+  selectedPackagePrice: number;
   bonuses: BonusRow[];
   terms: TermRow[];
   formValues: Record<string, unknown>;
@@ -203,9 +199,8 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const { data: packages = [], isLoading: packagesLoading } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
-  const selectedPackage = packages.find((p) => p.id === selectedPackageId);
-  const variants = selectedPackage?.variants ?? [];
-  const [selectedVariantPrice, setSelectedVariantPrice] = useState(0);
+  const selectedPackage = packages.find((p: PackageData) => p.id === selectedPackageId);
+  const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({}); // categoryName -> isTakeout
   const [takeoutPrices, setTakeoutPrices] = useState<Record<string, number>>({}); // categoryName -> editable takeout nominal
 
@@ -214,13 +209,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
   const [availLoading, setAvailLoading] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
-  const [selectedVariantId, setSelectedVariantId] = useState("");
 
   useEffect(() => {
     if (!selectedVenueId) { setAvailability({}); return; }
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
-    // Availability is per-venue — do NOT pass packageId/variantId.
+    // Availability is per-venue — do NOT pass packageId.
     // Any active booking at this venue blocks the slot regardless of package.
     const params = new URLSearchParams({ month });
     fetch(`/api/venues/${selectedVenueId}/availability?${params}`)
@@ -259,7 +253,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const form = useForm<BookingInput>({
     defaultValues: {
       bookingDate: "", customerId: "", venueId: "", packageId: "",
-      packageVariantId: null, paymentMethodId: null, sourceOfInformationId: null,
+      paymentMethodId: null, sourceOfInformationId: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
       specialBonusName: null, specialBonusAmount: null,
       signingLocation: null, signatureSales: null,
@@ -284,7 +278,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setSpecialBonusAmount(draft.specialBonusAmount);
         setSelectedVenueId(draft.selectedVenueId);
         setSelectedPackageId(draft.selectedPackageId);
-        setSelectedVariantPrice(draft.selectedVariantPrice);
+        setSelectedPackagePrice(draft.selectedPackagePrice);
         setBonuses(draft.bonuses);
         setTerms(draft.terms.some((t) => t.dueDate) ? draft.terms : makeDefaultTerms());
         if (draft.takeoutPrices) setTakeoutPrices(draft.takeoutPrices);
@@ -292,7 +286,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         form.reset(draft.formValues as BookingInput);
       } else {
         form.reset();
-        setSelectedVenueId(""); setSelectedPackageId(""); setSelectedVariantPrice(0);
+        setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0);
         setBonuses([]); setTerms(makeDefaultTerms());
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
         setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
@@ -314,14 +308,14 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         currentStep, customerName, contactNumbers, contactEmail, contactNik,
         contactKtpAddress,
       contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
-        specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice,
+        specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice,
         bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles,
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedVariantPrice, bonuses, terms, takeoutPrices, categoryToggles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getBasePrice = () => selectedVariantPrice;
+  const getBasePrice = () => selectedPackagePrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
   const getDifference = () => getTotalTerms() - getPriceAfterDiscount();
@@ -334,13 +328,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
   };
 
-  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wVariantId, wSourceOfInformationId, wPaymentMethodId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "packageVariantId", "sourceOfInformationId", "paymentMethodId"]);
+  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId"]);
   const isBitrixSource = sourceOptions.find((o) => o.id === wSourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && (variants.length === 0 || wVariantId) && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()));
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()));
 
-  const selectedVariantData = packages
-    .flatMap((p: PackageData) => p.variants)
-    .find((v) => v.id === wVariantId);
+  const selectedVariantData = packages.find((p: PackageData) => p.id === wPackageId);
 
   const allCategoryPrices = selectedVariantData?.categoryPrices ?? [];
   const visibleCategories = allCategoryPrices.filter((c) => c.isShow);
@@ -395,7 +387,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     }
     // When advancing from Step 2 to Step 3, sync price with takeout selection
     if (currentStep === 2) {
-      setSelectedVariantPrice(step2Price);
+      setSelectedPackagePrice(step2Price);
       allocatePrice(step2Price, specialBonusAmount);
     }
     if (currentStep === 3) {
@@ -651,7 +643,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Venue *</FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("packageVariantId", null); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -660,21 +652,10 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedVariantId(""); setSelectedVariantPrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageVariantId", null); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       <FormMessage />
                     </FormItem>
                   )} />
-
-                  {/* Pilih Tipe Paket */}
-                  {variants.length > 0 && (
-                    <FormField control={form.control} name="packageVariantId" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Tipe Paket *</FormLabel>
-                        <SearchableSelect options={variants.map((v) => ({ id: v.id, name: `${v.variantName} · ${v.pax} PAX · Rp ${fmtRp(getVariantPrice(v))}` }))} value={field.value ?? ""} onChange={(id) => { field.onChange(id); setSelectedVariantId(id); setCategoryToggles({}); setTakeoutPrices({}); const v = variants.find((x) => x.id === id); if (v) { const p = getVariantPrice(v); setSelectedVariantPrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder="Pilih tipe paket..." searchPlaceholder="Cari..." emptyText="Tidak ada variant" />
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  )}
 
                   {/* Event Date */}
                   <FormField control={form.control} name="bookingDate" render={({ field }) => (
@@ -828,7 +809,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   </div>
                   {visibleCategories.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-6">
-                      Tidak ada kategori harga untuk variant ini.
+                      Tidak ada kategori harga untuk paket ini.
                     </p>
                   )}
                   <div className="space-y-2">

@@ -92,7 +92,7 @@ export function SalesRecentBookings({ salesId, onViewAll }: Props) {
                       ? "text-destructive"
                       : "text-muted-foreground",
                 )}>
-                  {formatRp(b.snapPackageVariant?.price ?? 0)}
+                  {formatRp(b.snapPackagePricing?.price ?? 0)}
                 </span>
                 <Badge
                   variant={statusVariant(b.bookingStatus)}

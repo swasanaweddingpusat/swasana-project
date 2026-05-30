@@ -195,7 +195,7 @@ export function SalesDetailModal({ memberId, memberName, memberAvatarUrl, member
                     </TableCell>
 
                     <TableCell className="px-2 py-2.5 text-right">
-                      <span className="text-xs font-semibold">{formatRp(b.snapPackageVariant?.price ?? 0)}</span>
+                      <span className="text-xs font-semibold">{formatRp(b.snapPackagePricing?.price ?? 0)}</span>
                     </TableCell>
 
                     <TableCell className="px-4 sm:px-8 py-2.5 text-right">

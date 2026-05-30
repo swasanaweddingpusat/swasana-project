@@ -113,6 +113,7 @@ export async function getLeadStatuses() {
       isActive: true,
     },
     orderBy: { sortOrder: "asc" },
+    take: 200,
   });
 }
 

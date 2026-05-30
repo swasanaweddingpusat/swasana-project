@@ -19,7 +19,6 @@ export async function seedPackages() {
   console.log("🗑️  All packages deleted");
 
   const venues = await prisma.venue.findMany({ select: { id: true, code: true, name: true } });
-  const venueByCode = Object.fromEntries(venues.map((v) => [v.code, v.id]));
 
   // Get sales user profile for approval record creator
   const salesUser = await prisma.user.findUnique({ where: { email: "sales@swasana.com" } });
@@ -34,7 +33,7 @@ export async function seedPackages() {
     include: { steps: { orderBy: { sortOrder: "asc" } } },
   });
 
-  type VariantSeed = { variantName: string; pax: number; termAndCondition?: string; vendorItems?: { categoryName: string; itemText: string }[]; internalItems?: { itemName: string; itemDescription: string }[] };
+  type PackageSeed = { packageName: string; pax: number; termAndCondition?: string; vendorItems?: { categoryName: string; itemText: string }[]; internalItems?: { itemName: string; itemDescription: string }[] };
 
   const HOSPITALITY_PARAMITA = [
     { itemName: "Ballroom Facilities", itemDescription: "Grand Ballroom for 5 (five) Hours | 3 Makeup &amp; Changing Rooms | Multifunction Family Room | 100 Tifany Chair | Main Stage | Sound System | Electricity up to 15.000 watts | Parking Lot up to 250 Area | Housekeeping &amp; Security | 10 Free Parking Cars" },
@@ -344,68 +343,73 @@ export async function seedPackages() {
     { categoryName: "Entertainment", itemText: "<ol><li>1 Wedding Singer</li><li>Keyboard + Player</li><li>Saxophone + Player</li></ol>" },
   ];
 
-  const VARIANTS_BY_CODE: Record<string, VariantSeed[]> = {
+  // 1 Package = 1 pax tier (flattened — no variants)
+  const PACKAGES_BY_CODE: Record<string, PackageSeed[]> = {
     BRIN: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_BRIN_GOLD,     vendorItems: VENDOR_ITEMS_BRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_BRIN },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_BRIN_SAPPHIRE, vendorItems: VENDOR_ITEMS_BRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_BRIN },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_BRIN_PLATINUM, vendorItems: VENDOR_ITEMS_BRIN_PLATINUM,       internalItems: HOSPITALITY_BRIN },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_BRIN_GOLD,     vendorItems: VENDOR_ITEMS_BRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_BRIN },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_BRIN_SAPPHIRE, vendorItems: VENDOR_ITEMS_BRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_BRIN },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_BRIN_PLATINUM, vendorItems: VENDOR_ITEMS_BRIN_PLATINUM,       internalItems: HOSPITALITY_BRIN },
     ],
     DRM: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_DRM_GOLD,     vendorItems: VENDOR_ITEMS_DRM, internalItems: HOSPITALITY_DRM },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_DRM_SAPPHIRE, vendorItems: VENDOR_ITEMS_DRM, internalItems: HOSPITALITY_DRM },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_DRM_PLATINUM, vendorItems: VENDOR_ITEMS_DRM, internalItems: HOSPITALITY_DRM },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_DRM_GOLD,     vendorItems: VENDOR_ITEMS_DRM, internalItems: HOSPITALITY_DRM },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_DRM_SAPPHIRE, vendorItems: VENDOR_ITEMS_DRM, internalItems: HOSPITALITY_DRM },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_DRM_PLATINUM, vendorItems: VENDOR_ITEMS_DRM, internalItems: HOSPITALITY_DRM },
     ],
     GST: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_GST_GOLD,     vendorItems: VENDOR_ITEMS_GST_GOLD_SAPPHIRE, internalItems: HOSPITALITY_GST },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_GST_SAPPHIRE, vendorItems: VENDOR_ITEMS_GST_GOLD_SAPPHIRE, internalItems: HOSPITALITY_GST },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_GST_PLATINUM, vendorItems: VENDOR_ITEMS_GST_PLATINUM,       internalItems: HOSPITALITY_GST },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_GST_GOLD,     vendorItems: VENDOR_ITEMS_GST_GOLD_SAPPHIRE, internalItems: HOSPITALITY_GST },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_GST_SAPPHIRE, vendorItems: VENDOR_ITEMS_GST_GOLD_SAPPHIRE, internalItems: HOSPITALITY_GST },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_GST_PLATINUM, vendorItems: VENDOR_ITEMS_GST_PLATINUM,       internalItems: HOSPITALITY_GST },
     ],
     LIPPO: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_LIPPO_GOLD,     vendorItems: VENDOR_ITEMS_LIPPO_GOLD_SAPPHIRE, internalItems: HOSPITALITY_LIPPO },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_LIPPO_SAPPHIRE, vendorItems: VENDOR_ITEMS_LIPPO_GOLD_SAPPHIRE, internalItems: HOSPITALITY_LIPPO },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_LIPPO_PLATINUM, vendorItems: VENDOR_ITEMS_LIPPO_PLATINUM,       internalItems: HOSPITALITY_LIPPO },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_LIPPO_GOLD,     vendorItems: VENDOR_ITEMS_LIPPO_GOLD_SAPPHIRE, internalItems: HOSPITALITY_LIPPO },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_LIPPO_SAPPHIRE, vendorItems: VENDOR_ITEMS_LIPPO_GOLD_SAPPHIRE, internalItems: HOSPITALITY_LIPPO },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_LIPPO_PLATINUM, vendorItems: VENDOR_ITEMS_LIPPO_PLATINUM,       internalItems: HOSPITALITY_LIPPO },
     ],
     PTR: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_PTR_GOLD,     vendorItems: VENDOR_ITEMS_PTR_GOLD_SAPPHIRE, internalItems: HOSPITALITY_PTR },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_PTR_SAPPHIRE, vendorItems: VENDOR_ITEMS_PTR_GOLD_SAPPHIRE, internalItems: HOSPITALITY_PTR },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_PTR_PLATINUM, vendorItems: VENDOR_ITEMS_PTR_PLATINUM,       internalItems: HOSPITALITY_PTR },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_PTR_GOLD,     vendorItems: VENDOR_ITEMS_PTR_GOLD_SAPPHIRE, internalItems: HOSPITALITY_PTR },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_PTR_SAPPHIRE, vendorItems: VENDOR_ITEMS_PTR_GOLD_SAPPHIRE, internalItems: HOSPITALITY_PTR },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_PTR_PLATINUM, vendorItems: VENDOR_ITEMS_PTR_PLATINUM,       internalItems: HOSPITALITY_PTR },
     ],
     GP2: [
-      { variantName: "CLASSIC", pax: 800, termAndCondition: TC_GP2_CLASSIC, vendorItems: [{ categoryName: "Catering", itemText: CATERING_CLASSIC_PARAMITA }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 25.000.000)</p>" }, { categoryName: "LED Videotron", itemText: "<p>elevate your visual displays and leave a lasting impressions on your wedding day</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>1 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "" }, { categoryName: "Entertainment", itemText: "<ol><li>1 Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_PARAMITA },
-      { variantName: "LUXURY",  pax: 800, termAndCondition: TC_GP2_LUXURY, vendorItems: [{ categoryName: "Catering", itemText: CATERING_CLASSIC_PARAMITA }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 25.000.000)</p>" }, { categoryName: "LED Videotron", itemText: "<p>elevate your visual displays and leave a lasting impressions on your wedding day</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "" }, { categoryName: "Entertainment", itemText: "<ol><li>1 Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_PARAMITA },
-      { variantName: "ROYAL",   pax: 800, termAndCondition: TC_GP2_ROYAL, vendorItems: [{ categoryName: "Catering", itemText: CATERING_CLASSIC_PARAMITA }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 25.000.000)</p>" }, { categoryName: "LED Videotron", itemText: "<p>elevate your visual displays and leave a lasting impressions on your wedding day</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "" }, { categoryName: "Entertainment", itemText: "<ol><li>1 Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_PARAMITA },
+      { packageName: "CLASSIC", pax: 800, termAndCondition: TC_GP2_CLASSIC, vendorItems: [{ categoryName: "Catering", itemText: CATERING_CLASSIC_PARAMITA }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 25.000.000)</p>" }, { categoryName: "LED Videotron", itemText: "<p>elevate your visual displays and leave a lasting impressions on your wedding day</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>1 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "" }, { categoryName: "Entertainment", itemText: "<ol><li>1 Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_PARAMITA },
+      { packageName: "LUXURY",  pax: 800, termAndCondition: TC_GP2_LUXURY, vendorItems: [{ categoryName: "Catering", itemText: CATERING_CLASSIC_PARAMITA }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 25.000.000)</p>" }, { categoryName: "LED Videotron", itemText: "<p>elevate your visual displays and leave a lasting impressions on your wedding day</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "" }, { categoryName: "Entertainment", itemText: "<ol><li>1 Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_PARAMITA },
+      { packageName: "ROYAL",   pax: 800, termAndCondition: TC_GP2_ROYAL, vendorItems: [{ categoryName: "Catering", itemText: CATERING_CLASSIC_PARAMITA }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 25.000.000)</p>" }, { categoryName: "LED Videotron", itemText: "<p>elevate your visual displays and leave a lasting impressions on your wedding day</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "" }, { categoryName: "Entertainment", itemText: "<ol><li>1 Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_PARAMITA },
     ],
-    BRIPENS:  [
-      { variantName: "ALFA",      pax: 800, termAndCondition: TC_BRIPENS, vendorItems: [{ categoryName: "Catering", itemText: "<p><strong>Main Buffet 600 Pax</strong></p><ol><li>Steamed White Rice</li><li>Fried Rice</li><li>Selected Soup</li><li>Selected Meat Dish</li><li>Selected Chicken Dish</li><li>Selected Fish Dish</li><li>Assorted Fresh Fruits</li><li>Assorted Puddings</li><li>Assorted Mini Snack</li><li>Soft Drink</li><li>Plain Water</li><li>VIP Decoration</li></ol><p><strong>Foodstall</strong></p><ol><li>2 Ekor Kambing Guling</li><li>200 Empal Gentong</li><li>200 Assorted Pasta</li><li>200 Porsi Salmon Mayoyaki</li><li>200 Traditional Chicken Satay</li><li>2 Tubs Ice Cream</li></ol><p><strong>Inclusion</strong></p><ol><li>Test Food for 8 persons</li><li>Snack Boxes Technical Meeting</li><li>100 Original Soto Nusantara for family</li><li>50 Pax VIP Buffet</li><li>Taste Food Testing (max 15 Person)</li><li>Wedding Signage</li><li>Roundtable for VIP Area (max 5 Tables)</li></ol>" }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 20.000.000)</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "<p>1 Profesional Master of Ceremony Female or Male</p>" }, { categoryName: "Entertainment", itemText: "<ol><li>Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_BRIPENS },
-      { variantName: "SIGNATURE", pax: 800, termAndCondition: TC_BRIPENS, vendorItems: [{ categoryName: "Catering", itemText: "<p><strong>Main Buffet 600 Pax</strong></p><ol><li>Steamed White Rice</li><li>Fried Rice</li><li>Selected Soup</li><li>Selected Meat Dish</li><li>Selected Chicken Dish</li><li>Selected Fish Dish</li><li>Assorted Fresh Fruits</li><li>Assorted Puddings</li><li>Assorted Mini Snack</li><li>Soft Drink</li><li>Plain Water</li><li>VIP Decoration</li></ol><p><strong>Foodstall</strong></p><ol><li>2 Ekor Kambing Guling</li><li>200 Empal Gentong</li><li>200 Assorted Pasta</li><li>200 Porsi Salmon Mayoyaki</li><li>200 Traditional Chicken Satay</li><li>2 Tubs Ice Cream</li></ol><p><strong>Inclusion</strong></p><ol><li>Test Food for 8 persons</li><li>Snack Boxes Technical Meeting</li><li>100 Original Soto Nusantara for family</li><li>50 Pax VIP Buffet</li><li>Taste Food Testing (max 15 Person)</li><li>Wedding Signage</li><li>Roundtable for VIP Area (max 5 Tables)</li></ol>" }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 20.000.000)</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "<p>1 Profesional Master of Ceremony Female or Male</p>" }, { categoryName: "Entertainment", itemText: "<ol><li>Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_BRIPENS },
-      { variantName: "PRIORITY",  pax: 800, termAndCondition: TC_BRIPENS, vendorItems: [{ categoryName: "Catering", itemText: "<p><strong>Main Buffet 600 Pax</strong></p><ol><li>Steamed White Rice</li><li>Fried Rice</li><li>Selected Soup</li><li>Selected Meat Dish</li><li>Selected Chicken Dish</li><li>Selected Fish Dish</li><li>Assorted Fresh Fruits</li><li>Assorted Puddings</li><li>Assorted Mini Snack</li><li>Soft Drink</li><li>Plain Water</li><li>VIP Decoration</li></ol><p><strong>Foodstall</strong></p><ol><li>2 Ekor Kambing Guling</li><li>200 Empal Gentong</li><li>200 Assorted Pasta</li><li>200 Porsi Salmon Mayoyaki</li><li>200 Traditional Chicken Satay</li><li>2 Tubs Ice Cream</li></ol><p><strong>Inclusion</strong></p><ol><li>Test Food for 8 persons</li><li>Snack Boxes Technical Meeting</li><li>100 Original Soto Nusantara for family</li><li>50 Pax VIP Buffet</li><li>Taste Food Testing (max 15 Person)</li><li>Wedding Signage</li><li>Roundtable for VIP Area (max 5 Tables)</li></ol>" }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 20.000.000)</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "<p>1 Profesional Master of Ceremony Female or Male</p>" }, { categoryName: "Entertainment", itemText: "<ol><li>Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_BRIPENS },
+    BRIPENS: [
+      { packageName: "ALFA",      pax: 800, termAndCondition: TC_BRIPENS, vendorItems: [{ categoryName: "Catering", itemText: "<p><strong>Main Buffet 600 Pax</strong></p><ol><li>Steamed White Rice</li><li>Fried Rice</li><li>Selected Soup</li><li>Selected Meat Dish</li><li>Selected Chicken Dish</li><li>Selected Fish Dish</li><li>Assorted Fresh Fruits</li><li>Assorted Puddings</li><li>Assorted Mini Snack</li><li>Soft Drink</li><li>Plain Water</li><li>VIP Decoration</li></ol><p><strong>Foodstall</strong></p><ol><li>2 Ekor Kambing Guling</li><li>200 Empal Gentong</li><li>200 Assorted Pasta</li><li>200 Porsi Salmon Mayoyaki</li><li>200 Traditional Chicken Satay</li><li>2 Tubs Ice Cream</li></ol><p><strong>Inclusion</strong></p><ol><li>Test Food for 8 persons</li><li>Snack Boxes Technical Meeting</li><li>100 Original Soto Nusantara for family</li><li>50 Pax VIP Buffet</li><li>Taste Food Testing (max 15 Person)</li><li>Wedding Signage</li><li>Roundtable for VIP Area (max 5 Tables)</li></ol>" }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 20.000.000)</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "<p>1 Profesional Master of Ceremony Female or Male</p>" }, { categoryName: "Entertainment", itemText: "<ol><li>Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_BRIPENS },
+      { packageName: "SIGNATURE", pax: 800, termAndCondition: TC_BRIPENS, vendorItems: [{ categoryName: "Catering", itemText: "<p><strong>Main Buffet 600 Pax</strong></p><ol><li>Steamed White Rice</li><li>Fried Rice</li><li>Selected Soup</li><li>Selected Meat Dish</li><li>Selected Chicken Dish</li><li>Selected Fish Dish</li><li>Assorted Fresh Fruits</li><li>Assorted Puddings</li><li>Assorted Mini Snack</li><li>Soft Drink</li><li>Plain Water</li><li>VIP Decoration</li></ol><p><strong>Foodstall</strong></p><ol><li>2 Ekor Kambing Guling</li><li>200 Empal Gentong</li><li>200 Assorted Pasta</li><li>200 Porsi Salmon Mayoyaki</li><li>200 Traditional Chicken Satay</li><li>2 Tubs Ice Cream</li></ol><p><strong>Inclusion</strong></p><ol><li>Test Food for 8 persons</li><li>Snack Boxes Technical Meeting</li><li>100 Original Soto Nusantara for family</li><li>50 Pax VIP Buffet</li><li>Taste Food Testing (max 15 Person)</li><li>Wedding Signage</li><li>Roundtable for VIP Area (max 5 Tables)</li></ol>" }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 20.000.000)</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "<p>1 Profesional Master of Ceremony Female or Male</p>" }, { categoryName: "Entertainment", itemText: "<ol><li>Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_BRIPENS },
+      { packageName: "PRIORITY",  pax: 800, termAndCondition: TC_BRIPENS, vendorItems: [{ categoryName: "Catering", itemText: "<p><strong>Main Buffet 600 Pax</strong></p><ol><li>Steamed White Rice</li><li>Fried Rice</li><li>Selected Soup</li><li>Selected Meat Dish</li><li>Selected Chicken Dish</li><li>Selected Fish Dish</li><li>Assorted Fresh Fruits</li><li>Assorted Puddings</li><li>Assorted Mini Snack</li><li>Soft Drink</li><li>Plain Water</li><li>VIP Decoration</li></ol><p><strong>Foodstall</strong></p><ol><li>2 Ekor Kambing Guling</li><li>200 Empal Gentong</li><li>200 Assorted Pasta</li><li>200 Porsi Salmon Mayoyaki</li><li>200 Traditional Chicken Satay</li><li>2 Tubs Ice Cream</li></ol><p><strong>Inclusion</strong></p><ol><li>Test Food for 8 persons</li><li>Snack Boxes Technical Meeting</li><li>100 Original Soto Nusantara for family</li><li>50 Pax VIP Buffet</li><li>Taste Food Testing (max 15 Person)</li><li>Wedding Signage</li><li>Roundtable for VIP Area (max 5 Tables)</li></ol>" }, { categoryName: "Dekorasi", itemText: "<p>(National or International Concept)</p><p>(Inclusive of a voucher worth IDR 20.000.000)</p>" }, { categoryName: "Rias & Busana", itemText: "<p>(National Concept) or Bridal (International Concept)</p><p>(Inclusive of a voucher worth IDR 10.000.000)</p>" }, { categoryName: "Photography", itemText: "<ol><li>2 Experienced Photographer</li><li>1 Experienced Videographer</li><li>Cinematography</li><li>Stylish Editing &amp; Candid</li><li>Interactive Video</li><li>Master Photo</li><li>Signature Output based on Vendors</li></ol>" }, { categoryName: "MC", itemText: "<p>1 Profesional Master of Ceremony Female or Male</p>" }, { categoryName: "Entertainment", itemText: "<ol><li>Singer Female or Male</li><li>Baby Grand Piano</li><li>Saxophone</li><li>Sound System</li></ol>" }], internalItems: HOSPITALITY_BRIPENS },
     ],
     SES: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_SES_GOLD,     vendorItems: VENDOR_ITEMS_SES_GOLD_SAPPHIRE, internalItems: HOSPITALITY_SES },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_SES_SAPPHIRE, vendorItems: VENDOR_ITEMS_SES_GOLD_SAPPHIRE, internalItems: HOSPITALITY_SES },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_SES_PLATINUM, vendorItems: VENDOR_ITEMS_SES_PLATINUM,       internalItems: HOSPITALITY_SES_PLATINUM },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_SES_GOLD,     vendorItems: VENDOR_ITEMS_SES_GOLD_SAPPHIRE, internalItems: HOSPITALITY_SES },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_SES_SAPPHIRE, vendorItems: VENDOR_ITEMS_SES_GOLD_SAPPHIRE, internalItems: HOSPITALITY_SES },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_SES_PLATINUM, vendorItems: VENDOR_ITEMS_SES_PLATINUM,       internalItems: HOSPITALITY_SES_PLATINUM },
     ],
     TAMRIN: [
-      { variantName: "GOLD",     pax: 800, termAndCondition: TC_TAMRIN_GOLD,     vendorItems: VENDOR_ITEMS_TAMRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_TAMRIN },
-      { variantName: "SAPPHIRE", pax: 800, termAndCondition: TC_TAMRIN_SAPPHIRE, vendorItems: VENDOR_ITEMS_TAMRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_TAMRIN },
-      { variantName: "PLATINUM", pax: 800, termAndCondition: TC_TAMRIN_PLATINUM, vendorItems: VENDOR_ITEMS_TAMRIN_PLATINUM,       internalItems: HOSPITALITY_TAMRIN },
+      { packageName: "GOLD",     pax: 800, termAndCondition: TC_TAMRIN_GOLD,     vendorItems: VENDOR_ITEMS_TAMRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_TAMRIN },
+      { packageName: "SAPPHIRE", pax: 800, termAndCondition: TC_TAMRIN_SAPPHIRE, vendorItems: VENDOR_ITEMS_TAMRIN_GOLD_SAPPHIRE, internalItems: HOSPITALITY_TAMRIN },
+      { packageName: "PLATINUM", pax: 800, termAndCondition: TC_TAMRIN_PLATINUM, vendorItems: VENDOR_ITEMS_TAMRIN_PLATINUM,       internalItems: HOSPITALITY_TAMRIN },
     ],
     SAMISARA: [
-      { variantName: "ALFA",      pax: 800, termAndCondition: TC_SAMISARA_ALFA,      vendorItems: VENDOR_ITEMS_SAMISARA, internalItems: HOSPITALITY_SAMISARA },
-      { variantName: "SIGNATURE", pax: 800, termAndCondition: TC_SAMISARA_SIGNATURE, vendorItems: VENDOR_ITEMS_SAMISARA, internalItems: HOSPITALITY_SAMISARA },
-      { variantName: "PRIORITY",  pax: 800, termAndCondition: TC_SAMISARA_PRIORITY,  vendorItems: VENDOR_ITEMS_SAMISARA, internalItems: HOSPITALITY_SAMISARA },
+      { packageName: "ALFA",      pax: 800, termAndCondition: TC_SAMISARA_ALFA,      vendorItems: VENDOR_ITEMS_SAMISARA, internalItems: HOSPITALITY_SAMISARA },
+      { packageName: "SIGNATURE", pax: 800, termAndCondition: TC_SAMISARA_SIGNATURE, vendorItems: VENDOR_ITEMS_SAMISARA, internalItems: HOSPITALITY_SAMISARA },
+      { packageName: "PRIORITY",  pax: 800, termAndCondition: TC_SAMISARA_PRIORITY,  vendorItems: VENDOR_ITEMS_SAMISARA, internalItems: HOSPITALITY_SAMISARA },
     ],
   };
-  const DEFAULT_VARIANTS: VariantSeed[] = [
-    { variantName: "GOLD",     pax: 800 },
-    { variantName: "SAPPHIRE", pax: 800 },
-    { variantName: "PLATINUM", pax: 800 },
+  const DEFAULT_PACKAGES: PackageSeed[] = [
+    { packageName: "GOLD",     pax: 800 },
+    { packageName: "SAPPHIRE", pax: 800 },
+    { packageName: "PLATINUM", pax: 800 },
   ];
 
-  const packageData = venues.map((v) => ({
-    packageName: `${v.name.toUpperCase()} PACKAGE`,
-    venueCode: v.code,
-  }));
+  // Build flat list: one entry per (venue, package-tier)
+  const packageData: { venueId: string; venueCode: string; pkg: PackageSeed }[] = [];
+  for (const v of venues) {
+    const seedList = PACKAGES_BY_CODE[v.code] ?? DEFAULT_PACKAGES;
+    for (const p of seedList) {
+      packageData.push({ venueId: v.id, venueCode: v.code, pkg: p });
+    }
+  }
 
   const CATEGORY_PRICES: Record<string, { categoryName: string; basePrice: number }[]> = {
     "BRIN:GOLD": [{ categoryName: "CATERING", basePrice: 45000000 }, { categoryName: "DEKORASI", basePrice: 20000000 }, { categoryName: "RIAS BUSANA", basePrice: 10000000 }, { categoryName: "PHOTOGRAPHY", basePrice: 4000000 }, { categoryName: "ENTERTAINMENT", basePrice: 4000000 }, { categoryName: "MC", basePrice: 2000000 }, { categoryName: "WO", basePrice: 5500000 }, { categoryName: "RAB EVENT", basePrice: 2275000 }, { categoryName: "BONUS SALES", basePrice: 6000000 }, { categoryName: "BONUS MANAGER", basePrice: 1000000 }, { categoryName: "BONUS DIREKTUR", basePrice: 1000000 }, { categoryName: "BONUS VENUE SPECIALIST", basePrice: 1000000 }, { categoryName: "BONUS CLIENT", basePrice: 30000000 }, { categoryName: "GEDUNG (min 70 event/thn)", basePrice: 52500000 }],
@@ -440,30 +444,38 @@ export async function seedPackages() {
     "TAMRIN:SAPPHIRE": [{ categoryName: "CATERING", basePrice: 65000000 }, { categoryName: "DEKORASI", basePrice: 25000000 }, { categoryName: "RIAS BUSANA", basePrice: 10000000 }, { categoryName: "PHOTOGRAPHY", basePrice: 4000000 }, { categoryName: "ENTERTAINMENT", basePrice: 4000000 }, { categoryName: "MC", basePrice: 2000000 }, { categoryName: "WO", basePrice: 5500000 }, { categoryName: "RAB EVENT", basePrice: 5250000 }, { categoryName: "BONUS SALES", basePrice: 6000000 }, { categoryName: "BONUS MANAGER", basePrice: 1000000 }, { categoryName: "BONUS DIREKTUR", basePrice: 1000000 }, { categoryName: "BONUS VENUE SPECIALIST", basePrice: 1000000 }, { categoryName: "BONUS CLIENT", basePrice: 40000000 }, { categoryName: "GEDUNG (min 70 event/thn)", basePrice: 22500000 }],
   };
 
+  const SHOW_CATEGORIES = new Set(["CATERING", "DEKORASI", "RIAS BUSANA", "PHOTOGRAPHY", "ENTERTAINMENT", "MC", "WO"]);
   let count = 0;
-  for (const pkg of packageData) {
-    const venueId = venueByCode[pkg.venueCode];
-    if (!venueId) { console.warn(`⚠️  Venue ${pkg.venueCode} not found, skipping ${pkg.packageName}`); continue; }
+  for (const entry of packageData) {
+    const { venueId, venueCode, pkg } = entry;
+
+    const catKey = `${venueCode}:${pkg.packageName.replace(/\s+/g, "").toUpperCase()}`;
+
+    const catPrices = CATEGORY_PRICES[catKey] ?? [];
 
     const created = await prisma.package.create({
-      data: { packageName: pkg.packageName, available: true, venueId, notes: "", approvalStatus: adminProfile ? "approved" : "pending" },
+      data: {
+        packageName: pkg.packageName,
+        available: true,
+        venueId,
+        notes: "",
+        pax: pkg.pax,
+        margin: 50,
+        sellingPrice: 0,
+        termAndCondition: pkg.termAndCondition ?? null,
+        approvalStatus: adminProfile ? "approved" : "pending",
+      },
     });
 
-    const variants = VARIANTS_BY_CODE[pkg.venueCode] ?? DEFAULT_VARIANTS;
-    for (const v of variants) {
-      const createdVariant = await prisma.packageVariant.create({ data: { packageId: created.id, variantName: v.variantName, pax: v.pax, available: true, margin: 50, termAndCondition: v.termAndCondition ?? null } });
-      const items = v.vendorItems ?? defaultVendorItems();
-      for (let i = 0; i < items.length; i++) {
-        await prisma.packageVendorItem.create({ data: { packageVariantId: createdVariant.id, categoryName: items[i].categoryName, itemText: items[i].itemText } });
-      }
-      for (const ii of (v.internalItems ?? [])) {
-        await prisma.packageInternalItem.create({ data: { packageVariantId: createdVariant.id, itemName: ii.itemName, itemDescription: ii.itemDescription } });
-      }
-      const catPrices = CATEGORY_PRICES[`${pkg.venueCode}:${v.variantName}`] ?? [];
-      const SHOW_CATEGORIES = new Set(["CATERING", "DEKORASI", "RIAS BUSANA", "PHOTOGRAPHY", "ENTERTAINMENT", "MC", "WO"]);
-      for (let ci = 0; ci < catPrices.length; ci++) {
-        await prisma.packageVariantCategoryPrice.create({ data: { packageVariantId: createdVariant.id, categoryName: catPrices[ci].categoryName, basePrice: catPrices[ci].basePrice, sortOrder: ci, isShow: SHOW_CATEGORIES.has(catPrices[ci].categoryName) } });
-      }
+    const items = pkg.vendorItems ?? defaultVendorItems();
+    for (let i = 0; i < items.length; i++) {
+      await prisma.packageVendorItem.create({ data: { packageId: created.id, categoryName: items[i].categoryName, itemText: items[i].itemText, sortOrder: i } });
+    }
+    for (const ii of (pkg.internalItems ?? [])) {
+      await prisma.packageInternalItem.create({ data: { packageId: created.id, itemName: ii.itemName, itemDescription: ii.itemDescription } });
+    }
+    for (let ci = 0; ci < catPrices.length; ci++) {
+      await prisma.packageCategoryPrice.create({ data: { packageId: created.id, categoryName: catPrices[ci].categoryName, basePrice: catPrices[ci].basePrice, sortOrder: ci, isShow: SHOW_CATEGORIES.has(catPrices[ci].categoryName) } });
     }
 
     // Create approval record if flow exists and sales profile exists
@@ -490,7 +502,7 @@ export async function seedPackages() {
     count++;
   }
 
-  console.log(`✅ ${count} Packages seeded with venue-specific variants, created by sales@swasana.com`);
+  console.log(`✅ ${count} Packages seeded (flat — 1 package per tier), created by sales@swasana.com`);
 }
 
 // Run standalone

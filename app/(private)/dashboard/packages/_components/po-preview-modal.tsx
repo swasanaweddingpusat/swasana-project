@@ -13,9 +13,7 @@ import { Button } from "@/components/ui/button";
 
 interface POPreviewTarget {
   packageId: string;
-  variantId: string;
   packageName: string;
-  variantName: string;
 }
 
 interface POPreviewModalProps {
@@ -46,7 +44,6 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             packageId: target!.packageId,
-            variantId: target!.variantId,
           }),
         });
         if (!res.ok) {
@@ -85,7 +82,7 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
       <DialogContent className="flex h-[85vh] w-[70vw] max-w-[70vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[70vw]">
         <DialogHeader className="shrink-0 border-b p-4">
           <DialogTitle>
-            Preview PO — {target.packageName} ({target.variantName})
+            Preview PO — {target.packageName}
           </DialogTitle>
         </DialogHeader>
 

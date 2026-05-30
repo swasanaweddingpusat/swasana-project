@@ -5,7 +5,7 @@ const bookingListInclude = {
   snapCustomer: { select: { name: true, mobileNumber: true } },
   snapVenue: { select: { venueName: true, brandCode: true } },
   snapPackage: { select: { packageName: true } },
-  snapPackageVariant: { select: { variantName: true, pax: true, price: true, margin: true } },
+  snapPackagePricing: { select: { packageName: true, pax: true, price: true, margin: true } },
   sales: { select: { id: true, fullName: true } },
   manager: { select: { id: true, fullName: true } },
   paymentMethod: { select: { bankName: true } },
@@ -31,12 +31,12 @@ const bookingDetailInclude = {
   customer: { select: { bitrixId: true } },
   snapVenue: true,
   snapPackage: true,
-  snapPackageVariant: {
+  snapPackagePricing: {
     select: {
       id: true,
       bookingId: true,
-      variantId: true,
-      variantName: true,
+      packageId: true,
+      packageName: true,
       pax: true,
       price: true,
       termAndCondition: true,

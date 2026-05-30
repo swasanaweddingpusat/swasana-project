@@ -1,8 +1,8 @@
 -- Add isShow to package_variant_category_prices
 ALTER TABLE "package_variant_category_prices" ADD COLUMN IF NOT EXISTS "isShow" BOOLEAN NOT NULL DEFAULT true;
 
--- Add margin to snap_package_variants
-ALTER TABLE "snap_package_variants" ADD COLUMN IF NOT EXISTS "margin" DOUBLE PRECISION NOT NULL DEFAULT 0;
+-- Add margin to snap_package_pricing
+ALTER TABLE "snap_package_pricing" ADD COLUMN IF NOT EXISTS "margin" DOUBLE PRECISION NOT NULL DEFAULT 0;
 
 -- Create snap_package_category_prices
 CREATE TABLE IF NOT EXISTS "snap_package_category_prices" (

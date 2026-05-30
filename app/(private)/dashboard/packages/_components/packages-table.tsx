@@ -23,7 +23,7 @@ import { DetailModal } from "./detail-modal";
 import { DrawerFinance } from "./drawer-finance";
 import { ApprovalDialog } from "./approval-dialog";
 import { ApproveModal } from "./approve-modal";
-import { VariantTCDrawer } from "./variant-tc-drawer";
+import { PackageTCDrawer } from "./package-tc-drawer";
 import { POPreviewModal } from "./po-preview-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -32,19 +32,61 @@ const formatCurrency = (amount: number) =>
 
 function SkeletonTable() {
   return (
-    <div className={cn('space-y-4', 'p-6')}>
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className={cn('flex', 'items-center', 'space-x-4', 'py-3')}>
-          <Skeleton className={cn('h-4', 'w-4')} />
-          <Skeleton className={cn('h-4', 'w-8')} />
-          <Skeleton className={cn('h-4', 'w-32')} />
-          <Skeleton className={cn('h-4', 'w-20')} />
-          <Skeleton className={cn('h-4', 'w-24')} />
-          <Skeleton className={cn('h-4', 'w-16')} />
-          <div className={cn('flex', 'gap-2')}><Skeleton className={cn('h-6', 'w-6')} /><Skeleton className={cn('h-6', 'w-6')} /></div>
+    <Card>
+      <CardContent className="p-0">
+        {/* Header skeleton: title + count + search + btn */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-4 border-b">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-4 w-8 rounded-full" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-9 w-52 rounded-xl" />
+            <Skeleton className="h-9 w-36 rounded-xl" />
+          </div>
         </div>
-      ))}
-    </div>
+
+        {/* Table header skeleton */}
+        <div className="grid grid-cols-[2.5rem_2.5rem_1fr_1fr_5rem_7rem_6rem_7rem_6rem] items-center gap-3 px-6 py-3 border-b">
+          <Skeleton className="h-4 w-4 rounded-sm" />
+          <Skeleton className="h-4 w-5" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-8" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-14" />
+        </div>
+
+        {/* Table rows skeleton */}
+        <div className="divide-y">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="grid grid-cols-[2.5rem_2.5rem_1fr_1fr_5rem_7rem_6rem_7rem_6rem] items-center gap-3 px-6 py-3.5">
+              <Skeleton className="h-4 w-4 rounded-sm" />
+              <Skeleton className="h-4 w-5" />
+              <Skeleton className="h-4 w-40" style={{ width: `${60 + (i % 4) * 15}%` }} />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-10" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-8 w-8 rounded-lg" />
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination skeleton */}
+        <div className="flex items-center justify-between px-6 py-3 border-t">
+          <Skeleton className="h-4 w-36" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-8 rounded-lg" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -85,9 +127,7 @@ export function PackagesTable() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<{
     packageId: string;
-    variantId: string;
     packageName: string;
-    variantName: string;
   } | null>(null);
   const { data: approvals = [], isLoading: approvalsLoading } = usePackageApprovals();
 
@@ -117,19 +157,11 @@ export function PackagesTable() {
   const paginated = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   // Helpers
-  const priceRange = (pkg: PackageQueryItem) => {
-    if (!pkg.variants?.length) return "-";
-    const prices = pkg.variants
-      .map((v) => {
-        if (v.sellingPrice > 0) return v.sellingPrice;
-        const base = (v.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
-        return base + Math.round(base * ((v.margin ?? 0) / 100));
-      })
-      .filter((p) => p > 0);
-    if (!prices.length) return formatCurrency(0);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    return min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`;
+  const getPackagePrice = (pkg: PackageQueryItem) => {
+    if (pkg.sellingPrice > 0) return formatCurrency(pkg.sellingPrice);
+    const base = (pkg.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
+    if (!base) return "-";
+    return formatCurrency(base + Math.round(base * ((pkg.margin ?? 0) / 100)));
   };
 
   const allSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
@@ -198,7 +230,7 @@ export function PackagesTable() {
           {/* Header */}
           <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'pb-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
-              <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Packages</h2>
+              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
               <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
                 <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
@@ -229,8 +261,8 @@ export function PackagesTable() {
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Package Name</TableHead>
                 <TableHead>Venue</TableHead>
-                <TableHead>Variants</TableHead>
-                <TableHead>Price Range</TableHead>
+                <TableHead>PAX</TableHead>
+                <TableHead>Harga Jual</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Approval</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
@@ -239,7 +271,7 @@ export function PackagesTable() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
+                  <TableCell colSpan={8} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
                     {searchQuery ? "No packages found" : "No packages yet"}
                   </TableCell>
                 </TableRow>
@@ -258,8 +290,8 @@ export function PackagesTable() {
                     </TableCell>
                     <TableCell className="font-medium">{pkg.packageName}</TableCell>
                     <TableCell>{pkg.venue?.name ?? "-"}</TableCell>
-                    <TableCell>{pkg.variants?.length ?? 0}</TableCell>
-                    <TableCell>{priceRange(pkg)}</TableCell>
+                    <TableCell>{pkg.pax ?? 0}</TableCell>
+                    <TableCell>{getPackagePrice(pkg)}</TableCell>
                     <TableCell>
                       {can("package", "set-status") ? (
                         <button
@@ -313,8 +345,7 @@ export function PackagesTable() {
                                 try {
                                   await qc.refetchQueries({ queryKey: ["packages"] });
                                   const fresh = qc.getQueryData<PackagesQueryResult>(["packages", undefined]);
-                                  const freshPkg = fresh?.data.find((p) => p.id === pkg.id) ?? pkg;
-                                  setTcPkg(freshPkg);
+                                  setTcPkg(fresh?.data.find((p) => p.id === pkg.id) ?? pkg);
                                 } catch {
                                   toast.error("Gagal memuat data terbaru");
                                   setTcPkg(pkg);
@@ -418,32 +449,16 @@ export function PackagesTable() {
                                   Lihat Detail
                                 </DropdownMenuItem>
                               )}
-                              {can("package", "view") && Boolean(pkg.variants?.length) && (
-                                <DropdownMenuSub>
-                                  <DropdownMenuSubTrigger>
-                                    <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                    Preview PO
-                                  </DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent>
-                                    {pkg.variants?.map((v) => (
-                                      <DropdownMenuItem
-                                        key={v.id}
-                                        onSelect={() => {
-                                          setPreviewTarget({
-                                            packageId: pkg.id,
-                                            variantId: v.id,
-                                            packageName: pkg.packageName,
-                                            variantName: v.variantName,
-                                          });
-                                          setPreviewOpen(true);
-                                        }}
-                                      >
-                                        {v.variantName}
-                                        <span className="ml-2 text-muted-foreground">({v.pax} pax)</span>
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
+                              {can("package", "view") && (
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setPreviewTarget({ packageId: pkg.id, packageName: pkg.packageName });
+                                    setPreviewOpen(true);
+                                  }}
+                                >
+                                  <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                  Preview PO
+                                </DropdownMenuItem>
                               )}
                               {can("package", "delete") && (
                                 <>
@@ -535,7 +550,7 @@ export function PackagesTable() {
         />
       )}
 
-      <VariantTCDrawer
+      <PackageTCDrawer
         open={tcDrawerOpen}
         onClose={() => { setTcDrawerOpen(false); setTcPkg(null); }}
         pkg={tcPkg}

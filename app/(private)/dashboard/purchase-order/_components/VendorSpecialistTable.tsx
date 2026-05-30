@@ -240,10 +240,10 @@ export function VendorSpecialistTable({
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>
                         <div className="leading-tight">
                           <span className={cn("truncate", "block")}>{booking.snapPackage?.packageName ?? "—"}</span>
-                          {booking.snapPackageVariant && (
+                          {booking.snapPackagePricing && (
                             <>
-                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackageVariant.variantName}</span>
-                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackageVariant.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackageVariant.price) - (booking.discountAmount ?? 0)))}</span>
+                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackagePricing.packageName}</span>
+                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
                             </>
                           )}
                         </div>

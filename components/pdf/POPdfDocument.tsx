@@ -12,7 +12,7 @@ export interface POPdfBooking {
   snapCustomer: { name: string; mobileNumber: string; nikNumber?: string | null; ktpAddress?: string | null } | null;
   snapVenue: { venueName: string; address?: string | null; description?: string | null; brandName?: string | null; brandCode?: string | null } | null;
   snapPackage: { packageName: string; notes?: string | null } | null;
-  snapPackageVariant: { variantName: string; pax: number; price: number } | null;
+  snapPackagePricing: { packageName: string; pax: number; price: number } | null;
   snapPackageInternalItems: { id: string; itemName: string; itemDescription: string; sortOrder: number }[];
   snapPackageVendorItems: { id: string; categoryName: string; itemText: string; sortOrder: number }[];
   snapPackageCategoryPrices?: { categoryName: string; basePrice: number; isTakeout: boolean }[];
@@ -267,9 +267,9 @@ interface TableRow { no: string; desc: string; descBold?: boolean; total: string
 function buildTableRows(booking: POPdfBooking): TableRow[] {
   const venueName = booking.snapVenue?.venueName ?? "";
   const packageName = booking.snapPackage?.packageName ?? "";
-  const variantName = booking.snapPackageVariant?.variantName ?? "";
-  const pax = booking.snapPackageVariant?.pax ?? "";
-  const price = booking.snapPackageVariant ? fmtRp(booking.snapPackageVariant.price) : "";
+  const pricingPackageName = booking.snapPackagePricing?.packageName ?? "";
+  const pax = booking.snapPackagePricing?.pax ?? "";
+  const price = booking.snapPackagePricing ? fmtRp(booking.snapPackagePricing.price) : "";
   const notes = booking.snapPackage?.notes ? booking.snapPackage.notes.split("\n").filter(Boolean) : [];
   const internalItems = [...booking.snapPackageInternalItems].sort((a, b) => a.sortOrder - b.sortOrder);
   const packageVendorItems = [...booking.snapPackageVendorItems].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -278,7 +278,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   );
 
   const rows: TableRow[] = [];
-  rows.push({ no: "1", desc: `${venueName} ${packageName}${variantName ? ` - ${variantName}` : ""} for ${pax} people include: `, total: price });
+  rows.push({ no: "1", desc: `${venueName} ${packageName}${pricingPackageName ? ` - ${pricingPackageName}` : ""} for ${pax} people include: `, total: price });
   notes.forEach((note) => rows.push({ no: "", desc: note, total: "" }));
 
   const benefitItems = internalItems.filter((i) => i.itemName.toLowerCase().includes("benefit"));
@@ -386,7 +386,7 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
     po_number: booking.poNumber ?? "",
     wedding_type: booking.weddingType ? booking.weddingType.replace(/\b\w/g, (c) => c.toUpperCase()) : "",
     package_name: booking.snapPackage?.packageName ?? "",
-    package_price: booking.snapPackageVariant ? fmtRp(booking.snapPackageVariant.price) : "",
+    package_price: booking.snapPackagePricing ? fmtRp(booking.snapPackagePricing.price) : "",
     discount_amount: fmtRp(booking.discountAmount ?? 0),
     booking_fee: (() => { const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return bf ? fmtRp(bf.amount) : ""; })(),
     total_paid: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0)),
@@ -472,7 +472,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
     : null;
   const brandName = booking.snapVenue?.brandName ?? "";
   const venueName = booking.snapVenue?.venueName ?? "";
-  const varSnap = booking.snapPackageVariant;
+  const varSnap = booking.snapPackagePricing;
   const sigs = booking.signatures;
   const createdAt = booking.createdAt ?? new Date();
 
@@ -501,7 +501,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
           {/* Title */}
           <View style={{ alignItems: "center", marginBottom: 16 }}>
             <Text style={s.title}>PURCHASE ORDER PACKAGE</Text>
-            <Text style={s.title}>{varSnap?.variantName ? `${varSnap.variantName.toUpperCase()} ` : ""}{varSnap?.pax ?? "800"} PAX - {(brandName || "BRAND NAME").toUpperCase()}</Text>
+            <Text style={s.title}>{varSnap?.packageName ? `${varSnap.packageName.toUpperCase()} ` : ""}{varSnap?.pax ?? "800"} PAX - {(brandName || "BRAND NAME").toUpperCase()}</Text>
             <Text style={s.subtitle}>{venueName || "VENUE NAME"}</Text>
             <Text style={s.headerAddress}>{booking.snapVenue?.address ?? "-"}</Text>
           </View>

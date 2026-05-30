@@ -357,86 +357,69 @@ model PaymentMethod {
 // ─── Packages ────────────────────────────────────────────────────────────────
 
 model Package {
-  id             String           @id @default(uuid())
-  packageName    String
-  available      Boolean          @default(true)
-  approvalStatus String           @default("draft")
-  venueId        String?
-  notes          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  venue          Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
-  variants       PackageVariant[]
-  bookings       Booking[]
-  leads          Lead[]
+  id               String                  @id @default(uuid())
+  packageName      String
+  available        Boolean                 @default(true)
+  approvalStatus   String                  @default("draft")
+  venueId          String?
+  notes            String?
+  pax              Int                     @default(0)
+  margin           Float                   @default(0)
+  sellingPrice     Int                     @default(0)
+  termAndCondition String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  venue            Venue?                  @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  vendorItems      PackageVendorItem[]
+  internalItems    PackageInternalItem[]
+  categoryPrices   PackageCategoryPrice[]
+  bookings         Booking[]
+  leads            Lead[]
 
   @@index([venueId])
   @@map("packages")
 }
 
-model PackageVariant {
-  id               String                        @id @default(uuid())
-  packageId        String
-  variantName      String
-  pax              Int
-  margin           Float                         @default(0)
-  sellingPrice     Int                           @default(0)
-  available        Boolean                       @default(true)
-  termAndCondition String?
-  deletedAt        DateTime?
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
-  package          Package                       @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  vendorItems      PackageVendorItem[]
-  internalItems    PackageInternalItem[]
-  categoryPrices   PackageVariantCategoryPrice[]
-  bookings         Booking[]
+model PackageCategoryPrice {
+  id           String   @id @default(uuid())
+  packageId    String
+  categoryName String
+  basePrice    Int      @default(0)
+  sortOrder    Int      @default(0)
+  isShow       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  package      Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@index([packageId])
-  @@index([packageId, deletedAt])
-  @@map("package_variants")
-}
-
-model PackageVariantCategoryPrice {
-  id               String         @id @default(uuid())
-  packageVariantId String
-  categoryName     String
-  basePrice        Int            @default(0)
-  sortOrder        Int            @default(0)
-  isShow           Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
-
-  @@index([packageVariantId])
-  @@map("package_variant_category_prices")
+  @@map("package_category_prices")
 }
 
 model PackageVendorItem {
-  id               String         @id @default(uuid())
-  packageVariantId String
-  categoryName     String
-  itemText         String
-  sortOrder        Int            @default(0)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  packageId    String
+  categoryName String
+  itemText     String
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  package      Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
-  @@index([packageVariantId])
+  @@index([packageId])
   @@map("package_vendor_items")
 }
 
 model PackageInternalItem {
-  id               String         @id @default(uuid())
-  packageVariantId String
-  itemName         String
-  itemDescription  String         @default("")
-  sortOrder        Int            @default(0)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  packageVariant   PackageVariant @relation(fields: [packageVariantId], references: [id], onDelete: Cascade)
+  id              String   @id @default(uuid())
+  packageId       String
+  itemName        String
+  itemDescription String   @default("")
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  package         Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
-  @@index([packageVariantId])
+  @@index([packageId])
   @@map("package_internal_items")
 }
 
@@ -537,7 +520,6 @@ model Booking {
   customerId            String
   venueId               String
   packageId             String
-  packageVariantId      String?
   paymentMethodId       String?
   sourceOfInformationId String?
   createdAt             DateTime        @default(now())
@@ -548,7 +530,6 @@ model Booking {
   customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
   venue               Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
   package             Package              @relation(fields: [packageId], references: [id], onDelete: Restrict)
-  packageVariant      PackageVariant?      @relation(fields: [packageVariantId], references: [id], onDelete: SetNull)
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
 
@@ -556,7 +537,7 @@ model Booking {
   snapCustomer       SnapCustomer?
   snapVenue          SnapVenue?
   snapPackage        SnapPackage?
-  snapPackageVariant SnapPackageVariant?
+  snapPackagePricing SnapPackagePricing?
 
   // Snapshot relations (1:many)
   snapPackageInternalItems  SnapPackageInternalItem[]
@@ -581,7 +562,6 @@ model Booking {
   @@index([customerId])
   @@index([venueId])
   @@index([packageId])
-  @@index([packageVariantId])
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
   @@index([bookingStatus])
@@ -599,9 +579,8 @@ model BookingRevision {
   // Queryable fields
   packageId      String
   packageName    String
-  variantId      String?
-  variantName    String?
-  variantPrice   Int      @default(0)
+  pax            Int      @default(0)
+  price          Int      @default(0)
   venueId        String
   venueName      String
   discountName   String?
@@ -667,11 +646,11 @@ model SnapPackage {
   @@map("snap_packages")
 }
 
-model SnapPackageVariant {
+model SnapPackagePricing {
   id               String   @id @default(uuid())
   bookingId        String   @unique
-  variantId        String
-  variantName      String
+  packageId        String
+  packageName      String
   pax              Int
   price            Int
   margin           Float    @default(0)
@@ -679,7 +658,7 @@ model SnapPackageVariant {
   createdAt        DateTime @default(now())
   booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  @@map("snap_package_variants")
+  @@map("snap_package_pricing")
 }
 
 model SnapPackageInternalItem {
