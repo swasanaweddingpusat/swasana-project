@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -14,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -25,6 +27,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -37,125 +40,38 @@ import {
   Eye,
   Calendar,
   FileText,
+  TrashBinTrash,
+  DangerTriangle,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { usePoll } from "@/hooks/use-poll";
+import {
+  useMiceBookings,
+  useDeleteMiceBooking,
+  useMarkMiceLost,
+} from "@/hooks/use-mice-bookings";
 import { MiceBookingDrawer } from "./MiceBookingDrawer";
 import { MiceDetailModal } from "./MiceDetailModal";
-import type { MiceBookingItem, MiceStatus } from "./types";
+import type { MiceBookingItem, MiceBookingStatus } from "./types";
 
 export type { MiceBookingItem };
 
-export const STATUS_DOT_CLASS: Record<MiceStatus, string> = {
+export const STATUS_DOT_CLASS: Record<MiceBookingStatus, string> = {
   Confirmed: "bg-foreground border border-foreground",
   Pending: "bg-muted-foreground/60 border border-muted-foreground/60",
+  Uploaded: "bg-muted-foreground/40 border border-muted-foreground",
   Rejected: "bg-destructive border border-destructive",
   Canceled: "bg-muted-foreground/30 border border-muted-foreground/30",
   Lost: "bg-transparent border border-muted-foreground/60",
 };
 
-const ALL_STATUSES: MiceStatus[] = [
-  "Confirmed",
+const ALL_STATUSES: MiceBookingStatus[] = [
   "Pending",
+  "Uploaded",
+  "Confirmed",
   "Rejected",
   "Canceled",
   "Lost",
-];
-
-const DUMMY_MICE: MiceBookingItem[] = [
-  {
-    id: "m1",
-    clientName: "PT Maju Jaya",
-    clientPhone: "02112345678",
-    bookingDate: "2026-05-10",
-    poNumber: "PO-MICE-001",
-    quotation: {
-      id: "q-m1",
-      leadName: "PT Maju Jaya",
-      packageName: "Gold",
-      variantName: "100 Pax",
-      totalPrice: 40000000,
-    },
-    venueName: "Sasana Esthi Sopo",
-    status: "Confirmed",
-    eventDate: "2026-07-10",
-    eventType: "Fullday Meeting 8hrs",
-    fullPayment: 45000000,
-    bookingFee: 15000000,
-    salesName: "Deni",
-  },
-  {
-    id: "m2",
-    clientName: "PT Global Tech",
-    clientPhone: "02198765432",
-    bookingDate: "2026-05-12",
-    poNumber: "PO-MICE-002",
-    quotation: null,
-    venueName: "Bripensiunan",
-    status: "Pending",
-    eventDate: "2026-06-25",
-    eventType: "Halfday 6hrs",
-    fullPayment: 25000000,
-    bookingFee: 8000000,
-    salesName: "Deni",
-  },
-  {
-    id: "m3",
-    clientName: "Bank Mandiri",
-    clientPhone: "02155667788",
-    bookingDate: "2026-05-15",
-    poNumber: null,
-    quotation: null,
-    venueName: "Lippo Grand Ballroom",
-    status: "Pending",
-    eventDate: "2026-08-20",
-    eventType: "Fullday Meeting 12hrs",
-    fullPayment: 75000000,
-    bookingFee: 25000000,
-    salesName: "Rina",
-  },
-  {
-    id: "m4",
-    clientName: "Telkom Indonesia",
-    clientPhone: "02133445566",
-    bookingDate: "2026-05-18",
-    poNumber: "PO-MICE-004",
-    quotation: {
-      id: "q-m4",
-      leadName: "Telkom Indonesia",
-      packageName: "Silver",
-      variantName: "150 Pax",
-      totalPrice: 28000000,
-    },
-    venueName: "Grand Puri 2",
-    status: "Confirmed",
-    eventDate: "2026-09-05",
-    eventType: "Halfday 6hrs",
-    fullPayment: 30000000,
-    bookingFee: 10000000,
-    salesName: "Rina",
-  },
-  {
-    id: "m5",
-    clientName: "Astra International",
-    clientPhone: "02177889900",
-    bookingDate: "2026-04-28",
-    poNumber: "PO-MICE-005",
-    quotation: {
-      id: "q-m5",
-      leadName: "Astra International",
-      packageName: "Platinum",
-      variantName: "200 Pax",
-      totalPrice: 55000000,
-    },
-    venueName: "Bringhall",
-    status: "Rejected",
-    eventDate: "2026-06-15",
-    eventType: "Fullday Meeting 8hrs",
-    fullPayment: 55000000,
-    bookingFee: 18000000,
-    salesName: "Deni",
-  },
 ];
 
 function fmtRp(n: number): string {
@@ -164,7 +80,7 @@ function fmtRp(n: number): string {
 
 const ROWS_PER_PAGE = 10;
 
-export function StatusDot({ status }: { status: MiceStatus }) {
+export function StatusDot({ status }: { status: MiceBookingStatus }) {
   return (
     <span
       aria-hidden="true"
@@ -176,7 +92,7 @@ export function StatusDot({ status }: { status: MiceStatus }) {
   );
 }
 
-export function MiceStatusBadge({ status }: { status: MiceStatus }) {
+export function MiceStatusBadge({ status }: { status: MiceBookingStatus }) {
   return (
     <Badge
       variant="outline"
@@ -191,38 +107,64 @@ export function MiceStatusBadge({ status }: { status: MiceStatus }) {
 export function MiceTable() {
   usePoll();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<MiceStatus | "all">("all");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<MiceBookingStatus | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] =
     useState<MiceBookingItem | null>(null);
 
-  const filtered = DUMMY_MICE.filter((item) => {
-    if (statusFilter !== "all" && item.status !== statusFilter) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const matches =
-        item.clientName.toLowerCase().includes(q) ||
-        item.clientPhone.includes(q) ||
-        item.venueName.toLowerCase().includes(q) ||
-        item.salesName.toLowerCase().includes(q) ||
-        item.eventType.toLowerCase().includes(q) ||
-        (item.poNumber?.toLowerCase().includes(q) ?? false);
-      if (!matches) return false;
-    }
-    return true;
+  // Debounce search input ~300ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data, isLoading } = useMiceBookings({
+    page: currentPage,
+    pageSize: ROWS_PER_PAGE,
+    search: debouncedSearch.trim() || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  const paginated = filtered.slice(
-    (currentPage - 1) * ROWS_PER_PAGE,
-    currentPage * ROWS_PER_PAGE
-  );
+  const rows = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
+
+  const { mutateAsync: deleteMice } = useDeleteMiceBooking();
+  const { mutateAsync: markLost } = useMarkMiceLost();
 
   function handleRowClick(item: MiceBookingItem) {
     setSelectedBooking(item);
     setDetailOpen(true);
+  }
+
+  async function handleDelete(item: MiceBookingItem) {
+    if (!confirm(`Hapus booking "${item.customer.name}"? Tindakan ini tidak bisa dibatalkan.`)) {
+      return;
+    }
+    const result = await deleteMice(item.id);
+    if (result.success) {
+      toast.success("Booking berhasil dihapus.");
+    } else {
+      toast.error(result.error ?? "Gagal menghapus booking.");
+    }
+  }
+
+  async function handleMarkLost(item: MiceBookingItem) {
+    if (!confirm(`Tandai booking "${item.customer.name}" sebagai Lost?`)) {
+      return;
+    }
+    const result = await markLost({ id: item.id });
+    if (result.success) {
+      toast.success("Booking ditandai sebagai Lost.");
+    } else {
+      toast.error(result.error ?? "Gagal menandai sebagai Lost.");
+    }
   }
 
   return (
@@ -232,17 +174,14 @@ export function MiceTable() {
         <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
           <div className="flex items-center gap-3">
             <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
-              {filtered.length}
-              {search || statusFilter !== "all"
-                ? ` dari ${DUMMY_MICE.length}`
-                : " bookings"}
+              {total} bookings
             </span>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
             <Select
               value={statusFilter}
               onValueChange={(v) => {
-                setStatusFilter(v as MiceStatus | "all");
+                setStatusFilter(v as MiceBookingStatus | "all");
                 setCurrentPage(1);
               }}
             >
@@ -278,7 +217,6 @@ export function MiceTable() {
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
-                  setCurrentPage(1);
                 }}
                 className="pl-9 w-full sm:w-52"
               />
@@ -296,8 +234,15 @@ export function MiceTable() {
           </div>
         </div>
 
-        {/* Table */}
-        {filtered.length === 0 ? (
+        {/* Loading state */}
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          /* Empty state */
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <Calendar
               weight="BoldDuotone"
@@ -305,8 +250,8 @@ export function MiceTable() {
               className="h-10 w-10 mb-3 opacity-40"
             />
             <p className="text-sm">
-              {search
-                ? `Tidak ada hasil untuk "${search}"`
+              {debouncedSearch
+                ? `Tidak ada hasil untuk "${debouncedSearch}"`
                 : "Belum ada booking MICE."}
             </p>
           </div>
@@ -354,132 +299,152 @@ export function MiceTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginated.map((item, idx) => (
-                  <TableRow
-                    key={item.id}
-                    onClick={() => handleRowClick(item)}
-                    className="cursor-pointer transition-colors hover:bg-muted/40"
-                  >
-                    <TableCell className="px-4 text-center text-muted-foreground">
-                      {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
-                    </TableCell>
+                {rows.map((item, idx) => {
+                  const bookingFee =
+                    item.terms.find((t) => t.name === "Booking Fee")?.amount ?? 0;
+                  const finalPayment =
+                    item.terms.find((t) => t.name === "Final Payment")?.amount ?? 0;
 
-                    <TableCell className="px-4">
-                      <div className="min-w-0">
-                        <p
-                          className="font-medium truncate text-foreground"
-                          title={item.clientName}
-                        >
-                          {item.clientName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.clientPhone}
-                        </p>
-                      </div>
-                    </TableCell>
+                  return (
+                    <TableRow
+                      key={item.id}
+                      onClick={() => handleRowClick(item)}
+                      className="cursor-pointer transition-colors hover:bg-muted/40"
+                    >
+                      <TableCell className="px-4 text-center text-muted-foreground">
+                        {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                      </TableCell>
 
-                    <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                      {format(new Date(item.bookingDate), "dd MMM yyyy")}
-                    </TableCell>
+                      <TableCell className="px-4">
+                        <div className="min-w-0">
+                          <p
+                            className="font-medium truncate text-foreground"
+                            title={item.customer.name}
+                          >
+                            {item.customer.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.customer.phone}
+                          </p>
+                        </div>
+                      </TableCell>
 
-                    <TableCell className="px-4">
-                      {item.poNumber ? (
-                        <span className="font-mono text-xs">
-                          {item.poNumber}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          —
-                        </span>
-                      )}
-                    </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-foreground/80">
+                        {format(new Date(item.bookingDate), "dd MMM yyyy")}
+                      </TableCell>
 
-                    <TableCell className="px-4 whitespace-nowrap">
-                      {item.quotation ? (
-                        <Badge variant="secondary" className="text-xs gap-1">
+                      <TableCell className="px-4">
+                        {item.poNumber ? (
+                          <span className="font-mono text-xs">
+                            {item.poNumber}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            —
+                          </span>
+                        )}
+                      </TableCell>
+
+                      {/* Quotation — always deferred */}
+                      <TableCell className="px-4 whitespace-nowrap">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <FileText
                             weight="BoldDuotone"
                             aria-hidden="true"
-                            className="w-3 h-3"
+                            className="w-3 h-3 opacity-40"
                           />
-                          {item.quotation.packageName}{" "}
-                          {item.quotation.variantName}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
                           —
                         </span>
-                      )}
-                    </TableCell>
+                      </TableCell>
 
-                    <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                      {item.venueName}
-                    </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-foreground/80">
+                        {item.venue.name}
+                      </TableCell>
 
-                    <TableCell className="px-4">
-                      <MiceStatusBadge status={item.status} />
-                    </TableCell>
+                      <TableCell className="px-4">
+                        <MiceStatusBadge status={item.status} />
+                      </TableCell>
 
-                    <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                      {format(new Date(item.eventDate), "dd MMM yyyy")}
-                    </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-foreground/80">
+                        {item.eventDate
+                          ? format(new Date(item.eventDate), "dd MMM yyyy")
+                          : "—"}
+                      </TableCell>
 
-                    <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
-                      {fmtRp(item.fullPayment)}
-                    </TableCell>
+                      <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
+                        {fmtRp(finalPayment)}
+                      </TableCell>
 
-                    <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
-                      {fmtRp(item.bookingFee)}
-                    </TableCell>
+                      <TableCell className="px-4 text-right whitespace-nowrap font-medium text-foreground">
+                        {fmtRp(bookingFee)}
+                      </TableCell>
 
-                    <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
-                      {item.salesName}
-                    </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
+                        {item.sales?.fullName ?? "—"}
+                      </TableCell>
 
-                    <TableCell
-                      className="px-4"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Aksi untuk booking ${item.clientName}`}
-                          >
-                            <MenuDots
-                              weight="BoldDuotone"
-                              aria-hidden="true"
-                              className="w-4 h-4"
-                            />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            className="gap-2"
-                            onClick={() => {
-                              setSelectedBooking(item);
-                              setDetailOpen(true);
-                            }}
-                          >
-                            <Eye weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
-                            View Detail
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="gap-2"
-                            onClick={() => {
-                              setSelectedBooking(item);
-                              setDrawerOpen(true);
-                            }}
-                          >
-                            <Pen weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
-                            Edit
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      <TableCell
+                        className="px-4"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Aksi untuk booking ${item.customer.name}`}
+                            >
+                              <MenuDots
+                                weight="BoldDuotone"
+                                aria-hidden="true"
+                                className="w-4 h-4 text-muted-foreground"
+                              />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="gap-2"
+                              onClick={() => {
+                                setSelectedBooking(item);
+                                setDetailOpen(true);
+                              }}
+                            >
+                              <Eye weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-primary" />
+                              View Detail
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="gap-2"
+                              onClick={() => {
+                                setSelectedBooking(item);
+                                setDrawerOpen(true);
+                              }}
+                            >
+                              <Pen weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-primary" />
+                              Edit
+                            </DropdownMenuItem>
+                            {item.status !== "Lost" && item.status !== "Canceled" && item.status !== "Rejected" && (
+                              <DropdownMenuItem
+                                className="gap-2"
+                                onClick={() => { void handleMarkLost(item); }}
+                              >
+                                <DangerTriangle weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
+                                Mark Lost
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="gap-2 text-destructive focus:text-destructive"
+                              onClick={() => { void handleDelete(item); }}
+                            >
+                              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
+                              Hapus
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
