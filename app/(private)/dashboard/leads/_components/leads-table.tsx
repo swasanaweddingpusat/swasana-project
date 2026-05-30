@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { type DropResult } from "@hello-pangea/dnd";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,7 +43,7 @@ export function LeadsTable() {
   // Non-final statuses go in pipeline
   const pipelineStatuses = statuses.filter((s) => !s.isFinal);
 
-  const leads = leadsData?.items ?? [];
+  const leads = useMemo(() => leadsData?.items ?? [], [leadsData?.items]);
   const totalPages = leadsData?.totalPages ?? 1;
 
   const handleDragEnd = useCallback(

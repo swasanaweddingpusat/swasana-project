@@ -199,7 +199,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const { data: packages = [], isLoading: packagesLoading } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
-  const selectedPackage = packages.find((p: PackageData) => p.id === selectedPackageId);
   const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({}); // categoryName -> isTakeout
   const [takeoutPrices, setTakeoutPrices] = useState<Record<string, number>>({}); // categoryName -> editable takeout nominal

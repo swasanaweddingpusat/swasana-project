@@ -15,7 +15,9 @@ export default function DashboardLayout({
     <SidebarProvider>
       <HeaderActionProvider>
         <BookingDrawerProvider>
-          <SwasanaSidebar />
+          <Suspense fallback={null}>
+            <SwasanaSidebar />
+          </Suspense>
           <SidebarInset>
             <Suspense>
               <Header />

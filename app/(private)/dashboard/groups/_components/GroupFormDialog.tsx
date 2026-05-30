@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,17 +26,6 @@ export function GroupFormDialog({ open, onOpenChange, group, eligibleLeaders = [
   const [name, setName] = useState(group?.name ?? "");
   const [description, setDescription] = useState(group?.description ?? "");
   const [leaderId, setLeaderId] = useState<string | null>(group?.leaderId ?? null);
-
-  // Re-populate fields setiap kali dialog dibuka atau group target berubah.
-  // useState initial value hanya jalan saat mount — useEffect ini yang handle
-  // kasus dialog selalu mounted tapi group prop-nya berubah (null → data → null).
-  useEffect(() => {
-    if (open) {
-      setName(group?.name ?? "");
-      setDescription(group?.description ?? "");
-      setLeaderId(group?.leaderId ?? null);
-    }
-  }, [open, group]);
 
   function handleSubmit() {
     const handlers = {

@@ -50,11 +50,13 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _ca
       </div>
 
       <GroupFormDialog
+        key="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
         eligibleLeaders={eligibleLeaders}
       />
       <GroupFormDialog
+        key={editGroup?.id ?? "edit-empty"}
         open={!!editGroup}
         onOpenChange={(o) => { if (!o) setEditGroup(null); }}
         group={editGroup}
