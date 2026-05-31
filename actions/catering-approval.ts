@@ -6,6 +6,7 @@ import { requirePermission, isSuperAdmin as isSuperAdminFn } from "@/lib/permiss
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { revalidateTag } from "next/cache";
+import { resolveApprovalSteps } from "@/lib/approval-flows";
 
 type CategoryType = "catering" | "decoration";
 
@@ -41,12 +42,11 @@ export async function approveCategoryPO(
     });
 
     if (!record) {
-      // Auto-create from flow template
-      const flow = await db.approvalFlow.findUnique({
-        where: { module: categoryType },
-        include: { steps: { orderBy: { sortOrder: "asc" } } },
-      });
-      if (!flow) return { success: false, error: `Approval flow untuk ${categoryType} belum di-setup.` };
+      // Auto-create from hardcoded flow
+      const flowSteps = await resolveApprovalSteps(categoryType);
+      if (!flowSteps || flowSteps.length === 0) {
+        return { success: false, error: `Approval flow untuk ${categoryType} tidak ditemukan.` };
+      }
 
       record = await db.approvalRecord.create({
         data: {
@@ -58,14 +58,14 @@ export async function approveCategoryPO(
         include: { steps: { orderBy: { stepOrder: "asc" } } },
       });
 
-      for (const flowStep of flow.steps) {
+      for (const flowStep of flowSteps) {
         await db.approvalRecordStep.create({
           data: {
             recordId: record.id,
             stepOrder: flowStep.sortOrder,
             approverType: flowStep.approverType,
             approverRoleId: flowStep.approverRoleId,
-            approverUserId: flowStep.approverUserId,
+            approverUserId: null,
             status: "pending",
           },
         });

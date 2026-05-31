@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { buildResetApprovalOps } from "@/lib/approval-helpers";
+import { resolveApprovalSteps } from "@/lib/approval-flows";
 import { createNotifications } from "@/lib/notifications";
 import {
   createPackageSchema,
@@ -44,48 +45,67 @@ export async function createPackage(data: unknown): Promise<
   try {
     const { signature, ...pkgData } = parsed.data;
 
-    const flow = await db.approvalFlow.findUnique({
-      where: { module: "package" },
-      include: { steps: { orderBy: { sortOrder: "asc" } } },
-    });
+    // Hardcoded flow: Manager (step 1) → Finance (step 2)
+    const steps = await resolveApprovalSteps("package");
 
     const packageId = crypto.randomUUID();
     const recordId = crypto.randomUUID();
     const now = new Date();
     const creatorRoleId = session.user.roleId;
-    const creatorStepIdx = flow ? flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId) : -1;
-    // allAutoApproved: true only when ALL steps are auto-approved by creator.
-    // With the fixed logic (only exact match), this means every step index equals creatorStepIdx —
-    // i.e. flow has exactly 1 step and creator's role matches that step.
-    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => i === creatorStepIdx);
+    const creatorStepIdx = steps
+      ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
+      : -1;
+    // allAutoApproved: only when flow has exactly 1 step and creator matches that step
+    const allAutoApproved =
+      steps !== null &&
+      steps.length > 0 &&
+      steps.every((_, i) => i === creatorStepIdx);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.package.create({ data: { id: packageId, ...pkgData, approvalStatus: "pending" } }),
-      ...(flow && flow.steps.length > 0 ? [
-        db.approvalRecord.create({
-          data: { id: recordId, module: "package", entityId: packageId, status: "pending", createdById: session.user.profileId!, signature: signature ?? null },
-        }),
-        ...flow.steps.map((step, i) => {
-          // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
-          // If creatorStepIdx === -1, no step is auto-approved.
-          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-          const isCreatorStep = creatorStepIdx >= 0 && i === creatorStepIdx;
-          return db.approvalRecordStep.create({
-            data: {
-              recordId, stepOrder: step.sortOrder, approverType: step.approverType,
-              approverRoleId: step.approverRoleId ?? null, approverUserId: step.approverUserId ?? null,
-              status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session.user.profileId! : null,
-              decidedAt: shouldAutoApprove ? now : null,
-              signature: isCreatorStep ? (signature ?? null) : null,
-            },
-          });
-        }),
-        ...(allAutoApproved ? [
-          db.approvalRecord.update({ where: { id: recordId }, data: { status: "approved" } }),
-          db.package.update({ where: { id: packageId }, data: { approvalStatus: "approved" } }),
-        ] : []),
-      ] : []),
+      ...(steps && steps.length > 0
+        ? [
+            db.approvalRecord.create({
+              data: {
+                id: recordId,
+                module: "package",
+                entityId: packageId,
+                status: "pending",
+                createdById: session.user.profileId!,
+                signature: signature ?? null,
+              },
+            }),
+            ...steps.map((step, i) => {
+              // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
+              const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
+              return db.approvalRecordStep.create({
+                data: {
+                  recordId,
+                  stepOrder: step.sortOrder,
+                  approverType: step.approverType,
+                  approverRoleId: step.approverRoleId,
+                  approverUserId: null,
+                  status: shouldAutoApprove ? "approved" : "pending",
+                  decidedById: shouldAutoApprove ? session.user.profileId! : null,
+                  decidedAt: shouldAutoApprove ? now : null,
+                  signature: shouldAutoApprove ? (signature ?? null) : null,
+                },
+              });
+            }),
+            ...(allAutoApproved
+              ? [
+                  db.approvalRecord.update({
+                    where: { id: recordId },
+                    data: { status: "approved" },
+                  }),
+                  db.package.update({
+                    where: { id: packageId },
+                    data: { approvalStatus: "approved" },
+                  }),
+                ]
+              : []),
+          ]
+        : []),
     ];
 
     await db.$transaction(ops);
@@ -124,47 +144,82 @@ export async function updatePackage(id: string, data: unknown): Promise<
   const paxChanged = pkgData.pax !== undefined && existing?.pax !== pkgData.pax;
 
   // Read-only queries before transaction
-  const [flow, existingApproval] = await Promise.all([
-    db.approvalFlow.findUnique({ where: { module: "package" }, include: { steps: { orderBy: { sortOrder: "asc" } } } }),
-    db.approvalRecord.findUnique({ where: { module_entityId: { module: "package", entityId: id } }, select: { id: true } }),
+  const [steps, existingApproval] = await Promise.all([
+    resolveApprovalSteps("package"),
+    db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "package", entityId: id } },
+      select: { id: true },
+    }),
   ]);
 
   try {
     const recordId = existingApproval?.id ?? crypto.randomUUID();
     const now = new Date();
     const creatorRoleId = session.user.roleId;
-    const creatorStepIdx = flow ? flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId) : -1;
-    // allAutoApproved: true only when every step index equals creatorStepIdx (flow has 1 step, creator matches).
-    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => i === creatorStepIdx);
+    const creatorStepIdx = steps
+      ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
+      : -1;
+    // allAutoApproved: only when flow has exactly 1 step and creator matches that step
+    const allAutoApproved =
+      steps !== null &&
+      steps.length > 0 &&
+      steps.every((_, i) => i === creatorStepIdx);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending" } }),
-      ...(flow && flow.steps.length > 0 ? [
-        db.approvalRecordStep.deleteMany({ where: { recordId } }),
-        existingApproval
-          ? db.approvalRecord.update({ where: { id: existingApproval.id }, data: { status: "pending", updatedById: session.user.profileId!, signature: signature ?? null } })
-          : db.approvalRecord.create({ data: { id: recordId, module: "package", entityId: id, status: "pending", createdById: session.user.profileId!, signature: signature ?? null } }),
-        ...flow.steps.map((step, i) => {
-          // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
-          // If creatorStepIdx === -1, no step is auto-approved.
-          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-          const isCreatorStep = creatorStepIdx >= 0 && i === creatorStepIdx;
-          return db.approvalRecordStep.create({
-            data: {
-              recordId, stepOrder: step.sortOrder, approverType: step.approverType,
-              approverRoleId: step.approverRoleId ?? null, approverUserId: step.approverUserId ?? null,
-              status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session.user.profileId! : null,
-              decidedAt: shouldAutoApprove ? now : null,
-              signature: isCreatorStep ? (signature ?? null) : null,
-            },
-          });
-        }),
-        ...(allAutoApproved ? [
-          db.approvalRecord.update({ where: { id: recordId }, data: { status: "approved" } }),
-          db.package.update({ where: { id }, data: { approvalStatus: "approved" } }),
-        ] : []),
-      ] : []),
+      ...(steps && steps.length > 0
+        ? [
+            db.approvalRecordStep.deleteMany({ where: { recordId } }),
+            existingApproval
+              ? db.approvalRecord.update({
+                  where: { id: existingApproval.id },
+                  data: {
+                    status: "pending",
+                    updatedById: session.user.profileId!,
+                    signature: signature ?? null,
+                  },
+                })
+              : db.approvalRecord.create({
+                  data: {
+                    id: recordId,
+                    module: "package",
+                    entityId: id,
+                    status: "pending",
+                    createdById: session.user.profileId!,
+                    signature: signature ?? null,
+                  },
+                }),
+            ...steps.map((step, i) => {
+              // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
+              const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
+              return db.approvalRecordStep.create({
+                data: {
+                  recordId,
+                  stepOrder: step.sortOrder,
+                  approverType: step.approverType,
+                  approverRoleId: step.approverRoleId,
+                  approverUserId: null,
+                  status: shouldAutoApprove ? "approved" : "pending",
+                  decidedById: shouldAutoApprove ? session.user.profileId! : null,
+                  decidedAt: shouldAutoApprove ? now : null,
+                  signature: shouldAutoApprove ? (signature ?? null) : null,
+                },
+              });
+            }),
+            ...(allAutoApproved
+              ? [
+                  db.approvalRecord.update({
+                    where: { id: recordId },
+                    data: { status: "approved" },
+                  }),
+                  db.package.update({
+                    where: { id },
+                    data: { approvalStatus: "approved" },
+                  }),
+                ]
+              : []),
+          ]
+        : []),
     ];
 
     await db.$transaction(ops);

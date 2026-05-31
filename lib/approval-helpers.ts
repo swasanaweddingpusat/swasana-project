@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { resolveApprovalSteps } from "@/lib/approval-flows";
 
 interface SessionUser {
   profileId: string | null | undefined;
@@ -8,9 +9,9 @@ interface SessionUser {
 
 /**
  * Build a list of PrismaPromise ops that reset an approved package's approval
- * back to pending and recreate all approval steps from the flow template.
+ * back to pending and recreate all approval steps from the hardcoded flow.
  *
- * Returns an empty array if no approval flow exists for "package".
+ * Returns an empty array if the flow cannot be resolved (e.g. roles missing in DB).
  * The caller MUST include these ops in a db.$transaction([...]) call.
  *
  * Note: module "package" does NOT use Peruri e-meterai — emateraiSn /
@@ -21,29 +22,26 @@ export async function buildResetApprovalOps(
   packageId: string,
   session: SessionUser
 ): Promise<Prisma.PrismaPromise<unknown>[]> {
-  const [flow, existing] = await Promise.all([
-    db.approvalFlow.findUnique({
-      where: { module: "package" },
-      include: { steps: { orderBy: { sortOrder: "asc" } } },
-    }),
+  const [steps, existing] = await Promise.all([
+    resolveApprovalSteps("package"),
     db.approvalRecord.findUnique({
       where: { module_entityId: { module: "package", entityId: packageId } },
       select: { id: true },
     }),
   ]);
 
-  if (!flow || flow.steps.length === 0) return [];
+  if (!steps || steps.length === 0) return [];
 
   const recordId = existing?.id ?? crypto.randomUUID();
   const now = new Date();
   const creatorRoleId = session.roleId;
-  const creatorStepIdx = flow.steps.findIndex(
+  const creatorStepIdx = steps.findIndex(
     (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
   );
   // allAutoApproved: true only when every step index equals creatorStepIdx —
   // i.e. flow has exactly 1 step and creator's role matches that step.
   const allAutoApproved =
-    flow.steps.length > 0 && flow.steps.every((_, i) => i === creatorStepIdx);
+    steps.length > 0 && steps.every((_, i) => i === creatorStepIdx);
 
   const ops: Prisma.PrismaPromise<unknown>[] = [
     // 1. Delete existing steps
@@ -70,8 +68,8 @@ export async function buildResetApprovalOps(
           },
         }),
 
-    // 3. Recreate steps from flow template
-    ...flow.steps.map((step, i) => {
+    // 3. Recreate steps from hardcoded flow
+    ...steps.map((step, i) => {
       // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
       // If creatorStepIdx === -1, no step is auto-approved.
       const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
@@ -80,8 +78,8 @@ export async function buildResetApprovalOps(
           recordId,
           stepOrder: step.sortOrder,
           approverType: step.approverType,
-          approverRoleId: step.approverRoleId ?? null,
-          approverUserId: step.approverUserId ?? null,
+          approverRoleId: step.approverRoleId,
+          approverUserId: null,
           status: shouldAutoApprove ? "approved" : "pending",
           decidedById: shouldAutoApprove ? (session.profileId ?? null) : null,
           decidedAt: shouldAutoApprove ? now : null,

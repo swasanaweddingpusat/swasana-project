@@ -12,7 +12,6 @@ import {
   InfoCircle,
   List,
   Diploma,
-  BranchingPathsDown,
   CalendarMark,
   type IconProps,
 } from "@solar-icons/react";
@@ -52,13 +51,6 @@ const GROUPS: SettingGroup[] = [
         icon: ShieldCheck,
         href: "/dashboard/settings/roles",
         module: "settings-role-permission",
-      },
-      {
-        title: "Approval Flow",
-        description: "Atur alur persetujuan untuk setiap modul.",
-        icon: BranchingPathsDown,
-        href: "/dashboard/settings/approval-flow",
-        module: "settings-approval-flow",
       },
     ],
   },
@@ -122,7 +114,7 @@ const GROUPS: SettingGroup[] = [
 export default async function SettingsHubPage() {
   await requirePagePermission([
     "settings-users", "settings-brands", "settings-venues",
-    "settings-role-permission", "settings-approval-flow", "settings-payment-methods",
+    "settings-role-permission", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
   ]);

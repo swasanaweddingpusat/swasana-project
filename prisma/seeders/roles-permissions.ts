@@ -32,7 +32,6 @@ const moduleActions: Record<string, string[]> = {
   "settings-education-level": ["view", "create", "edit", "delete"],
   "settings-event-types": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
-  "settings-approval-flow": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
@@ -67,7 +66,6 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view"],
     "finance-ar": ["view"],
-    "settings-approval-flow": ["view"],
     leads: ["view", "create", "edit", "delete"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
@@ -86,7 +84,6 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-education-level": ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-order-status": ["view", "create", "edit", "delete"],
-    "settings-approval-flow": ["view", "create", "edit", "delete"],
     "settings-payment-methods": ["view", "create", "edit", "delete"],
     "settings-role-permission": ["view", "edit"],
     "settings-source-of-information": ["view", "create", "edit", "delete"],
@@ -100,7 +97,6 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view"],
     package: ["view"],
     vendor: ["view", "create", "edit"],
-    "settings-approval-flow": ["view"],
   },
   operational: {
     booking: ["view", "create", "edit", "comment"],
@@ -157,6 +153,7 @@ const REMOVED_MODULES = [
   "user_management", "venue_management", "client_agreement", "settlement",
   "settings", "payment_methods", "role_permission", "source_of_information",
   "settings-groups", // renamed → "groups" (code uses module "groups", not "settings-groups")
+  "settings-approval-flow", // approval flow is now hardcoded, no longer a DB-driven setting
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────

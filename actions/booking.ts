@@ -9,6 +9,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/validations/booking";
+import { resolveApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
@@ -126,11 +127,8 @@ export async function createBooking(data: unknown) {
       emateraiResult = await generateEmaterai(poNumber, new Date(input.bookingDate));
     }
 
-    // Fetch approval flow before transaction so we can include it atomically
-    const flow = await db.approvalFlow.findUnique({
-      where: { module: "booking" },
-      include: { steps: { orderBy: { sortOrder: "asc" } } },
-    });
+    // Resolve hardcoded approval flow: Manager (step 1) → Finance (step 2)
+    const bookingApprovalSteps = await resolveApprovalSteps("booking");
 
     // Build array-form transaction — customer create/update included for atomicity
     const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -297,11 +295,11 @@ export async function createBooking(data: unknown) {
       );
     }
 
-    // Add ApprovalRecord + steps to the same transaction
-    if (flow && flow.active) {
+    // Add ApprovalRecord + steps to the same transaction (hardcoded: Manager → Finance)
+    if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
       const approvalRecordId = crypto.randomUUID();
       const creatorRoleId = session!.user.roleId;
-      const creatorStepIdx = flow.steps.findIndex(
+      const creatorStepIdx = bookingApprovalSteps.findIndex(
         (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
       );
 
@@ -317,22 +315,22 @@ export async function createBooking(data: unknown) {
             emateraiQrBase64: emateraiResult?.qrBase64 ?? null,
           },
         }),
-        ...flow.steps.map((step, i) => {
-          const shouldAutoApprove = step.approverType !== "client" && (
-            creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
-          );
-          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
+        ...bookingApprovalSteps.map((step, i) => {
+          // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
+          // Finance creating → only Finance step auto-approved; Manager still pending.
+          // Role lain → semua pending.
+          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
           return db.approvalRecordStep.create({
             data: {
               recordId: approvalRecordId,
               stepOrder: step.sortOrder,
               approverType: step.approverType,
               approverRoleId: step.approverRoleId,
-              approverUserId: step.approverUserId,
+              approverUserId: null,
               status: shouldAutoApprove ? "approved" : "pending",
               decidedById: shouldAutoApprove ? session!.user.profileId! : null,
               decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: isCreatorStep ? (input.signatureSales ?? null) : null,
+              signature: shouldAutoApprove ? (input.signatureSales ?? null) : null,
             },
           });
         })
@@ -784,33 +782,29 @@ export async function editBooking(data: unknown) {
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
     if (approvalRecord) {
-      const flow = await db.approvalFlow.findUnique({
-        where: { module: "booking" },
-        include: { steps: { orderBy: { sortOrder: "asc" } } },
-      });
+      // Resolve hardcoded approval flow: Manager (step 1) → Finance (step 2)
+      const editApprovalSteps = await resolveApprovalSteps("booking");
 
-      if (flow) {
+      if (editApprovalSteps && editApprovalSteps.length > 0) {
         const creatorRoleId = session!.user.roleId;
-        const creatorStepIdx = flow.steps.findIndex(
+        const creatorStepIdx = editApprovalSteps.findIndex(
           (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
         );
 
-        const newStepOps: Prisma.PrismaPromise<unknown>[] = flow.steps.map((flowStep, i) => {
-          const shouldAutoApprove = flowStep.approverType !== "client" && (
-            creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
-          );
-          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
+        const newStepOps: Prisma.PrismaPromise<unknown>[] = editApprovalSteps.map((flowStep, i) => {
+          // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
+          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
           return db.approvalRecordStep.create({
             data: {
               recordId: approvalRecord.id,
-              stepOrder: i + 1,
+              stepOrder: flowStep.sortOrder,
               approverType: flowStep.approverType,
               approverRoleId: flowStep.approverRoleId,
-              approverUserId: flowStep.approverUserId,
+              approverUserId: null,
               status: shouldAutoApprove ? "approved" : "pending",
               decidedById: shouldAutoApprove ? session!.user.profileId : null,
               decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: isCreatorStep ? (rest.signatureSales ?? null) : null,
+              signature: shouldAutoApprove ? (rest.signatureSales ?? null) : null,
               revisionId,
             },
           });
