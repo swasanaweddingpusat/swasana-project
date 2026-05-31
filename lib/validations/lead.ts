@@ -25,6 +25,7 @@ export const createLeadSchema = z.object({
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(2000).optional(),
+  category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
   eventTypeId: z.string().optional().nullable(),

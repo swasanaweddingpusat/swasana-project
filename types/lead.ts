@@ -46,6 +46,7 @@ export type LeadListItem = {
   estimatedPax: number | null;
   budgetRange: string | null;
   notes: string | null;
+  category: "WEDDINGS" | "MICE";
   status: Pick<LeadStatusRow, "id" | "name" | "color" | "isFinal" | "isSystem">;
   venue: { id: string; name: string } | null;
   package: { id: string; packageName: string } | null;
