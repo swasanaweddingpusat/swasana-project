@@ -22,7 +22,7 @@ export default async function BookingsPage() {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const [bookings, salesProfiles] = await Promise.all([getBookings(profileId, dataScope), getSalesProfiles()]);
+  const [bookings, salesProfiles] = await Promise.all([getBookings(profileId, dataScope, { category: "WEDDINGS" }), getSalesProfiles()]);
   return (
     <div className={cn('flex', 'flex-col', 'mb-6', 'px-2')}>
       <BookingsTableClient initialData={bookings} salesProfiles={salesProfiles} />

@@ -98,7 +98,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, onSuccess
                       const g = groups.find((x) => x.id === gid);
                       if (!g) return null;
                       return (
-                        <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full">
+                        <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-primary text-primary-foreground rounded-full">
                           {g.name}
                           <button type="button" onClick={() => setSelectedGroupIds((p) => p.filter((id) => id !== gid))} className="ml-0.5 hover:text-gray-300"><CloseCircle weight="BoldDuotone" className="h-3 w-3" /></button>
                         </span>
@@ -119,7 +119,7 @@ export function BulkEditModal({ open, onClose, selectedUserIds, roles, onSuccess
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white pt-4 px-2">
+        <div className="sticky bottom-0 bg-background pt-4 px-2">
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleClose} disabled={submitting} className="flex-1 text-destructive border-destructive hover:bg-destructive/10">Batal</Button>
             <Button onClick={handleSubmit} disabled={submitting} className="flex-1">{submitting ? "Menyimpan..." : "Simpan"}</Button>

@@ -113,9 +113,9 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               placeholder="e.g. Brin Gatot Subroto"
-              className={cn("border-[#CCCCCC] bg-[#F9F9F9]", errors.name && "border-red-500")}
+              className={cn("border-[#CCCCCC] bg-[#F9F9F9]", errors.name && "border-destructive")}
             />
-            {errors.name && <p className={cn('text-xs', 'text-red-500')}>{errors.name}</p>}
+            {errors.name && <p className={cn('text-xs', 'text-destructive')}>{errors.name}</p>}
           </div>
 
           {/* Code */}
@@ -125,9 +125,9 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
               value={form.code}
               onChange={(e) => set("code", e.target.value.toUpperCase())}
               placeholder="e.g. BRINGATSU"
-              className={cn("border-[#CCCCCC] bg-[#F9F9F9] uppercase", errors.code && "border-red-500")}
+              className={cn("border-[#CCCCCC] bg-[#F9F9F9] uppercase", errors.code && "border-destructive")}
             />
-            {errors.code && <p className={cn('text-xs', 'text-red-500')}>{errors.code}</p>}
+            {errors.code && <p className={cn('text-xs', 'text-destructive')}>{errors.code}</p>}
           </div>
 
           {/* Capacity */}
@@ -138,9 +138,9 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
               value={form.capacity}
               onChange={(e) => set("capacity", e.target.value)}
               placeholder="e.g. 500"
-              className={cn("border-[#CCCCCC] bg-[#F9F9F9]", errors.capacity && "border-red-500")}
+              className={cn("border-[#CCCCCC] bg-[#F9F9F9]", errors.capacity && "border-destructive")}
             />
-            {errors.capacity && <p className={cn('text-xs', 'text-red-500')}>{errors.capacity}</p>}
+            {errors.capacity && <p className={cn('text-xs', 'text-destructive')}>{errors.capacity}</p>}
           </div>
 
           {/* Address */}
@@ -169,9 +169,9 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
         </div>
 
         {/* Sticky footer */}
-        <div className={cn('sticky', 'bottom-0', 'bg-white', 'pt-4')}>
+        <div className={cn('sticky', 'bottom-0', 'bg-background', 'pt-4')}>
           <div className={cn('flex', 'gap-2')}>
-            <Button variant="outline" onClick={onClose} className={cn('flex-1', 'cursor-pointer', 'text-red-600', 'border-red-600', 'hover:bg-red-50')} disabled={saving}>
+            <Button variant="outline" onClick={onClose} className={cn('flex-1', 'cursor-pointer', 'text-destructive', 'border-destructive', 'hover:bg-destructive/10')} disabled={saving}>
               Batal
             </Button>
             <Button onClick={handleSubmit} className={cn('flex-1', 'cursor-pointer')} disabled={saving}>

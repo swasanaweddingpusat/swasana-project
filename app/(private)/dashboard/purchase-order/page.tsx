@@ -27,7 +27,7 @@ export default async function VendorSpecialistPage() {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const bookings = await getBookings(profileId, dataScope);
+  const bookings = await getBookings(profileId, dataScope, { category: "WEDDINGS" });
 
   return (
     <div className={cn("flex", "flex-col", "mb-6", "px-2")}>

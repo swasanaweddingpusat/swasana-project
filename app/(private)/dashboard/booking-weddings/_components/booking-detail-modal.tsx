@@ -50,10 +50,10 @@ function RichText({ html }: { html: string | null | undefined }) {
 
 
 const AGREEMENT_COLOR: Record<string, string> = {
-  Pending: "bg-gray-100 text-gray-700",
-  Sent: "bg-blue-100 text-blue-800",
-  Viewed: "bg-yellow-100 text-yellow-800",
-  Signed: "bg-green-100 text-green-800",
+  Pending: "bg-muted text-muted-foreground",
+  Sent: "bg-primary/10 text-primary",
+  Viewed: "bg-muted text-foreground/70",
+  Signed: "bg-primary/20 text-primary",
 };
 
 /* ─── Component ────────────────────────────────────────────────────────────── */
@@ -122,7 +122,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Refresh"
                 >
-                  <Refresh weight="BoldDuotone" className="h-4 w-4" />
+                  <Refresh weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
                 </button>
               )}
             </div>
@@ -374,9 +374,9 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               <td className="px-4 py-3 text-foreground">{t.invoiceNumber ?? "-"}</td>
                               <td className="px-4 py-3">
                                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                                  t.paymentStatus === "paid" ? "bg-green-100 text-green-700" :
-                                  t.paymentStatus === "partial" ? "bg-yellow-100 text-yellow-700" :
-                                  "bg-red-100 text-red-700"
+                                  t.paymentStatus === "paid" ? "bg-primary/10 text-primary" :
+                                  t.paymentStatus === "partial" ? "bg-muted text-foreground/70" :
+                                  "bg-destructive/10 text-destructive"
                                 }`}>
                                   {t.paymentStatus || "Unpaid"}
                                 </span>
@@ -494,7 +494,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                                 className="shrink-0 text-muted-foreground hover:text-destructive"
                                                 onClick={(e) => { e.stopPropagation(); setDeleteDocTarget({ id: doc.id, name: doc.fileName }); }}
                                               >
-                                                <TrashBinTrash weight="BoldDuotone" className="h-2.5 w-2.5" />
+                                                <TrashBinTrash weight="BoldDuotone" className="h-2.5 w-2.5 text-muted-foreground" />
                                               </button>
                                             </div>
                                           </div>

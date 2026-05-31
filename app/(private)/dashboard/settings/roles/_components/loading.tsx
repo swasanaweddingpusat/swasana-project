@@ -7,8 +7,8 @@ export function RolesLoading() {
       <div className={cn('grid', 'grid-cols-1', 'lg:grid-cols-4', 'gap-6')}>
         {/* Roles List */}
         <div className="lg:col-span-1">
-          <div className={cn('bg-white', 'border', 'border-gray-200', 'rounded-lg')}>
-            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-gray-100')}>
+          <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
+            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border')}>
               <Skeleton className={cn('h-4', 'w-12')} />
               <Skeleton className={cn('h-7', 'w-7')} />
             </div>
@@ -24,8 +24,8 @@ export function RolesLoading() {
         </div>
         {/* Permission Matrix */}
         <div className="lg:col-span-3">
-          <div className={cn('bg-white', 'border', 'border-gray-200', 'rounded-lg')}>
-            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-gray-100')}>
+          <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
+            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border')}>
               <Skeleton className={cn('h-4', 'w-40')} />
               <div className={cn('flex', 'gap-2')}>
                 <Skeleton className={cn('h-7', 'w-24')} />
@@ -35,7 +35,7 @@ export function RolesLoading() {
             </div>
             <div className={cn('p-3', 'space-y-2')}>
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className={cn('border', 'border-gray-100', 'rounded-lg', 'p-3', 'space-y-2')}>
+                <div key={i} className={cn('border', 'border-border', 'rounded-lg', 'p-3', 'space-y-2')}>
                   <Skeleton className={cn('h-4', 'w-32')} />
                   <div className={cn('flex', 'gap-3')}>
                     {Array.from({ length: 4 }).map((__, j) => (

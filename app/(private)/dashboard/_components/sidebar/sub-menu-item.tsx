@@ -49,8 +49,8 @@ export function SubMenuItemRow({
           className={cn(
             "flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors",
             active || childActive
-              ? "bg-gray-100 text-gray-900"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent"
           )}
         >
           <Link href={item.href} className="flex items-center flex-1 min-w-0">
@@ -60,7 +60,7 @@ export function SubMenuItemRow({
           {!collapsed && (
             <button
               onClick={() => setOpen(!open)}
-              className={cn('p-1', 'rounded', 'hover:bg-gray-200', 'transition-colors', 'cursor-pointer', 'shrink-0')}
+              className={cn('p-1', 'rounded', 'hover:bg-accent', 'transition-colors', 'cursor-pointer', 'shrink-0')}
             >
               {open ? <AltArrowDown weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} /> : <AltArrowRight weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />}
             </button>
@@ -83,8 +83,8 @@ export function SubMenuItemRow({
       className={cn(
         "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
         active
-          ? "bg-gray-100 text-gray-900"
-          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-accent"
       )}
     >
       {Icon && <Icon weight="BoldDuotone" className="mr-2 h-4 w-4 text-foreground" />}

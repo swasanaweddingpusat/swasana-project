@@ -124,7 +124,7 @@ export function SourceOfInformationManager({ initialData }: Props) {
                           )}
                           {(can("settings-source-of-information", "delete") || isAdmin) && (
                             <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
                             </button>
                           )}
                         </div>

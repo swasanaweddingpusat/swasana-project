@@ -34,27 +34,27 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
 
 const STATUS_DOT: Record<string, string> = {
-  Confirmed: "bg-green-500",
-  Uploaded: "bg-blue-500",
-  Pending: "bg-orange-400",
+  Confirmed: "bg-primary",
+  Uploaded: "bg-primary/60",
+  Pending: "bg-muted-foreground/60",
   Rejected: "bg-destructive",
   Canceled: "bg-muted-foreground",
   Lost: "bg-muted-foreground",
 };
 
 const STATUS_TEXT: Record<string, string> = {
-  Confirmed: "text-green-600 border-border",
-  Uploaded: "text-blue-600 border-border",
-  Pending: "text-orange-500 border-border",
+  Confirmed: "text-primary border-primary/20",
+  Uploaded: "text-primary/70 border-border",
+  Pending: "text-muted-foreground border-border",
   Rejected: "text-destructive border-destructive/30",
   Canceled: "text-muted-foreground border-border",
   Lost: "text-muted-foreground border-border",
 };
 
 const SESSION_STYLE: Record<string, string> = {
-  morning: "bg-muted text-amber-600",
-  evening: "bg-muted text-indigo-600",
-  fullday: "bg-muted text-emerald-600",
+  morning: "bg-muted text-foreground/70",
+  evening: "bg-muted text-foreground/70",
+  fullday: "bg-muted text-foreground/70",
 };
 
 const SESSION_LABEL: Record<string, string> = {
@@ -78,6 +78,31 @@ function fmtRp(n: unknown) {
   return `Rp ${new Intl.NumberFormat("id-ID").format(Number(n))}`;
 }
 
+/** Returns a page range array with "..." for gaps.
+ *  Always shows: first, last, current, and 1 neighbour each side.
+ *  Example (current=50, total=150): [1, "...", 49, 50, 51, "...", 150]
+ */
+function buildPageRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  pages.add(current);
+  if (current - 1 >= 1) pages.add(current - 1);
+  if (current + 1 <= total) pages.add(current + 1);
+
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const result: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    result.push(sorted[i]);
+    if (i < sorted.length - 1 && sorted[i + 1] - sorted[i] > 1) {
+      result.push("...");
+    }
+  }
+  return result;
+}
 
 const ROWS_PER_PAGE = 10;
 
@@ -230,7 +255,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               <Tooltip>
                 <DropdownMenuTrigger asChild>
                   <TooltipTrigger className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}>
-                    <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                    <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-primary')} />
                   </TooltipTrigger>
                 </DropdownMenuTrigger>
                 <TooltipContent side="top"><p className="text-xs">Approval</p></TooltipContent>
@@ -278,18 +303,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </Tooltip>
           <DropdownMenuContent align="end">
             <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
-              <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Lihat Detail
+              <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {can("booking", "edit") && (
             <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTarget(booking); }}>
-              <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Booking
+              <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Booking
             </DropdownMenuItem>
             )}
             {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
               <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
                 <DropdownMenuSubTrigger className="cursor-pointer">
-                  <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                  <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id)}>
@@ -305,21 +330,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               </DropdownMenuSub>
             )}
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
-              <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Upload Dokumen
+              <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit TOP
+              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit TOP
             </DropdownMenuItem>
             {can("booking", "edit") &&
               booking.snapPackageCategoryPrices &&
               booking.snapPackageCategoryPrices.length > 0 && (
               <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
-                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Edit Set Harga
+                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Set Harga
               </DropdownMenuItem>
             )}
             {can("booking", "transfer") && (
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
-              <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Transfer Booking
+              <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Booking
             </DropdownMenuItem>
             )}
             {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
@@ -341,7 +366,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             {can("booking", "delete") && <DropdownMenuSeparator />}
             {can("booking", "delete") && (
             <DropdownMenuItem className={cn('cursor-pointer', 'text-destructive', 'focus:text-destructive')} onClick={() => setDeleteTarget(booking)}>
-              <Trash2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} /> Hapus
+              <Trash2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Hapus
             </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -370,7 +395,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 {totalBookings} Bookings
               </span>
               <Button variant="ghost" size="sm" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
-                <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground", isFetching && "animate-spin")} />
                 <span className="text-xs">Refresh</span>
               </Button>
             </div>
@@ -389,7 +414,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   className="w-full sm:w-48"
                 />
                 <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
-                  <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                  <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground", isFetching && "animate-spin")} />
                 </Button>
               </div>
             </div>
@@ -594,7 +619,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     {/* Row 3: event date + session badge */}
                     <div className={cn('flex', 'items-center', 'gap-2', 'flex-wrap', 'text-xs', 'text-muted-foreground')}>
                       <span className={cn('flex', 'items-center', 'gap-1')}>
-                        <CalendarDays weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
+                        <CalendarDays weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'shrink-0', 'text-muted-foreground')} />
                         {format(new Date(booking.bookingDate), "dd MMM yyyy")}
                       </span>
                       {booking.weddingSession && (
@@ -648,7 +673,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         onClick={() => setDetailTarget(booking.id)}
                         aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
                       >
-                        <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Detail
+                        <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Detail
                       </Button>
                       {can("booking", "edit") && (
                         <Button
@@ -657,7 +682,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           onClick={() => setEditTarget(booking)}
                           aria-label={`Edit booking ${booking.snapCustomer?.name ?? ""}`}
                         >
-                          <Pencil weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1')} /> Edit
+                          <Pencil weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
                         </Button>
                       )}
                       <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
@@ -679,14 +704,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               </Button>
               {/* Mobile: page X/Y */}
               <span className={cn('text-sm', 'text-muted-foreground', 'sm:hidden')}>{currentPage} / {totalPages}</span>
-              {/* Desktop: page numbers */}
+              {/* Desktop: page numbers with ellipsis truncation */}
               <div className={cn('hidden', 'sm:flex', 'items-center', 'gap-1')}>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button key={page} onClick={() => setCurrentPage(page)}
-                    className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === page ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")}>
-                    {page}
-                  </button>
-                ))}
+                {buildPageRange(currentPage, totalPages).map((item, idx) =>
+                  item === "..." ? (
+                    <span key={`ellipsis-${idx}`} className={cn('px-2', 'py-1', 'text-sm', 'text-muted-foreground', 'select-none')}>...</span>
+                  ) : (
+                    <button key={item} onClick={() => setCurrentPage(item as number)}
+                      className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === item ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")}>
+                      {item}
+                    </button>
+                  )
+                )}
               </div>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
                 <span className={cn('hidden', 'sm:inline')}>Next</span> <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'sm:ml-2')} />

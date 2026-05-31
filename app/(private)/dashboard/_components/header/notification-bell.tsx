@@ -53,22 +53,22 @@ export function NotificationBell() {
       <Button variant="ghost" size="icon" className={cn('relative', 'cursor-pointer')} onClick={() => setOpen(!open)}>
         <Bell weight="BoldDuotone" className={cn('h-5', 'w-5')} />
         {unreadCount > 0 && (
-          <span className={cn('absolute', '-top-0.5', '-right-0.5', 'h-4', 'min-w-4', 'px-1', 'flex', 'items-center', 'justify-center', 'rounded-full', 'bg-red-500', 'text-white', 'text-[10px]', 'font-bold')}>
+          <span className={cn('absolute', '-top-0.5', '-right-0.5', 'h-4', 'min-w-4', 'px-1', 'flex', 'items-center', 'justify-center', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[10px]', 'font-bold')}>
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </Button>
 
       {open && (
-        <div className={cn('absolute', 'right-0', 'top-full', 'mt-2', 'w-80', 'sm:w-96', 'bg-white', 'border', 'border-gray-200', 'rounded-xl', 'shadow-lg', 'z-50', 'overflow-hidden')}>
-          <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'py-3', 'border-b', 'border-gray-100')}>
-            <p className={cn('text-sm', 'font-semibold', 'text-gray-900')}>Notifikasi</p>
+        <div className={cn('absolute', 'right-0', 'top-full', 'mt-2', 'w-80', 'sm:w-96', 'bg-popover', 'border', 'border-border', 'rounded-xl', 'shadow-lg', 'z-50', 'overflow-hidden')}>
+          <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'py-3', 'border-b', 'border-border')}>
+            <p className={cn('text-sm', 'font-semibold', 'text-foreground')}>Notifikasi</p>
             <div className={cn('flex', 'items-center', 'gap-2')}>
-              <button type="button" onClick={() => refetch()} className={cn('p-1', 'rounded-md', 'hover:bg-gray-100', 'cursor-pointer', 'transition-colors')} title="Refresh">
-                <Refresh weight="BoldDuotone" className={`h-3.5 w-3.5 text-gray-500 ${isFetching ? "animate-spin" : ""}`} />
+              <button type="button" onClick={() => refetch()} className={cn('p-1', 'rounded-md', 'hover:bg-accent', 'cursor-pointer', 'transition-colors')} title="Refresh">
+                <Refresh weight="BoldDuotone" className={`h-3.5 w-3.5 text-muted-foreground ${isFetching ? "animate-spin" : ""}`} />
               </button>
               {unreadCount > 0 && (
-                <button type="button" onClick={() => markAll.mutate()} className={cn('text-xs', 'text-blue-600', 'hover:text-blue-800', 'flex', 'items-center', 'gap-1', 'cursor-pointer')}>
+                <button type="button" onClick={() => markAll.mutate()} className={cn('text-xs', 'text-primary', 'hover:text-primary/80', 'flex', 'items-center', 'gap-1', 'cursor-pointer')}>
                   <CheckRead weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} /> Tandai semua dibaca
                 </button>
               )}
@@ -78,26 +78,26 @@ export function NotificationBell() {
           <div className={cn('max-h-80', 'overflow-y-auto')}>
             {notifications.length === 0 ? (
               <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-10', 'text-center')}>
-                <Bell weight="BoldDuotone" className={cn('h-8', 'w-8', 'text-gray-300', 'mb-2')} />
-                <p className={cn('text-sm', 'text-gray-400')}>Belum ada notifikasi</p>
+                <Bell weight="BoldDuotone" className={cn('h-8', 'w-8', 'text-muted-foreground/40', 'mb-2')} />
+                <p className={cn('text-sm', 'text-muted-foreground')}>Belum ada notifikasi</p>
               </div>
             ) : (
               notifications.slice(0, 5).map((n) => {
                 const Icon = TYPE_ICON[n.type] ?? Bell;
                 return (
                   <button key={n.id} type="button" onClick={() => handleClick(n)}
-                    className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 ${!n.isRead ? "bg-blue-50/50" : ""}`}>
-                    <div className={cn('shrink-0', 'mt-0.5', 'h-7', 'w-7', 'rounded-full', 'bg-gray-100', 'flex', 'items-center', 'justify-center')}>
-                      <Icon weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-gray-600')} />
+                    className={`w-full text-left px-4 py-3 border-b border-border hover:bg-accent transition-colors cursor-pointer flex gap-3 ${!n.isRead ? "bg-primary/5" : ""}`}>
+                    <div className={cn('shrink-0', 'mt-0.5', 'h-7', 'w-7', 'rounded-full', 'bg-muted', 'flex', 'items-center', 'justify-center')}>
+                      <Icon weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-muted-foreground')} />
                     </div>
                     <div className={cn('flex-1', 'min-w-0')}>
-                      <p className={`text-sm truncate ${!n.isRead ? "font-semibold text-gray-900" : "text-gray-700"}`}>{n.title}</p>
-                      <p className={cn('text-xs', 'text-gray-500', 'line-clamp-2', 'mt-0.5')}>{n.message}</p>
-                      <p className={cn('text-[10px]', 'text-gray-400', 'mt-1')}>
+                      <p className={`text-sm truncate ${!n.isRead ? "font-semibold text-foreground" : "text-foreground/70"}`}>{n.title}</p>
+                      <p className={cn('text-xs', 'text-muted-foreground', 'line-clamp-2', 'mt-0.5')}>{n.message}</p>
+                      <p className={cn('text-[10px]', 'text-muted-foreground/60', 'mt-1')}>
                         {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: localeId })}
                       </p>
                     </div>
-                    {!n.isRead && <span className={cn('h-2', 'w-2', 'rounded-full', 'bg-blue-500', 'shrink-0', 'mt-2')} />}
+                    {!n.isRead && <span className={cn('h-2', 'w-2', 'rounded-full', 'bg-primary', 'shrink-0', 'mt-2')} />}
                   </button>
                 );
               })
@@ -107,7 +107,7 @@ export function NotificationBell() {
           {/* View all */}
           {notifications.length > 0 && (
             <button type="button" onClick={() => { router.push("/dashboard/notifications"); setOpen(false); }}
-              className={cn('w-full', 'text-center', 'py-2.5', 'text-xs', 'font-medium', 'text-gray-500', 'hover:text-gray-900', 'hover:bg-gray-50', 'border-t', 'border-gray-100', 'cursor-pointer', 'transition-colors')}>
+              className={cn('w-full', 'text-center', 'py-2.5', 'text-xs', 'font-medium', 'text-muted-foreground', 'hover:text-foreground', 'hover:bg-accent', 'border-t', 'border-border', 'cursor-pointer', 'transition-colors')}>
               Lihat Semua Notifikasi
             </button>
           )}

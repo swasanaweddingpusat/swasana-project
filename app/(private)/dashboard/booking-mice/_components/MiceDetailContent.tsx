@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { MiceStatusBadge } from "./mice-table";
-import type { MiceBookingItem } from "./types";
+import type { MiceBookingItem, MiceTerm } from "./types";
 
 interface MiceDetailContentProps {
   booking: MiceBookingItem;
@@ -15,6 +15,11 @@ interface MiceDetailContentProps {
 
 function fmtRp(n: number): string {
   return `Rp ${new Intl.NumberFormat("id-ID").format(n)}`;
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return format(new Date(iso), "dd MMM yyyy");
 }
 
 function InfoRow({
@@ -30,6 +35,35 @@ function InfoRow({
       <span className="text-sm font-medium text-right text-foreground">
         {value}
       </span>
+    </div>
+  );
+}
+
+function TermRow({ term }: { term: MiceTerm }) {
+  return (
+    <div className="py-2.5 border-b border-border last:border-0 space-y-0.5">
+      <div className="flex justify-between items-center gap-4">
+        <span className="text-sm text-muted-foreground shrink-0">
+          {term.name}
+        </span>
+        <span className="text-sm font-medium text-foreground">
+          {fmtRp(term.amount)}
+        </span>
+      </div>
+      <div className="flex justify-between items-center gap-4">
+        <span className="text-xs text-muted-foreground">
+          Jatuh tempo: {fmtDate(term.dueDate)}
+        </span>
+        <span
+          className={
+            term.paymentStatus === "Paid"
+              ? "text-xs font-medium text-foreground"
+              : "text-xs text-muted-foreground"
+          }
+        >
+          {term.paymentStatus}
+        </span>
+      </div>
     </div>
   );
 }
@@ -52,9 +86,7 @@ export function MiceDetailContent({
               {booking.poNumber}
             </span>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              Belum ada PO
-            </span>
+            <span className="text-xs text-muted-foreground">Belum ada PO</span>
           )}
         </div>
       )}
@@ -65,8 +97,8 @@ export function MiceDetailContent({
           Client
         </p>
         <div className="rounded-lg border border-border px-4 divide-y divide-border">
-          <InfoRow label="Nama" value={booking.clientName} />
-          <InfoRow label="Telepon" value={booking.clientPhone} />
+          <InfoRow label="Nama" value={booking.customer.name} />
+          <InfoRow label="Telepon" value={booking.customer.phone} />
         </div>
       </div>
 
@@ -76,62 +108,50 @@ export function MiceDetailContent({
           Detail Event
         </p>
         <div className="rounded-lg border border-border px-4 divide-y divide-border">
-          <InfoRow label="Venue" value={booking.venueName} />
-          <InfoRow label="Tipe Event" value={booking.eventType} />
-          <InfoRow
-            label="Tanggal Event"
-            value={format(new Date(booking.eventDate), "dd MMM yyyy")}
-          />
+          <InfoRow label="Venue" value={booking.venue.name} />
+          <InfoRow label="Tanggal Event" value={fmtDate(booking.eventDate)} />
           <InfoRow
             label="Tanggal Booking"
-            value={format(new Date(booking.bookingDate), "dd MMM yyyy")}
+            value={fmtDate(booking.bookingDate)}
           />
+          {booking.sourceOfInformation && (
+            <InfoRow
+              label="Sumber Informasi"
+              value={booking.sourceOfInformation.name}
+            />
+          )}
         </div>
       </div>
 
-      {/* Financial */}
+      {/* Financial — terms */}
       <div className="space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Pembayaran
         </p>
-        <div className="rounded-lg border border-border px-4 divide-y divide-border">
-          <InfoRow label="Full Payment" value={fmtRp(booking.fullPayment)} />
-          <InfoRow
-            label="Booking Fee / DP"
-            value={fmtRp(booking.bookingFee)}
-          />
-          <InfoRow
-            label="Sisa Pembayaran"
-            value={fmtRp(booking.fullPayment - booking.bookingFee)}
-          />
+        <div className="rounded-lg border border-border px-4">
+          {booking.terms.length > 0 ? (
+            booking.terms.map((term) => <TermRow key={term.id} term={term} />)
+          ) : (
+            <div className="py-2.5">
+              <span className="text-sm text-muted-foreground italic">
+                Belum ada term pembayaran
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Quotation */}
+      {/* Quotation — deferred */}
       <div className="space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Quotation
         </p>
-        <div className="rounded-lg border border-border px-4 divide-y divide-border">
-          {booking.quotation ? (
-            <>
-              <InfoRow label="Lead" value={booking.quotation.leadName} />
-              <InfoRow
-                label="Paket"
-                value={`${booking.quotation.packageName} ${booking.quotation.variantName}`}
-              />
-              <InfoRow
-                label="Total Quotation"
-                value={fmtRp(booking.quotation.totalPrice)}
-              />
-            </>
-          ) : (
-            <div className="py-2.5">
-              <span className="text-sm text-muted-foreground italic">
-                Belum dipilih quotation
-              </span>
-            </div>
-          )}
+        <div className="rounded-lg border border-border px-4">
+          <div className="py-2.5">
+            <span className="text-sm text-muted-foreground italic">
+              Modul Quotation menyusul
+            </span>
+          </div>
         </div>
       </div>
 
@@ -141,7 +161,10 @@ export function MiceDetailContent({
           Sales
         </p>
         <div className="rounded-lg border border-border px-4 divide-y divide-border">
-          <InfoRow label="Sales" value={booking.salesName} />
+          <InfoRow
+            label="Sales"
+            value={booking.sales?.fullName ?? "—"}
+          />
         </div>
       </div>
 

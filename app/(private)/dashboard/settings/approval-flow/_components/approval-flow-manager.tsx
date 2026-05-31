@@ -33,8 +33,8 @@ interface LocalStep {
 function SortableStep({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex items-center gap-2 p-3 border rounded-lg bg-white", isDragging && "opacity-50 shadow-lg")}>
-      <button type="button" {...attributes} {...listeners} className={cn('text-gray-400', 'hover:text-gray-600', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')} tabIndex={-1}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex items-center gap-2 p-3 border rounded-lg bg-background", isDragging && "opacity-50 shadow-lg")}>
+      <button type="button" {...attributes} {...listeners} className={cn('text-muted-foreground', 'hover:text-foreground', 'cursor-grab', 'active:cursor-grabbing', 'shrink-0')} tabIndex={-1}>
         <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4')} />
       </button>
       <div className={cn('flex-1', 'min-w-0')}>{children}</div>
@@ -226,7 +226,7 @@ export function ApprovalFlowManager() {
                     <TableCell>
                       <span className={cn(
                         "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-                        flow.active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                        flow.active ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
                       )}>
                         {flow.active ? "Aktif" : "Nonaktif"}
                       </span>
@@ -252,7 +252,7 @@ export function ApprovalFlowManager() {
       {/* Form Dialog */}
       {formOpen && (
         <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/50')} onClick={() => setFormOpen(false)}>
-          <div className={cn('bg-white', 'rounded-xl', 'shadow-xl', 'w-full', 'max-w-lg', 'mx-4', 'max-h-[85vh]', 'flex', 'flex-col')} onClick={(e) => e.stopPropagation()}>
+          <div className={cn('bg-card', 'rounded-xl', 'shadow-xl', 'w-full', 'max-w-lg', 'mx-4', 'max-h-[85vh]', 'flex', 'flex-col')} onClick={(e) => e.stopPropagation()}>
             <div className={cn('px-5', 'py-4', 'border-b')}>
               <h2 className={cn('text-base', 'font-semibold')}>{editingFlow ? "Edit Approval Flow" : "Tambah Approval Flow"}</h2>
             </div>
@@ -280,11 +280,11 @@ export function ApprovalFlowManager() {
                       {formSteps.map((step, i) => (
                         <SortableStep key={step.tempId} id={step.tempId}>
                           <div className={cn('flex', 'items-center', 'gap-2')}>
-                            <span className={cn('flex', 'items-center', 'justify-center', 'h-5', 'w-5', 'rounded-full', 'bg-black', 'text-white', 'text-xs', 'font-bold', 'shrink-0')}>{i + 1}</span>
+                            <span className={cn('flex', 'items-center', 'justify-center', 'h-5', 'w-5', 'rounded-full', 'bg-primary', 'text-primary-foreground', 'text-xs', 'font-bold', 'shrink-0')}>{i + 1}</span>
                             <select
                               value={step.approverType}
                               onChange={(e) => updateStep(step.tempId, "approverType", e.target.value)}
-                              className={cn('h-8', 'rounded-md', 'border', 'border-gray-300', 'bg-white', 'px-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring')}
+                              className={cn('h-8', 'rounded-md', 'border', 'border-border', 'bg-background', 'px-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring')}
                             >
                               <option value="role">Role</option>
                               <option value="user">User</option>
@@ -311,7 +311,7 @@ export function ApprovalFlowManager() {
                                 />
                               )}
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => removeStep(step.tempId)} className={cn('h-8', 'w-8', 'p-0', 'shrink-0', 'text-red-500', 'hover:text-red-700', 'hover:bg-red-50')}>
+                            <Button variant="ghost" size="sm" onClick={() => removeStep(step.tempId)} className={cn('h-8', 'w-8', 'p-0', 'shrink-0', 'text-destructive', 'hover:text-destructive', 'hover:bg-destructive/10')}>
                               <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                             </Button>
                           </div>

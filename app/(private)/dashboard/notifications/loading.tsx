@@ -17,7 +17,7 @@ export default function NotificationsLoading() {
       </div>
 
       {/* List skeleton */}
-      <div className={cn('bg-white', 'rounded-lg', 'border', 'border-gray-200', 'divide-y', 'divide-gray-100')}>
+      <div className={cn('bg-background', 'rounded-lg', 'border', 'border-border', 'divide-y', 'divide-border')}>
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className={cn('px-5', 'py-4', 'flex', 'gap-4')}>
             <Skeleton className={cn('h-9', 'w-9', 'rounded-full', 'shrink-0')} />

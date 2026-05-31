@@ -321,7 +321,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                   onChange={(e) => { setPackageName(e.target.value); setErrors((p) => { const n = { ...p }; delete n.packageName; return n; }); }}
                   placeholder="Masukkan nama paket"
                 />
-                {errors.packageName && <p className={cn("mt-1 text-xs text-red-500")}>{errors.packageName}</p>}
+                {errors.packageName && <p className={cn("mt-1 text-xs text-destructive")}>{errors.packageName}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -391,7 +391,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                             placeholder="Nama kategori"
                             className={cn("text-sm font-medium border-gray-300")}
                           />
-                          <Button variant="outline" size="sm" onClick={() => removeVendorItem(item.id)} className={cn("h-8 w-8 p-0 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50")}>
+                          <Button variant="outline" size="sm" onClick={() => removeVendorItem(item.id)} className={cn("h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10")}>
                             <TrashBinTrash weight="BoldDuotone" className={cn("h-4 w-4")} />
                           </Button>
                         </div>
@@ -436,7 +436,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                             placeholder="Nama item"
                             className={cn("text-sm font-medium border-gray-300")}
                           />
-                          <Button variant="outline" size="sm" onClick={() => removeInternalItem(item.id)} className={cn("h-8 w-8 p-0 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50")}>
+                          <Button variant="outline" size="sm" onClick={() => removeInternalItem(item.id)} className={cn("h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10")}>
                             <TrashBinTrash weight="BoldDuotone" className={cn("h-4 w-4")} />
                           </Button>
                         </div>
@@ -482,12 +482,12 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
         </div>
 
         {/* Footer */}
-        <div className={cn("sticky bottom-0 bg-white border-t pt-4 mt-4")}>
+        <div className={cn("sticky bottom-0 bg-background border-t border-border pt-4 mt-4")}>
           <div className={cn("flex gap-2")}>
             <Button
               variant="outline"
               onClick={currentStep === 1 ? handleClose : handlePrevious}
-              className={cn("flex-1 cursor-pointer", currentStep === 1 ? "text-red-600 border-red-600 hover:bg-red-50" : "border-black text-black hover:bg-gray-100")}
+              className={cn("flex-1 cursor-pointer", currentStep === 1 ? "text-destructive border-destructive hover:bg-destructive/10" : "border-border text-foreground hover:bg-accent")}
               disabled={submitting}
             >
               {currentStep === 1 ? "Batal" : "Sebelumnya"}

@@ -37,51 +37,128 @@ import {
   CalendarMark,
   MenuDots,
   Pen,
+  Eye,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { QuotationDrawer } from "./quotation-drawer";
+import { QuotationPreview } from "./quotation-preview";
+
+/** Satu baris penawaran (flat list). Total default = qty * price, tapi bisa di-override manual. */
+export interface QuotationLineItem {
+  id: string;
+  description: string;
+  qty: number;
+  price: number;
+  total: number;
+  /** true kalau total diisi manual (tidak mengikuti qty * price) */
+  manualTotal?: boolean;
+}
 
 export interface QuotationItem {
   id: string;
+  /** Nomor dokumen, mis. "#221-MICE". Optional — di-derive kalau kosong. */
+  quotationNo?: string;
+  purchaseOrderNo?: string;
+  // ── Customer / PIC ─────────────────────────────────────────────
   leadName: string;
   leadPhone: string;
+  /** Instansi / perusahaan (mis. "Al Azhar") */
+  instansi?: string;
+  // ── Sales ──────────────────────────────────────────────────────
+  salesName: string;
+  salesPhone?: string;
+  // ── Event ──────────────────────────────────────────────────────
   venue: string;
   category: "weddings" | "mice";
   eventType: string;
   eventDate: string;
+  /** mis. "Venue Only" */
+  details?: string;
+  /** mis. "Half Day 07.00 - 13.00" */
+  time?: string;
+  /** mis. "Ballroom" */
+  place?: string;
+  // ── Paket (ringkasan untuk list) ───────────────────────────────
   packageName: string;
   variantName: string;
   pax: number;
+  // ── Line items (detail penawaran) ──────────────────────────────
+  items?: QuotationLineItem[];
+  // ── Pricing ────────────────────────────────────────────────────
   price: number;
   discount: number;
   totalPrice: number;
+  // ── Term & Payment ─────────────────────────────────────────────
+  bookingFee?: number;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankAccountName?: string;
+  downPayment?: number;
+  others?: number;
+  // ── Meta ───────────────────────────────────────────────────────
   status: "draft" | "sent" | "revised" | "accepted" | "rejected";
   validUntil: string;
-  salesName: string;
   createdAt: string;
+  /** Tanggal dokumen diterbitkan (mis. "2026-02-04") */
+  issuedAt?: string;
   notes: string;
 }
 
 const DUMMY_QUOTATIONS: QuotationItem[] = [
   {
     id: "1",
-    leadName: "Ahmad Fauzi",
-    leadPhone: "081234567890",
-    venue: "Menara Bripens",
-    category: "weddings",
-    eventType: "Akad & Resepsi",
-    eventDate: "2026-08-15",
-    packageName: "MENARA BRIPENS PACKAGE",
-    variantName: "ALFA",
-    pax: 800,
-    price: 135000000,
-    discount: 5000000,
-    totalPrice: 130000000,
+    quotationNo: "#221-MICE",
+    purchaseOrderNo: "",
+    leadName: "Ibu Henny",
+    leadPhone: "0811 960 053",
+    instansi: "Al Azhar",
+    salesName: "Metalia Yuniarti",
+    salesPhone: "0851 2108 5180",
+    venue: "Patra Jasa Yudistira Grand Ballroom",
+    category: "mice",
+    eventType: "Graduation",
+    eventDate: "2026-05-09",
+    details: "Venue Only",
+    time: "Half Day 07.00 - 13.00",
+    place: "Ballroom",
+    packageName: "PATRA JASA YUDISTIRA PACKAGE",
+    variantName: "GRAND BALLROOM",
+    pax: 600,
+    items: [
+      { id: "i1", description: "A. Ballroom Facilities :", qty: 1, price: 65000000, total: 65000000, manualTotal: true },
+      { id: "i2", description: "Patrajasa Yudistira Grand Ballroom usage for 6hrs", qty: 0, price: 0, total: 0 },
+      { id: "i3", description: "Full Carpet Ballroom", qty: 0, price: 0, total: 0 },
+      { id: "i4", description: "Full Air Conditioned", qty: 0, price: 0, total: 0 },
+      { id: "i5", description: "Voyager Area", qty: 0, price: 0, total: 0 },
+      { id: "i6", description: "Exclusive Chandeliers", qty: 0, price: 0, total: 0 },
+      { id: "i7", description: "7-meter High Ceiling", qty: 0, price: 0, total: 0 },
+      { id: "i8", description: "3 Changing Rooms", qty: 0, price: 0, total: 0 },
+      { id: "i9", description: "Exclusive Restroom", qty: 0, price: 0, total: 0 },
+      { id: "i10", description: "Parking area lot up to 600", qty: 0, price: 0, total: 0 },
+      { id: "i11", description: "Cleaning Service", qty: 0, price: 0, total: 0 },
+      { id: "i12", description: "Electricity 10.000 watt", qty: 0, price: 0, total: 0 },
+      { id: "i13", description: "Security", qty: 0, price: 0, total: 0 },
+      { id: "i14", description: "B. Equipments :", qty: 0, price: 0, total: 0 },
+      { id: "i15", description: "Main Stage", qty: 0, price: 0, total: 0 },
+      { id: "i16", description: "200 Mix Banquet & Futura Chairs", qty: 0, price: 0, total: 0 },
+      { id: "i17", description: "4 Registration Table (d120)", qty: 0, price: 0, total: 0 },
+      { id: "i18", description: "LED Videotron", qty: 0, price: 0, total: 0 },
+      { id: "i19", description: "Soundsystem Standart (2 MIC)", qty: 0, price: 0, total: 0 },
+    ],
+    price: 65000000,
+    discount: 0,
+    totalPrice: 65000000,
+    bookingFee: 10000000,
+    bankName: "Bank BCA",
+    bankAccountNo: "628 263 4470",
+    bankAccountName: "Imam",
+    downPayment: 0,
+    others: 0,
     status: "sent",
-    validUntil: "2026-06-30",
-    salesName: "Rina",
-    createdAt: "2026-05-15",
-    notes: "",
+    validUntil: "2026-04-30",
+    createdAt: "2026-02-04",
+    issuedAt: "2026-02-04",
+    notes: "All confirm transactions are non-cancellable and non-refundable.",
   },
   {
     id: "2",
@@ -360,6 +437,13 @@ function formatRupiah(amount: number): string {
   });
 }
 
+/** Nomor dokumen — pakai yang ada, atau derive dari id + kategori. */
+function deriveQuotationNo(q: QuotationItem): string {
+  if (q.quotationNo) return q.quotationNo;
+  const suffix = q.category === "mice" ? "MICE" : "WED";
+  return `#${q.id}-${suffix}`;
+}
+
 function formatDate(dateStr: string): string {
   return format(new Date(dateStr), "d MMM yyyy");
 }
@@ -404,12 +488,16 @@ export function QuotationsTable() {
   const [editQuotation, setEditQuotation] = useState<QuotationItem | null>(
     null
   );
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewQuotation, setPreviewQuotation] =
+    useState<QuotationItem | null>(null);
 
   const filtered = DUMMY_QUOTATIONS.filter((q) => {
     if (statusFilter !== "all" && q.status !== statusFilter) return false;
     if (search.trim()) {
       const query = search.toLowerCase();
       const matches =
+        deriveQuotationNo(q).toLowerCase().includes(query) ||
         q.leadName.toLowerCase().includes(query) ||
         q.leadPhone.includes(query) ||
         q.venue.toLowerCase().includes(query) ||
@@ -436,6 +524,11 @@ export function QuotationsTable() {
   function handleEdit(q: QuotationItem) {
     setEditQuotation(q);
     setDrawerOpen(true);
+  }
+
+  function handlePreview(q: QuotationItem) {
+    setPreviewQuotation(q);
+    setPreviewOpen(true);
   }
 
   function handleConvertToBooking(q: QuotationItem) {
@@ -596,6 +689,9 @@ export function QuotationsTable() {
                     {/* Customer */}
                     <TableCell className="min-w-0">
                       <div className="min-w-0">
+                        <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                          {deriveQuotationNo(q)}
+                        </span>
                         <span
                           title={q.leadName}
                           className="block truncate font-medium text-sm text-foreground"
@@ -679,12 +775,22 @@ export function QuotationsTable() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
+                            onClick={() => handlePreview(q)}
+                          >
+                            <Eye
+                              weight="BoldDuotone"
+                              aria-hidden="true"
+                              className="h-4 w-4 mr-2 text-primary"
+                            />
+                            Lihat / Cetak
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => handleEdit(q)}
                           >
                             <Pen
                               weight="BoldDuotone"
                               aria-hidden="true"
-                              className="h-4 w-4 mr-2"
+                              className="h-4 w-4 mr-2 text-primary"
                             />
                             Edit
                           </DropdownMenuItem>
@@ -695,7 +801,7 @@ export function QuotationsTable() {
                               <CalendarMark
                                 weight="BoldDuotone"
                                 aria-hidden="true"
-                                className="h-4 w-4 mr-2"
+                                className="h-4 w-4 mr-2 text-primary"
                               />
                               Convert ke Booking
                             </DropdownMenuItem>
@@ -768,6 +874,12 @@ export function QuotationsTable() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         editQuotation={editQuotation}
+      />
+
+      <QuotationPreview
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        quotation={previewQuotation}
       />
     </>
   );

@@ -113,7 +113,7 @@ export const navItems: NavItem[] = [
     name: "Booking MICE",
     href: "/dashboard/booking-mice",
     icon: TicketSale,
-    permission: { module: "booking", action: "view" },
+    permission: { module: "booking-mice", action: "view" },
   },
   {
     name: "Calendar Events",

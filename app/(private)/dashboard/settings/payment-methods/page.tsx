@@ -224,7 +224,7 @@ export default function PaymentMethodsPage() {
                         )}
                         {(can("settings-payment-methods", "delete") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
-                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
                           </button>
                         )}
                       </div>

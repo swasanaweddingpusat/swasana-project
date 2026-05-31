@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { fetchPackages } from "@/services/package-service";
+import type { FetchPackagesParams } from "@/services/package-service";
 import {
   createPackage,
   updatePackage,
@@ -16,11 +17,14 @@ import {
 import type { PackagesQueryResult } from "@/lib/queries/packages";
 import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
 
-export function usePackages(venueId?: string) {
+export function usePackages(params: FetchPackagesParams = {}) {
   return useQuery<PackagesQueryResult>({
-    queryKey: ["packages", venueId],
-    queryFn: () => fetchPackages(venueId),
+    queryKey: ["packages", params.page ?? 1, params.pageSize ?? 10, params.search ?? "", params.venueId ?? ""],
+    queryFn: () => fetchPackages(params),
+    placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 }
 

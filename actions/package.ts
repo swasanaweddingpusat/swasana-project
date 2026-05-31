@@ -54,7 +54,10 @@ export async function createPackage(data: unknown): Promise<
     const now = new Date();
     const creatorRoleId = session.user.roleId;
     const creatorStepIdx = flow ? flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId) : -1;
-    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0);
+    // allAutoApproved: true only when ALL steps are auto-approved by creator.
+    // With the fixed logic (only exact match), this means every step index equals creatorStepIdx —
+    // i.e. flow has exactly 1 step and creator's role matches that step.
+    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => i === creatorStepIdx);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.package.create({ data: { id: packageId, ...pkgData, approvalStatus: "pending" } }),
@@ -63,8 +66,10 @@ export async function createPackage(data: unknown): Promise<
           data: { id: recordId, module: "package", entityId: packageId, status: "pending", createdById: session.user.profileId!, signature: signature ?? null },
         }),
         ...flow.steps.map((step, i) => {
-          const shouldAutoApprove = creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
-          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
+          // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
+          // If creatorStepIdx === -1, no step is auto-approved.
+          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
+          const isCreatorStep = creatorStepIdx >= 0 && i === creatorStepIdx;
           return db.approvalRecordStep.create({
             data: {
               recordId, stepOrder: step.sortOrder, approverType: step.approverType,
@@ -129,7 +134,8 @@ export async function updatePackage(id: string, data: unknown): Promise<
     const now = new Date();
     const creatorRoleId = session.user.roleId;
     const creatorStepIdx = flow ? flow.steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId) : -1;
-    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0);
+    // allAutoApproved: true only when every step index equals creatorStepIdx (flow has 1 step, creator matches).
+    const allAutoApproved = flow && flow.steps.length > 0 && flow.steps.every((_, i) => i === creatorStepIdx);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.package.update({ where: { id }, data: { ...pkgData, approvalStatus: "pending" } }),
@@ -139,8 +145,10 @@ export async function updatePackage(id: string, data: unknown): Promise<
           ? db.approvalRecord.update({ where: { id: existingApproval.id }, data: { status: "pending", updatedById: session.user.profileId!, signature: signature ?? null } })
           : db.approvalRecord.create({ data: { id: recordId, module: "package", entityId: id, status: "pending", createdById: session.user.profileId!, signature: signature ?? null } }),
         ...flow.steps.map((step, i) => {
-          const shouldAutoApprove = creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
-          const isCreatorStep = creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
+          // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
+          // If creatorStepIdx === -1, no step is auto-approved.
+          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
+          const isCreatorStep = creatorStepIdx >= 0 && i === creatorStepIdx;
           return db.approvalRecordStep.create({
             data: {
               recordId, stepOrder: step.sortOrder, approverType: step.approverType,

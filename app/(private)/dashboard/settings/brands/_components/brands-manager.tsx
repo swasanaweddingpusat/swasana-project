@@ -117,7 +117,7 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
                           <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
                         </button>
                         <button onClick={() => setDeleteTarget(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                          <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
+                          <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
                         </button>
                       </div>
                     </TableCell>

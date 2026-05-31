@@ -309,18 +309,18 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                           <div className={cn('flex', 'items-center', 'justify-end', 'gap-1')}>
                             <DropdownMenu>
                               <DropdownMenuTrigger className={cn('p-1', 'hover:bg-gray-100', 'rounded', 'cursor-pointer', 'outline-none')} title="Actions">
-                                <MenuDots weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-gray-700')} />
+                                <MenuDots weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-muted-foreground')} />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleEdit(user)}>
-                                  <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit
+                                  <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> Edit
                                 </DropdownMenuItem>
                                 {!isVerified && (
                                   <DropdownMenuItem onClick={() => handleResend(user)} disabled={resendingId === user.profile?.id}>
-                                    <Letter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
+                                    <Letter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }} className="text-red-600">
+                                <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }} className="text-destructive focus:text-destructive">
                                   <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>

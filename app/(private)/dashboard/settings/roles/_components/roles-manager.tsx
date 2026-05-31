@@ -352,16 +352,16 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
 
         {/* ── Roles List ── */}
         <div className="lg:col-span-1">
-          <div className={cn('bg-white', 'border', 'border-gray-200', 'rounded-lg')}>
-            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-gray-100')}>
-              <h2 className={cn('text-sm', 'font-semibold', 'text-gray-900')}>Roles</h2>
-              <button onClick={() => setShowAddRole(!showAddRole)} className={cn('p-1.5', 'rounded-lg', 'hover:bg-gray-100', 'transition-colors')}>
-                <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-500')} />
+          <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
+            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border')}>
+              <h2 className={cn('text-sm', 'font-semibold', 'text-foreground')}>Roles</h2>
+              <button onClick={() => setShowAddRole(!showAddRole)} className={cn('p-1.5', 'rounded-lg', 'hover:bg-accent', 'transition-colors')}>
+                <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
               </button>
             </div>
             <div className="p-2">
               {showAddRole && (
-                <div className={cn('mb-2', 'p-3', 'bg-gray-50', 'rounded-lg', 'border', 'border-gray-200', 'space-y-2')}>
+                <div className={cn('mb-2', 'p-3', 'bg-muted/40', 'rounded-lg', 'border', 'border-border', 'space-y-2')}>
                   <Input placeholder="Nama role" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} className={cn('text-sm', 'h-8')} autoFocus />
                   <Input placeholder="Deskripsi (opsional)" value={newRoleDesc} onChange={(e) => setNewRoleDesc(e.target.value)} className={cn('text-sm', 'h-8')} />
                   <div className={cn('flex', 'gap-2')}>
@@ -384,11 +384,11 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               ref={drag.innerRef}
                               {...drag.draggableProps}
                               className={`group flex items-center gap-2 px-2 py-2 rounded-lg transition-colors ${
-                                selectedRoleId === role.id ? "bg-gray-100" : "hover:bg-gray-50"
-                              } ${snapshot.isDragging ? "shadow-md bg-white" : ""}`}
+                                selectedRoleId === role.id ? "bg-accent" : "hover:bg-accent"
+                              } ${snapshot.isDragging ? "shadow-md bg-background" : ""}`}
                             >
                               <div {...drag.dragHandleProps} className={cn('cursor-grab', 'opacity-0', 'group-hover:opacity-40', 'hover:opacity-70!', 'shrink-0')}>
-                                <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-400')} />
+                                <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                               </div>
                               <button onClick={() => { setSelectedRoleId(role.id); setIsDirty(false); }} className={cn('flex', 'items-center', 'gap-2', 'flex-1', 'min-w-0', 'text-left')}>
                                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${roleColors[role.name.toLowerCase()] ?? "bg-gray-300 text-white"}`}>
@@ -396,16 +396,16 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                 </div>
                                 <div className={cn('flex-1', 'min-w-0')}>
                                   <p className={cn('text-sm', 'font-medium', 'truncate')}>{role.name}</p>
-                                  {role.description && <p className={cn('text-xs', 'text-gray-400', 'truncate')}>{role.description}</p>}
+                                  {role.description && <p className={cn('text-xs', 'text-muted-foreground', 'truncate')}>{role.description}</p>}
                                 </div>
                               </button>
                               <div className={cn('flex', 'gap-0.5', 'opacity-0', 'group-hover:opacity-100', 'shrink-0')}>
-                                <button className={cn('p-1', 'hover:bg-gray-200', 'rounded', 'cursor-pointer')} onClick={() => { setEditingRole(role); setEditName(role.name); setEditDesc(role.description ?? ""); }}>
-                                  <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-gray-500')} />
+                                <button className={cn('p-1', 'hover:bg-accent', 'rounded', 'cursor-pointer')} onClick={() => { setEditingRole(role); setEditName(role.name); setEditDesc(role.description ?? ""); }}>
+                                  <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-primary')} />
                                 </button>
                                 {role.name !== "super-admin" && (
-                                  <button className={cn('p-1', 'hover:bg-red-100', 'rounded', 'cursor-pointer')} onClick={() => setDeletingRole(role)}>
-                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-red-400')} />
+                                  <button className={cn('p-1', 'hover:bg-destructive/10', 'rounded', 'cursor-pointer')} onClick={() => setDeletingRole(role)}>
+                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-destructive/70')} />
                                   </button>
                                 )}
                               </div>
@@ -424,13 +424,13 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
 
         {/* ── Permission Matrix ── */}
         <div className="lg:col-span-3">
-          <div className={cn('bg-white', 'border', 'border-gray-200', 'rounded-lg')}>
-            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-gray-100', 'sticky', 'top-0', 'bg-white', 'z-10', 'rounded-t-lg')}>
+          <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
+            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border', 'sticky', 'top-0', 'bg-background', 'z-10', 'rounded-t-lg')}>
               <div>
-                <h2 className={cn('text-sm', 'font-semibold', 'text-gray-900')}>
+                <h2 className={cn('text-sm', 'font-semibold', 'text-foreground')}>
                   Permissions — <span>{selectedRole?.name ?? "—"}</span>
                 </h2>
-                {selectedRole?.description && <p className={cn('text-xs', 'text-gray-500', 'mt-0.5')}>{selectedRole.description}</p>}
+                {selectedRole?.description && <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>{selectedRole.description}</p>}
               </div>
               <div className={cn('flex', 'gap-2')}>
                 <Button size="sm" variant="outline" onClick={() => setShowAddModule(true)} className={cn('h-7', 'text-xs', 'gap-1')}>
@@ -446,7 +446,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
             <div className={cn('p-3', 'space-y-2', 'max-h-[calc(100vh-220px)]', 'overflow-y-auto')}>
               {/* Add Module inline form */}
               {showAddModule && (
-                <div className={cn('flex', 'items-center', 'gap-2', 'p-3', 'border', 'border-dashed', 'border-gray-300', 'rounded-xl', 'bg-gray-50')}>
+                <div className={cn('flex', 'items-center', 'gap-2', 'p-3', 'border', 'border-dashed', 'border-border', 'rounded-xl', 'bg-muted/40')}>
                   <Input
                     value={newModuleName}
                     onChange={(e) => setNewModuleName(e.target.value)}
@@ -477,12 +477,12 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                 const isOpen = openModules.has(mod);
 
                 return (
-                  <div key={mod} className={cn('border', 'border-gray-200', 'rounded-xl', 'overflow-hidden')}>
+                  <div key={mod} className={cn('border', 'border-border', 'rounded-xl', 'overflow-hidden')}>
                     {/* Accordion Header */}
-                    <div className={cn('flex', 'items-center', 'gap-3', 'px-4', 'py-3', 'bg-gray-50', 'hover:bg-gray-100', 'transition-colors')}>
+                    <div className={cn('flex', 'items-center', 'gap-3', 'px-4', 'py-3', 'bg-muted/30', 'hover:bg-accent', 'transition-colors')}>
                       {/* Drag handle */}
                       <div {...drag.dragHandleProps} className={cn('cursor-grab', 'opacity-40', 'hover:opacity-70', 'shrink-0')}>
-                        <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-400')} />
+                        <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                       </div>
                       {/* Toggle All */}
                       <Switch
@@ -495,25 +495,25 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                         className={cn('flex-1', 'text-left', 'flex', 'items-center', 'gap-2', 'cursor-pointer')}
                         onClick={() => setOpenModules((prev) => { const n = new Set(prev); if (n.has(mod)) { n.delete(mod); } else { n.add(mod); } return n; })}
                       >
-                        <span className={cn('text-sm', 'font-medium', 'text-gray-900')}>{MODULE_LABELS[mod] ?? mod}</span>
-                        <span className={cn('text-xs', 'text-gray-400')}>{checkedCount}/{pids.length}</span>
+                        <span className={cn('text-sm', 'font-medium', 'text-foreground')}>{MODULE_LABELS[mod] ?? mod}</span>
+                        <span className={cn('text-xs', 'text-muted-foreground')}>{checkedCount}/{pids.length}</span>
                       </button>
 
                       {/* Actions dropdown */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button className={cn('p-1', 'hover:bg-gray-200', 'rounded', 'cursor-pointer')}>
-                            <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-400')} />
+                          <button className={cn('p-1', 'hover:bg-accent', 'rounded', 'cursor-pointer')}>
+                            <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
                           <DropdownMenuItem onClick={() => { setEditModuleKey(mod); setEditModuleName(MODULE_LABELS[mod] ?? mod); }}>
-                            <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Edit Label
+                            <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> Edit Label
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setAddPermModule(mod); setNewAction(""); setOpenModules((p) => new Set([...p, mod])); }}>
-                            <AddCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Tambah Permission
+                            <AddCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> Tambah Permission
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDeleteModule(mod)} className={cn('text-red-600', 'focus:text-red-600', 'focus:bg-red-50')}>
+                          <DropdownMenuItem onClick={() => handleDeleteModule(mod)} className={cn('text-destructive', 'focus:text-destructive', 'focus:bg-destructive/10')}>
                             <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Hapus Module
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -521,14 +521,14 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
 
                       <AltArrowDown
                         weight="BoldDuotone"
-                        className={`h-4 w-4 text-gray-400 transition-transform cursor-pointer shrink-0 ${isOpen ? "rotate-180" : ""}`}
+                        className={`h-4 w-4 text-muted-foreground transition-transform cursor-pointer shrink-0 ${isOpen ? "rotate-180" : ""}`}
                         onClick={() => setOpenModules((prev) => { const n = new Set(prev); if (n.has(mod)) { n.delete(mod); } else { n.add(mod); } return n; })}
                       />
                     </div>
 
                     {/* Accordion Body */}
                     {isOpen && (
-                      <div className={cn('px-4', 'py-3', 'bg-white')}>
+                      <div className={cn('px-4', 'py-3', 'bg-background')}>
                         <div className={cn('grid', 'grid-cols-3', 'gap-x-6', 'gap-y-1')}>
                         {actions.map((action) => {
                           const pid = permLookup[`${mod}:${action}`];
@@ -549,26 +549,26 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                   <div className={cn('flex', 'items-center', 'gap-1')}>
                                     <Input value={editPermAction} onChange={(e) => setEditPermAction(e.target.value)} className={cn('h-6', 'text-xs', 'w-28', 'px-2')} autoFocus
                                       onKeyDown={(e) => { if (e.key === "Enter") handleUpdatePermission(pid); if (e.key === "Escape") { setEditPermId(null); setEditPermAction(""); } }} />
-                                    <button onClick={() => handleUpdatePermission(pid)} disabled={!editPermAction.trim()} className={cn('p-0.5', 'hover:bg-gray-200', 'rounded', 'cursor-pointer', 'disabled:opacity-50')}>
-                                      <span className={cn('text-xs', 'text-green-600', 'font-medium')}>✓</span>
+                                    <button onClick={() => handleUpdatePermission(pid)} disabled={!editPermAction.trim()} className={cn('p-0.5', 'hover:bg-accent', 'rounded', 'cursor-pointer', 'disabled:opacity-50')}>
+                                      <span className={cn('text-xs', 'text-primary', 'font-medium')}>✓</span>
                                     </button>
-                                    <button onClick={() => { setEditPermId(null); setEditPermAction(""); }} className={cn('p-0.5', 'hover:bg-gray-200', 'rounded', 'cursor-pointer')}>
-                                      <span className={cn('text-xs', 'text-red-400')}>✕</span>
+                                    <button onClick={() => { setEditPermId(null); setEditPermAction(""); }} className={cn('p-0.5', 'hover:bg-accent', 'rounded', 'cursor-pointer')}>
+                                      <span className={cn('text-xs', 'text-destructive/70')}>✕</span>
                                     </button>
                                   </div>
                                 ) : (
-                                  <span className={cn('text-sm', 'text-gray-700')}>{ACTION_LABELS[action] ?? action}</span>
+                                  <span className={cn('text-sm', 'text-foreground/80')}>{ACTION_LABELS[action] ?? action}</span>
                                 )}
                               </div>
 
                               {/* Edit / Delete icons */}
                               {!isEditing && pid && (
                                 <div className={cn('opacity-0', 'group-hover/perm:opacity-100', 'flex', 'items-center', 'gap-1', 'transition-opacity')}>
-                                  <button onClick={() => { setEditPermId(pid); setEditPermAction(action); }} className={cn('p-1', 'hover:bg-gray-100', 'rounded', 'cursor-pointer')}>
-                                    <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-gray-400')} />
+                                  <button onClick={() => { setEditPermId(pid); setEditPermAction(action); }} className={cn('p-1', 'hover:bg-accent', 'rounded', 'cursor-pointer')}>
+                                    <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-muted-foreground')} />
                                   </button>
-                                  <button onClick={() => handleDeletePermission(pid, mod, action)} className={cn('p-1', 'hover:bg-red-50', 'rounded', 'cursor-pointer')}>
-                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-red-400')} />
+                                  <button onClick={() => handleDeletePermission(pid, mod, action)} className={cn('p-1', 'hover:bg-destructive/10', 'rounded', 'cursor-pointer')}>
+                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-destructive/70')} />
                                   </button>
                                 </div>
                               )}
@@ -579,13 +579,13 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
 
                         {/* Inline add permission */}
                         {addPermModule === mod && (
-                          <div className={cn('flex', 'items-center', 'gap-2', 'pt-2', 'mt-1', 'border-t', 'border-gray-100')}>
+                          <div className={cn('flex', 'items-center', 'gap-2', 'pt-2', 'mt-1', 'border-t', 'border-border')}>
                             <Input value={newAction} onChange={(e) => setNewAction(e.target.value)} placeholder="nama action baru" className={cn('h-7', 'text-xs', 'flex-1')} autoFocus
                               onKeyDown={(e) => { if (e.key === "Enter") handleAddPermission(mod); if (e.key === "Escape") { setAddPermModule(null); setNewAction(""); } }} />
                             <button onClick={() => handleAddPermission(mod)} disabled={!newAction.trim() || createPermMut.isPending} className={cn('px-2', 'py-1', 'text-xs', 'bg-primary', 'text-primary-foreground', 'rounded', 'hover:bg-primary/90', 'cursor-pointer', 'disabled:opacity-50')}>
                               {createPermMut.isPending ? <Refresh weight="BoldDuotone" className={cn('h-3', 'w-3', 'animate-spin')} /> : "Add"}
                             </button>
-                            <button onClick={() => { setAddPermModule(null); setNewAction(""); }} className={cn('px-2', 'py-1', 'text-xs', 'border', 'rounded', 'hover:bg-gray-50', 'cursor-pointer')}>Cancel</button>
+                            <button onClick={() => { setAddPermModule(null); setNewAction(""); }} className={cn('px-2', 'py-1', 'text-xs', 'border', 'rounded', 'hover:bg-accent', 'cursor-pointer')}>Cancel</button>
                           </div>
                         )}
                       </div>

@@ -46,18 +46,18 @@ export function SummaryPanel({ totalMakanan, totalPayment, displayGroups, selisi
   }, [displayGroups]);
 
   return (
-    <div className="border border-gray-300 rounded-lg p-3 bg-white space-y-2">
+    <div className="border border-border rounded-lg p-3 bg-background space-y-2">
       <div className="flex items-center gap-1.5 mb-2">
-        <Bill weight="BoldDuotone" className="h-4 w-4 text-gray-500" />
-        <p className="text-sm font-bold text-gray-900">Detail Summary</p>
+        <Bill weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+        <p className="text-sm font-bold text-foreground">Detail Summary</p>
       </div>
 
       {/* Groups by section */}
       {Object.entries(groupsBySection).map(([sectionName, groups]) => (
         <div key={sectionName} className="mb-1">
-          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{sectionName}</p>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{sectionName}</p>
           {groups.map((g, i) => (
-            <div key={i} className="flex justify-between text-xs py-0.5" style={{ paddingLeft: `${8 + g.depth * 12}px`, color: g.type === "pengurangan" ? "#c0392b" : g.type === "discount" ? "#15803d" : "#000" }}>
+            <div key={i} className="flex justify-between text-xs py-0.5" style={{ paddingLeft: `${8 + g.depth * 12}px`, color: g.type === "pengurangan" ? "var(--destructive)" : g.type === "discount" ? "var(--primary)" : "var(--foreground)" }}>
               <span className={g.isSelisih ? "italic" : ""}>{g.name}</span>
               <span>{g.type === "pengurangan" || g.type === "discount" ? "-" : ""}{fmt(g.total)}</span>
             </div>
@@ -66,13 +66,13 @@ export function SummaryPanel({ totalMakanan, totalPayment, displayGroups, selisi
       ))}
 
       {selisihTotal !== 0 && (
-        <div className="flex justify-between text-xs py-0.5 italic" style={{ color: selisihTotal < 0 ? "#c0392b" : "#15803d" }}>
+        <div className="flex justify-between text-xs py-0.5 italic" style={{ color: selisihTotal < 0 ? "var(--destructive)" : "var(--primary)" }}>
           <span>Selisih Menu Pilihan</span>
           <span>{selisihTotal < 0 ? "-" : "+"}{fmt(selisihTotal)}</span>
         </div>
       )}
 
-      <div className="flex justify-between text-sm font-bold text-gray-900 pt-2 border-t border-gray-300">
+      <div className="flex justify-between text-sm font-bold text-foreground pt-2 border-t border-border">
         <span>Total Pembayaran Makanan</span>
         <span>{fmt(totalMakanan)}</span>
       </div>
@@ -82,9 +82,9 @@ export function SummaryPanel({ totalMakanan, totalPayment, displayGroups, selisi
         <div className="mb-1">
           {Object.entries(chargeGroups).map(([sectionName, groups]) => (
             <div key={sectionName}>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{sectionName}</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{sectionName}</p>
               {groups.map((g, i) => (
-                <div key={i} className="flex justify-between text-xs py-0.5 text-gray-500" style={{ paddingLeft: `${8 + g.depth * 12}px` }}>
+                <div key={i} className="flex justify-between text-xs py-0.5 text-muted-foreground" style={{ paddingLeft: `${8 + g.depth * 12}px` }}>
                   <span>{g.name}</span>
                   <span>-{fmt(g.total)}</span>
                 </div>
@@ -94,19 +94,19 @@ export function SummaryPanel({ totalMakanan, totalPayment, displayGroups, selisi
         </div>
       )}
 
-      <div className="flex justify-between text-sm font-bold text-gray-900 pt-2 border-t border-gray-300 mt-1">
+      <div className="flex justify-between text-sm font-bold text-foreground pt-2 border-t border-border mt-1">
         <span>TOTAL PAYMENT</span>
         <span>{fmt(totalPayment)}</span>
       </div>
 
       {/* Pembayaran groups */}
       {Object.keys(pembayaranGroups).length > 0 && (
-        <div className="mt-1 pt-1 border-t border-gray-200">
+        <div className="mt-1 pt-1 border-t border-border">
           {Object.entries(pembayaranGroups).map(([sectionName, groups]) => (
             <div key={sectionName}>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{sectionName}</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{sectionName}</p>
               {groups.map((g, i) => (
-                <div key={i} className="flex justify-between text-xs py-0.5 text-gray-500 italic" style={{ paddingLeft: `${8 + g.depth * 12}px` }}>
+                <div key={i} className="flex justify-between text-xs py-0.5 text-muted-foreground italic" style={{ paddingLeft: `${8 + g.depth * 12}px` }}>
                   <span>{g.name}</span>
                   <span>-{fmt(g.total)}</span>
                 </div>
@@ -117,7 +117,7 @@ export function SummaryPanel({ totalMakanan, totalPayment, displayGroups, selisi
       )}
 
       {/* Pelunasan */}
-      <div className="pt-1 mt-1 border-t border-gray-200">
+      <div className="pt-1 mt-1 border-t border-border">
         <div className="flex justify-between text-sm font-bold py-0.5"
           style={{ color: pelunasan < 0 ? SUMMARY_FINANCIAL_COLORS.positive : pelunasan > 0 ? SUMMARY_FINANCIAL_COLORS.negative : SUMMARY_FINANCIAL_COLORS.neutral }}>
           <span>Pelunasan</span>
