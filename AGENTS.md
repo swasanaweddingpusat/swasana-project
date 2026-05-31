@@ -444,7 +444,7 @@ Permission `(module, action)` tuples — kebab-case format:
 | Module | Actions |
 |---|---|
 | `booking` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `reject`, `comment`, `client-agreement` |
-| `approval` | `edit` |
+| `booking-mice` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `reject`, `comment`, `client-agreement` |
 | `customers` | `view`, `create`, `edit`, `delete` |
 | `finance-ar` | `view`, `create`, `edit`, `delete` |
 | `groups` | `view`, `view-all`, `create`, `edit`, `delete` |
@@ -457,7 +457,6 @@ Permission `(module, action)` tuples — kebab-case format:
 | `settings-education-level` | `view`, `create`, `edit`, `delete` |
 | `settings-event-types` | `view`, `create`, `edit`, `delete` |
 | `settings-order-status` | `view`, `create`, `edit`, `delete` |
-| `settings-approval-flow` | `view`, `create`, `edit`, `delete` |
 | `settings-payment-methods` | `view`, `create`, `edit`, `delete` |
 | `settings-role-permission` | `view`, `create`, `edit`, `delete` |
 | `settings-source-of-information` | `view`, `create`, `edit`, `delete` |

@@ -21,17 +21,19 @@ export const createLeadSchema = z.object({
     .min(1, "Minimal 1 nomor HP/WA wajib diisi")
     .max(10),
   email: z.string().trim().email("Format email tidak valid").optional().or(z.literal("")),
-  eventDate: z.string().optional().nullable(),
+  address: z.string().trim().max(500).optional(),
+  eventDate: z.string().min(1, "Tanggal event wajib diisi"),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(2000).optional(),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
-  venueId: z.string().optional().nullable(),
+  venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().optional().nullable(),
-  eventTypeId: z.string().optional().nullable(),
-  sourceOfInformationId: z.string().optional().nullable(),
-  assignedToId: z.string().optional().nullable(),
+  eventTypeId: z.string().min(1, "Event type wajib dipilih"),
+  sourceOfInformationId: z.string().min(1, "Sumber informasi wajib dipilih"),
+  assignedToId: z.string().min(1, "Assign ke sales wajib dipilih"),
   statusId: z.string().min(1, "Status wajib dipilih"),
+  bitrixId: z.string().trim().max(100).optional().nullable(),
 });
 
 export const updateLeadSchema = createLeadSchema.partial().extend({

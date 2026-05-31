@@ -37,6 +37,7 @@ export async function createLead(data: CreateLeadInput) {
     name,
     contactNumbers,
     email,
+    address,
     eventDate,
     estimatedPax,
     budgetRange,
@@ -48,6 +49,7 @@ export async function createLead(data: CreateLeadInput) {
     sourceOfInformationId,
     assignedToId,
     statusId,
+    bitrixId,
   } = parsed.data;
 
   try {
@@ -57,6 +59,7 @@ export async function createLead(data: CreateLeadInput) {
           name,
           contactNumbers,
           email: email || null,
+          address: address || null,
           eventDate: eventDate ? new Date(eventDate) : null,
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
@@ -68,6 +71,7 @@ export async function createLead(data: CreateLeadInput) {
           sourceOfInformationId: sourceOfInformationId || null,
           assignedToId: assignedToId || null,
           statusId,
+          bitrixId: bitrixId || null,
           createdById: session.user.profileId,
         },
         select: { id: true, name: true },
@@ -121,6 +125,7 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.name !== undefined && { name: fields.name }),
           ...(fields.contactNumbers !== undefined && { contactNumbers: fields.contactNumbers }),
           ...(fields.email !== undefined && { email: fields.email || null }),
+          ...(fields.address !== undefined && { address: fields.address || null }),
           ...(fields.eventDate !== undefined && {
             eventDate: fields.eventDate ? new Date(fields.eventDate) : null,
           }),
@@ -136,6 +141,7 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.category !== undefined && { category: fields.category }),
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
+          ...(fields.bitrixId !== undefined && { bitrixId: fields.bitrixId || null }),
         },
         select: { id: true, name: true },
       }),

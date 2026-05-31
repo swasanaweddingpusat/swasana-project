@@ -42,11 +42,13 @@ export type LeadListItem = {
   name: string;
   contactNumbers: ContactNumber[];
   email: string | null;
+  address: string | null;
   eventDate: Date | null;
   estimatedPax: number | null;
   budgetRange: string | null;
   notes: string | null;
   category: "WEDDINGS" | "MICE";
+  bitrixId: string | null;
   status: Pick<LeadStatusRow, "id" | "name" | "color" | "isFinal" | "isSystem">;
   venue: { id: string; name: string } | null;
   package: { id: string; packageName: string } | null;

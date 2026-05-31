@@ -14,6 +14,7 @@ import {
   Magnifer,
   List,
   Widget,
+  Refresh,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,8 @@ interface LeadsFiltersProps {
   statusCounts: StatusCount[];
   totalFiltered: number;
   onAdd: () => void;
+  onRefresh: () => void;
+  isRefreshing?: boolean;
 }
 
 function StatusDot({
@@ -64,11 +67,13 @@ export function LeadsFilters({
   statusCounts,
   totalFiltered,
   onAdd,
+  onRefresh,
+  isRefreshing,
 }: LeadsFiltersProps) {
   return (
     <>
       {/* Header row */}
-      <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
+      <div className="flex flex-col gap-3 px-4 sm:px-6 pb-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
           {/* View mode toggle — Pipeline button hidden on mobile (<sm) */}
           <div
@@ -151,6 +156,23 @@ export function LeadsFilters({
               className="pl-9 w-full sm:w-52"
             />
           </div>
+
+          {/* Refresh button — icon only */}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="Muat ulang data lead"
+            title="Muat ulang"
+          >
+            <Refresh
+              weight="BoldDuotone"
+              aria-hidden="true"
+              className={cn("h-4 w-4", isRefreshing && "animate-spin")}
+            />
+          </Button>
 
           {/* Add button */}
           <Button onClick={onAdd}>

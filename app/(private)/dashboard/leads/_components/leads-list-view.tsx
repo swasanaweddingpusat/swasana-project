@@ -297,8 +297,6 @@ export function LeadsListView({
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Tanggal Event</TableHead>
               {/* Pax — lg+ */}
               <TableHead className="px-4 whitespace-nowrap text-right hidden lg:table-cell">Pax</TableHead>
-              {/* Paket — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Paket</TableHead>
               {/* Status — always visible */}
               <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
               {/* Sales — sm+ */}
@@ -363,17 +361,6 @@ export function LeadsListView({
                   {/* Pax */}
                   <TableCell className="px-4 text-right whitespace-nowrap text-foreground/80 hidden lg:table-cell">
                     {lead.estimatedPax ? lead.estimatedPax.toLocaleString("id-ID") : "—"}
-                  </TableCell>
-
-                  {/* Paket */}
-                  <TableCell className="px-4 hidden lg:table-cell">
-                    {lead.package ? (
-                      <Badge variant="secondary" className="text-xs">
-                        {lead.package.packageName}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
                   </TableCell>
 
                   {/* Status */}

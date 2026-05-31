@@ -18,7 +18,6 @@ const roleData = [
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
   booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-  approval: ["edit"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -60,7 +59,6 @@ const moduleActions: Record<string, string[]> = {
 const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur-sales": {
     booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "comment", "print", "client-agreement"],
-    approval: ["edit"],
     customers: ["view", "create", "edit"],
     groups: ["view", "view-all", "create", "edit", "delete"],
     package: ["view"],
@@ -70,30 +68,21 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
   },
+  // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
     booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-    approval: ["edit"],
+    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     customers: ["view", "create", "edit", "delete"],
+    "finance-ar": ["view", "create", "edit", "delete"],
     groups: ["view", "view-all", "create", "edit", "delete"],
-    package: ["view", "create", "edit", "delete", "term-&-condition"],
+    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
-    "finance-ar": ["view"],
-    "settings-brands": ["view", "create", "edit", "delete"],
-    "settings-venues": ["view", "create", "edit", "delete"],
-    "settings-users": ["view", "create", "edit", "delete"],
-    "settings-education-level": ["view", "create", "edit", "delete"],
-    "settings-event-types": ["view", "create", "edit", "delete"],
-    "settings-order-status": ["view", "create", "edit", "delete"],
-    "settings-payment-methods": ["view", "create", "edit", "delete"],
-    "settings-role-permission": ["view", "edit"],
-    "settings-source-of-information": ["view", "create", "edit", "delete"],
+    "vendor-specialist": ["view", "create", "edit", "delete"],
     leads: ["view", "create", "edit", "delete"],
-    "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
-    approval: ["edit"],
     customers: ["view"],
     package: ["view"],
     vendor: ["view", "create", "edit"],
@@ -154,6 +143,7 @@ const REMOVED_MODULES = [
   "settings", "payment_methods", "role_permission", "source_of_information",
   "settings-groups", // renamed → "groups" (code uses module "groups", not "settings-groups")
   "settings-approval-flow", // approval flow is now hardcoded, no longer a DB-driven setting
+  "approval", // approve/reject authorization handled by role-matching in approval flow (manager → finance), not a permission toggle
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────

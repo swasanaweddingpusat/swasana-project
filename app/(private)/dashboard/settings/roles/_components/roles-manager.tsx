@@ -157,7 +157,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
   }, [permissions]);
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? null;
-  const isSuperAdmin = false; // All roles can be edited
+  // System super-admin bypasses all permission checks in the backend (hasPermission()),
+  // so its toggles are forced ON and locked here to reflect that — editing them is a no-op.
+  const isSuperAdmin = selectedRole?.isSystemRole === true;
   const currentPerms = selectedRoleId ? localPerms[selectedRoleId] ?? new Set<string>() : new Set<string>();
 
   // ─── Permission handlers ──────────────────────────────────────────────────
@@ -427,10 +429,17 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
           <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
             <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border', 'sticky', 'top-0', 'bg-background', 'z-10', 'rounded-t-lg')}>
               <div>
-                <h2 className={cn('text-sm', 'font-semibold', 'text-foreground')}>
+                <h2 className={cn('text-sm', 'font-semibold', 'text-foreground', 'flex', 'items-center', 'gap-2')}>
                   Permissions — <span>{selectedRole?.name ?? "—"}</span>
+                  {isSuperAdmin && (
+                    <span className={cn('inline-flex', 'items-center', 'gap-1', 'rounded-full', 'bg-muted', 'px-2', 'py-0.5', 'text-[10px]', 'font-medium', 'text-muted-foreground')}>
+                      <ShieldCheck weight="BoldDuotone" className={cn('h-3', 'w-3')} /> Akses penuh — terkunci
+                    </span>
+                  )}
                 </h2>
-                {selectedRole?.description && <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>{selectedRole.description}</p>}
+                {isSuperAdmin
+                  ? <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>Role sistem ini otomatis punya semua izin dan tidak bisa diubah.</p>
+                  : selectedRole?.description && <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>{selectedRole.description}</p>}
               </div>
               <div className={cn('flex', 'gap-2')}>
                 <Button size="sm" variant="outline" onClick={() => setShowAddModule(true)} className={cn('h-7', 'text-xs', 'gap-1')}>
@@ -472,7 +481,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               {(() => {
                 const actions = Array.from(moduleActions[mod]).sort();
                 const pids = actions.map((a) => permLookup[`${mod}:${a}`]).filter(Boolean);
-                const checkedCount = pids.filter((pid) => currentPerms.has(pid)).length;
+                const checkedCount = isSuperAdmin ? pids.length : pids.filter((pid) => currentPerms.has(pid)).length;
                 const allChecked = pids.length > 0 && checkedCount === pids.length;
                 const isOpen = openModules.has(mod);
 
@@ -486,8 +495,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                       </div>
                       {/* Toggle All */}
                       <Switch
-                        checked={allChecked}
+                        checked={isSuperAdmin || allChecked}
                         onCheckedChange={() => toggleAllForModule(mod)}
+                        disabled={isSuperAdmin}
                       />
 
                       {/* Module name */}
@@ -539,9 +549,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               <div className={cn('flex', 'items-center', 'gap-3', 'flex-1')}>
                                 {/* Toggle per permission */}
                                 <Switch
-                                  checked={checked}
+                                  checked={isSuperAdmin || checked}
                                   onCheckedChange={() => togglePermission(mod, action)}
-                                  disabled={!pid}
+                                  disabled={!pid || isSuperAdmin}
                                 />
 
                                 {/* Action name — inline edit */}

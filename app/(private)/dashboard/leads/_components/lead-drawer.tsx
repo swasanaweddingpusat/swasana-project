@@ -47,6 +47,7 @@ interface LeadDrawerProps {
 interface LeadFormValues {
   name: string;
   email: string;
+  address: string;
   category: "WEDDINGS" | "MICE";
   statusId: string;
   venueId: string;
@@ -70,6 +71,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 const DEFAULT_VALUES: LeadFormValues = {
   name: "",
   email: "",
+  address: "",
   category: "WEDDINGS",
   statusId: "",
   venueId: "",
@@ -85,7 +87,7 @@ const DEFAULT_VALUES: LeadFormValues = {
 // ── Draft persistence (create mode only) ──────────────────────────────────────
 const LEAD_DRAFT_KEY = "lead-draft-v1";
 
-type LeadDraft = { values: Partial<LeadFormValues>; contactNumbers: ContactNumber[] };
+type LeadDraft = { values: Partial<LeadFormValues>; contactNumbers: ContactNumber[]; bitrixId?: string };
 
 function hasDraftContent(d: LeadDraft | null): boolean {
   if (!d) return false;
@@ -105,9 +107,9 @@ function readLeadDraft(): LeadDraft | null {
   }
 }
 
-function persistLeadDraft(values: LeadFormValues, contactNumbers: ContactNumber[]) {
+function persistLeadDraft(values: LeadFormValues, contactNumbers: ContactNumber[], bitrixId: string) {
   if (typeof window === "undefined") return;
-  const draft: LeadDraft = { values, contactNumbers };
+  const draft: LeadDraft = { values, contactNumbers, bitrixId };
   if (hasDraftContent(draft)) {
     localStorage.setItem(LEAD_DRAFT_KEY, JSON.stringify(draft));
   } else {
@@ -142,6 +144,8 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
     fetchJson<Option[]>("/api/source-of-informations").then(setSourceOptions);
   }, []);
 
+  const [bitrixId, setBitrixId] = useState("");
+
   const form = useForm<LeadFormValues>({
     defaultValues: DEFAULT_VALUES,
   });
@@ -152,6 +156,8 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
 
   const watchedVenueId = form.watch("venueId");
   const watchedCategory = form.watch("category");
+  const watchedSourceId = form.watch("sourceOfInformationId");
+  const isBitrixSource = sourceOptions.find((o) => o.id === watchedSourceId)?.name.toLowerCase().includes("bitrix") ?? false;
 
   // ── Venue availability ───────────────────────────────────────────────────────
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -191,6 +197,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       form.reset({
         name: editLead.name,
         email: editLead.email ?? "",
+        address: editLead.address ?? "",
         category: editLead.category ?? "WEDDINGS",
         statusId: editLead.status.id,
         venueId: editLead.venue?.id ?? "",
@@ -205,14 +212,17 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
         notes: editLead.notes ?? "",
       });
       setContactNumbers(editLead.contactNumbers);
+      setBitrixId(editLead.bitrixId ?? "");
     } else {
       const draft = readLeadDraft();
       if (hasDraftContent(draft)) {
         form.reset({ ...DEFAULT_VALUES, ...draft!.values });
         setContactNumbers(draft!.contactNumbers ?? []);
+        setBitrixId(draft!.bitrixId ?? "");
       } else {
         form.reset(DEFAULT_VALUES);
         setContactNumbers([]);
+        setBitrixId("");
       }
     }
     setContactInput({ name: "", number: "" });
@@ -223,16 +233,16 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   useEffect(() => {
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
-      persistLeadDraft(values as LeadFormValues, contactNumbers);
+      persistLeadDraft(values as LeadFormValues, contactNumbers, bitrixId);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, contactNumbers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, contactNumbers, bitrixId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist draft on contact-number changes (create mode only)
+  // Persist draft on contact-number or bitrixId changes (create mode only)
   useEffect(() => {
     if (!open || isEdit) return;
-    persistLeadDraft(form.getValues(), contactNumbers);
-  }, [contactNumbers, open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistLeadDraft(form.getValues(), contactNumbers, bitrixId);
+  }, [contactNumbers, bitrixId, open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addContact() {
     const digits = contactInput.number.trim();
@@ -259,21 +269,27 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       toast.error("Minimal 1 nomor HP/WA wajib diisi.");
       return;
     }
+    if (isBitrixSource && !bitrixId.trim()) {
+      toast.error("Bitrix ID wajib diisi jika sumber informasi adalah Bitrix.");
+      return;
+    }
 
     const payload: CreateLeadInput = {
       name: values.name,
       contactNumbers,
       email: values.email || undefined,
-      eventDate: values.eventDate || undefined,
+      address: values.address || undefined,
+      eventDate: values.eventDate,
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       budgetRange: values.budgetRange || undefined,
       notes: values.notes || undefined,
       category: values.category,
-      venueId: values.venueId || null,
-      eventTypeId: values.eventTypeId || null,
-      sourceOfInformationId: values.sourceOfInformationId || null,
-      assignedToId: values.assignedToId || null,
+      venueId: values.venueId,
+      eventTypeId: values.eventTypeId,
+      sourceOfInformationId: values.sourceOfInformationId,
+      assignedToId: values.assignedToId,
       statusId: values.statusId,
+      bitrixId: isBitrixSource ? bitrixId || null : null,
     };
 
     const validated = createLeadSchema.safeParse(payload);
@@ -424,6 +440,25 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 )}
               />
 
+              {/* Alamat */}
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Alamat</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        rows={2}
+                        placeholder="Alamat lengkap (opsional)..."
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Status */}
               <FormField
                 control={form.control}
@@ -499,11 +534,11 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                   );
                   return (
                     <FormItem>
-                      <FormLabel>Event Type</FormLabel>
+                      <FormLabel>Event Type *</FormLabel>
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih event type (opsional)..." />
+                            <SelectValue placeholder="Pilih event type..." />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -526,12 +561,12 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 name="assignedToId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Assigned To (Sales)</FormLabel>
+                    <FormLabel>Assigned To (Sales) *</FormLabel>
                     <SearchableSelect
                       options={assignableUsers.map((u) => ({ id: u.id, name: u.fullName }))}
                       value={field.value}
                       onChange={field.onChange}
-                      placeholder="Pilih sales (opsional)..."
+                      placeholder="Pilih sales..."
                       searchPlaceholder="Cari sales..."
                       emptyText="Sales tidak ditemukan"
                     />
@@ -546,14 +581,14 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 name="venueId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Venue</FormLabel>
+                    <FormLabel>Venue *</FormLabel>
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih venue (opsional)..." />
+                          <SelectValue placeholder="Pilih venue..." />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -575,12 +610,16 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 name="sourceOfInformationId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Sumber Informasi</FormLabel>
+                    <FormLabel>Sumber Informasi *</FormLabel>
                     <SearchableSelect
                       options={sourceOptions}
                       value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Pilih sumber informasi"
+                      onChange={(id) => {
+                        field.onChange(id);
+                        const isBitrix = sourceOptions.find((o) => o.id === id)?.name.toLowerCase().includes("bitrix") ?? false;
+                        if (!isBitrix) setBitrixId("");
+                      }}
+                      placeholder="Pilih sumber informasi..."
                       searchPlaceholder="Cari sumber..."
                       emptyText="Tidak ada data"
                       onAdd={async (name) => {
@@ -602,29 +641,39 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 )}
               />
 
+              {/* Bitrix ID — hanya muncul jika sumber informasi adalah Bitrix */}
+              {isBitrixSource && (
+                <div>
+                  <FormLabel className="text-sm font-medium">Bitrix ID *</FormLabel>
+                  <Input
+                    placeholder="e.g. 12345"
+                    value={bitrixId}
+                    onChange={(e) => setBitrixId(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              )}
+
               {/* Tanggal Event */}
               <FormField
                 control={form.control}
                 name="eventDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tanggal Event</FormLabel>
+                    <FormLabel>Tanggal Event *</FormLabel>
                     <Popover>
                       <PopoverTrigger render={
                         <Button
                           variant="outline"
-                          disabled={!watchedVenueId}
                           className={cn(
                             "w-full justify-start text-left font-normal",
                             !field.value && "text-muted-foreground",
                           )}
                         >
                           <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                          {watchedVenueId
-                            ? (field.value
-                              ? format(new Date(field.value + "T00:00:00"), "PPP")
-                              : "Pilih tanggal event")
-                            : "Pilih venue terlebih dahulu"}
+                          {field.value
+                            ? format(new Date(field.value + "T00:00:00"), "PPP")
+                            : "Pilih tanggal event"}
                         </Button>
                       } />
                       <PopoverContent className="w-auto p-0" align="start">

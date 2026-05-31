@@ -1077,12 +1077,15 @@ model Lead {
   name           String
   contactNumbers Json   @default("[]") // Array of { label: string, number: string }
   email          String?
+  address        String?
   eventDate      DateTime?
   estimatedPax   Int?
   budgetRange    String?
   notes          String?
 
   category       EventCategory @default(WEDDINGS)
+
+  bitrixId       String?
 
   // FK relations
   venueId               String?

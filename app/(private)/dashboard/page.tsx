@@ -2,11 +2,15 @@ import { Metadata } from "next";
 import { ShieldCross } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { isSuperAdmin } from "@/lib/permissions";
 import { getDashboardData } from "@/lib/queries/dashboard";
+import { getDashboardCalendarEvents } from "@/lib/queries/calendar-events";
+import type { DataScope } from "@/types/user";
 import { SalesStatCards } from "./_components/sales-stat-cards";
 import { GroupAchievementSection } from "./_components/group-achievement-section";
 import { SalesLeaderboard } from "./_components/sales-leaderboard";
+import { CalendarWidget } from "./_components/calendar-widget";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -30,6 +34,22 @@ export default async function DashboardPage({
     isAdmin ? undefined : profileId,
     startDate,
     endDate,
+  );
+
+  // Calendar widget — super-admin sees all; others scoped to their dataScope.
+  let calendarScope: DataScope = "all";
+  if (!isAdmin && profileId) {
+    const profile = await db.profile.findUnique({
+      where: { id: profileId },
+      select: { dataScope: true },
+    });
+    calendarScope = (profile?.dataScope as DataScope) ?? "own";
+  }
+  const calendarEvents = await getDashboardCalendarEvents(
+    year,
+    month + 1,
+    isAdmin ? undefined : profileId,
+    calendarScope,
   );
 
   const subtitle = startDate.toLocaleDateString("id-ID", {
@@ -65,6 +85,9 @@ export default async function DashboardPage({
         <GroupAchievementSection groups={groups} />
         <SalesLeaderboard sales={salesLeaderboard} />
       </div>
+
+      {/* Calendar Event */}
+      <CalendarWidget events={calendarEvents} year={year} month={month + 1} />
     </div>
   );
 }

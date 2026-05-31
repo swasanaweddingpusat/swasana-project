@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { id as localeId } from "date-fns/locale";
 import { Drawer } from "@/components/shared/drawer";
 import {
   Form,
@@ -18,12 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import {
   SearchableSelect,
   type SearchableSelectOption,
 } from "@/components/ui/searchable-select";
@@ -34,7 +26,6 @@ import {
   TrashBinTrash,
   Refresh,
   ArrowRight,
-  Calendar as CalendarIcon,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { QuotationItem } from "./quotations-table";
@@ -213,6 +204,11 @@ function parseNumericInput(raw: string): number {
   return parseInt(raw.replace(/\D/g, ""), 10) || 0;
 }
 
+function normalizePhone(phone: string): string {
+  const stripped = phone.replace(/\s/g, "");
+  return stripped.startsWith("0") ? stripped.slice(1) : stripped;
+}
+
 function formatNumericDisplay(raw: string | number): string {
   const digits = String(raw).replace(/\D/g, "");
   if (!digits) return "";
@@ -322,11 +318,11 @@ export function QuotationDrawer({
       form.reset({
         leadId: lead?.id ?? "",
         clientName: editQuotation.leadName,
-        clientPhone: editQuotation.leadPhone,
+        clientPhone: normalizePhone(editQuotation.leadPhone),
         instansi: editQuotation.instansi ?? "",
         salesId: sales?.id ?? "",
         salesName: editQuotation.salesName,
-        salesPhone: editQuotation.salesPhone ?? "",
+        salesPhone: editQuotation.salesPhone ? normalizePhone(editQuotation.salesPhone) : "",
         eventName: editQuotation.eventType,
         details: editQuotation.details ?? "",
         time: editQuotation.time ?? "",
@@ -350,7 +346,7 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!selectedSales) return;
     form.setValue("salesName", selectedSales.name);
-    form.setValue("salesPhone", selectedSales.phone);
+    form.setValue("salesPhone", normalizePhone(selectedSales.phone));
   }, [watchedSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleNext() {
@@ -406,7 +402,7 @@ export function QuotationDrawer({
                             // pilih lead existing → auto-fill semua data terkait
                             form.setValue("leadId", lead.id);
                             field.onChange(lead.name);
-                            form.setValue("clientPhone", lead.phone);
+                            form.setValue("clientPhone", normalizePhone(lead.phone));
                             form.setValue("venue", lead.venue);
                             form.setValue("eventName", lead.eventType);
                             form.setValue("eventDate", lead.eventDate);
@@ -433,12 +429,20 @@ export function QuotationDrawer({
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>No. Hp Client</FormLabel>
                           <FormControl>
-                            <Input
-                              {...field}
-                              placeholder="No. HP client"
-                              inputMode="tel"
-                              className="w-full"
-                            />
+                            <div className="relative w-full">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none pointer-events-none">
+                                +62
+                              </span>
+                              <Input
+                                value={field.value}
+                                onChange={(e) =>
+                                  field.onChange(e.target.value.replace(/\D/g, ""))
+                                }
+                                placeholder="8xx xxxx xxxx"
+                                inputMode="tel"
+                                className="w-full pl-10"
+                              />
+                            </div>
                           </FormControl>
                         </FormItem>
                       )}
@@ -462,10 +466,10 @@ export function QuotationDrawer({
                   </div>
                 </div>
 
-                {/* Sales MICE */}
+                {/* Sales */}
                 <div className="border-t pt-4 space-y-3">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Sales MICE
+                    Sales
                   </p>
                   <FormField
                     control={form.control}
@@ -473,7 +477,7 @@ export function QuotationDrawer({
                     rules={{ required: "Sales wajib dipilih" }}
                     render={({ field }) => (
                       <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Sales MICE *</FormLabel>
+                        <FormLabel className={LABEL_CLASS}>Sales *</FormLabel>
                         <FormControl>
                           <SearchableSelect
                             options={SALES_OPTIONS}
@@ -488,7 +492,23 @@ export function QuotationDrawer({
                       </FormItem>
                     )}
                   />
-                  <ReadonlyField label="No. Hp Sales" value={watchedSalesPhone} />
+                  <FormItem className="w-full">
+                    <FormLabel className={LABEL_CLASS}>No. Hp Sales</FormLabel>
+                    <FormControl>
+                      <div className="relative w-full">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none pointer-events-none">
+                          +62
+                        </span>
+                        <Input
+                          value={watchedSalesPhone}
+                          readOnly
+                          placeholder="—"
+                          aria-readonly="true"
+                          className={cn("bg-muted text-muted-foreground pl-10", !watchedSalesPhone && "italic")}
+                        />
+                      </div>
+                    </FormControl>
+                  </FormItem>
                 </div>
 
                 {/* Event */}
@@ -496,7 +516,7 @@ export function QuotationDrawer({
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Detail Event
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-3">
                     <FormField
                       control={form.control}
                       name="eventName"
@@ -504,13 +524,10 @@ export function QuotationDrawer({
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>Event Name</FormLabel>
                           <FormControl>
-                            <SearchableSelect
-                              options={EVENT_OPTIONS}
-                              value={field.value}
-                              onChange={field.onChange}
-                              placeholder="Pilih / cari event..."
-                              searchPlaceholder="Cari event..."
-                              emptyText="Event tidak ditemukan"
+                            <Input
+                              {...field}
+                              placeholder="mis. Gala Dinner"
+                              className="w-full"
                             />
                           </FormControl>
                         </FormItem>
@@ -537,56 +554,15 @@ export function QuotationDrawer({
                     />
                   </div>
                   <div className="space-y-3">
-                    {/* Tanggal Event — calendar (full width) */}
                     <FormField
                       control={form.control}
                       name="eventDate"
                       render={({ field }) => (
-                        <FormItem className="flex w-full flex-col">
-                          <FormLabel className={LABEL_CLASS}>
-                            Tanggal Event
-                          </FormLabel>
-                          <Popover>
-                            <PopoverTrigger
-                              render={
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={cn(
-                                    "w-full justify-start text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                />
-                              }
-                            >
-                              <CalendarIcon
-                                weight="BoldDuotone"
-                                className="mr-2 h-4 w-4 shrink-0"
-                              />
-                              {field.value
-                                ? format(new Date(field.value), "d MMMM yyyy", {
-                                    locale: localeId,
-                                  })
-                                : "Pilih tanggal"}
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={
-                                  field.value ? new Date(field.value) : undefined
-                                }
-                                onSelect={(date) =>
-                                  field.onChange(
-                                    date ? format(date, "yyyy-MM-dd") : ""
-                                  )
-                                }
-                                defaultMonth={
-                                  field.value ? new Date(field.value) : undefined
-                                }
-                                autoFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
+                        <FormItem className="w-full">
+                          <FormLabel className={LABEL_CLASS}>Tanggal Event</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} className="w-full" />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
@@ -898,13 +874,23 @@ export function QuotationDrawer({
         {/* Footer */}
         <div className="sticky bottom-0 bg-background z-10">
           <div className="flex py-4 gap-2">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="flex-[40%] cursor-pointer text-destructive border-destructive hover:bg-destructive/10"
-            >
-              Batal
-            </Button>
+            {step === 1 ? (
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="flex-[40%] cursor-pointer text-destructive border-destructive hover:bg-destructive/10"
+              >
+                Batal
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setStep(1)}
+                className="flex-[40%] cursor-pointer"
+              >
+                Kembali
+              </Button>
+            )}
             {step === 1 ? (
               <Button
                 onClick={handleNext}

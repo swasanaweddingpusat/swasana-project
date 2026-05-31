@@ -30,7 +30,7 @@ export function LeadsTable() {
   const [editLead, setEditLead] = useState<LeadListItem | null>(null);
 
   const pageSize = 20;
-  const { data: leadsData, isLoading: leadsLoading } = useLeads({
+  const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching, refetch: refetchLeads } = useLeads({
     search: search.trim() || undefined,
     statusId: statusFilter !== "all" ? statusFilter : undefined,
     page: currentPage,
@@ -96,6 +96,10 @@ export function LeadsTable() {
     setCurrentPage(1);
   }
 
+  function handleRefresh() {
+    void refetchLeads();
+  }
+
   const statusCounts = statuses.map((s) => ({
     id: s.id,
     name: s.name,
@@ -117,6 +121,8 @@ export function LeadsTable() {
             statusCounts={statusCounts}
             totalFiltered={leadsData?.total ?? 0}
             onAdd={handleAdd}
+            onRefresh={handleRefresh}
+            isRefreshing={leadsFetching}
           />
 
           {effectiveViewMode === "list" && (

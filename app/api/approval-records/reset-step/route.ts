@@ -1,13 +1,13 @@
 import { db } from "@/lib/db";
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { auth } from "@/lib/auth";
 import { isSuperAdmin } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
 
 export async function POST(req: Request) {
-  const { session, response } = await requirePermissionForRoute({ module: "approval", action: "edit" });
-  if (response) return response;
+  const session = await auth();
+  if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!mutationLimiter.check(`reset-step:${session.user.id}`)) return rateLimitResponse();
 
   const isAdmin = await isSuperAdmin(session.user.roleId);
