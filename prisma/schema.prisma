@@ -132,7 +132,6 @@ model Profile {
   notifications           Notification[]
   bookingComments         BookingComment[]
   bookingCommentReads     BookingCommentRead[]
-  approvalSteps           ApprovalFlowStep[]
   approvalRecordsCreated  ApprovalRecord[]           @relation("ApprovalRecordCreator")
   approvalRecordsUpdated  ApprovalRecord[]           @relation("ApprovalRecordUpdater")
   approvalStepApprovals   ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
@@ -158,7 +157,6 @@ model Role {
   createdAt           DateTime             @default(now())
   profiles            Profile[]
   rolePermissions     RolePermission[]
-  approvalSteps       ApprovalFlowStep[]
   approvalRecordSteps ApprovalRecordStep[] @relation("ApprovalRecordStepRole")
 
   @@map("roles")
@@ -957,38 +955,7 @@ model ClientAgreement {
   @@map("client_agreements")
 }
 
-// ─── Approval Flow ────────────────────────────────────────────────────────────
-
-model ApprovalFlow {
-  id        String             @id @default(uuid())
-  module    String             @unique
-  name      String
-  active    Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  steps     ApprovalFlowStep[]
-
-  @@map("approval_flows")
-}
-
-model ApprovalFlowStep {
-  id             String       @id @default(uuid())
-  flowId         String
-  sortOrder      Int
-  approverType   String // "role" | "user"
-  approverRoleId String?
-  approverUserId String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  flow           ApprovalFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  approverRole   Role?        @relation(fields: [approverRoleId], references: [id], onDelete: SetNull)
-  approverUser   Profile?     @relation(fields: [approverUserId], references: [id], onDelete: SetNull)
-
-  @@index([flowId])
-  @@index([approverRoleId])
-  @@index([approverUserId])
-  @@map("approval_flow_steps")
-}
+// ─── Approval Records ──────────────────────────────────────────────────────
 
 model ApprovalRecord {
   id          String               @id @default(uuid())
@@ -1114,6 +1081,8 @@ model Lead {
   estimatedPax   Int?
   budgetRange    String?
   notes          String?
+
+  category       EventCategory @default(WEDDINGS)
 
   // FK relations
   venueId               String?

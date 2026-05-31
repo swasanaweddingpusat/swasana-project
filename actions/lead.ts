@@ -41,6 +41,7 @@ export async function createLead(data: CreateLeadInput) {
     estimatedPax,
     budgetRange,
     notes,
+    category,
     venueId,
     packageId,
     eventTypeId,
@@ -60,6 +61,7 @@ export async function createLead(data: CreateLeadInput) {
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
           notes: notes || null,
+          category,
           venueId: venueId || null,
           packageId: packageId || null,
           eventTypeId: eventTypeId || null,
@@ -131,6 +133,7 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.sourceOfInformationId !== undefined && {
             sourceOfInformationId: fields.sourceOfInformationId || null,
           }),
+          ...(fields.category !== undefined && { category: fields.category }),
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
         },

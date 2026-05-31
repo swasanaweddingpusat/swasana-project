@@ -12,6 +12,7 @@ const leadSelect = {
   estimatedPax: true,
   budgetRange: true,
   notes: true,
+  category: true,
   convertedAt: true,
   createdAt: true,
   updatedAt: true,

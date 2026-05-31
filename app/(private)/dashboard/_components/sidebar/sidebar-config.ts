@@ -66,7 +66,6 @@ export const SETTINGS_MODULES = [
   "settings-education-level",
   "settings-event-types",
   "settings-order-status",
-  "settings-approval-flow",
   "settings-payment-methods",
   "settings-role-permission",
   "settings-source-of-information",
@@ -98,12 +97,6 @@ export const navItems: NavItem[] = [
     permission: { module: "customers", action: "view" },
   },
   {
-    name: "Groups",
-    href: "/dashboard/groups",
-    icon: UsersGroupRounded,
-    permission: { module: "groups", action: "view" },
-  },
-  {
     name: "Booking Weddings",
     href: "/dashboard/booking-weddings",
     icon: Ticket,
@@ -126,6 +119,12 @@ export const navItems: NavItem[] = [
     href: "/dashboard/purchase-order",
     icon: Bill,
     permission: { module: "vendor-specialist", action: "view" },
+  },
+  {
+    name: "Groups",
+    href: "/dashboard/groups",
+    icon: UsersGroupRounded,
+    permission: { module: "groups", action: "view" },
   },
   {
     name: "Finance",

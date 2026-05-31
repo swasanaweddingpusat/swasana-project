@@ -1,0 +1,1 @@
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "category" "EventCategory" NOT NULL DEFAULT 'WEDDINGS';

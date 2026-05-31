@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { format, startOfMonth } from "date-fns";
 import { Drawer } from "@/components/shared/drawer";
 import {
   Form,
@@ -16,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -25,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { CloseCircle } from "@solar-icons/react";
+import { Calendar as CalendarSolarIcon, CloseCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { createLeadSchema } from "@/lib/validations/lead";
 import type { CreateLeadInput } from "@/lib/validations/lead";
@@ -45,9 +47,9 @@ interface LeadDrawerProps {
 interface LeadFormValues {
   name: string;
   email: string;
+  category: "WEDDINGS" | "MICE";
   statusId: string;
   venueId: string;
-  packageId: string;
   eventTypeId: string;
   sourceOfInformationId: string;
   assignedToId: string;
@@ -68,9 +70,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 const DEFAULT_VALUES: LeadFormValues = {
   name: "",
   email: "",
+  category: "WEDDINGS",
   statusId: "",
   venueId: "",
-  packageId: "",
   eventTypeId: "",
   sourceOfInformationId: "",
   assignedToId: "",
@@ -149,19 +151,38 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
   const watchedVenueId = form.watch("venueId");
+  const watchedCategory = form.watch("category");
 
-  const [packages, setPackages] = useState<Option[]>([]);
+  // ── Venue availability ───────────────────────────────────────────────────────
+  type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
+  const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
+  const [availLoading, setAvailLoading] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
+
   useEffect(() => {
     if (!watchedVenueId) {
-      setPackages([]);
+      setAvailability({});
       return;
     }
-    fetchJson<{ data: Array<{ id: string; packageName: string }> }>(
-      `/api/packages?venueId=${watchedVenueId}&page=1&limit=100`
-    ).then((res) => {
-      setPackages(res.data?.map((p) => ({ id: p.id, name: p.packageName })) ?? []);
-    });
-  }, [watchedVenueId]);
+    setAvailLoading(true);
+    const month = format(startOfMonth(visibleMonth), "yyyy-MM");
+    const params = new URLSearchParams({ month });
+    fetch(`/api/venues/${watchedVenueId}/availability?${params}`)
+      .then((r) => r.json())
+      .then((data: Record<string, DayAvail>) => setAvailability(data))
+      .catch(() => setAvailability({}))
+      .finally(() => setAvailLoading(false));
+  }, [watchedVenueId, visibleMonth]);
+
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
+    const key = format(d, "yyyy-MM-dd");
+    const a = availability[key];
+    if (!a) return null;
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -170,9 +191,9 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       form.reset({
         name: editLead.name,
         email: editLead.email ?? "",
+        category: editLead.category ?? "WEDDINGS",
         statusId: editLead.status.id,
         venueId: editLead.venue?.id ?? "",
-        packageId: editLead.package?.id ?? "",
         eventTypeId: editLead.eventType?.id ?? "",
         sourceOfInformationId: editLead.sourceOfInformation?.id ?? "",
         assignedToId: editLead.assignedTo?.id ?? "",
@@ -189,7 +210,6 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       if (hasDraftContent(draft)) {
         form.reset({ ...DEFAULT_VALUES, ...draft!.values });
         setContactNumbers(draft!.contactNumbers ?? []);
-        toast.info("Draft sebelumnya dipulihkan");
       } else {
         form.reset(DEFAULT_VALUES);
         setContactNumbers([]);
@@ -248,8 +268,8 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       budgetRange: values.budgetRange || undefined,
       notes: values.notes || undefined,
+      category: values.category,
       venueId: values.venueId || null,
-      packageId: values.packageId || null,
       eventTypeId: values.eventTypeId || null,
       sourceOfInformationId: values.sourceOfInformationId || null,
       assignedToId: values.assignedToId || null,
@@ -440,6 +460,66 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 )}
               />
 
+              {/* Tipe Booking */}
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipe Booking *</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => {
+                        field.onChange(v);
+                        form.setValue("eventTypeId", "");
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih tipe booking..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="WEDDINGS">Wedding</SelectItem>
+                        <SelectItem value="MICE">MICE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Event Type */}
+              <FormField
+                control={form.control}
+                name="eventTypeId"
+                render={({ field }) => {
+                  const filteredEventTypes = eventTypes.filter(
+                    (et) => et.category === watchedCategory,
+                  );
+                  return (
+                    <FormItem>
+                      <FormLabel>Event Type</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Pilih event type (opsional)..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredEventTypes.map((et) => (
+                            <SelectItem key={et.id} value={et.id}>
+                              {et.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
               {/* Assigned To */}
               <FormField
                 control={form.control}
@@ -469,10 +549,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                     <FormLabel>Venue</FormLabel>
                     <Select
                       value={field.value}
-                      onValueChange={(v) => {
-                        field.onChange(v);
-                        form.setValue("packageId", "");
-                      }}
+                      onValueChange={field.onChange}
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -483,69 +560,6 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                         {venues.map((v) => (
                           <SelectItem key={v.id} value={v.id}>
                             {v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Paket */}
-              {watchedVenueId && (
-                <FormField
-                  control={form.control}
-                  name="packageId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Paket</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={packages.length === 0}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih paket (opsional)..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {packages.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              {/* Event Type */}
-              <FormField
-                control={form.control}
-                name="eventTypeId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Event Type</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih event type (opsional)..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {eventTypes.map((et) => (
-                          <SelectItem key={et.id} value={et.id}>
-                            <span className="flex items-center gap-2">
-                              {et.name}
-                              <span className="text-[10px] text-muted-foreground">
-                                {et.category === "MICE" ? "(MICE)" : "(Wedding)"}
-                              </span>
-                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -595,9 +609,65 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tanggal Event</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="date" />
-                    </FormControl>
+                    <Popover>
+                      <PopoverTrigger render={
+                        <Button
+                          variant="outline"
+                          disabled={!watchedVenueId}
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !field.value && "text-muted-foreground",
+                          )}
+                        >
+                          <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                          {watchedVenueId
+                            ? (field.value
+                              ? format(new Date(field.value + "T00:00:00"), "PPP")
+                              : "Pilih tanggal event")
+                            : "Pilih venue terlebih dahulu"}
+                        </Button>
+                      } />
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          captionLayout="dropdown"
+                          selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const y = date.getFullYear();
+                              const m = String(date.getMonth() + 1).padStart(2, "0");
+                              const d = String(date.getDate()).padStart(2, "0");
+                              field.onChange(`${y}-${m}-${d}`);
+                            } else {
+                              field.onChange("");
+                            }
+                          }}
+                          disabled={(d) => getDateStatus(d) === "unavailable"}
+                          fromYear={new Date().getFullYear() - 10}
+                          toYear={new Date().getFullYear() + 5}
+                          defaultMonth={
+                            field.value ? new Date(field.value + "T00:00:00") : new Date()
+                          }
+                          onMonthChange={setVisibleMonth}
+                          modifiers={{
+                            available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                            partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                            unavailable: (d) =>
+                              !!watchedVenueId && getDateStatus(d) === "unavailable",
+                          }}
+                          modifiersClassNames={{
+                            available: "day-available",
+                            partial: "day-partial",
+                            unavailable: "day-unavailable",
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {availLoading && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Mengecek ketersediaan...
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
