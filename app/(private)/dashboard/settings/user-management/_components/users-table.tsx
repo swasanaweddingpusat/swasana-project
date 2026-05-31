@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -32,6 +33,55 @@ import {
   CloseCircle, UserPlus, Filter, Refresh,
 } from "@solar-icons/react";
 
+// ─── Skeleton Components ───────────────────────────────────────────────────────
+
+const ROWS_PER_PAGE = 10;
+
+function SkeletonTableBody({ rows = ROWS_PER_PAGE }: { rows?: number }) {
+  return (
+    <TableBody>
+      {Array.from({ length: rows }).map((_, i) => (
+        <TableRow key={i} className="border-b border-gray-100">
+          <TableCell className="px-4 py-2.5">
+            <Skeleton className="h-4 w-4 rounded-sm" />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <Skeleton className="h-4 w-5 rounded" />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-7 w-7 rounded-full shrink-0" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 rounded" style={{ width: `${80 + (i % 5) * 16}px` }} />
+              </div>
+            </div>
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <Skeleton className="h-3.5 rounded" style={{ width: `${100 + (i % 4) * 20}px` }} />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <Skeleton className="h-5 w-14 rounded-full" />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <Skeleton className="h-3.5 w-24 rounded" />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </TableCell>
+          <TableCell className="px-2 py-2.5">
+            <div className="flex items-center justify-end">
+              <Skeleton className="h-6 w-6 rounded-md" />
+            </div>
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const getRoleBadgeClass = () => "bg-secondary text-secondary-foreground";
@@ -54,7 +104,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
   const [statusFilter, setStatusFilterRaw] = useState("");
   const [searchQuery, setSearchQueryRaw] = useState("");
 
-  const rowsPerPage = 10;
+  const rowsPerPage = ROWS_PER_PAGE;
 
   const setRoleFilter = (v: string) => { setRoleFilterRaw(v); setPage(1); };
   const setStatusFilter = (v: string) => { setStatusFilterRaw(v); setPage(1); };
@@ -68,7 +118,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
     limit: rowsPerPage,
   };
 
-  const { data, refetch, isRefetching } = useUsers(initialData, filters);
+  const { data, refetch, isRefetching, isLoading, isFetching } = useUsers(initialData, filters);
   const users: UserQueryItem[] = useMemo(() => data?.users ?? [], [data]);
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / rowsPerPage);
@@ -150,7 +200,56 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
     setIsBulkDeleting(false);
   };
 
-  // Skeleton is handled by loading.tsx — no need for isMounted check
+  // Initial load: full skeleton card (no data yet, no header to show)
+  if (isLoading) {
+    return (
+      <Card className={cn('p-0', 'shadow-none')}>
+        <CardContent className="p-0">
+          <div className={cn('px-6', 'py-4', 'space-y-3')}>
+            <div className={cn('flex', 'items-center', 'justify-between')}>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-24 rounded" />
+                <Skeleton className="h-5 w-28 rounded-full" />
+              </div>
+              <Skeleton className="h-8 w-28 rounded-lg" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 flex-1 lg:flex-none lg:w-64 rounded-lg" />
+              <Skeleton className="h-8 w-28 rounded-lg hidden lg:block" />
+              <Skeleton className="h-8 w-28 rounded-lg hidden lg:block" />
+            </div>
+          </div>
+          <div className={cn('relative', 'overflow-x-auto', 'w-full')}>
+            <Table className={cn('min-w-full', 'text-xs')}>
+              <TableHeader>
+                <TableRow className={cn('border-b-2', 'border-border', 'bg-secondary')}>
+                  <TableHead className="px-4 py-2.5"><Skeleton className="h-4 w-4 rounded-sm" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-5 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-12 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-12 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-10 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-20 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-24 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5"><Skeleton className="h-3.5 w-14 rounded" /></TableHead>
+                  <TableHead className="px-2 py-2.5" />
+                </TableRow>
+              </TableHeader>
+              <SkeletonTableBody rows={ROWS_PER_PAGE} />
+            </Table>
+          </div>
+          <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
+            <Skeleton className="h-8 w-24 rounded-lg" />
+            <div className="flex items-center gap-1">
+              <Skeleton className="h-6 w-8 rounded-md" />
+              <Skeleton className="h-6 w-8 rounded-md" />
+              <Skeleton className="h-6 w-8 rounded-md" />
+            </div>
+            <Skeleton className="h-8 w-16 rounded-lg" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div>
@@ -235,7 +334,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
 
           {/* Table */}
           <div className={cn('relative', 'overflow-x-auto', 'w-full')}>
-            {paginatedUsers.length === 0 ? (
+            {!isFetching && paginatedUsers.length === 0 ? (
               <div className={cn('flex', 'justify-center', 'items-center', 'py-8')}>
                 <div className={cn('text-xs', 'text-gray-500')}>No users found</div>
               </div>
@@ -256,6 +355,9 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs', 'text-right')}></TableHead>
                   </TableRow>
                 </TableHeader>
+                {isFetching ? (
+                  <SkeletonTableBody rows={Math.max(paginatedUsers.length, ROWS_PER_PAGE)} />
+                ) : (
                 <TableBody>
                   {paginatedUsers.map((user, index) => {
                     const roleName = user.profile?.role?.name ?? "";
@@ -331,6 +433,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                     );
                   })}
                 </TableBody>
+                )}
               </Table>
             )}
           </div>

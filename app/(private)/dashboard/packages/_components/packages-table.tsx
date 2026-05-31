@@ -461,7 +461,7 @@ export function PackagesTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'py-4', 'border-b')}>
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'pb-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>

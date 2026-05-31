@@ -1,4 +1,5 @@
 import { prisma } from "./_client";
+import { resolveApprovalSteps } from "../../lib/approval-flows";
 
 export async function seedPackages() {
   // Truncate approval data for packages & bookings (steps cascade from records)
@@ -27,11 +28,8 @@ export async function seedPackages() {
   const adminUser = await prisma.user.findUnique({ where: { email: "admin@swasana.com" } });
   const adminProfile = adminUser ? await prisma.profile.findUnique({ where: { userId: adminUser.id } }) : null;
 
-  // Get approval flow for package
-  const flow = await prisma.approvalFlow.findUnique({
-    where: { module: "package" },
-    include: { steps: { orderBy: { sortOrder: "asc" } } },
-  });
+  // Get hardcoded approval flow for package (Manager → Finance)
+  const flow = await resolveApprovalSteps("package");
 
   type PackageSeed = { packageName: string; pax: number; termAndCondition?: string; vendorItems?: { categoryName: string; itemText: string }[]; internalItems?: { itemName: string; itemDescription: string }[] };
 
@@ -478,19 +476,19 @@ export async function seedPackages() {
       await prisma.packageCategoryPrice.create({ data: { packageId: created.id, categoryName: catPrices[ci].categoryName, basePrice: catPrices[ci].basePrice, sortOrder: ci, isShow: SHOW_CATEGORIES.has(catPrices[ci].categoryName) } });
     }
 
-    // Create approval record if flow exists and sales profile exists
-    if (flow && flow.steps.length > 0 && salesProfile) {
+    // Create approval record if flow steps resolved and sales profile exists
+    if (flow && flow.length > 0 && salesProfile) {
       const approver = adminProfile ?? salesProfile;
       const record = await prisma.approvalRecord.create({
         data: { module: "package", entityId: created.id, status: adminProfile ? "approved" : "pending", createdById: salesProfile.id },
       });
 
-      for (let i = 0; i < flow.steps.length; i++) {
-        const step = flow.steps[i];
+      for (let i = 0; i < flow.length; i++) {
+        const step = flow[i];
         await prisma.approvalRecordStep.create({
           data: {
             recordId: record.id, stepOrder: step.sortOrder, approverType: step.approverType,
-            approverRoleId: step.approverRoleId, approverUserId: step.approverUserId,
+            approverRoleId: step.approverRoleId, approverUserId: null,
             status: "approved",
             decidedById: approver.id,
             decidedAt: new Date(),

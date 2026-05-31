@@ -66,7 +66,6 @@ export const SETTINGS_MODULES = [
   "settings-education-level",
   "settings-event-types",
   "settings-order-status",
-  "settings-approval-flow",
   "settings-payment-methods",
   "settings-role-permission",
   "settings-source-of-information",
