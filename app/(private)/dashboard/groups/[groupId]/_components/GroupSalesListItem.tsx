@@ -148,7 +148,7 @@ export function GroupSalesListItem({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onEditTarget(member)}>
-                <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5 mr-2" /> Edit Target
+                <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5 mr-2 text-primary" /> Edit Target
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"

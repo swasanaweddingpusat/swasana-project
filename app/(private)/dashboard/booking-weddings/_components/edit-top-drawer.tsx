@@ -242,7 +242,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                 className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
               />
               <button type="button" onClick={() => setDiscountEditing((p) => !p)} className="shrink-0 text-muted-foreground hover:text-foreground">
-                <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
+                <Pen weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </div>
             <Input
@@ -298,7 +298,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                         )}
                         {terms.length > 1 && !locked && (
                           <button type="button" onClick={() => setTerms((prev) => prev.filter((t) => t.id !== term.id))} className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-9 min-w-9">
-                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
                           </button>
                         )}
                       </div>
@@ -320,7 +320,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                         <Popover>
                           <PopoverTrigger render={
                             <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !term.dueDate && "text-muted-foreground")} disabled={locked}>
-                              <CalendarIcon weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4")} />
+                              <CalendarIcon weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-muted-foreground")} />
                               {term.dueDate ? format(new Date(term.dueDate), "dd MMM yyyy") : "Select Date"}
                             </Button>
                           } />
@@ -350,7 +350,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                               }} />
                             );
                           }
-                          return <FileText weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "shrink-0")} />;
+                          return <FileText weight="BoldDuotone" className={cn("h-3.5", "w-3.5", "shrink-0", "text-muted-foreground")} />;
                         })()}
                         {(pendingFiles[term.id] || term.paymentEvidence) ? (
                           <button type="button" className={cn("relative", "z-10", "flex-1", "truncate", "text-left", "hover:underline")} onClick={(e) => { e.stopPropagation(); const file = pendingFiles[term.id]; if (file) { const url = URL.createObjectURL(file); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); } else if (term.paymentEvidence) { window.open(toFullUrl(term.paymentEvidence), "_blank"); } }}>{pendingFiles[term.id]?.name ?? term.paymentEvidence?.split("/").pop()}</button>
@@ -376,7 +376,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                           <button type="button" onClick={toggleExpand} className="flex items-center gap-2 w-full text-left text-xs text-muted-foreground hover:text-foreground">
                             <AltArrowDown weight="BoldDuotone" className={cn("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")} />
                             <span>Pembayaran Partial ({payments.length})</span>
-                            <span className={cn("ml-auto font-medium", remaining > 0 ? "text-orange-600" : remaining === 0 ? "text-foreground" : "text-destructive")}>Sisa: Rp{fmtRp(Math.abs(remaining))}{remaining === 0 ? " ✓" : ""}</span>
+                            <span className={cn("ml-auto font-medium", remaining > 0 ? "text-muted-foreground" : remaining === 0 ? "text-foreground" : "text-destructive")}>Sisa: Rp{fmtRp(Math.abs(remaining))}{remaining === 0 ? " ✓" : ""}</span>
                           </button>
                           {isExpanded && (
                           <div className="space-y-2 ml-2 pl-3 border-l-2 border-border">
@@ -387,10 +387,10 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                                 <span className="text-xs font-medium text-muted-foreground shrink-0">#{pi + 1}</span>
                                 <Input value={p.amount ? fmtRp(p.amount) : ""} onChange={(e) => { const n = parseInt(e.target.value.replace(/\D/g, "")) || 0; setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, amount: n } : x) })); }} placeholder="Nominal" inputMode="numeric" className="h-8 text-xs flex-1 min-w-0" />
                                 <Popover>
-                                  <PopoverTrigger render={<Button variant="outline" className={cn("h-8 text-xs px-2 shrink-0", !p.paidAt && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="h-3 w-3 mr-1" />{p.paidAt ? format(new Date(p.paidAt), "dd MMM yy") : "Tgl"}</Button>} />
+                                  <PopoverTrigger render={<Button variant="outline" className={cn("h-8 text-xs px-2 shrink-0", !p.paidAt && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="h-3 w-3 mr-1 text-muted-foreground" />{p.paidAt ? format(new Date(p.paidAt), "dd MMM yy") : "Tgl"}</Button>} />
                                   <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={p.paidAt ? new Date(p.paidAt) : undefined} onSelect={(d) => setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).map((x) => x.tempId === p.tempId ? { ...x, paidAt: d ? toLocalISO(d) : "" } : x) }))} /></PopoverContent>
                                 </Popover>
-                                <button type="button" className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-8 min-w-8" onClick={async () => { if (p.dbId) { const r = await deletePartialPayment(p.dbId); if (!r.success) { toast.error(r.error); return; } toast.success("Pembayaran dihapus"); } setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).filter((x) => x.tempId !== p.tempId) })); }}><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>
+                                <button type="button" className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-8 min-w-8" onClick={async () => { if (p.dbId) { const r = await deletePartialPayment(p.dbId); if (!r.success) { toast.error(r.error); return; } toast.success("Pembayaran dihapus"); } setPartialPayments((prev) => ({ ...prev, [term.id]: (prev[term.id] ?? []).filter((x) => x.tempId !== p.tempId) })); }}><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" /></button>
                               </div>
                               {/* Row 2: Upload bukti */}
                               <div className={cn("relative", "flex", "items-center", "gap-2", "px-2", "py-1.5", "border", "rounded-md", "bg-background", "text-muted-foreground", "cursor-pointer", "hover:bg-muted/30", "text-xs")}>
@@ -400,7 +400,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                                     else if (p.evidence) { const url = URL.createObjectURL(p.evidence); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }
                                   }} />
                                 ) : (
-                                  <FileText weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                                  <FileText weight="BoldDuotone" className="h-3 w-3 shrink-0 text-muted-foreground" />
                                 )}
                                 {p.evidence ? (
                                   <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); if (typeof p.evidence === "string") { window.open(toFullUrl(p.evidence), "_blank"); } else if (p.evidence) { const url = URL.createObjectURL(p.evidence); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); } }}>{typeof p.evidence === "string" ? p.evidence.split("/").pop() : p.evidence.name}</button>
@@ -415,7 +415,7 @@ export function EditTopDrawer({ isOpen, onClose, bookingId, customerName, initia
                             </div>
                           ))}
                           <div className="flex items-center justify-end">
-                            <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setPartialPayments((prev) => ({ ...prev, [term.id]: [...(prev[term.id] ?? []), { tempId: `new-${Date.now()}`, amount: 0, paidAt: toLocalISO(new Date()), evidence: null, notes: "" }] }))}><AddCircle weight="BoldDuotone" className="h-3 w-3" /> Tambah Pembayaran</button>
+                            <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setPartialPayments((prev) => ({ ...prev, [term.id]: [...(prev[term.id] ?? []), { tempId: `new-${Date.now()}`, amount: 0, paidAt: toLocalISO(new Date()), evidence: null, notes: "" }] }))}><AddCircle weight="BoldDuotone" className="h-3 w-3 text-muted-foreground" /> Tambah Pembayaran</button>
                           </div>
                           </div>
                           )}

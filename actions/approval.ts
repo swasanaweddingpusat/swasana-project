@@ -34,6 +34,17 @@ export async function approveStep(stepId: string, signature?: string | null) {
       ? allSteps.filter((s) => s.status === "pending" && s.approverType !== "client")
       : [step];
 
+    // Enforce step order: for non-super-admin, all steps with a lower stepOrder must
+    // already be approved before the target step can be approved.
+    if (!isSuperAdmin) {
+      const blockedByPrior = allSteps.some(
+        (s) => s.stepOrder < step.stepOrder && s.status !== "approved"
+      );
+      if (blockedByPrior) {
+        return { success: false as const, error: "Langkah sebelumnya belum disetujui" };
+      }
+    }
+
     const allApprovedAfter = allSteps.every((s) =>
       stepsToApprove.some((a) => a.id === s.id) ? true : s.status === "approved"
     );

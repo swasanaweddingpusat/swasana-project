@@ -28,27 +28,27 @@ import { BookingDetailModal } from "@/app/(private)/dashboard/booking-weddings/_
 import type { BookingsResult, BookingListItem, BookingDetail } from "@/lib/queries/bookings";
 
 const STATUS_DOT: Record<string, string> = {
-  Confirmed: "bg-green-500",
-  Uploaded: "bg-blue-500",
-  Pending: "bg-orange-400",
+  Confirmed: "bg-primary",
+  Uploaded: "bg-primary/60",
+  Pending: "bg-muted-foreground/60",
   Rejected: "bg-destructive",
   Canceled: "bg-muted-foreground",
   Lost: "bg-muted-foreground",
 };
 
 const STATUS_TEXT: Record<string, string> = {
-  Confirmed: "text-green-600 border-border",
-  Uploaded: "text-blue-600 border-border",
-  Pending: "text-orange-500 border-border",
+  Confirmed: "text-primary border-border",
+  Uploaded: "text-primary/70 border-border",
+  Pending: "text-muted-foreground border-border",
   Rejected: "text-destructive border-destructive/30",
   Canceled: "text-muted-foreground border-border",
   Lost: "text-muted-foreground border-border",
 };
 
 const SESSION_STYLE: Record<string, string> = {
-  morning: "bg-muted text-amber-600",
-  evening: "bg-muted text-indigo-600",
-  fullday: "bg-muted text-emerald-600",
+  morning: "bg-muted text-foreground/70",
+  evening: "bg-muted text-foreground/70",
+  fullday: "bg-muted text-foreground/70",
 };
 
 const SESSION_LABEL: Record<string, string> = {

@@ -169,7 +169,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
                 <div className={cn('flex', 'items-center', 'justify-between')}>
                   <span className={cn('text-xs', 'font-medium', 'text-muted-foreground')}>Rekening {idx + 1}</span>
                   <button className={cn('p-1', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => setPaymentMethods((p) => p.filter((_, i) => i !== idx))}>
-                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-red-500')} />
+                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'text-destructive')} />
                   </button>
                 </div>
                 <Input value={pm.bankName} onChange={(e) => updatePM(idx, "bankName", e.target.value)} placeholder="Nama Bank (BCA, Mandiri, dll)" className={cn('h-8', 'text-xs')} />
@@ -180,7 +180,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
           </div>
         </div>
 
-        <div className={cn('sticky', 'bottom-0', 'bg-white', 'border-t', 'pt-4', 'mt-4')}>
+        <div className={cn('sticky', 'bottom-0', 'bg-background', 'border-t', 'border-border', 'pt-4', 'mt-4')}>
           <Button onClick={handleSave} disabled={saving || !name.trim() || !categoryId} className={cn('w-full', 'cursor-pointer')}>
             {saving ? "Menyimpan..." : isEdit ? "Simpan Perubahan" : "Tambah Vendor"}
           </Button>

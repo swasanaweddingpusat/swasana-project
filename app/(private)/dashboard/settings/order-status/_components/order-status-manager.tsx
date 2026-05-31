@@ -107,7 +107,7 @@ export function OrderStatusManager({ initialData }: Props) {
                           )}
                           {(can("settings-order-status", "delete") || isAdmin) && (
                             <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
                             </button>
                           )}
                         </div>

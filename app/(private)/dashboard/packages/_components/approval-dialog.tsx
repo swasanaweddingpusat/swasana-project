@@ -108,7 +108,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
           <div className="space-y-4">
             {/* Creator info */}
             <div className={cn('flex', 'items-center', 'gap-3', 'p-3', 'rounded-lg', 'border', 'bg-muted/30')}>
-              <div className={cn('flex', 'items-center', 'justify-center', 'h-7', 'w-7', 'rounded-full', 'bg-black', 'text-white', 'shrink-0')}>
+              <div className={cn('flex', 'items-center', 'justify-center', 'h-7', 'w-7', 'rounded-full', 'bg-primary', 'text-primary-foreground', 'shrink-0')}>
                 <PenNewSquare weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
               </div>
               <div className={cn('flex-1', 'min-w-0')}>
@@ -137,7 +137,7 @@ export function ApprovalDialog({ open, onClose, packageId, packageName, userProf
                 <div key={step.id} className={cn("flex items-center gap-3 p-3 rounded-lg border", step.status === "approved" && "bg-muted/50", step.status === "rejected" && "bg-destructive/5 border-destructive/20")}>
                   <div className={cn(
                     "flex items-center justify-center h-7 w-7 rounded-full shrink-0",
-                    step.status === "approved" && "bg-black text-white",
+                    step.status === "approved" && "bg-primary text-primary-foreground",
                     step.status === "rejected" && "bg-destructive text-white",
                     step.status === "pending" && "bg-muted text-muted-foreground",
                   )}>

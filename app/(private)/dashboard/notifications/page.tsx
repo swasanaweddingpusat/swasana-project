@@ -59,9 +59,9 @@ export default function NotificationsPage() {
       {/* Header */}
       <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'justify-between', 'gap-3')}>
         <div className={cn('flex', 'items-center', 'gap-3')}>
-          <h2 className={cn('text-lg', 'font-bold', 'text-gray-900')}>Notifikasi</h2>
+          <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Notifikasi</h2>
           {unreadCount > 0 && (
-            <span className={cn('text-sm', 'text-gray-500', 'bg-gray-100', 'border', 'border-gray-200', 'rounded-full', 'px-3', 'py-0.5')}>
+            <span className={cn('text-sm', 'text-muted-foreground', 'bg-muted', 'border', 'border-border', 'rounded-full', 'px-3', 'py-0.5')}>
               {unreadCount} belum dibaca
             </span>
           )}
@@ -70,11 +70,11 @@ export default function NotificationsPage() {
           {/* Filter tabs */}
           <div className={cn('flex', 'border', 'border-gray-200', 'rounded-lg', 'overflow-hidden')}>
             <button type="button" onClick={() => setFilter("all")}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer", filter === "all" ? "bg-primary text-primary-foreground" : "bg-white text-gray-600 hover:bg-gray-50")}>
+              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer", filter === "all" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent")}>
               Semua
             </button>
             <button type="button" onClick={() => setFilter("unread")}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer border-l border-gray-200", filter === "unread" ? "bg-primary text-primary-foreground" : "bg-white text-gray-600 hover:bg-gray-50")}>
+              className={cn("px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer border-l border-border", filter === "unread" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent")}>
               Belum Dibaca
             </button>
           </div>
@@ -91,29 +91,29 @@ export default function NotificationsPage() {
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-center')}>
-              <Bell weight="BoldDuotone" className={cn('h-10', 'w-10', 'text-gray-300', 'mb-3')} />
-              <p className={cn('text-sm', 'text-gray-500')}>{filter === "unread" ? "Semua notifikasi sudah dibaca." : "Belum ada notifikasi."}</p>
+              <Bell weight="BoldDuotone" className={cn('h-10', 'w-10', 'text-muted-foreground/40', 'mb-3')} />
+              <p className={cn('text-sm', 'text-muted-foreground')}>{filter === "unread" ? "Semua notifikasi sudah dibaca." : "Belum ada notifikasi."}</p>
             </div>
           ) : (
-            <div className={cn('divide-y', 'divide-gray-100')}>
+            <div className={cn('divide-y', 'divide-border')}>
               {filtered.map((n) => {
                 const Icon = TYPE_ICON[n.type] ?? Bell;
                 return (
                   <button key={n.id} type="button" onClick={() => handleClick(n)}
-                    className={cn("w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-4", !n.isRead && "bg-blue-50/40")}>
-                    <div className={cn("shrink-0 h-9 w-9 rounded-full flex items-center justify-center", !n.isRead ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500")}>
+                    className={cn("w-full text-left px-5 py-4 hover:bg-accent transition-colors cursor-pointer flex gap-4", !n.isRead && "bg-primary/5")}>
+                    <div className={cn("shrink-0 h-9 w-9 rounded-full flex items-center justify-center", !n.isRead ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
                       <Icon weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                     </div>
                     <div className={cn('flex-1', 'min-w-0')}>
                       <div className={cn('flex', 'items-center', 'gap-2')}>
-                        <p className={cn("text-sm", !n.isRead ? "font-semibold text-gray-900" : "text-gray-700")}>{n.title}</p>
-                        <span className={cn('text-[10px]', 'text-gray-400', 'bg-gray-100', 'rounded', 'px-1.5', 'py-0.5', 'shrink-0')}>
+                        <p className={cn("text-sm", !n.isRead ? "font-semibold text-foreground" : "text-foreground/70")}>{n.title}</p>
+                        <span className={cn('text-[10px]', 'text-muted-foreground', 'bg-muted', 'rounded', 'px-1.5', 'py-0.5', 'shrink-0')}>
                           {TYPE_LABEL[n.type] ?? n.type}
                         </span>
-                        {!n.isRead && <span className={cn('h-2', 'w-2', 'rounded-full', 'bg-blue-500', 'shrink-0')} />}
+                        {!n.isRead && <span className={cn('h-2', 'w-2', 'rounded-full', 'bg-primary', 'shrink-0')} />}
                       </div>
-                      <p className={cn('text-xs', 'text-gray-500', 'mt-0.5', 'line-clamp-2')}>{n.message}</p>
-                      <p className={cn('text-[10px]', 'text-gray-400', 'mt-1')}>
+                      <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'line-clamp-2')}>{n.message}</p>
+                      <p className={cn('text-[10px]', 'text-muted-foreground/60', 'mt-1')}>
                         {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: localeId })}
                       </p>
                     </div>

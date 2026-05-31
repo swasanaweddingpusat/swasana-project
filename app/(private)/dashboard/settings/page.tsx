@@ -153,12 +153,12 @@ export default async function SettingsHubPage() {
       {visibleGroups.map((group) => (
         <section key={group.title} className="space-y-3">
           <div>
-            <h2 className={cn('text-base', 'font-semibold', 'text-gray-900')}>
+            <h2 className={cn('text-base', 'font-semibold', 'text-foreground')}>
               {group.title}
             </h2>
             <p className={cn('text-sm', 'text-muted-foreground')}>{group.description}</p>
           </div>
-          <div className={cn('rounded-lg', 'border', 'border-gray-200', 'bg-white', 'overflow-hidden')}>
+          <div className={cn('rounded-lg', 'border', 'border-border', 'bg-background', 'overflow-hidden')}>
             <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3')}>
               {group.items.map((item) => {
                 const Icon = item.icon;
@@ -166,13 +166,13 @@ export default async function SettingsHubPage() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={cn('group', 'flex', 'items-start', 'gap-3', 'p-4', 'bg-white', 'border-b', 'sm:border-r', 'border-gray-200', 'hover:bg-gray-50', 'transition-colors')}
+                    className={cn('group', 'flex', 'items-start', 'gap-3', 'p-4', 'bg-background', 'border-b', 'sm:border-r', 'border-border', 'hover:bg-accent', 'transition-colors')}
                   >
-                    <div className={cn('flex', 'items-center', 'justify-center', 'h-10', 'w-10', 'rounded-lg', 'bg-gray-100', 'group-hover:bg-gray-200', 'transition-colors', 'shrink-0')}>
-                      <Icon weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-gray-700')} />
+                    <div className={cn('flex', 'items-center', 'justify-center', 'h-10', 'w-10', 'rounded-lg', 'bg-muted', 'group-hover:bg-muted/80', 'transition-colors', 'shrink-0')}>
+                      <Icon weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-foreground/70')} />
                     </div>
                     <div className="min-w-0">
-                      <h3 className={cn('text-sm', 'font-semibold', 'text-gray-900')}>
+                      <h3 className={cn('text-sm', 'font-semibold', 'text-foreground')}>
                         {item.title}
                       </h3>
                       <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'line-clamp-2')}>

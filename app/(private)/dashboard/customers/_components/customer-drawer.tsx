@@ -187,7 +187,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                 <FormLabel>No. HP *</FormLabel>
                 <div className={cn('rounded-lg', 'bg-muted', 'p-3', 'space-y-2')}>
                   {mobileNumbers.map((entry, idx) => (
-                    <div key={idx} className={cn('flex', 'items-center', 'gap-2', 'rounded-md', 'bg-white', 'border', 'px-3', 'py-2')}>
+                    <div key={idx} className={cn('flex', 'items-center', 'gap-2', 'rounded-md', 'bg-card', 'border', 'px-3', 'py-2')}>
                       <div className={cn('flex-1', 'min-w-0')}>
                         {entry.name && <p className={cn('text-xs', 'text-muted-foreground')}>{entry.name}</p>}
                         <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
@@ -294,7 +294,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
             </form>
           </Form>
         </div>
-        <div className={cn('sticky', 'bottom-0', 'bg-white', 'pt-4')}>
+        <div className={cn('sticky', 'bottom-0', 'bg-background', 'pt-4')}>
           <div className={cn('flex', 'gap-2')}>
             <Button variant="outline" onClick={() => onOpenChange(false)} className={cn('flex-1', 'cursor-pointer')} disabled={isPending}>
               Batal

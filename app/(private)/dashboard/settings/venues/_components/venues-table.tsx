@@ -113,7 +113,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                 />
               </div>
               {selected.size > 1 && (
-                <Button variant="outline" onClick={() => setBulkDeleteOpen(true)} className={cn('h-9', 'text-red-500', 'border-red-500', 'hover:bg-red-50', 'cursor-pointer')}>
+                <Button variant="outline" onClick={() => setBulkDeleteOpen(true)} className={cn('h-9', 'text-destructive', 'border-destructive', 'hover:bg-destructive/10', 'cursor-pointer')}>
                   <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Hapus ({selected.size})
                 </Button>
               )}
@@ -175,7 +175,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
                               aria-label="Hapus"
                             >
-                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
+                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
                             </TooltipTrigger>
                             <TooltipContent>Hapus Venue</TooltipContent>
                           </Tooltip>

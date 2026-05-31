@@ -435,7 +435,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
               onClick={onClose}
               aria-label="Close"
             >
-              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-muted-foreground')} />
             </button>
           </div>
 
@@ -629,10 +629,10 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start">
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <Gallery weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Foto / Gambar
+                  <Gallery weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'text-muted-foreground')} /> Foto / Gambar
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
-                  <Paperclip weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Dokumen
+                  <Paperclip weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'text-muted-foreground')} /> Dokumen
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -686,7 +686,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
           onClick={() => setPreviewImage(null)}
         >
           <button className={cn('absolute', 'top-4', 'right-4', 'p-1', 'rounded-full', 'bg-white/10', 'hover:bg-white/20')} onClick={() => setPreviewImage(null)}>
-            <CloseCircle weight="BoldDuotone" className={cn('h-6', 'w-6', 'text-white')} />
+            <CloseCircle weight="BoldDuotone" className={cn('h-6', 'w-6', 'text-background')} />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

@@ -7,8 +7,30 @@ const packageInclude = {
   categoryPrices: { orderBy: { sortOrder: "asc" as const } },
 } as const;
 
-export async function getPackages(venueId?: string, page = 1, limit = 10) {
-  const where = venueId ? { venueId } : undefined;
+export interface GetPackagesParams {
+  venueId?: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
+export async function getPackages({
+  venueId,
+  page = 1,
+  limit = 10,
+  search,
+}: GetPackagesParams = {}) {
+  const where = {
+    ...(venueId ? { venueId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { packageName: { contains: search, mode: "insensitive" as const } },
+            { venue: { name: { contains: search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+  };
   const skip = (page - 1) * limit;
 
   const [data, total] = await Promise.all([
@@ -22,7 +44,7 @@ export async function getPackages(venueId?: string, page = 1, limit = 10) {
     db.package.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getPackagesForBooking(venueId?: string) {

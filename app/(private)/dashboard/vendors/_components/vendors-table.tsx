@@ -139,12 +139,12 @@ export function VendorsTable() {
                       <div className={cn('flex', 'gap-1', 'justify-end')}>
                         {(can("vendor", "edit") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setEditingVendor(vendor); setVendorDrawerOpen(true); }}>
-                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-primary')} />
                           </button>
                         )}
                         {(can("vendor", "delete") || isAdmin) && (
                           <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setVendorToDelete(vendor); setDeleteOpen(true); }}>
-                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-red-500')} />
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
                           </button>
                         )}
                       </div>

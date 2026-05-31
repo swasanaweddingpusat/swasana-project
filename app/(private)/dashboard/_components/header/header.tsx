@@ -54,6 +54,7 @@ export function Header() {
         <Button
           variant="outline"
           size="sm"
+          nativeButton={false}
           render={<Link href="/dashboard/tutorial" />}
           className={cn("cursor-pointer gap-1.5")}
         >

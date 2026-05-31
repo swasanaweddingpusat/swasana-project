@@ -40,11 +40,10 @@ export async function buildResetApprovalOps(
   const creatorStepIdx = flow.steps.findIndex(
     (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
   );
+  // allAutoApproved: true only when every step index equals creatorStepIdx —
+  // i.e. flow has exactly 1 step and creator's role matches that step.
   const allAutoApproved =
-    flow.steps.length > 0 &&
-    flow.steps.every((_, i) =>
-      creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0
-    );
+    flow.steps.length > 0 && flow.steps.every((_, i) => i === creatorStepIdx);
 
   const ops: Prisma.PrismaPromise<unknown>[] = [
     // 1. Delete existing steps
@@ -73,10 +72,9 @@ export async function buildResetApprovalOps(
 
     // 3. Recreate steps from flow template
     ...flow.steps.map((step, i) => {
-      const shouldAutoApprove =
-        creatorStepIdx >= 0 ? i <= creatorStepIdx : i === 0;
-      const isCreatorStep =
-        creatorStepIdx >= 0 ? i === creatorStepIdx : i === 0;
+      // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
+      // If creatorStepIdx === -1, no step is auto-approved.
+      const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
       return db.approvalRecordStep.create({
         data: {
           recordId,
@@ -87,7 +85,7 @@ export async function buildResetApprovalOps(
           status: shouldAutoApprove ? "approved" : "pending",
           decidedById: shouldAutoApprove ? (session.profileId ?? null) : null,
           decidedAt: shouldAutoApprove ? now : null,
-          signature: isCreatorStep ? null : null, // no signature on reset
+          signature: null, // no signature on reset
         },
       });
     }),

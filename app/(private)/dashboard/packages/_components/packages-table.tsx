@@ -1,23 +1,24 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots } from "@solar-icons/react";
+import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useVenues } from "@/hooks/use-venues";
 import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable } from "@/hooks/use-packages";
 import type { PackageQueryItem, PackagesQueryResult } from "@/lib/queries/packages";
 import { toast } from "sonner";
-import SearchBar from "@/components/shared/search-bar";
 import { DrawerPackage } from "./drawer-package";
 import { DetailModal } from "./detail-modal";
 import { DrawerFinance } from "./drawer-finance";
@@ -27,8 +28,89 @@ import { PackageTCDrawer } from "./package-tc-drawer";
 import { POPreviewModal } from "./po-preview-modal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
+const ROWS_PER_PAGE = 10;
+
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+
+function buildPageRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  pages.add(current);
+  if (current - 1 >= 1) pages.add(current - 1);
+  if (current + 1 <= total) pages.add(current + 1);
+
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const result: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    result.push(sorted[i]);
+    if (i < sorted.length - 1 && sorted[i + 1] - sorted[i] > 1) {
+      result.push("...");
+    }
+  }
+  return result;
+}
+
+function SkeletonTableBody({ rows = ROWS_PER_PAGE }: { rows?: number }) {
+  return (
+    <TableBody>
+      {Array.from({ length: rows }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell><Skeleton className="h-4 w-4 rounded-sm" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-5" /></TableCell>
+          <TableCell>
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 rounded" style={{ width: `${55 + (i % 5) * 9}%` }} />
+              <Skeleton className="h-3 w-32 rounded lg:hidden" />
+            </div>
+          </TableCell>
+          <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-24 rounded" /></TableCell>
+          <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-8 rounded" /></TableCell>
+          <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-20 rounded" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+          <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+          <TableCell>
+            <div className="flex items-center gap-1 justify-end">
+              <Skeleton className="h-7 w-7 rounded-md" />
+              <Skeleton className="h-7 w-7 rounded-md" />
+            </div>
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  );
+}
+
+function SkeletonMobileCards({ rows = ROWS_PER_PAGE }: { rows?: number }) {
+  return (
+    <div className="block sm:hidden p-4 space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Skeleton className="h-4 w-4 rounded-sm shrink-0" />
+              <Skeleton className="h-4 rounded" style={{ width: `${120 + (i % 4) * 20}px` }} />
+            </div>
+            <Skeleton className="h-5 w-20 rounded-full shrink-0" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Skeleton className="h-3 w-24 rounded" />
+            <Skeleton className="h-3 w-16 rounded" />
+          </div>
+          <div className="flex items-center gap-1 pt-1 border-t border-border">
+            <Skeleton className="h-9 flex-1 rounded-lg" />
+            <Skeleton className="h-9 flex-1 rounded-lg" />
+            <Skeleton className="h-7 w-7 rounded-md shrink-0" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function SkeletonTable() {
   return (
@@ -91,9 +173,32 @@ function SkeletonTable() {
 }
 
 export function PackagesTable() {
-  const searchParams = useSearchParams();
-  const { data: packagesResult, isLoading } = usePackages();
-  const packages = useMemo(() => packagesResult?.data ?? [], [packagesResult?.data]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedVenueId, setSelectedVenueId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: venues = [] } = useVenues();
+
+  const { data: packagesResult, isLoading, isFetching } = usePackages({
+    page: currentPage,
+    pageSize: ROWS_PER_PAGE,
+    search: debouncedSearch || undefined,
+    venueId: selectedVenueId,
+  });
+
+  const packages = packagesResult?.data ?? [];
+  const total = packagesResult?.total ?? 0;
+  const totalPages = packagesResult?.totalPages ?? 0;
+
   const deleteMutation = useDeletePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
   const { canCreate, can, isAdmin } = usePermissions();
@@ -108,7 +213,6 @@ export function PackagesTable() {
     setRefreshing(false);
   }
 
-  const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingPkg, setEditingPkg] = useState<PackageQueryItem | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -138,23 +242,7 @@ export function PackagesTable() {
     return map;
   }, [approvals]);
 
-  const searchQuery = searchParams.get("search") || "";
-  const rowsPerPage = 10;
-
-  // Filter
-  const filtered = useMemo(() => {
-    if (!searchQuery) return packages;
-    const q = searchQuery.toLowerCase();
-    return packages.filter(
-      (p) =>
-        p.packageName.toLowerCase().includes(q) ||
-        p.venue?.name?.toLowerCase().includes(q)
-    );
-  }, [packages, searchQuery]);
-
-  // Pagination
-  const totalPages = Math.ceil(filtered.length / rowsPerPage);
-  const paginated = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const paginated = packages;
 
   // Helpers
   const getPackagePrice = (pkg: PackageQueryItem) => {
@@ -221,6 +309,151 @@ export function PackagesTable() {
     setDrawerOpen(true);
   };
 
+  function renderPackageActions(pkg: PackageQueryItem) {
+    return (
+      <>
+        {can("package", "term-&-condition") && (
+          <Tooltip>
+            <TooltipTrigger
+              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+              onClick={async () => {
+                try {
+                  await qc.refetchQueries({ queryKey: ["packages"] });
+                  const fresh = qc.getQueryData<PackagesQueryResult>(["packages", currentPage, ROWS_PER_PAGE, debouncedSearch, ""]);
+                  setTcPkg(fresh?.data.find((p) => p.id === pkg.id) ?? pkg);
+                } catch {
+                  toast.error("Gagal memuat data terbaru");
+                  setTcPkg(pkg);
+                }
+                setTcDrawerOpen(true);
+              }}
+            >
+              <FileText weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+            </TooltipTrigger>
+            <TooltipContent>Term & Condition</TooltipContent>
+          </Tooltip>
+        )}
+        {can("package", "set-harga") && (
+          <Tooltip>
+            <TooltipTrigger
+              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+              onClick={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
+            >
+              <SettingsMinimalistic weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+            </TooltipTrigger>
+            <TooltipContent>Set Harga</TooltipContent>
+          </Tooltip>
+        )}
+        {approvalMap.has(pkg.id) && (() => {
+          const record = approvalMap.get(pkg.id)!;
+          if (record.status === "approved" || pkg.approvalStatus === "approved") return null;
+          const steps = record.steps;
+          return (
+            <DropdownMenu>
+              <Tooltip>
+                <DropdownMenuTrigger asChild>
+                  <TooltipTrigger
+                    className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                  >
+                    <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                  </TooltipTrigger>
+                </DropdownMenuTrigger>
+                <TooltipContent>Approval</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                {steps.map((step) => {
+                  const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+                  const isApproved = step.status === "approved";
+                  const isRejected = step.status === "rejected";
+                  const isPending = step.status === "pending";
+                  const canAct = isPending && (
+                    isAdmin ||
+                    (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
+                    (step.approverType === "user" && step.approverUserId === user?.profileId)
+                  );
+                  return (
+                    <DropdownMenuItem
+                      key={step.id}
+                      className="cursor-pointer"
+                      disabled={isApproved || isRejected || (isPending && !canAct)}
+                      onClick={() => {
+                        if (canAct) {
+                          setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
+                        } else {
+                          setApprovalPkg(pkg);
+                        }
+                      }}
+                    >
+                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
+        {can("package", "edit") && (
+          <Tooltip>
+            <TooltipTrigger
+              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'hidden', 'sm:flex')}
+              onClick={() => openEdit(pkg)}
+            >
+              <PenNewSquare weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+            </TooltipTrigger>
+            <TooltipContent>Edit</TooltipContent>
+          </Tooltip>
+        )}
+        {(can("package", "view") || can("package", "delete")) && (
+          <DropdownMenu>
+            <Tooltip>
+              <DropdownMenuTrigger asChild>
+                <TooltipTrigger
+                  className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+                >
+                  <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                </TooltipTrigger>
+              </DropdownMenuTrigger>
+              <TooltipContent>Lainnya</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              {can("package", "view") && (
+                <DropdownMenuItem
+                  onSelect={() => { setDetailPkg(pkg); setDetailOpen(true); }}
+                >
+                  <Eye weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+                  Lihat Detail
+                </DropdownMenuItem>
+              )}
+              {can("package", "view") && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setPreviewTarget({ packageId: pkg.id, packageName: pkg.packageName });
+                    setPreviewOpen(true);
+                  }}
+                >
+                  <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+                  Preview PO
+                </DropdownMenuItem>
+              )}
+              {can("package", "delete") && (
+                <>
+                  {can("package", "view") && <DropdownMenuSeparator />}
+                  <DropdownMenuItem
+                    onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <TrashBinTrash weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                    Hapus
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </>
+    );
+  }
+
   if (isLoading || approvalsLoading) return <SkeletonTable />;
 
   return (
@@ -228,16 +461,47 @@ export function PackagesTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'pb-4', 'border-b')}>
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'py-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
-              <span className={cn('text-sm', 'text-muted-foreground')}>({filtered.length})</span>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
               <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
                 <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               </button>
             </div>
-            <div className={cn('flex', 'items-center', 'gap-2')}>
-              <SearchBar placeholder="Search packages..." />
+            <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2')}>
+              {/* Venue filter */}
+              <Select
+                value={selectedVenueId ?? "all"}
+                onValueChange={(val) => {
+                  setSelectedVenueId(val === "all" ? undefined : val);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-48 bg-muted/40">
+                  <SelectValue placeholder="Semua Venue" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Venue</SelectItem>
+                  {venues.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Search */}
+              <div className="relative w-full sm:w-75">
+                <Magnifer weight="BoldDuotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search packages..."
+                  className="pl-10 bg-muted/40"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
                   <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Delete ({selectedIds.size})
@@ -251,252 +515,260 @@ export function PackagesTable() {
             </div>
           </div>
 
-          {/* Table */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
-                </TableHead>
-                <TableHead className="w-10">#</TableHead>
-                <TableHead>Package Name</TableHead>
-                <TableHead>Venue</TableHead>
-                <TableHead>PAX</TableHead>
-                <TableHead>Harga Jual</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Approval</TableHead>
-                <TableHead className="w-24">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginated.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
-                    {searchQuery ? "No packages found" : "No packages yet"}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginated.map((pkg, idx) => (
-                  <TableRow key={pkg.id} className={cn(selectedIds.has(pkg.id) && "bg-muted/50")}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.has(pkg.id)}
-                        onCheckedChange={() => toggleOne(pkg.id)}
-                        aria-label={`Select ${pkg.packageName}`}
-                      />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {(currentPage - 1) * rowsPerPage + idx + 1}
-                    </TableCell>
-                    <TableCell className="font-medium">{pkg.packageName}</TableCell>
-                    <TableCell>{pkg.venue?.name ?? "-"}</TableCell>
-                    <TableCell>{pkg.pax ?? 0}</TableCell>
-                    <TableCell>{getPackagePrice(pkg)}</TableCell>
-                    <TableCell>
-                      {can("package", "set-status") ? (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const res = await toggleAvailableMutation.mutateAsync(pkg.id);
-                            if (!res.success) toast.error(res.error);
-                          }}
-                          disabled={toggleAvailableMutation.isPending}
-                          className={cn(
-                            "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-70 transition-opacity",
-                            pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-                          )}
-                        >
-                          {pkg.available ? "Available" : "Unavailable"}
-                        </button>
-                      ) : (
-                        <span className={cn(
-                          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-                          pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-                        )}>
-                          {pkg.available ? "Available" : "Unavailable"}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {pkg.approvalStatus !== "approved" ? (
-                      <button
-                        type="button"
-                        onClick={() => setApprovalPkg(pkg)}
-                        className={cn(
-                          "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                          pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
-                          pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
-                          pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
-                        )}
-                      >
-                        {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
-                      </button>
-                      ) : (
-                        <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground")}>Approved</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
-                        {can("package", "term-&-condition") && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
+          {/* Table — desktop (sm+) */}
+          {!isFetching && paginated.length === 0 ? (
+            <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
+              <AddCircle weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
+              <p className="text-sm">{debouncedSearch || selectedVenueId ? "No packages found" : "No packages yet"}</p>
+            </div>
+          ) : (
+            <>
+              <div className={cn('hidden', 'sm:block', 'w-full', 'overflow-x-auto')}>
+                <Table className={cn('w-full', 'text-sm')}>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                      </TableHead>
+                      <TableHead className="w-10">#</TableHead>
+                      <TableHead>Package Name</TableHead>
+                      <TableHead className={cn('hidden', 'sm:table-cell')}>Venue</TableHead>
+                      <TableHead className={cn('hidden', 'lg:table-cell')}>PAX</TableHead>
+                      <TableHead className={cn('hidden', 'lg:table-cell')}>Harga Jual</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className={cn('hidden', 'sm:table-cell')}>Approval</TableHead>
+                      <TableHead className="w-24 text-right pr-4">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  {isFetching ? (
+                    <SkeletonTableBody rows={Math.max(paginated.length, ROWS_PER_PAGE)} />
+                  ) : (
+                  <TableBody>
+                    {paginated.map((pkg, idx) => (
+                      <TableRow key={pkg.id} className={cn(selectedIds.has(pkg.id) && "bg-muted/50")}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(pkg.id)}
+                            onCheckedChange={() => toggleOne(pkg.id)}
+                            aria-label={`Select ${pkg.packageName}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                        </TableCell>
+                        <TableCell>
+                          <div className="leading-tight">
+                            <p className={cn('font-medium', 'text-foreground', 'truncate')}>{pkg.packageName}</p>
+                            {/* venue + PAX shown in name cell on md (when cols are hidden at lg) */}
+                            <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'lg:hidden')}>{pkg.venue?.name ?? "—"}{pkg.pax ? ` · ${pkg.pax} PAX` : ""}</p>
+                            <p className={cn('text-xs', 'text-muted-foreground', 'lg:hidden')}>{getPackagePrice(pkg)}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className={cn('hidden', 'sm:table-cell')}>{pkg.venue?.name ?? "-"}</TableCell>
+                        <TableCell className={cn('hidden', 'lg:table-cell')}>{pkg.pax ?? 0}</TableCell>
+                        <TableCell className={cn('hidden', 'lg:table-cell')}>{getPackagePrice(pkg)}</TableCell>
+                        <TableCell>
+                          {can("package", "set-status") ? (
+                            <button
+                              type="button"
                               onClick={async () => {
-                                try {
-                                  await qc.refetchQueries({ queryKey: ["packages"] });
-                                  const fresh = qc.getQueryData<PackagesQueryResult>(["packages", undefined]);
-                                  setTcPkg(fresh?.data.find((p) => p.id === pkg.id) ?? pkg);
-                                } catch {
-                                  toast.error("Gagal memuat data terbaru");
-                                  setTcPkg(pkg);
-                                }
-                                setTcDrawerOpen(true);
+                                const res = await toggleAvailableMutation.mutateAsync(pkg.id);
+                                if (!res.success) toast.error(res.error);
                               }}
-                            >
-                              <FileText weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                            </TooltipTrigger>
-                            <TooltipContent>Term & Condition</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {can("package", "set-harga") && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                              onClick={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
-                            >
-                              <SettingsMinimalistic weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                            </TooltipTrigger>
-                            <TooltipContent>Set Harga</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {approvalMap.has(pkg.id) && (() => {
-                          const record = approvalMap.get(pkg.id)!;
-                          if (record.status === "approved" || pkg.approvalStatus === "approved") return null;
-                          const steps = record.steps;
-                          return (
-                            <DropdownMenu>
-                              <Tooltip>
-                              <DropdownMenuTrigger asChild>
-                                <TooltipTrigger
-                                  className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                                >
-                                  <ClipboardCheck weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                                </TooltipTrigger>
-                              </DropdownMenuTrigger>
-                              <TooltipContent>Approval</TooltipContent>
-                              </Tooltip>
-                              <DropdownMenuContent align="end">
-                                {steps.map((step) => {
-                                  const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
-                                  const isApproved = step.status === "approved";
-                                  const isRejected = step.status === "rejected";
-                                  const isPending = step.status === "pending";
-                                  const canAct = isPending && (
-                                    isAdmin ||
-                                    (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
-                                    (step.approverType === "user" && step.approverUserId === user?.profileId)
-                                  );
-                                  return (
-                                    <DropdownMenuItem
-                                      key={step.id}
-                                      className="cursor-pointer"
-                                      disabled={isApproved || isRejected || (isPending && !canAct)}
-                                      onClick={() => {
-                                        if (canAct) {
-                                          setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
-                                        } else {
-                                          setApprovalPkg(pkg);
-                                        }
-                                      }}
-                                    >
-                                      {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
-                                    </DropdownMenuItem>
-                                  );
-                                })}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          );
-                        })()}
-                        {can("package", "edit") && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                              onClick={() => openEdit(pkg)}
-                            >
-                              <PenNewSquare weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                            </TooltipTrigger>
-                            <TooltipContent>Edit</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {(can("package", "view") || can("package", "delete")) && (
-                          <DropdownMenu>
-                            <Tooltip>
-                              <DropdownMenuTrigger asChild>
-                                <TooltipTrigger
-                                  className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
-                                >
-                                  <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
-                                </TooltipTrigger>
-                              </DropdownMenuTrigger>
-                              <TooltipContent>Lainnya</TooltipContent>
-                            </Tooltip>
-                            <DropdownMenuContent align="end">
-                              {can("package", "view") && (
-                                <DropdownMenuItem
-                                  onSelect={() => { setDetailPkg(pkg); setDetailOpen(true); }}
-                                >
-                                  <Eye weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                  Lihat Detail
-                                </DropdownMenuItem>
+                              disabled={toggleAvailableMutation.isPending}
+                              className={cn(
+                                "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-70 transition-opacity",
+                                pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
                               )}
-                              {can("package", "view") && (
-                                <DropdownMenuItem
-                                  onSelect={() => {
-                                    setPreviewTarget({ packageId: pkg.id, packageName: pkg.packageName });
-                                    setPreviewOpen(true);
-                                  }}
-                                >
-                                  <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                  Preview PO
-                                </DropdownMenuItem>
+                            >
+                              {pkg.available ? "Available" : "Unavailable"}
+                            </button>
+                          ) : (
+                            <span className={cn(
+                              "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
+                              pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                            )}>
+                              {pkg.available ? "Available" : "Unavailable"}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className={cn('hidden', 'sm:table-cell')}>
+                          {pkg.approvalStatus !== "approved" ? (
+                            <button
+                              type="button"
+                              onClick={() => setApprovalPkg(pkg)}
+                              className={cn(
+                                "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                                pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
+                                pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
+                                pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
                               )}
-                              {can("package", "delete") && (
-                                <>
-                                  {can("package", "view") && <DropdownMenuSeparator />}
-                                  <DropdownMenuItem
-                                    onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
-                                    className="text-destructive focus:text-destructive"
-                                  >
-                                    <TrashBinTrash weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                    Hapus
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            >
+                              {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
+                            </button>
+                          ) : (
+                            <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground")}>Approved</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
+                            {renderPackageActions(pkg)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  )}
+                </Table>
+              </div>
+
+              {/* Mobile (<sm): card list */}
+              {isFetching ? (
+                <SkeletonMobileCards rows={Math.max(paginated.length, ROWS_PER_PAGE)} />
+              ) : (
+              <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
+                {paginated.map((pkg, idx) => {
+                  const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
+                  return (
+                    <div
+                      key={pkg.id}
+                      className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', selectedIds.has(pkg.id) && "border-primary/40 bg-primary/5")}
+                    >
+                      {/* Row 1: checkbox + name + status badge */}
+                      <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
+                        <div className={cn('flex', 'items-center', 'gap-2', 'min-w-0')}>
+                          <Checkbox
+                            checked={selectedIds.has(pkg.id)}
+                            onCheckedChange={() => toggleOne(pkg.id)}
+                            aria-label={`Select ${pkg.packageName}`}
+                          />
+                          <span className={cn('font-medium', 'text-foreground', 'truncate', 'text-sm')}>
+                            {rowNumber}. {pkg.packageName}
+                          </span>
+                        </div>
+                        {can("package", "set-status") ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await toggleAvailableMutation.mutateAsync(pkg.id);
+                              if (!res.success) toast.error(res.error);
+                            }}
+                            disabled={toggleAvailableMutation.isPending}
+                            className={cn(
+                              "inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-70 transition-opacity",
+                              pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                            )}
+                          >
+                            {pkg.available ? "Available" : "Unavailable"}
+                          </button>
+                        ) : (
+                          <span className={cn(
+                            "inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium",
+                            pkg.available ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                          )}>
+                            {pkg.available ? "Available" : "Unavailable"}
+                          </span>
                         )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+
+                      {/* Row 2: venue + pax */}
+                      <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs', 'text-muted-foreground')}>
+                        <span className="truncate">{pkg.venue?.name ?? "Venue —"}</span>
+                        {pkg.pax ? (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span>{pkg.pax} PAX</span>
+                          </>
+                        ) : null}
+                        {getPackagePrice(pkg) !== "-" && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="text-foreground/70 font-medium">{getPackagePrice(pkg)}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Row 3: approval badge */}
+                      <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs')}>
+                        {pkg.approvalStatus !== "approved" ? (
+                          <button
+                            type="button"
+                            onClick={() => setApprovalPkg(pkg)}
+                            className={cn(
+                              "inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                              pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
+                              pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
+                              pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
+                            )}
+                          >
+                            {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
+                          </button>
+                        ) : (
+                          <span className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground")}>Approved</span>
+                        )}
+                      </div>
+
+                      {/* Footer: action buttons */}
+                      <div className={cn('flex', 'items-center', 'gap-1', 'pt-1', 'border-t', 'border-border')}>
+                        {can("package", "edit") && (
+                          <Button
+                            variant="outline"
+                            className={cn('h-9', 'flex-1', 'text-xs')}
+                            onClick={() => openEdit(pkg)}
+                            aria-label={`Edit ${pkg.packageName}`}
+                          >
+                            <PenNewSquare weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
+                          </Button>
+                        )}
+                        {can("package", "view") && (
+                          <Button
+                            variant="outline"
+                            className={cn('h-9', 'flex-1', 'text-xs')}
+                            onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
+                            aria-label={`Lihat detail ${pkg.packageName}`}
+                          >
+                            <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Detail
+                          </Button>
+                        )}
+                        <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
+                          {renderPackageActions(pkg)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               )}
-            </TableBody>
-          </Table>
+            </>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
-              <span className={cn('text-sm', 'text-muted-foreground')}>
-                Page {currentPage} of {totalPages}
-              </span>
-              <div className={cn('flex', 'gap-1')}>
-                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                </Button>
-                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                </Button>
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-4', 'sm:px-6', 'py-4', 'border-t')}>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage <= 1}>
+                <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'sm:mr-2')} /> <span className={cn('hidden', 'sm:inline')}>Previous</span>
+              </Button>
+              {/* Mobile: page X/Y */}
+              <span className={cn('text-sm', 'text-muted-foreground', 'sm:hidden')}>{currentPage} / {totalPages}</span>
+              {/* Desktop: page numbers with ellipsis */}
+              <div className={cn('hidden', 'sm:flex', 'items-center', 'gap-1')}>
+                {buildPageRange(currentPage, totalPages).map((item, idx) =>
+                  item === "..." ? (
+                    <span key={`ellipsis-${idx}`} className={cn('px-2', 'py-1', 'text-sm', 'text-muted-foreground', 'select-none')}>...</span>
+                  ) : (
+                    <button
+                      key={item}
+                      onClick={() => setCurrentPage(item as number)}
+                      className={cn("px-3 py-1 rounded-md text-sm font-medium cursor-pointer", currentPage === item ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")}
+                    >
+                      {item}
+                    </button>
+                  )
+                )}
               </div>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages}>
+                <span className={cn('hidden', 'sm:inline')}>Next</span> <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'sm:ml-2')} />
+              </Button>
             </div>
           )}
         </CardContent>
@@ -516,7 +788,7 @@ export function PackagesTable() {
         pkg={detailPkg}
         onEdit={(id) => {
           setDetailOpen(false);
-          const p = packages.find((x) => x.id === id);
+          const p = paginated.find((x) => x.id === id);
           if (p) openEdit(p);
         }}
       />

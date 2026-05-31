@@ -293,7 +293,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
                       const g = groups.find((x) => x.id === gid);
                       if (!g) return null;
                       return (
-                        <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-900 text-white rounded-full">
+                        <span key={gid} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-primary text-primary-foreground rounded-full">
                           {g.name}
                           <button type="button" onClick={() => setSelectedGroupIds((p) => p.filter((id) => id !== gid))} className="ml-0.5 hover:text-gray-300">×</button>
                         </span>
@@ -321,7 +321,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
         </div>
 
         {/* Footer */}
-        <div className="bg-white sticky bottom-0 z-10">
+        <div className="bg-background sticky bottom-0 z-10">
           <div className="flex py-4 gap-2">
             <Button variant="outline" onClick={handleClose} className="flex-1 text-destructive border-destructive hover:bg-destructive/10" disabled={isPending}>
               Cancel
