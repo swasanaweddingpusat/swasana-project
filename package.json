@@ -16,6 +16,7 @@
     "db:seed:roles-permissions": "tsx prisma/seeders/roles-permissions.ts",
     "db:seed:packages": "tsx prisma/seeders/packages.ts",
     "db:seed:packages-prod": "tsx prisma/seeders/packages-from-prod.ts",
+    "db:seed:bookings-2026": "tsx prisma/seeders/seed-bookings-2026.ts",
     "db:seed:users": "tsx prisma/seeders/users.ts",
     "db:seed:test-users": "tsx prisma/seeders/test-users.ts",
     "db:seed:venue-tc": "tsx prisma/seeders/venue-term-conditions.ts",
