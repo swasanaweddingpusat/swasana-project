@@ -316,6 +316,13 @@ export async function createBooking(data: unknown) {
       const toggleMap = new Map(
         (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
+      // Resolve which category IDs are taken out, so vendor items can carry the flag
+      // directly (matching by categoryId, not fragile categoryName string).
+      const takeoutCategoryIds = new Set(
+        pkg.categoryPrices
+          .filter((c) => c.isShow && (toggleMap.get(c.categoryName) ?? false) && c.categoryId)
+          .map((c) => c.categoryId as string),
+      );
       // Hidden categories (isShow=false) always included; visible ones respect isTakeout toggle
       const hasTakeout = (input.categoryToggles ?? []).some((t) => t.isTakeout);
       const pkgBase = pkg.categoryPrices.reduce((sum, c) => {
@@ -350,7 +357,16 @@ export async function createBooking(data: unknown) {
       if (pkg.vendorItems.length > 0) {
         ops.push(
           ...pkg.vendorItems.map((item, i) =>
-            db.snapPackageVendorItem.create({ data: { bookingId, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
+            db.snapPackageVendorItem.create({
+              data: {
+                bookingId,
+                categoryId: item.categoryId ?? null,
+                categoryName: item.categoryName,
+                itemText: item.itemText,
+                sortOrder: i,
+                isTakeout: item.categoryId ? takeoutCategoryIds.has(item.categoryId) : false,
+              },
+            })
           )
         );
       }
@@ -360,6 +376,7 @@ export async function createBooking(data: unknown) {
             db.snapPackageCategoryPrice.create({
               data: {
                 bookingId,
+                categoryId: cp.categoryId ?? null,
                 categoryName: cp.categoryName,
                 basePrice: cp.basePrice,
                 sortOrder: cp.sortOrder,
@@ -783,6 +800,11 @@ export async function editBooking(data: unknown) {
       const toggleMap = new Map(
         (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
+      const takeoutCategoryIds = new Set(
+        newPkg.categoryPrices
+          .filter((c) => c.isShow && (toggleMap.get(c.categoryName) ?? false) && c.categoryId)
+          .map((c) => c.categoryId as string),
+      );
       const hasTakeout = (parsed.data.categoryToggles ?? []).some((t) => t.isTakeout);
       const pkgBase = newPkg.categoryPrices.reduce((sum, c) => {
         if (!c.isShow) return sum + c.basePrice;
@@ -821,12 +843,22 @@ export async function editBooking(data: unknown) {
           db.snapPackageInternalItem.create({ data: { bookingId: id, itemName: item.itemName, itemDescription: item.itemDescription, sortOrder: i } })
         ),
         ...newPkg.vendorItems.map((item, i) =>
-          db.snapPackageVendorItem.create({ data: { bookingId: id, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i } })
+          db.snapPackageVendorItem.create({
+            data: {
+              bookingId: id,
+              categoryId: item.categoryId ?? null,
+              categoryName: item.categoryName,
+              itemText: item.itemText,
+              sortOrder: i,
+              isTakeout: item.categoryId ? takeoutCategoryIds.has(item.categoryId) : false,
+            },
+          })
         ),
         ...newPkg.categoryPrices.map((cp) =>
           db.snapPackageCategoryPrice.create({
             data: {
               bookingId: id,
+              categoryId: cp.categoryId ?? null,
               categoryName: cp.categoryName,
               basePrice: cp.basePrice,
               sortOrder: cp.sortOrder,

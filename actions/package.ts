@@ -308,7 +308,7 @@ export async function deleteBulkPackages(ids: string[]): Promise<
 
 export async function saveVendorItems(
   packageId: string,
-  items: { categoryName: string; itemText: string }[]
+  items: { categoryId?: string | null; categoryName: string; itemText: string }[]
 ): Promise<{ success: true } | { success: false; error: string }> {
   const permResult = await requirePermission({ module: "package", action: "edit" });
   if (permResult.error) return { success: false, error: permResult.error };
@@ -316,7 +316,7 @@ export async function saveVendorItems(
   if (!mutationLimiter.check(`vendor-items:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   for (const item of items) {
-    const parsed = createVendorItemSchema.safeParse({ packageId, ...item });
+    const parsed = createVendorItemSchema.safeParse({ packageId, categoryName: item.categoryName, itemText: item.itemText });
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
   }
 
@@ -325,7 +325,7 @@ export async function saveVendorItems(
       db.packageVendorItem.deleteMany({ where: { packageId } }),
       ...items.map((item, i) =>
         db.packageVendorItem.create({
-          data: { packageId, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i },
+          data: { packageId, categoryId: item.categoryId ?? null, categoryName: item.categoryName, itemText: item.itemText, sortOrder: i },
         })
       ),
     ]);
@@ -376,7 +376,7 @@ export async function saveInternalItems(
 
 export async function savePackagePrices(
   packageId: string,
-  categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[],
+  categories: { categoryId?: string | null; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[],
   margin: number,
   sellingPrice: number
 ): Promise<{ success: true } | { success: false; error: string }> {
@@ -399,6 +399,7 @@ export async function savePackagePrices(
       db.packageCategoryPrice.createMany({
         data: categories.map((c) => ({
           packageId,
+          categoryId: c.categoryId ?? null,
           categoryName: c.categoryName,
           basePrice: c.basePrice,
           sortOrder: c.sortOrder,

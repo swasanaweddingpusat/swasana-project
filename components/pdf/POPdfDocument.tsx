@@ -14,7 +14,7 @@ export interface POPdfBooking {
   snapPackage: { packageName: string; notes?: string | null } | null;
   snapPackagePricing: { packageName: string; pax: number; price: number } | null;
   snapPackageInternalItems: { id: string; itemName: string; itemDescription: string; sortOrder: number }[];
-  snapPackageVendorItems: { id: string; categoryName: string; itemText: string; sortOrder: number }[];
+  snapPackageVendorItems: { id: string; categoryName: string; itemText: string; sortOrder: number; isTakeout?: boolean }[];
   snapPackageCategoryPrices?: { categoryName: string; basePrice: number; isTakeout: boolean }[];
   snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: number; qty: number; unit?: string | null; totalPrice: number; isAddons: boolean }[];
   snapBonuses: { id: string; vendorName: string; description?: string | null; qty: number }[];
@@ -273,9 +273,6 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   const notes = booking.snapPackage?.notes ? booking.snapPackage.notes.split("\n").filter(Boolean) : [];
   const internalItems = [...booking.snapPackageInternalItems].sort((a, b) => a.sortOrder - b.sortOrder);
   const packageVendorItems = [...booking.snapPackageVendorItems].sort((a, b) => a.sortOrder - b.sortOrder);
-  const takeoutSet = new Set(
-    (booking.snapPackageCategoryPrices ?? []).filter((c) => c.isTakeout).map((c) => c.categoryName.toUpperCase()),
-  );
 
   const rows: TableRow[] = [];
   rows.push({ no: "1", desc: `${venueName} ${packageName}${pricingPackageName ? ` - ${pricingPackageName}` : ""} for ${pax} people include: `, total: price });
@@ -293,10 +290,10 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   }
 
   // Merge non-benefit internal items + vendor items, sort by sortOrder
-  type MergedItem = { type: "internal"; itemName: string; itemDescription: string; sortOrder: number } | { type: "vendor"; categoryName: string; itemText: string; sortOrder: number };
+  type MergedItem = { type: "internal"; itemName: string; itemDescription: string; sortOrder: number } | { type: "vendor"; categoryName: string; itemText: string; sortOrder: number; isTakeout: boolean };
   const mergedItems: MergedItem[] = [
     ...nonBenefitItems.map((i) => ({ type: "internal" as const, itemName: i.itemName, itemDescription: i.itemDescription, sortOrder: i.sortOrder })),
-    ...packageVendorItems.map((i) => ({ type: "vendor" as const, categoryName: i.categoryName, itemText: i.itemText, sortOrder: i.sortOrder })),
+    ...packageVendorItems.map((i) => ({ type: "vendor" as const, categoryName: i.categoryName, itemText: i.itemText, sortOrder: i.sortOrder, isTakeout: i.isTakeout ?? false })),
   ].sort((a, b) => a.sortOrder - b.sortOrder);
 
   let alphaCounter = 0;
@@ -308,7 +305,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
       rows.push({ no: "", desc: item.itemDescription, total: "" });
       rows.push({ no: "", desc: "", total: "", isSpacer: true });
     } else {
-      const catTakeout = takeoutSet.has(item.categoryName.toUpperCase());
+      const catTakeout = item.isTakeout;
       rows.push({ no: "", desc: `${letter}. ${item.categoryName}${catTakeout ? " (TAKEOUT)" : ""}`, descBold: true, total: "", isTakeout: catTakeout });
       if (item.itemText.trim()) {
         if (item.itemText.includes("<")) {
