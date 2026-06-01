@@ -10,13 +10,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2 } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle } from "@solar-icons/react";
 const RefreshCw = Refresh;
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateAgreementToken } from "@/actions/client-agreement";
 import { UploadDocumentModal } from "./upload-document-modal";
@@ -112,6 +113,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
   const { can, isAdmin } = usePermissions();
+  const { openBookingDrawer } = useBookingDrawer();
   const { user } = useCurrentUser();
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -416,6 +418,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
                   <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground", isFetching && "animate-spin")} />
                 </Button>
+                {can("booking", "create") && (
+                  <Button onClick={() => openBookingDrawer()} className={cn('cursor-pointer', 'shrink-0')}>
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                    <span className={cn('hidden', 'sm:inline', 'ml-1')}>Tambah Booking</span>
+                  </Button>
+                )}
               </div>
             </div>
           </div>

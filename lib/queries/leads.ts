@@ -8,11 +8,15 @@ const leadSelect = {
   name: true,
   contactNumbers: true,
   email: true,
+  address: true,
   eventDate: true,
+  time: true,
   estimatedPax: true,
   budgetRange: true,
   notes: true,
   category: true,
+  weddingSession: true,
+  bitrixId: true,
   convertedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -50,7 +54,7 @@ export async function getLeads(filter: LeadFilterInput) {
   cacheTag("leads");
   cacheLife("seconds");
 
-  const { search, statusId, venueId, assignedToId, page, pageSize } = filter;
+  const { search, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
 
   const where: Prisma.LeadWhereInput = {
     ...(search?.trim() && {
@@ -61,6 +65,7 @@ export async function getLeads(filter: LeadFilterInput) {
     }),
     ...(statusId && { statusId }),
     ...(venueId && { venueId }),
+    ...(eventTypeId && { eventTypeId }),
     ...(assignedToId && { assignedToId }),
   };
 

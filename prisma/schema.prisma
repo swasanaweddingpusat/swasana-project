@@ -378,32 +378,53 @@ model Package {
   @@map("packages")
 }
 
+// Global category master — shared across all packages. categoryName columns on
+// the rows below are kept for back-compat/backfill but matching is now by categoryId.
+model Category {
+  id             String                 @id @default(uuid())
+  name           String                 @unique
+  sortOrder      Int                    @default(0)
+  isActive       Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  categoryPrices PackageCategoryPrice[]
+  vendorItems    PackageVendorItem[]
+
+  @@map("categories")
+}
+
 model PackageCategoryPrice {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   packageId    String
+  categoryId   String?
   categoryName String
-  basePrice    Int      @default(0)
-  sortOrder    Int      @default(0)
-  isShow       Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  package      Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  basePrice    Int       @default(0)
+  sortOrder    Int       @default(0)
+  isShow       Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  package      Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([packageId])
+  @@index([categoryId])
   @@map("package_category_prices")
 }
 
 model PackageVendorItem {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   packageId    String
+  categoryId   String?
   categoryName String
   itemText     String
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  package      Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  sortOrder    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  package      Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([packageId])
+  @@index([categoryId])
   @@map("package_vendor_items")
 }
 
@@ -680,9 +701,11 @@ model SnapPackageInternalItem {
 model SnapPackageVendorItem {
   id           String   @id @default(uuid())
   bookingId    String
+  categoryId   String?
   categoryName String
   itemText     String
   sortOrder    Int      @default(0)
+  isTakeout    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -694,6 +717,7 @@ model SnapPackageVendorItem {
 model SnapPackageCategoryPrice {
   id           String   @id @default(uuid())
   bookingId    String
+  categoryId   String?
   categoryName String
   basePrice    Int      @default(0)
   sortOrder    Int      @default(0)
@@ -1077,12 +1101,17 @@ model Lead {
   name           String
   contactNumbers Json   @default("[]") // Array of { label: string, number: string }
   email          String?
+  address        String?
   eventDate      DateTime?
+  time           String?
   estimatedPax   Int?
   budgetRange    String?
   notes          String?
 
-  category       EventCategory @default(WEDDINGS)
+  category        EventCategory  @default(WEDDINGS)
+  weddingSession  WeddingSession?
+
+  bitrixId       String?
 
   // FK relations
   venueId               String?

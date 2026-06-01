@@ -22,9 +22,13 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Box, AddCircle, CloseCircle, MenuDots } from "@solar-icons/react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Box, CloseCircle, MenuDots } from "@solar-icons/react";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { useSavePackagePrices } from "@/hooks/use-packages";
+import { useCategories } from "@/hooks/use-categories";
+import { createCategory } from "@/actions/category";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -173,6 +177,8 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
   const [state, setState] = useState<FinanceState>(initFinanceState());
   const [saving, setSaving] = useState(false);
   const savePackagePricesMut = useSavePackagePrices();
+  const { data: categories = [] } = useCategories();
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (isOpen && pkg) {
@@ -206,11 +212,8 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
     });
   }
 
-  function addCategory() {
-    const name = state.newCat.trim();
-    if (!name || state.categories.includes(name)) return;
-    setState((v) => ({ ...v, categories: [...v.categories, name], newCat: "" }));
-  }
+  // Categories from master not yet added to this package.
+  const availableCategories = categories.filter((c) => !state.categories.includes(c.name));
 
   function removeCategory(cat: string) {
     setState((v) => {
@@ -235,7 +238,10 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
     if (!pkg) return;
     setSaving(true);
     try {
-      const categories = state.categories.map((cat, idx) => ({
+      // Resolve categoryId from master by case-insensitive name match.
+      const catByName = new Map(categories.map((c) => [c.name.trim().toUpperCase(), c.id]));
+      const payloadCategories = state.categories.map((cat, idx) => ({
+        categoryId: catByName.get(cat.trim().toUpperCase()) ?? null,
         categoryName: cat,
         basePrice: state.basePrices[cat] ?? 0,
         sortOrder: idx + 1,
@@ -243,7 +249,7 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
       }));
       const res = await savePackagePricesMut.mutateAsync({
         packageId: pkg.id,
-        categories,
+        categories: payloadCategories,
         margin: state.margin,
         sellingPrice: state.sellingPrice,
       });
@@ -313,25 +319,29 @@ export function DrawerFinance({ isOpen, onClose, pkg }: DrawerFinanceProps) {
               </SortableContext>
             </DndContext>
 
-            {/* Add Custom Category */}
-            <div className={cn("flex items-center gap-2")}>
-              <Input
-                placeholder="Tambah kategori..."
-                value={state.newCat}
-                onChange={(e) => setState((v) => ({ ...v, newCat: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCategory(); } }}
-                className={cn("h-9 text-sm flex-1")}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addCategory}
-                disabled={!state.newCat.trim() || state.categories.includes(state.newCat.trim())}
-                className={cn("h-9 shrink-0")}
-              >
-                <AddCircle weight="BoldDuotone" className={cn("h-3.5 w-3.5 mr-1")} /> Tambah
-              </Button>
-            </div>
+            {/* Add Category — pilih dari master kategori global, atau tambah baru inline */}
+            <SearchableSelect
+              options={availableCategories.map((c) => ({ id: c.name, name: c.name }))}
+              value=""
+              onChange={(name) => {
+                if (name && !state.categories.includes(name)) {
+                  setState((v) => ({ ...v, categories: [...v.categories, name] }));
+                }
+              }}
+              placeholder="Tambah kategori..."
+              searchPlaceholder="Cari / ketik kategori baru..."
+              emptyText="Kategori tidak ditemukan"
+              className="w-full"
+              onAdd={async (name) => {
+                const res = await createCategory(name);
+                if (!res.success) { toast.error(res.error ?? "Gagal menambahkan"); return; }
+                await qc.invalidateQueries({ queryKey: ["categories"] });
+                if (!state.categories.includes(res.category.name)) {
+                  setState((v) => ({ ...v, categories: [...v.categories, res.category.name] }));
+                }
+                toast.success(`Kategori "${res.category.name}" ditambahkan`);
+              }}
+            />
           </div>
 
           <Separator />

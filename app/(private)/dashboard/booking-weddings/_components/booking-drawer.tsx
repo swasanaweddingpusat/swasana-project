@@ -5,10 +5,9 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle } from "@solar-icons/react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
-import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,18 +18,36 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
-import { cn } from "@/lib/utils";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
+import { cn, formatRupiah } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
+import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
+import {
+  getWeddingTimeRange,
+  type WeddingSession,
+  type WeddingEventType,
+} from "@/lib/constants/wedding-session-times";
+
+/** Map weddingType (R/AR/TR/PR/VO) ke WeddingEventType untuk auto-fill time.
+ *  TR, PR, VO tidak punya padanan standar → return "" (user isi manual). */
+function mapWeddingTypeToEventType(weddingType: string | null): WeddingEventType | "" {
+  if (weddingType === "R") return "resepsi";
+  if (weddingType === "AR") return "akad-dan-resepsi";
+  return "";
+}
 
 interface BookingDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 type Option = { id: string; name: string };
 interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
+interface LeadOption { id: string; name: string; email: string | null; contactNumbers: Array<{ label?: string; name?: string; number: string }>; address: string | null; sourceOfInformation: { id: string; name: string } | null; bitrixId: string | null; convertedToCustomerId: string | null; assignedTo: { id: string; fullName: string | null } | null }
 interface CategoryPriceEntry {
   id: string;
   categoryName: string;
@@ -127,6 +144,7 @@ const DRAFT_KEY = "booking_draft";
 interface BookingDraft {
   currentStep: number;
   customerName: string;
+  selectedLeadId: string;
   contactNumbers: MobileNumberEntry[];
   contactEmail: string;
   contactNik: string;
@@ -144,6 +162,7 @@ interface BookingDraft {
   formValues: Record<string, unknown>;
   takeoutPrices?: Record<string, number>;
   categoryToggles?: Record<string, boolean>;
+  time?: string;
 }
 
 function saveDraft(d: BookingDraft) {
@@ -156,9 +175,17 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
 }
 
-export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
+export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerProps) {
   const createMut = useCreateBooking();
   const qc = useQueryClient();
+  const { users: salesUsers } = useSalesUsers();
+  const { user } = useCurrentUser();
+
+  // Sales auto-detect: salesUsers already contains both "sales" & "sales-mice"
+  // roles, and s.id === profileId. If the logged-in user is in that list, lock
+  // the sales field to themselves; admin/manager picks freely.
+  const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
+
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
 
@@ -175,14 +202,28 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [contactKtpAddress, setContactKtpAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
+  const [time, setTime] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [selectedLeadId, setSelectedLeadId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(customerSearch), 300);
     return () => clearTimeout(t);
   }, [customerSearch]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setCustomerDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const { data: customersResult } = useQuery({
     queryKey: ["customers", debouncedSearch],
@@ -191,6 +232,14 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     staleTime: 30_000,
   });
   const customers = customersResult?.data ?? [];
+
+  const { data: leadsResult } = useQuery({
+    queryKey: ["leads-search", debouncedSearch],
+    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/leads?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
+    enabled: debouncedSearch.length >= 1,
+    staleTime: 30_000,
+  });
+  const leadOptions = leadsResult?.items ?? [];
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
   const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
@@ -244,6 +293,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   }
 
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
+  const [bonusPickerOpen, setBonusPickerOpen] = useState(false);
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id, categoryName: c.name })));
   const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
 
@@ -252,6 +302,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const form = useForm<BookingInput>({
     defaultValues: {
       bookingDate: "", customerId: "", venueId: "", packageId: "",
+      salesId: null,
       paymentMethodId: null, sourceOfInformationId: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
       specialBonusName: null, specialBonusAmount: null,
@@ -262,10 +313,12 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   useEffect(() => {
     if (open) {
+      setBonusPickerOpen(false);
       const draft = loadDraft();
       if (draft) {
         setCurrentStep(draft.currentStep);
         setCustomerName(draft.customerName);
+        setSelectedLeadId(draft.selectedLeadId ?? "");
         setContactNumbers(draft.contactNumbers);
         setContactEmail(draft.contactEmail);
         setContactNik(draft.contactNik);
@@ -282,6 +335,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setTerms(draft.terms.some((t) => t.dueDate) ? draft.terms : makeDefaultTerms());
         if (draft.takeoutPrices) setTakeoutPrices(draft.takeoutPrices);
         if (draft.categoryToggles) setCategoryToggles(draft.categoryToggles);
+        if (draft.time) setTime(draft.time);
         form.reset(draft.formValues as BookingInput);
       } else {
         form.reset();
@@ -289,9 +343,10 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setBonuses([]); setTerms(makeDefaultTerms());
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
         setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
-        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName("");
+        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
         setTakeoutPrices({});
         setCategoryToggles({});
+        setTime("");
         sigSalesRef.current?.clear();
       }
     }
@@ -304,15 +359,15 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => {
       saveDraft({
-        currentStep, customerName, contactNumbers, contactEmail, contactNik,
+        currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik,
         contactKtpAddress,
-      contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
+        contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
         specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice,
-        bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles,
+        bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles, time,
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles, time]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBasePrice = () => selectedPackagePrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
@@ -327,9 +382,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
   };
 
-  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId"]);
+  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId, wSalesId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId", "salesId"]);
+  // Name shown in the locked sales field — resolves from the current salesId.
+  const lockedSalesName =
+    salesUsers.find((s) => s.id === wSalesId)?.fullName ??
+    (currentUserIsSales ? (user?.name ?? "—") : "—");
   const isBitrixSource = sourceOptions.find((o) => o.id === wSourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()));
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()) && time.trim() && wSalesId);
 
   const selectedVariantData = packages.find((p: PackageData) => p.id === wPackageId);
 
@@ -371,10 +430,31 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   // Recalc term dates when event date changes
   useEffect(() => {
     if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
-  }, [wBookingDate]);  
+  }, [wBookingDate]);
+
+  // Auto-fill time dari session + weddingType (weddings only, R/AR saja)
+  useEffect(() => {
+    const mappedType = mapWeddingTypeToEventType(wWeddingType ?? null);
+    const autoTime = getWeddingTimeRange(
+      (wWeddingSession as WeddingSession | "") ?? "",
+      mappedType,
+    );
+    if (autoTime) {
+      setTime(autoTime);
+    }
+  }, [wWeddingSession, wWeddingType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Force-assign the sales field to the logged-in sales user (covers salesUsers
+  // loading after the open/draft reset, and re-applies if it gets cleared).
+  useEffect(() => {
+    if (open && currentUserIsSales && user?.profileId && wSalesId !== user.profileId) {
+      form.setValue("salesId", user.profileId);
+    }
+  }, [open, currentUserIsSales, user?.profileId, wSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) {
+      if (!wSalesId) { toast.error("Sales PIC wajib dipilih."); return; }
       if (!wSourceOfInformationId) { toast.error("Sumber informasi wajib diisi."); return; }
       if (isBitrixSource && !contactBitrixId.trim()) { toast.error("Bitrix ID wajib diisi jika sumber informasi adalah Bitrix."); return; }
       toast.error("Lengkapi field yang wajib diisi terlebih dahulu.");
@@ -429,6 +509,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
+      leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
       categoryToggles: allCategoryPrices.map((c) => ({
@@ -459,6 +540,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
     clearDraft();
     toast.success("Booking berhasil dibuat.");
+    onSuccess?.();
     onOpenChange(false);
   }
 
@@ -478,39 +560,98 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
               {/* ─── Step 1: Data Booking ─── */}
               {currentStep === 1 && (
                 <div className="space-y-3">
-                  {/* Customer */}
-                  {/* Customer */}
-                  <div>
+                  {/* Customer / Lead selector */}
+                  <div ref={customerDropdownRef}>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Customer Name *</FormLabel>
-                    <AutocompleteInput
-                      options={customers.map((c) => ({ id: c.id, name: c.name }))}
-                      value={customerName}
-                      onChange={(val) => {
-                        setCustomerName(val);
-                        setCustomerSearch(val);
-                        form.setValue("customerId", "");
-                      }}
-                      onSelect={(opt) => {
-                        setCustomerName(opt.name);
-                        form.setValue("customerId", opt.id);
-                        const c = customers.find((x) => x.id === opt.id);
-                        if (c) {
-                          if (c.mobileNumber) {
-                            const entries = Array.isArray(c.mobileNumber)
-                              ? (c.mobileNumber as MobileNumberEntry[])
-                              : String(c.mobileNumber).split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
-                            setContactNumbers(entries);
-                          }
-                          if (c.email) setContactEmail(c.email);
-                          if (c.nikNumber) setContactNik(c.nikNumber);
-                          if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
-                          if (c.bitrixId) setContactBitrixId(c.bitrixId);
-                          if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
-                        }
-                      }}
-                      placeholder="e.g. John Doe & Jane Doe"
-                      className="mt-1"
-                    />
+                    {selectedLeadId && (
+                      <p className={cn('text-xs', 'text-[var(--brand-gold)]', 'mt-0.5')}>Dari Lead — konversi otomatis saat booking dibuat</p>
+                    )}
+                    <div className="relative mt-1">
+                      <Input
+                        value={customerName}
+                        onChange={(e) => {
+                          setCustomerName(e.target.value);
+                          setCustomerSearch(e.target.value);
+                          form.setValue("customerId", "");
+                          setSelectedLeadId("");
+                          setCustomerDropdownOpen(true);
+                        }}
+                        onFocus={() => { if (customerName.trim()) setCustomerDropdownOpen(true); }}
+                        placeholder="Cari lead atau customer terdaftar..."
+                        className="w-full"
+                      />
+                      {customerDropdownOpen && customerName.trim() && (leadOptions.length > 0 || customers.length > 0) && (
+                        <div className="absolute z-50 w-full mt-1 max-h-80 overflow-auto rounded-xl border bg-background shadow-md">
+                          {leadOptions.length > 0 && (
+                            <div>
+                              <p className={cn('px-3', 'pt-2', 'pb-1', 'text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Dari Leads</p>
+                              {leadOptions.map((lead) => (
+                                <div
+                                  key={lead.id}
+                                  className={cn('cursor-pointer', 'px-3', 'py-2', 'text-sm', 'hover:bg-accent', 'transition-colors')}
+                                  onClick={() => {
+                                    setCustomerName(lead.name);
+                                    setSelectedLeadId(lead.id);
+                                    form.setValue("customerId", "");
+                                    // Auto-populate: contactNumbers (label→name mapping)
+                                    if (Array.isArray(lead.contactNumbers) && lead.contactNumbers.length > 0) {
+                                      const mapped = lead.contactNumbers.map((e) => ({
+                                        name: e.label ?? e.name ?? "",
+                                        number: e.number,
+                                      })).filter((e) => e.number);
+                                      setContactNumbers(mapped);
+                                    }
+                                    if (lead.email) setContactEmail(lead.email);
+                                    if (lead.address) setContactKtpAddress(lead.address);
+                                    if (lead.bitrixId) setContactBitrixId(lead.bitrixId);
+                                    if (lead.sourceOfInformation?.id) form.setValue("sourceOfInformationId", lead.sourceOfInformation.id);
+                                    // Sales — autofill dari sales lead. Skip kalau user login adalah
+                                    // sales (field-nya terkunci ke dirinya sendiri).
+                                    if (!currentUserIsSales && lead.assignedTo?.id) form.setValue("salesId", lead.assignedTo.id);
+                                    setCustomerDropdownOpen(false);
+                                  }}
+                                >
+                                  <p className="font-medium">{lead.name}</p>
+                                  {lead.email && <p className="text-xs text-muted-foreground">{lead.email}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {customers.length > 0 && (
+                            <div>
+                              {leadOptions.length > 0 && <div className="border-t my-1" />}
+                              <p className={cn('px-3', 'pt-2', 'pb-1', 'text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Customer Terdaftar</p>
+                              {customers.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className={cn('cursor-pointer', 'px-3', 'py-2', 'text-sm', 'hover:bg-accent', 'transition-colors')}
+                                  onClick={() => {
+                                    setCustomerName(c.name);
+                                    form.setValue("customerId", c.id);
+                                    setSelectedLeadId("");
+                                    if (c.mobileNumber) {
+                                      const entries = Array.isArray(c.mobileNumber)
+                                        ? (c.mobileNumber as MobileNumberEntry[])
+                                        : String(c.mobileNumber).split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
+                                      setContactNumbers(entries);
+                                    }
+                                    if (c.email) setContactEmail(c.email);
+                                    if (c.nikNumber) setContactNik(c.nikNumber);
+                                    if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
+                                    if (c.bitrixId) setContactBitrixId(c.bitrixId);
+                                    if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
+                                    setCustomerDropdownOpen(false);
+                                  }}
+                                >
+                                  <p className="font-medium">{c.name}</p>
+                                  {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Contact Person */}
@@ -584,6 +725,35 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     </div>
                   </div>
 
+                  {/* Sales PIC */}
+                  {currentUserIsSales ? (
+                    /* Logged-in user is a sales → locked to themselves */
+                    <div>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Sales PIC *</FormLabel>
+                      <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                        {lockedSalesName}
+                      </div>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Booking ini akan tercatat atas nama Anda.
+                      </p>
+                    </div>
+                  ) : (
+                    <FormField control={form.control} name="salesId" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Sales PIC *</FormLabel>
+                        <SearchableSelect
+                          options={salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? "" }))}
+                          value={field.value ?? ""}
+                          onChange={(id) => field.onChange(id || null)}
+                          placeholder="Pilih sales..."
+                          searchPlaceholder="Cari sales..."
+                          emptyText="Sales tidak ditemukan"
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
+
                   {/* Sumber Informasi */}
                   <FormField control={form.control} name="sourceOfInformationId" render={({ field }) => (
                     <FormItem>
@@ -651,7 +821,25 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Event Type */}
+                  <FormField control={form.control} name="weddingType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Type *</FormLabel>
+                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="R">Resepsi</SelectItem>
+                          <SelectItem value="AR">Akad & Resepsi</SelectItem>
+                          <SelectItem value="TR">Teapai & Resepsi</SelectItem>
+                          <SelectItem value="PR">Pemberkatan Resepsi</SelectItem>
+                          <SelectItem value="VO">Venue Only</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -721,23 +909,22 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                     </FormItem>
                   )} />
 
-                  {/* Event Type */}
-                  <FormField control={form.control} name="weddingType" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Type *</FormLabel>
-                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="R">Resepsi</SelectItem>
-                          <SelectItem value="AR">Akad & Resepsi</SelectItem>
-                          <SelectItem value="TR">Teapai & Resepsi</SelectItem>
-                          <SelectItem value="PR">Pemberkatan Resepsi</SelectItem>
-                          <SelectItem value="VO">Venue Only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                  {/* Time */}
+                  <div className="flex flex-col gap-1">
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>
+                      Time *
+                      {wWeddingSession && mapWeddingTypeToEventType(wWeddingType ?? null) && (
+                        <span className="ml-2 font-normal text-muted-foreground text-xs">
+                          (auto-filled, bisa diubah manual)
+                        </span>
+                      )}
+                    </FormLabel>
+                    <TimeRangePicker
+                      value={time}
+                      onChange={setTime}
+                      placeholder="Pilih waktu (bisa rentang)..."
+                    />
+                  </div>
 
                   {/* Note Date Event */}
                   <div>
@@ -748,14 +935,21 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Complimentary (Bonus) */}
                   <div className="space-y-2">
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Complimentary (Bonus)</FormLabel>
-                    <SearchableSelect
-                      options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
-                      value=""
-                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); }}
-                      placeholder="Pilih vendor..."
-                      searchPlaceholder="Cari vendor..."
-                      emptyText="Tidak ada vendor"
-                    />
+                    {bonusPickerOpen ? (
+                      <SearchableSelect
+                        options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
+                        value=""
+                        onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); setBonusPickerOpen(false); }}
+                        placeholder="Pilih vendor..."
+                        searchPlaceholder="Cari vendor..."
+                        emptyText="Tidak ada vendor"
+                      />
+                    ) : (
+                      <Button type="button" variant="outline" className="w-full rounded-xl border-dashed" onClick={() => setBonusPickerOpen(true)}>
+                        <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} />
+                        Tambah Complimentary
+                      </Button>
+                    )}
                     {bonuses.map((b, idx) => (
                       <div key={idx} className={cn('bg-muted', 'border', 'border-border', 'rounded-md', 'px-3', 'py-2', 'space-y-1.5')}>
                         <div className={cn('flex', 'items-center', 'justify-between', 'gap-2')}>

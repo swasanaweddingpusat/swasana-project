@@ -18,13 +18,23 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCreatePackage, useUpdatePackage, useSaveVendorItems, useSaveInternalItems } from "@/hooks/use-packages";
 import { useVenues } from "@/hooks/use-venues";
+import { useCategories } from "@/hooks/use-categories";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { createCategory } from "@/actions/category";
+import { useQueryClient } from "@tanstack/react-query";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { SignaturePad } from "@/components/shared/signature-pad";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_VENDOR_CATEGORIES = ["Catering", "Dekorasi", "Rias & Busana", "Photography", "Entertainment", "MC"];
-const defaultVendorItems = () => DEFAULT_VENDOR_CATEGORIES.map((cat, i) => ({ id: `default-${i}-${Date.now()}`, categoryName: cat, itemText: "" }));
+const defaultVendorItems = (): VendorItemState[] => [];
+
+interface VendorItemState {
+  id: string;
+  categoryId: string | null;
+  categoryName: string;
+  itemText: string;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +79,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   const saveVendorItemsMut = useSaveVendorItems();
   const saveInternalItemsMut = useSaveInternalItems();
   const { data: venues = [] } = useVenues();
+  const { data: categories = [] } = useCategories();
+  const qc = useQueryClient();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -82,7 +94,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Step 2: Vendor items
-  const [vendorItems, setVendorItems] = useState<{ id: string; categoryName: string; itemText: string }[]>([]);
+  const [vendorItems, setVendorItems] = useState<VendorItemState[]>([]);
 
   // Step 3: Internal items
   const [internalItems, setInternalItems] = useState<{ id: string; itemName: string; itemDescription: string }[]>([]);
@@ -102,7 +114,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
       setPax(editingPackage.pax ?? 0);
       setVendorItems(
         (editingPackage.vendorItems ?? []).length > 0
-          ? (editingPackage.vendorItems ?? []).map((item) => ({ id: item.id, categoryName: item.categoryName, itemText: item.itemText }))
+          ? (editingPackage.vendorItems ?? []).map((item) => ({ id: item.id, categoryId: item.categoryId ?? null, categoryName: item.categoryName, itemText: item.itemText }))
           : defaultVendorItems()
       );
       setInternalItems(
@@ -130,7 +142,16 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
       if (d.venueId) setVenueId(d.venueId);
       if (d.notes) setNotes(d.notes);
       if (typeof d.pax === "number") setPax(d.pax);
-      if (d.vendorItems?.length) setVendorItems(d.vendorItems);
+      if (d.vendorItems?.length) {
+        setVendorItems(
+          d.vendorItems.map((it: Partial<VendorItemState> & { id: string }) => ({
+            id: it.id,
+            categoryId: it.categoryId ?? null,
+            categoryName: it.categoryName ?? "",
+            itemText: it.itemText ?? "",
+          })),
+        );
+      }
       if (d.internalItems?.length) setInternalItems(d.internalItems);
       if (d.currentStep) setCurrentStep(d.currentStep);
     } catch { /* ignore corrupt data */ }
@@ -251,7 +272,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
       // Save vendor items
       const viItems = vendorItems
         .filter((item) => item.categoryName.trim() && item.itemText.trim())
-        .map(({ categoryName, itemText }) => ({ categoryName, itemText }));
+        .map(({ categoryId, categoryName, itemText }) => ({ categoryId, categoryName, itemText }));
       if (viItems.length > 0) {
         await saveVendorItemsMut.mutateAsync({ packageId: pkgId, items: viItems });
       }
@@ -277,11 +298,15 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   // ─── Item helpers ──────────────────────────────────────────────────────────
 
   function addVendorItem() {
-    setVendorItems((prev) => [...prev, { id: `temp-${Date.now()}`, categoryName: "", itemText: "" }]);
+    setVendorItems((prev) => [...prev, { id: `temp-${Date.now()}`, categoryId: null, categoryName: "", itemText: "" }]);
   }
 
-  function updateVendorItem(itemId: string, field: "categoryName" | "itemText", value: string) {
-    setVendorItems((prev) => prev.map((item) => item.id === itemId ? { ...item, [field]: value } : item));
+  function setVendorItemCategory(itemId: string, categoryId: string, categoryName: string) {
+    setVendorItems((prev) => prev.map((item) => item.id === itemId ? { ...item, categoryId, categoryName } : item));
+  }
+
+  function updateVendorItemText(itemId: string, value: string) {
+    setVendorItems((prev) => prev.map((item) => item.id === itemId ? { ...item, itemText: value } : item));
   }
 
   function removeVendorItem(itemId: string) {
@@ -385,11 +410,24 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                     {vendorItems.map((item) => (
                       <SortableItemRow key={item.id} id={item.id}>
                         <div className={cn("flex items-center justify-between gap-2")}>
-                          <Input
-                            value={item.categoryName}
-                            onChange={(e) => updateVendorItem(item.id, "categoryName", e.target.value)}
-                            placeholder="Nama kategori"
-                            className={cn("text-sm font-medium border-gray-300")}
+                          <SearchableSelect
+                            options={categories.map((c) => ({ id: c.id, name: c.name }))}
+                            value={item.categoryId ?? ""}
+                            onChange={(val) => {
+                              const cat = categories.find((c) => c.id === val);
+                              if (cat) setVendorItemCategory(item.id, cat.id, cat.name);
+                            }}
+                            placeholder="Pilih kategori..."
+                            searchPlaceholder="Cari kategori..."
+                            emptyText="Kategori tidak ditemukan"
+                            className="flex-1"
+                            onAdd={async (name) => {
+                              const res = await createCategory(name);
+                              if (!res.success) { toast.error(res.error ?? "Gagal menambahkan"); return; }
+                              await qc.invalidateQueries({ queryKey: ["categories"] });
+                              setVendorItemCategory(item.id, res.category.id, res.category.name);
+                              toast.success(`Kategori "${res.category.name}" ditambahkan`);
+                            }}
                           />
                           <Button variant="outline" size="sm" onClick={() => removeVendorItem(item.id)} className={cn("h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10")}>
                             <TrashBinTrash weight="BoldDuotone" className={cn("h-4 w-4")} />
@@ -397,7 +435,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                         </div>
                         <SimpleEditor
                           value={item.itemText}
-                          onChange={(html) => updateVendorItem(item.id, "itemText", html)}
+                          onChange={(html) => updateVendorItemText(item.id, html)}
                           placeholder="Deskripsi item vendor..."
                         />
                       </SortableItemRow>

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
-import { ShieldCheck, AddCircle, Refresh, PenNewSquare, TrashBinTrash, MenuDots, AltArrowDown } from "@solar-icons/react";
+import { ShieldCheck, AddCircle, Refresh, PenNewSquare, TrashBinTrash, MenuDots, AltArrowDown, AltArrowLeft } from "@solar-icons/react";
 import { toast } from "sonner";
 import {
   useRoles, useCreateRole, useUpdateRole, useDeleteRole,
@@ -72,6 +72,8 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
   const [editPermAction, setEditPermAction] = useState("");
 
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(initialRoles[0]?.id ?? null);
+  // Mobile master-detail: when true, the detail panel is shown full-screen (<lg).
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   // Local permission state per role
   const [localPerms, setLocalPerms] = useState<Record<string, Set<string>>>(() => {
@@ -157,7 +159,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
   }, [permissions]);
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? null;
-  const isSuperAdmin = false; // All roles can be edited
+  // System super-admin bypasses all permission checks in the backend (hasPermission()),
+  // so its toggles are forced ON and locked here to reflect that — editing them is a no-op.
+  const isSuperAdmin = selectedRole?.isSystemRole === true;
   const currentPerms = selectedRoleId ? localPerms[selectedRoleId] ?? new Set<string>() : new Set<string>();
 
   // ─── Permission handlers ──────────────────────────────────────────────────
@@ -350,8 +354,8 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
     <div className={cn('flex', 'flex-col', 'mb-6', 'px-2')}>
       <div className={cn('grid', 'grid-cols-1', 'lg:grid-cols-4', 'gap-6')}>
 
-        {/* ── Roles List ── */}
-        <div className="lg:col-span-1">
+        {/* ── Roles List (master) — hidden on mobile when a detail is open ── */}
+        <div className={cn('lg:col-span-1', mobileDetailOpen && 'hidden lg:block')}>
           <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
             <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border')}>
               <h2 className={cn('text-sm', 'font-semibold', 'text-foreground')}>Roles</h2>
@@ -387,10 +391,10 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                 selectedRoleId === role.id ? "bg-accent" : "hover:bg-accent"
                               } ${snapshot.isDragging ? "shadow-md bg-background" : ""}`}
                             >
-                              <div {...drag.dragHandleProps} className={cn('cursor-grab', 'opacity-0', 'group-hover:opacity-40', 'hover:opacity-70!', 'shrink-0')}>
+                              <div {...drag.dragHandleProps} className={cn('cursor-grab', 'opacity-40', 'lg:opacity-0', 'lg:group-hover:opacity-40', 'hover:opacity-70!', 'shrink-0')}>
                                 <MenuDots weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
                               </div>
-                              <button onClick={() => { setSelectedRoleId(role.id); setIsDirty(false); }} className={cn('flex', 'items-center', 'gap-2', 'flex-1', 'min-w-0', 'text-left')}>
+                              <button onClick={() => { setSelectedRoleId(role.id); setIsDirty(false); setMobileDetailOpen(true); }} className={cn('flex', 'items-center', 'gap-2', 'flex-1', 'min-w-0', 'text-left')}>
                                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${roleColors[role.name.toLowerCase()] ?? "bg-gray-300 text-white"}`}>
                                   <ShieldCheck weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
                                 </div>
@@ -399,7 +403,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                                   {role.description && <p className={cn('text-xs', 'text-muted-foreground', 'truncate')}>{role.description}</p>}
                                 </div>
                               </button>
-                              <div className={cn('flex', 'gap-0.5', 'opacity-0', 'group-hover:opacity-100', 'shrink-0')}>
+                              <div className={cn('flex', 'gap-0.5', 'opacity-100', 'lg:opacity-0', 'lg:group-hover:opacity-100', 'shrink-0')}>
                                 <button className={cn('p-1', 'hover:bg-accent', 'rounded', 'cursor-pointer')} onClick={() => { setEditingRole(role); setEditName(role.name); setEditDesc(role.description ?? ""); }}>
                                   <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-primary')} />
                                 </button>
@@ -422,19 +426,36 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
           </div>
         </div>
 
-        {/* ── Permission Matrix ── */}
-        <div className="lg:col-span-3">
+        {/* ── Permission Matrix (detail) — hidden on mobile until a role is opened ── */}
+        <div className={cn('lg:col-span-3', !mobileDetailOpen && 'hidden lg:block')}>
           <div className={cn('bg-background', 'border', 'border-border', 'rounded-lg')}>
-            <div className={cn('flex', 'items-center', 'justify-between', 'p-4', 'border-b', 'border-border', 'sticky', 'top-0', 'bg-background', 'z-10', 'rounded-t-lg')}>
-              <div>
-                <h2 className={cn('text-sm', 'font-semibold', 'text-foreground')}>
-                  Permissions — <span>{selectedRole?.name ?? "—"}</span>
-                </h2>
-                {selectedRole?.description && <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>{selectedRole.description}</p>}
+            <div className={cn('flex', 'flex-col', 'gap-3', 'p-4', 'border-b', 'border-border', 'sticky', 'top-0', 'bg-background', 'z-10', 'rounded-t-lg', 'sm:flex-row', 'sm:items-center', 'sm:justify-between')}>
+              <div className={cn('flex', 'items-start', 'gap-2', 'min-w-0')}>
+                {/* Mobile back button */}
+                <button
+                  onClick={() => setMobileDetailOpen(false)}
+                  className={cn('lg:hidden', 'shrink-0', 'p-1.5', '-ml-1.5', 'rounded-lg', 'hover:bg-accent', 'transition-colors')}
+                  aria-label="Kembali ke daftar role"
+                >
+                  <AltArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+                </button>
+                <div className="min-w-0">
+                  <h2 className={cn('text-sm', 'font-semibold', 'text-foreground', 'flex', 'items-center', 'gap-2', 'flex-wrap')}>
+                    Permissions — <span>{selectedRole?.name ?? "—"}</span>
+                    {isSuperAdmin && (
+                      <span className={cn('inline-flex', 'items-center', 'gap-1', 'rounded-full', 'bg-muted', 'px-2', 'py-0.5', 'text-[10px]', 'font-medium', 'text-muted-foreground')}>
+                        <ShieldCheck weight="BoldDuotone" className={cn('h-3', 'w-3')} /> Akses penuh — terkunci
+                      </span>
+                    )}
+                  </h2>
+                  {isSuperAdmin
+                    ? <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>Role sistem ini otomatis punya semua izin dan tidak bisa diubah.</p>
+                    : selectedRole?.description && <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5')}>{selectedRole.description}</p>}
+                </div>
               </div>
-              <div className={cn('flex', 'gap-2')}>
+              <div className={cn('flex', 'gap-2', 'shrink-0')}>
                 <Button size="sm" variant="outline" onClick={() => setShowAddModule(true)} className={cn('h-7', 'text-xs', 'gap-1')}>
-                  <AddCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} /> Add Module
+                  <AddCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} /> <span className={cn('hidden', 'sm:inline')}>Add Module</span>
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleReset} disabled={!isDirty || isSuperAdmin} className={cn('h-7', 'text-xs')}>Reset</Button>
                 <Button size="sm" onClick={handleSave} disabled={!isDirty || isSuperAdmin || updatePermsMut.isPending} className={cn('h-7', 'text-xs', 'gap-1')}>
@@ -472,7 +493,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               {(() => {
                 const actions = Array.from(moduleActions[mod]).sort();
                 const pids = actions.map((a) => permLookup[`${mod}:${a}`]).filter(Boolean);
-                const checkedCount = pids.filter((pid) => currentPerms.has(pid)).length;
+                const checkedCount = isSuperAdmin ? pids.length : pids.filter((pid) => currentPerms.has(pid)).length;
                 const allChecked = pids.length > 0 && checkedCount === pids.length;
                 const isOpen = openModules.has(mod);
 
@@ -486,8 +507,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                       </div>
                       {/* Toggle All */}
                       <Switch
-                        checked={allChecked}
+                        checked={isSuperAdmin || allChecked}
                         onCheckedChange={() => toggleAllForModule(mod)}
+                        disabled={isSuperAdmin}
                       />
 
                       {/* Module name */}
@@ -529,7 +551,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                     {/* Accordion Body */}
                     {isOpen && (
                       <div className={cn('px-4', 'py-3', 'bg-background')}>
-                        <div className={cn('grid', 'grid-cols-3', 'gap-x-6', 'gap-y-1')}>
+                        <div className={cn('grid', 'grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3', 'gap-x-6', 'gap-y-1')}>
                         {actions.map((action) => {
                           const pid = permLookup[`${mod}:${action}`];
                           const checked = pid ? currentPerms.has(pid) : false;
@@ -539,9 +561,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
                               <div className={cn('flex', 'items-center', 'gap-3', 'flex-1')}>
                                 {/* Toggle per permission */}
                                 <Switch
-                                  checked={checked}
+                                  checked={isSuperAdmin || checked}
                                   onCheckedChange={() => togglePermission(mod, action)}
-                                  disabled={!pid}
+                                  disabled={!pid || isSuperAdmin}
                                 />
 
                                 {/* Action name — inline edit */}
@@ -563,7 +585,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
 
                               {/* Edit / Delete icons */}
                               {!isEditing && pid && (
-                                <div className={cn('opacity-0', 'group-hover/perm:opacity-100', 'flex', 'items-center', 'gap-1', 'transition-opacity')}>
+                                <div className={cn('opacity-100', 'lg:opacity-0', 'lg:group-hover/perm:opacity-100', 'flex', 'items-center', 'gap-1', 'transition-opacity')}>
                                   <button onClick={() => { setEditPermId(pid); setEditPermAction(action); }} className={cn('p-1', 'hover:bg-accent', 'rounded', 'cursor-pointer')}>
                                     <PenNewSquare weight="BoldDuotone" className={cn('h-3', 'w-3', 'text-muted-foreground')} />
                                   </button>

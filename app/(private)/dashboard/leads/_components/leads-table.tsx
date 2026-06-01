@@ -4,11 +4,22 @@ import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { type DropResult } from "@hello-pangea/dnd";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 import { LeadDrawer } from "./lead-drawer";
 import { LeadsFilters, type ViewMode } from "./leads-filters";
 import { LeadsListView } from "./leads-list-view";
 import { LeadsPipelineView } from "./leads-pipeline-view";
-import { useLeads, useUpdateLeadStatus } from "@/hooks/use-leads";
+import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LeadItem } from "@/lib/queries/leads";
@@ -25,20 +36,27 @@ export function LeadsTable() {
   const effectiveViewMode: ViewMode = isMobile ? "list" : viewMode;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [venueFilter, setVenueFilter] = useState("all");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editLead, setEditLead] = useState<LeadListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LeadItem | null>(null);
+  const [isManualRefresh, setIsManualRefresh] = useState(false);
 
   const pageSize = 20;
-  const { data: leadsData, isLoading: leadsLoading } = useLeads({
+  const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useLeads({
     search: search.trim() || undefined,
     statusId: statusFilter !== "all" ? statusFilter : undefined,
+    venueId: venueFilter !== "all" ? venueFilter : undefined,
+    eventTypeId: eventTypeFilter !== "all" ? eventTypeFilter : undefined,
     page: currentPage,
     pageSize,
   });
 
   const { data: statuses = [] } = useLeadStatuses();
   const { mutateAsync: updateStatus } = useUpdateLeadStatus();
+  const { mutateAsync: deleteLeadMut, isPending: isDeleting } = useDeleteLead();
 
   // Non-final statuses go in pipeline
   const pipelineStatuses = statuses.filter((s) => !s.isFinal);
@@ -47,7 +65,7 @@ export function LeadsTable() {
   const totalPages = leadsData?.totalPages ?? 1;
 
   const handleDragEnd = useCallback(
-    async (result: DropResult) => {
+    (result: DropResult) => {
       const { draggableId, destination } = result;
       if (!destination) return;
       const newStatusId = destination.droppableId;
@@ -62,12 +80,18 @@ export function LeadsTable() {
         return;
       }
 
-      const res = await updateStatus({ id: draggableId, statusId: newStatusId });
-      if (res.success) {
-        toast.success(`${lead.name} dipindahkan ke ${newStatus.name}`);
-      } else {
-        toast.error(res.error ?? "Gagal memindahkan lead.");
-      }
+      // Fire-and-forget: the card moves instantly via optimistic cache update
+      // in useUpdateLeadStatus. The API runs in the background; on failure the
+      // mutation rolls back the cache and we surface the error.
+      updateStatus({ id: draggableId, statusId: newStatusId })
+        .then((res) => {
+          if (res.success) {
+            toast.success(`${lead.name} dipindahkan ke ${newStatus.name}`);
+          } else {
+            toast.error(res.error ?? "Gagal memindahkan lead.");
+          }
+        })
+        .catch(() => toast.error("Gagal memindahkan lead."));
     },
     [leads, statuses, updateStatus]
   );
@@ -86,6 +110,17 @@ export function LeadsTable() {
     toast.info(`Buat Quotation untuk ${lead.name} — coming soon.`);
   }
 
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    const res = await deleteLeadMut(deleteTarget.id);
+    if (res.success) {
+      toast.success(`Lead "${deleteTarget.name}" dihapus.`);
+      setDeleteTarget(null);
+    } else {
+      toast.error(res.error ?? "Gagal menghapus lead.");
+    }
+  }
+
   function handleSearchChange(value: string) {
     setSearch(value);
     setCurrentPage(1);
@@ -94,6 +129,23 @@ export function LeadsTable() {
   function handleStatusChange(value: string) {
     setStatusFilter(value);
     setCurrentPage(1);
+  }
+
+  function handleVenueChange(value: string) {
+    setVenueFilter(value);
+    setCurrentPage(1);
+  }
+
+  function handleEventTypeChange(value: string) {
+    setEventTypeFilter(value);
+    setCurrentPage(1);
+  }
+
+  function handleRefresh() {
+    // Show shimmer only for manual refresh (not for background refetches like
+    // drag-and-drop optimistic settles).
+    setIsManualRefresh(true);
+    void refetchLeads().finally(() => setIsManualRefresh(false));
   }
 
   const statusCounts = statuses.map((s) => ({
@@ -114,9 +166,15 @@ export function LeadsTable() {
             onSearchChange={handleSearchChange}
             statusFilter={statusFilter}
             onStatusChange={handleStatusChange}
+            venueFilter={venueFilter}
+            onVenueChange={handleVenueChange}
+            eventTypeFilter={eventTypeFilter}
+            onEventTypeChange={handleEventTypeChange}
             statusCounts={statusCounts}
             totalFiltered={leadsData?.total ?? 0}
             onAdd={handleAdd}
+            onRefresh={handleRefresh}
+            isRefreshing={isManualRefresh}
           />
 
           {effectiveViewMode === "list" && (
@@ -128,8 +186,9 @@ export function LeadsTable() {
               totalPages={totalPages}
               onPageChange={setCurrentPage}
               onEdit={handleEdit}
+              onDelete={setDeleteTarget}
               onBuatQuotation={handleBuatQuotation}
-              isLoading={leadsLoading}
+              isLoading={leadsLoading || isManualRefresh}
             />
           )}
 
@@ -139,6 +198,7 @@ export function LeadsTable() {
               statuses={pipelineStatuses}
               onDragEnd={handleDragEnd}
               onEdit={handleEdit}
+              isLoading={leadsLoading || isManualRefresh}
             />
           )}
         </CardContent>
@@ -149,6 +209,27 @@ export function LeadsTable() {
         onOpenChange={setDrawerOpen}
         editLead={editLead}
       />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Lead</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className={cn("bg-destructive", "text-destructive-foreground", "hover:bg-destructive/90")}
+            >
+              {isDeleting ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

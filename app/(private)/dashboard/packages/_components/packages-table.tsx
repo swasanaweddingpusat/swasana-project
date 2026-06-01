@@ -18,6 +18,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useVenues } from "@/hooks/use-venues";
 import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable } from "@/hooks/use-packages";
 import type { PackageQueryItem, PackagesQueryResult } from "@/lib/queries/packages";
+import { fetchPackages } from "@/services/package-service";
 import { toast } from "sonner";
 import { DrawerPackage } from "./drawer-package";
 import { DetailModal } from "./detail-modal";
@@ -317,15 +318,23 @@ export function PackagesTable() {
             <TooltipTrigger
               className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}
               onClick={async () => {
-                try {
-                  await qc.refetchQueries({ queryKey: ["packages"] });
-                  const fresh = qc.getQueryData<PackagesQueryResult>(["packages", currentPage, ROWS_PER_PAGE, debouncedSearch, ""]);
-                  setTcPkg(fresh?.data.find((p) => p.id === pkg.id) ?? pkg);
-                } catch {
-                  toast.error("Gagal memuat data terbaru");
-                  setTcPkg(pkg);
-                }
+                // Open immediately with current data, then silently refresh just this
+                // package's T&C in the background — without touching the table query
+                // (refetchQueries would flip isFetching and flash the whole table).
+                setTcPkg(pkg);
                 setTcDrawerOpen(true);
+                try {
+                  const fresh = await fetchPackages({
+                    page: currentPage,
+                    pageSize: ROWS_PER_PAGE,
+                    search: debouncedSearch || undefined,
+                    venueId: selectedVenueId,
+                  });
+                  const updated = fresh.data.find((p) => p.id === pkg.id);
+                  if (updated) setTcPkg(updated);
+                } catch {
+                  /* keep the already-shown data on failure */
+                }
               }}
             >
               <FileText weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />

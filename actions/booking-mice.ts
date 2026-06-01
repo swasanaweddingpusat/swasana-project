@@ -48,23 +48,71 @@ export async function createMiceBooking(
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/${eventType.code}/${dd}-${mm}-${year}`;
 
-    const customerId = crypto.randomUUID();
     const bookingId = crypto.randomUUID();
+
+    // ── Resolve customer ──────────────────────────────────────────────────────
+    // Priority: explicit customerId → lead's converted customer / new from lead →
+    // new from manual input. Avoids creating duplicate customers per MICE booking.
+    let customerId: string;
+    let isNewCustomer = false;
+    let leadRecord: { id: string; convertedToCustomerId: string | null } | null = null;
+
+    if (input.leadId) {
+      leadRecord = await db.lead.findUnique({
+        where: { id: input.leadId },
+        select: { id: true, convertedToCustomerId: true },
+      });
+      if (!leadRecord) return { success: false, error: "Lead tidak ditemukan." };
+      if (leadRecord.convertedToCustomerId) {
+        customerId = leadRecord.convertedToCustomerId;
+        const exists = await db.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+        if (!exists) return { success: false, error: "Customer dari lead tidak ditemukan." };
+      } else {
+        customerId = crypto.randomUUID();
+        isNewCustomer = true;
+      }
+    } else if (input.customerId) {
+      const exists = await db.customer.findUnique({ where: { id: input.customerId }, select: { id: true } });
+      if (!exists) return { success: false, error: "Customer tidak ditemukan." };
+      customerId = input.customerId;
+    } else {
+      customerId = crypto.randomUUID();
+      isNewCustomer = true;
+    }
+
     const managerId = await resolveManagerId(salesId);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
-      db.customer.create({
-        data: {
-          id: customerId,
-          name: input.clientName,
-          mobileNumber: [{ number: input.clientPhone }],
-          email: input.email || "",
-          type: "mice",
-          memberStatus: "Non-Member",
-          sourceOfInformationId: input.sourceOfInformationId ?? null,
-          updatedBy: session!.user.name ?? session!.user.email ?? null,
-        },
-      }),
+      ...(isNewCustomer
+        ? [
+            db.customer.create({
+              data: {
+                id: customerId,
+                name: input.clientName,
+                mobileNumber: [{ number: input.clientPhone }],
+                email: input.email || "",
+                type: "mice",
+                memberStatus: "Non-Member",
+                sourceOfInformationId: input.sourceOfInformationId ?? null,
+                updatedBy: session!.user.name ?? session!.user.email ?? null,
+              },
+            }),
+          ]
+        : []),
+      // Lead conversion tracking — mirror wedding flow
+      ...(leadRecord
+        ? [
+            db.lead.update({
+              where: { id: leadRecord.id },
+              data: {
+                convertedToBookingId: bookingId,
+                ...(leadRecord.convertedToCustomerId
+                  ? {}
+                  : { convertedToCustomerId: customerId, convertedAt: new Date() }),
+              },
+            }),
+          ]
+        : []),
       db.booking.create({
         data: {
           id: bookingId,
@@ -79,27 +127,22 @@ export async function createMiceBooking(
           sourceOfInformationId: input.sourceOfInformationId ?? null,
           quotationId: input.quotationId ?? null,
           salesSignature: input.salesSignature ?? null,
+          signingLocation: input.signingLocation ?? null,
           poNumber,
         },
       }),
-      db.termOfPayment.create({
-        data: {
-          bookingId,
-          name: "Booking Fee",
-          amount: input.bookingFee,
-          dueDate: new Date(input.bookingFeeDueDate),
-          sortOrder: 0,
-        },
-      }),
-      db.termOfPayment.create({
-        data: {
-          bookingId,
-          name: "Final Payment",
-          amount: input.finalPayment,
-          dueDate: new Date(input.finalPaymentDueDate),
-          sortOrder: 1,
-        },
-      }),
+      ...input.terms.map((t, i) =>
+        db.termOfPayment.create({
+          data: {
+            bookingId,
+            name: t.name,
+            amount: t.amount,
+            dueDate: new Date(t.dueDate),
+            sortOrder: t.sortOrder ?? i,
+            paymentStatus: t.paymentStatus ?? "unpaid",
+          },
+        })
+      ),
     ];
 
     await db.$transaction(ops);
@@ -173,39 +216,29 @@ export async function updateMiceBooking(
     if (input.salesId !== undefined) bookingUpdate.salesId = input.salesId ?? session!.user.profileId;
     if (input.salesSignature !== undefined)
       bookingUpdate.salesSignature = input.salesSignature ?? null;
+    if (input.signingLocation !== undefined)
+      bookingUpdate.signingLocation = input.signingLocation ?? null;
     if (input.quotationId !== undefined) bookingUpdate.quotationId = input.quotationId ?? null;
     if (Object.keys(bookingUpdate).length > 0) {
       ops.push(db.booking.update({ where: { id }, data: bookingUpdate }));
     }
 
-    // Replace term of payments atomically if any TOP field changed
-    const hasTopChanges =
-      input.bookingFee !== undefined ||
-      input.bookingFeeDueDate !== undefined ||
-      input.finalPayment !== undefined ||
-      input.finalPaymentDueDate !== undefined;
-
-    if (hasTopChanges) {
+    // Replace term of payments atomically when terms array is provided
+    if (input.terms && input.terms.length > 0) {
       ops.push(
         db.termOfPayment.deleteMany({ where: { bookingId: id } }),
-        db.termOfPayment.create({
-          data: {
-            bookingId: id,
-            name: "Booking Fee",
-            amount: input.bookingFee ?? 0,
-            dueDate: new Date(input.bookingFeeDueDate ?? new Date()),
-            sortOrder: 0,
-          },
-        }),
-        db.termOfPayment.create({
-          data: {
-            bookingId: id,
-            name: "Final Payment",
-            amount: input.finalPayment ?? 0,
-            dueDate: new Date(input.finalPaymentDueDate ?? new Date()),
-            sortOrder: 1,
-          },
-        })
+        ...input.terms.map((t, i) =>
+          db.termOfPayment.create({
+            data: {
+              bookingId: id,
+              name: t.name,
+              amount: t.amount,
+              dueDate: new Date(t.dueDate),
+              sortOrder: t.sortOrder ?? i,
+              paymentStatus: t.paymentStatus ?? "unpaid",
+            },
+          })
+        )
       );
     }
 

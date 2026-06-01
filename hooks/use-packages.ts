@@ -72,7 +72,7 @@ export function useTogglePackageAvailable() {
 export function useSaveVendorItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ packageId, items }: { packageId: string; items: { categoryName: string; itemText: string }[] }) =>
+    mutationFn: ({ packageId, items }: { packageId: string; items: { categoryId?: string | null; categoryName: string; itemText: string }[] }) =>
       saveVendorItems(packageId, items),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
@@ -110,7 +110,7 @@ export function useSavePackagePrices() {
       sellingPrice,
     }: {
       packageId: string;
-      categories: { categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[];
+      categories: { categoryId?: string | null; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }[];
       margin: number;
       sellingPrice: number;
     }) => savePackagePrices(packageId, categories, margin, sellingPrice),

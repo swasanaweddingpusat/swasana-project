@@ -1,16 +1,16 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requirePermission, isSuperAdmin as isSuperAdminFn } from "@/lib/permissions";
+import { auth } from "@/lib/auth";
+import { isSuperAdmin as isSuperAdminFn } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 
 export async function approveStep(stepId: string, signature?: string | null) {
-  const permResult = await requirePermission({ module: "approval", action: "edit" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const session = await auth();
+  if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan. Silakan login kembali." };
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   try {
@@ -98,9 +98,8 @@ export async function approveStep(stepId: string, signature?: string | null) {
 }
 
 export async function rejectStep(stepId: string, notes: string) {
-  const permResult = await requirePermission({ module: "approval", action: "edit" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const session = await auth();
+  if (!session?.user?.id) return { success: false as const, error: "Sesi tidak ditemukan. Silakan login kembali." };
   if (!mutationLimiter.check(`approval:${session.user.id}`)) return { success: false as const, ...rateLimitError() };
 
   if (!notes.trim()) return { success: false as const, error: "Alasan penolakan wajib diisi" };

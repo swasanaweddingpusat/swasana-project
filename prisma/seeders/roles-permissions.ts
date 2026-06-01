@@ -18,7 +18,6 @@ const roleData = [
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
   booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-  approval: ["edit"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -60,40 +59,31 @@ const moduleActions: Record<string, string[]> = {
 const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur-sales": {
     booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "comment", "print", "client-agreement"],
-    approval: ["edit"],
     customers: ["view", "create", "edit"],
     groups: ["view", "view-all", "create", "edit", "delete"],
     package: ["view"],
     vendor: ["view"],
     "finance-ar": ["view"],
-    leads: ["view", "create", "edit", "delete"],
+    // leads:delete is intentionally reserved for super-admin & manager only.
+    leads: ["view", "create", "edit"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
   },
+  // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
     booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-    approval: ["edit"],
+    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     customers: ["view", "create", "edit", "delete"],
+    "finance-ar": ["view", "create", "edit", "delete"],
     groups: ["view", "view-all", "create", "edit", "delete"],
-    package: ["view", "create", "edit", "delete", "term-&-condition"],
+    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
-    "finance-ar": ["view"],
-    "settings-brands": ["view", "create", "edit", "delete"],
-    "settings-venues": ["view", "create", "edit", "delete"],
-    "settings-users": ["view", "create", "edit", "delete"],
-    "settings-education-level": ["view", "create", "edit", "delete"],
-    "settings-event-types": ["view", "create", "edit", "delete"],
-    "settings-order-status": ["view", "create", "edit", "delete"],
-    "settings-payment-methods": ["view", "create", "edit", "delete"],
-    "settings-role-permission": ["view", "edit"],
-    "settings-source-of-information": ["view", "create", "edit", "delete"],
+    "vendor-specialist": ["view", "create", "edit", "delete"],
     leads: ["view", "create", "edit", "delete"],
-    "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
-    approval: ["edit"],
     customers: ["view"],
     package: ["view"],
     vendor: ["view", "create", "edit"],
@@ -114,7 +104,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement"],
     customers: ["view", "create", "edit"],
-    groups: ["view", "create", "edit"],
+    groups: ["view"],
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
     leads: ["view", "create", "edit"],
@@ -154,6 +144,7 @@ const REMOVED_MODULES = [
   "settings", "payment_methods", "role_permission", "source_of_information",
   "settings-groups", // renamed → "groups" (code uses module "groups", not "settings-groups")
   "settings-approval-flow", // approval flow is now hardcoded, no longer a DB-driven setting
+  "approval", // approve/reject authorization handled by role-matching in approval flow (manager → finance), not a permission toggle
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────
@@ -276,10 +267,13 @@ export async function seedRolesPermissions(): Promise<void> {
     if (!existing) await prisma.rolePermission.create({ data: { roleId: adminRole.id, permissionId: perm.id } });
   }
 
-  // 6. Assign permissions per role from the matrix
+  // 6. Assign permissions per role from the matrix (wipe-and-replace per role for idempotency)
   for (const [roleName, modules] of Object.entries(rolePermissionMap)) {
     const role = await prisma.role.findUnique({ where: { name: roleName } });
     if (!role) continue;
+
+    // Wipe existing assignments for this role so removals take effect
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
 
     for (const [mod, actions] of Object.entries(modules)) {
       for (const action of actions) {
@@ -287,10 +281,7 @@ export async function seedRolesPermissions(): Promise<void> {
           where: { module_action: { module: mod, action } },
         });
         if (!perm) continue;
-        const existing = await prisma.rolePermission.findUnique({
-          where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
-        });
-        if (!existing) await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+        await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
       }
     }
   }

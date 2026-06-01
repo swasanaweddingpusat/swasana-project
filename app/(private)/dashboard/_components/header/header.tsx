@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AddCircle, Book } from "@solar-icons/react";
+import { Book, UserPlus } from "@solar-icons/react";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { NotificationBell } from "./notification-bell";
 import { useHeaderAction } from "@/components/providers/header-action-provider";
-import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
+import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { Button } from "@/components/ui/button";
-import { usePermissions } from "@/hooks/use-permissions";
 import { usePoll } from "@/hooks/use-poll";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +18,7 @@ export function Header() {
   const pathname = usePathname();
   const meta = resolveRouteMeta(pathname)?.meta;
   const { action } = useHeaderAction();
-  const { openBookingDrawer } = useBookingDrawer();
-  const { can } = usePermissions();
+  const { openLeadDrawer } = useLeadDrawer();
   usePoll();
 
   return (
@@ -41,16 +40,17 @@ export function Header() {
 
       <div className={cn("flex items-center gap-2")}>
         {action}
-        {can("booking", "create") && (
+        <PermissionGate module="leads" action="create">
           <Button
+            variant="default"
             size="sm"
-            onClick={openBookingDrawer}
-            className={cn("cursor-pointer")}
+            className={cn("cursor-pointer gap-1.5 hidden sm:inline-flex")}
+            onClick={() => openLeadDrawer()}
           >
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            <span className={cn("hidden sm:inline ml-1")}>Tambah Booking</span>
+            <UserPlus weight="BoldDuotone" className="h-4 w-4" />
+            <span>Tambah Lead</span>
           </Button>
-        )}
+        </PermissionGate>
         <Button
           variant="outline"
           size="sm"

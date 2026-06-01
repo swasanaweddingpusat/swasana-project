@@ -13,6 +13,7 @@ import {
   List,
   Diploma,
   CalendarMark,
+  UserRounded,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -51,6 +52,13 @@ const GROUPS: SettingGroup[] = [
         icon: ShieldCheck,
         href: "/dashboard/settings/roles",
         module: "settings-role-permission",
+      },
+      {
+        title: "Customers",
+        description: "Kelola data customer, member status, dan riwayat booking.",
+        icon: UserRounded,
+        href: "/dashboard/settings/customer",
+        module: "customers",
       },
     ],
   },
@@ -117,6 +125,7 @@ export default async function SettingsHubPage() {
     "settings-role-permission", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
+    "customers",
   ]);
 
   const session = await auth();

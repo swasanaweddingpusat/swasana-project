@@ -3,12 +3,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createLead, updateLead, deleteLead, updateLeadStatus } from "@/actions/lead";
 import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput } from "@/lib/validations/lead";
-import type { LeadsResult } from "@/lib/queries/leads";
+import type { LeadsResult, LeadStatusItem } from "@/lib/queries/leads";
 
 interface LeadFilter {
   search?: string;
   statusId?: string;
   venueId?: string;
+  eventTypeId?: string;
   assignedToId?: string;
   page?: number;
   pageSize?: number;
@@ -19,6 +20,7 @@ async function fetchLeads(filter: LeadFilter = {}): Promise<LeadsResult> {
   if (filter.search) params.set("search", filter.search);
   if (filter.statusId) params.set("statusId", filter.statusId);
   if (filter.venueId) params.set("venueId", filter.venueId);
+  if (filter.eventTypeId) params.set("eventTypeId", filter.eventTypeId);
   if (filter.assignedToId) params.set("assignedToId", filter.assignedToId);
   if (filter.page) params.set("page", String(filter.page));
   if (filter.pageSize) params.set("pageSize", String(filter.pageSize));
@@ -66,6 +68,47 @@ export function useUpdateLeadStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateLeadStatusInput) => updateLeadStatus(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
+    // Optimistic: move the card immediately, before the API responds.
+    onMutate: async ({ id, statusId }) => {
+      await qc.cancelQueries({ queryKey: ["leads"] });
+
+      // Resolve the target status object from the cached statuses list.
+      const statuses = qc.getQueryData<LeadStatusItem[]>(["lead-statuses"]);
+      const nextStatus = statuses?.find((s) => s.id === statusId);
+      if (!nextStatus) return { snapshots: [] as [readonly unknown[], LeadsResult | undefined][] };
+
+      // Snapshot every cached leads query so we can roll back on error.
+      const snapshots = qc.getQueriesData<LeadsResult>({ queryKey: ["leads"] });
+
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        qc.setQueryData<LeadsResult>(key, {
+          ...data,
+          items: data.items.map((lead) =>
+            lead.id === id
+              ? {
+                  ...lead,
+                  status: {
+                    id: nextStatus.id,
+                    name: nextStatus.name,
+                    color: nextStatus.color,
+                    isFinal: nextStatus.isFinal,
+                    isSystem: nextStatus.isSystem,
+                  },
+                }
+              : lead,
+          ),
+        });
+      }
+
+      return { snapshots };
+    },
+    onError: (_err, _vars, context) => {
+      // Roll back to the pre-drag snapshots.
+      context?.snapshots?.forEach(([key, data]) => {
+        qc.setQueryData(key, data);
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["leads"] }),
   });
 }

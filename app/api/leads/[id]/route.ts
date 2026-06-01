@@ -63,6 +63,7 @@ export async function PATCH(
           ...(fields.name !== undefined && { name: fields.name }),
           ...(fields.contactNumbers !== undefined && { contactNumbers: fields.contactNumbers }),
           ...(fields.email !== undefined && { email: fields.email || null }),
+          ...(fields.address !== undefined && { address: fields.address || null }),
           ...(fields.eventDate !== undefined && {
             eventDate: fields.eventDate ? new Date(fields.eventDate) : null,
           }),
@@ -75,6 +76,7 @@ export async function PATCH(
           ...(fields.sourceOfInformationId !== undefined && {
             sourceOfInformationId: fields.sourceOfInformationId || null,
           }),
+          ...(fields.weddingSession !== undefined && { weddingSession: fields.weddingSession }),
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
         },

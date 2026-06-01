@@ -21,7 +21,9 @@ import {
   FileText,
   CalendarMark,
   UserCircle,
+  TrashBinTrash,
 } from "@solar-icons/react";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 
@@ -38,6 +40,7 @@ interface LeadsListViewProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   onEdit: (lead: LeadItem) => void;
+  onDelete: (lead: LeadItem) => void;
   onBuatQuotation: (lead: LeadItem) => void;
   isLoading?: boolean;
 }
@@ -114,11 +117,13 @@ function MobileLeadCard({
   lead,
   rowNumber,
   onEdit,
+  onDelete,
   onBuatQuotation,
 }: {
   lead: LeadItem;
   rowNumber: number;
   onEdit: (lead: LeadItem) => void;
+  onDelete: (lead: LeadItem) => void;
   onBuatQuotation: (lead: LeadItem) => void;
 }) {
   const firstContact = Array.isArray(lead.contactNumbers)
@@ -174,7 +179,12 @@ function MobileLeadCard({
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            {formatEventDate(lead.eventDate)}
+            <span>
+              <span>{formatEventDate(lead.eventDate)}</span>
+              {lead.time && (
+                <span className="block text-muted-foreground">{lead.time}</span>
+              )}
+            </span>
           </span>
           <span className="flex items-center gap-1">
             <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
@@ -210,6 +220,17 @@ function MobileLeadCard({
               Quotation
             </Button>
           )}
+          <PermissionGate module="leads" action="delete">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => onDelete(lead)}
+              aria-label={`Hapus lead ${lead.name}`}
+            >
+              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
+          </PermissionGate>
         </div>
       </CardContent>
     </Card>
@@ -226,6 +247,7 @@ export function LeadsListView({
   totalPages,
   onPageChange,
   onEdit,
+  onDelete,
   onBuatQuotation,
   isLoading,
 }: LeadsListViewProps) {
@@ -274,6 +296,7 @@ export function LeadsListView({
               lead={lead}
               rowNumber={rowNumber}
               onEdit={onEdit}
+              onDelete={onDelete}
               onBuatQuotation={onBuatQuotation}
             />
           );
@@ -297,8 +320,6 @@ export function LeadsListView({
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Tanggal Event</TableHead>
               {/* Pax — lg+ */}
               <TableHead className="px-4 whitespace-nowrap text-right hidden lg:table-cell">Pax</TableHead>
-              {/* Paket — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Paket</TableHead>
               {/* Status — always visible */}
               <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
               {/* Sales — sm+ */}
@@ -306,9 +327,7 @@ export function LeadsListView({
               {/* Sumber Info — lg+ */}
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Sumber Info</TableHead>
               {/* Action — always visible */}
-              <TableHead className="px-4 whitespace-nowrap w-28">
-                <span className="sr-only">Aksi</span>
-              </TableHead>
+              <TableHead className="px-4 whitespace-nowrap w-28">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -333,6 +352,9 @@ export function LeadsListView({
                     {/* Tablet only: show event date inline since Tanggal Event col is hidden at md */}
                     <div className="text-xs text-muted-foreground mt-0.5 lg:hidden">
                       {formatEventDate(lead.eventDate)}
+                      {lead.time && (
+                        <span className="block text-muted-foreground">{lead.time}</span>
+                      )}
                     </div>
                   </TableCell>
 
@@ -356,24 +378,16 @@ export function LeadsListView({
                   </TableCell>
 
                   {/* Tanggal Event */}
-                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden lg:table-cell">
-                    {formatEventDate(lead.eventDate)}
+                  <TableCell className="px-4 text-foreground/80 hidden lg:table-cell">
+                    <div>{formatEventDate(lead.eventDate)}</div>
+                    {lead.time && (
+                      <div className="text-xs text-muted-foreground">{lead.time}</div>
+                    )}
                   </TableCell>
 
                   {/* Pax */}
                   <TableCell className="px-4 text-right whitespace-nowrap text-foreground/80 hidden lg:table-cell">
                     {lead.estimatedPax ? lead.estimatedPax.toLocaleString("id-ID") : "—"}
-                  </TableCell>
-
-                  {/* Paket */}
-                  <TableCell className="px-4 hidden lg:table-cell">
-                    {lead.package ? (
-                      <Badge variant="secondary" className="text-xs">
-                        {lead.package.packageName}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
                   </TableCell>
 
                   {/* Status */}
@@ -421,6 +435,17 @@ export function LeadsListView({
                           <FileText weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       )}
+                      <PermissionGate module="leads" action="delete">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => onDelete(lead)}
+                          aria-label={`Hapus lead ${lead.name}`}
+                        >
+                          <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                        </Button>
+                      </PermissionGate>
                     </div>
                   </TableCell>
                 </TableRow>

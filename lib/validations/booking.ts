@@ -13,6 +13,9 @@ export const bookingSchema = z.object({
   contactBitrixId: z.string().optional().default(""),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().min(1, "Package wajib dipilih"),
+  // Optional: admin/manager assigns on behalf of a sales. When omitted, the
+  // action falls back to the caller's own profileId.
+  salesId: z.string().optional().nullable(),
   paymentMethodId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   specialBonusName: z.string().optional().nullable(),
@@ -42,6 +45,7 @@ export const bookingSchema = z.object({
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
   withMaterai: z.boolean().default(false),
+  leadId: z.string().optional().nullable(),
 });
 
 export const updateBookingSchema = z.object({

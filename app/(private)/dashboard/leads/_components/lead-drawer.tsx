@@ -28,6 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Calendar as CalendarSolarIcon, CloseCircle } from "@solar-icons/react";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn } from "@/lib/utils";
 import { createLeadSchema } from "@/lib/validations/lead";
 import type { CreateLeadInput } from "@/lib/validations/lead";
@@ -36,17 +37,20 @@ import { useCreateLead, useUpdateLead } from "@/hooks/use-leads";
 import { useVenues } from "@/hooks/use-venues";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useEventTypes } from "@/hooks/use-event-types";
-import { useUsers } from "@/hooks/use-users";
+import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface LeadDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editLead: LeadListItem | null;
+  onSuccess?: () => void;
 }
 
 interface LeadFormValues {
   name: string;
   email: string;
+  address: string;
   category: "WEDDINGS" | "MICE";
   statusId: string;
   venueId: string;
@@ -54,6 +58,8 @@ interface LeadFormValues {
   sourceOfInformationId: string;
   assignedToId: string;
   eventDate: string;
+  weddingSession: "morning" | "evening" | "fullday" | "";
+  time: string;
   estimatedPax: string;
   budgetRange: string;
   notes: string;
@@ -67,9 +73,16 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
+const SESSION_LABELS: Record<string, string> = {
+  morning: "Pagi",
+  evening: "Malam",
+  fullday: "Full Day",
+};
+
 const DEFAULT_VALUES: LeadFormValues = {
   name: "",
   email: "",
+  address: "",
   category: "WEDDINGS",
   statusId: "",
   venueId: "",
@@ -77,6 +90,8 @@ const DEFAULT_VALUES: LeadFormValues = {
   sourceOfInformationId: "",
   assignedToId: "",
   eventDate: "",
+  weddingSession: "",
+  time: "",
   estimatedPax: "",
   budgetRange: "",
   notes: "",
@@ -85,7 +100,7 @@ const DEFAULT_VALUES: LeadFormValues = {
 // ── Draft persistence (create mode only) ──────────────────────────────────────
 const LEAD_DRAFT_KEY = "lead-draft-v1";
 
-type LeadDraft = { values: Partial<LeadFormValues>; contactNumbers: ContactNumber[] };
+type LeadDraft = { values: Partial<LeadFormValues>; contactNumbers: ContactNumber[]; bitrixId?: string };
 
 function hasDraftContent(d: LeadDraft | null): boolean {
   if (!d) return false;
@@ -105,9 +120,9 @@ function readLeadDraft(): LeadDraft | null {
   }
 }
 
-function persistLeadDraft(values: LeadFormValues, contactNumbers: ContactNumber[]) {
+function persistLeadDraft(values: LeadFormValues, contactNumbers: ContactNumber[], bitrixId: string) {
   if (typeof window === "undefined") return;
-  const draft: LeadDraft = { values, contactNumbers };
+  const draft: LeadDraft = { values, contactNumbers, bitrixId };
   if (hasDraftContent(draft)) {
     localStorage.setItem(LEAD_DRAFT_KEY, JSON.stringify(draft));
   } else {
@@ -120,7 +135,7 @@ function clearLeadDraft() {
   localStorage.removeItem(LEAD_DRAFT_KEY);
 }
 
-export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
+export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDrawerProps) {
   const isEdit = !!editLead;
   const qc = useQueryClient();
 
@@ -131,16 +146,21 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
   const { data: statuses = [] } = useLeadStatuses();
-  const { data: usersData } = useUsers(undefined, { page: 1, limit: 100 });
-  const assignableUsers = (usersData?.users ?? []).map((u) => ({
-    id: u.profile?.id ?? u.id,
-    fullName: u.profile?.fullName ?? u.name ?? u.email,
-  }));
+  const { users: salesUsers } = useSalesUsers();
+  const { user } = useCurrentUser();
+
+  // Sales auto-detect: salesUsers already contains both "sales" & "sales-mice"
+  // roles, and s.id === profileId. If the logged-in user is in that list, lock
+  // the assignee field (create → self; edit → record's sales, shown as-is).
+  // Admin/manager picks freely.
+  const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
 
   const [sourceOptions, setSourceOptions] = useState<Option[]>([]);
   useEffect(() => {
     fetchJson<Option[]>("/api/source-of-informations").then(setSourceOptions);
   }, []);
+
+  const [bitrixId, setBitrixId] = useState("");
 
   const form = useForm<LeadFormValues>({
     defaultValues: DEFAULT_VALUES,
@@ -152,6 +172,38 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
 
   const watchedVenueId = form.watch("venueId");
   const watchedCategory = form.watch("category");
+  const watchedSourceId = form.watch("sourceOfInformationId");
+  const watchedAssignedToId = form.watch("assignedToId");
+  // Name shown in the locked sales field — resolves from the current field value
+  // so edit mode displays the record's actual sales (not the logged-in user).
+  const lockedSalesName =
+    salesUsers.find((s) => s.id === watchedAssignedToId)?.fullName ??
+    (currentUserIsSales ? (user?.name ?? "—") : "—");
+  const isBitrixSource = sourceOptions.find((o) => o.id === watchedSourceId)?.name.toLowerCase().includes("bitrix") ?? false;
+  const isWeddings = watchedCategory === "WEDDINGS";
+
+  // Watch all required fields so the submit button reacts to completeness.
+  const watchedName = form.watch("name");
+  const watchedStatusId = form.watch("statusId");
+  const watchedEventTypeId = form.watch("eventTypeId");
+  const watchedEventDate = form.watch("eventDate");
+  const watchedWeddingSession = form.watch("weddingSession");
+  const watchedTime = form.watch("time");
+
+  // Create-mode only: disable submit until every required field is filled.
+  const isFormIncomplete =
+    !watchedName?.trim() ||
+    contactNumbers.length === 0 ||
+    !watchedStatusId ||
+    !watchedCategory ||
+    !watchedEventTypeId ||
+    !watchedAssignedToId ||
+    !watchedVenueId ||
+    !watchedSourceId ||
+    !watchedEventDate ||
+    !watchedWeddingSession ||
+    !watchedTime?.trim() ||
+    (isBitrixSource && !bitrixId.trim());
 
   // ── Venue availability ───────────────────────────────────────────────────────
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -164,6 +216,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       setAvailability({});
       return;
     }
+    form.setValue("weddingSession", "");
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const params = new URLSearchParams({ month });
@@ -172,7 +225,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [watchedVenueId, visibleMonth]);
+  }, [watchedVenueId, visibleMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
@@ -184,6 +237,16 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
     return "partial";
   }
 
+  function getAvailableSessions(dateStr: string): string[] {
+    const a = availability[dateStr];
+    if (!a) return ["morning", "evening", "fullday"];
+    const sessions: string[] = [];
+    if (a.morning) sessions.push("morning");
+    if (a.evening) sessions.push("evening");
+    if (a.fullday && a.morning && a.evening) sessions.push("fullday");
+    return sessions;
+  }
+
   useEffect(() => {
     if (!open) return;
 
@@ -191,6 +254,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       form.reset({
         name: editLead.name,
         email: editLead.email ?? "",
+        address: editLead.address ?? "",
         category: editLead.category ?? "WEDDINGS",
         statusId: editLead.status.id,
         venueId: editLead.venue?.id ?? "",
@@ -200,39 +264,52 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
         eventDate: editLead.eventDate
           ? new Date(editLead.eventDate).toISOString().split("T")[0]
           : "",
+        weddingSession: (editLead.weddingSession as "morning" | "evening" | "fullday" | "") ?? "",
+        time: editLead.time ?? "",
         estimatedPax: editLead.estimatedPax ? String(editLead.estimatedPax) : "",
         budgetRange: editLead.budgetRange ?? "",
         notes: editLead.notes ?? "",
       });
       setContactNumbers(editLead.contactNumbers);
+      setBitrixId(editLead.bitrixId ?? "");
     } else {
       const draft = readLeadDraft();
       if (hasDraftContent(draft)) {
         form.reset({ ...DEFAULT_VALUES, ...draft!.values });
         setContactNumbers(draft!.contactNumbers ?? []);
+        setBitrixId(draft!.bitrixId ?? "");
       } else {
         form.reset(DEFAULT_VALUES);
         setContactNumbers([]);
+        setBitrixId("");
       }
     }
     setContactInput({ name: "", number: "" });
     setContactPopoverOpen(false);
   }, [open, editLead]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Create mode: force-assign to the logged-in sales user (also covers the case
+  // where salesUsers loads after the reset effect above has already run).
+  useEffect(() => {
+    if (open && !isEdit && currentUserIsSales && user?.profileId) {
+      form.setValue("assignedToId", user.profileId);
+    }
+  }, [open, isEdit, currentUserIsSales, user?.profileId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Persist draft on form field changes (create mode only)
   useEffect(() => {
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
-      persistLeadDraft(values as LeadFormValues, contactNumbers);
+      persistLeadDraft(values as LeadFormValues, contactNumbers, bitrixId);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, contactNumbers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, contactNumbers, bitrixId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist draft on contact-number changes (create mode only)
+  // Persist draft on contact-number or bitrixId changes (create mode only)
   useEffect(() => {
     if (!open || isEdit) return;
-    persistLeadDraft(form.getValues(), contactNumbers);
-  }, [contactNumbers, open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistLeadDraft(form.getValues(), contactNumbers, bitrixId);
+  }, [contactNumbers, bitrixId, open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addContact() {
     const digits = contactInput.number.trim();
@@ -259,21 +336,29 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       toast.error("Minimal 1 nomor HP/WA wajib diisi.");
       return;
     }
+    if (isBitrixSource && !bitrixId.trim()) {
+      toast.error("Bitrix ID wajib diisi jika sumber informasi adalah Bitrix.");
+      return;
+    }
 
     const payload: CreateLeadInput = {
       name: values.name,
       contactNumbers,
       email: values.email || undefined,
-      eventDate: values.eventDate || undefined,
+      address: values.address || undefined,
+      eventDate: values.eventDate,
+      time: values.time || undefined,
+      weddingSession: values.weddingSession as "morning" | "evening" | "fullday",
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       budgetRange: values.budgetRange || undefined,
       notes: values.notes || undefined,
       category: values.category,
-      venueId: values.venueId || null,
-      eventTypeId: values.eventTypeId || null,
-      sourceOfInformationId: values.sourceOfInformationId || null,
-      assignedToId: values.assignedToId || null,
+      venueId: values.venueId,
+      eventTypeId: values.eventTypeId,
+      sourceOfInformationId: values.sourceOfInformationId,
+      assignedToId: values.assignedToId,
       statusId: values.statusId,
+      bitrixId: isBitrixSource ? bitrixId || null : null,
     };
 
     const validated = createLeadSchema.safeParse(payload);
@@ -297,6 +382,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       }
       clearLeadDraft();
       toast.success("Lead berhasil disimpan.");
+      onSuccess?.();
     }
 
     onOpenChange(false);
@@ -424,6 +510,25 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 )}
               />
 
+              {/* Alamat */}
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Alamat</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        rows={2}
+                        placeholder="Alamat lengkap (opsional)..."
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Status */}
               <FormField
                 control={form.control}
@@ -499,11 +604,11 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                   );
                   return (
                     <FormItem>
-                      <FormLabel>Event Type</FormLabel>
+                      <FormLabel>Event Type *</FormLabel>
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih event type (opsional)..." />
+                            <SelectValue placeholder="Pilih event type..." />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -521,24 +626,40 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
               />
 
               {/* Assigned To */}
-              <FormField
-                control={form.control}
-                name="assignedToId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Assigned To (Sales)</FormLabel>
-                    <SearchableSelect
-                      options={assignableUsers.map((u) => ({ id: u.id, name: u.fullName }))}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Pilih sales (opsional)..."
-                      searchPlaceholder="Cari sales..."
-                      emptyText="Sales tidak ditemukan"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {currentUserIsSales ? (
+                /* Logged-in user is a sales → locked to themselves */
+                <div className="w-full">
+                  <FormLabel>Assigned To (Sales) *</FormLabel>
+                  <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                    {lockedSalesName}
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Lead ini akan tercatat atas nama Anda.
+                  </p>
+                </div>
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="assignedToId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Assigned To (Sales) *</FormLabel>
+                      <SearchableSelect
+                        options={salesUsers.map((u) => ({
+                          id: u.id,
+                          name: u.fullName ?? "",
+                        }))}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Pilih sales..."
+                        searchPlaceholder="Cari sales..."
+                        emptyText="Sales tidak ditemukan"
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Venue */}
               <FormField
@@ -546,14 +667,14 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 name="venueId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Venue</FormLabel>
+                    <FormLabel>Venue *</FormLabel>
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih venue (opsional)..." />
+                          <SelectValue placeholder="Pilih venue..." />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -569,62 +690,26 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 )}
               />
 
-              {/* Sumber Informasi */}
-              <FormField
-                control={form.control}
-                name="sourceOfInformationId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sumber Informasi</FormLabel>
-                    <SearchableSelect
-                      options={sourceOptions}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Pilih sumber informasi"
-                      searchPlaceholder="Cari sumber..."
-                      emptyText="Tidak ada data"
-                      onAdd={async (name) => {
-                        const { createSourceOfInformation } = await import(
-                          "@/actions/source-of-information"
-                        );
-                        const result = await createSourceOfInformation(name);
-                        if (!result.success) {
-                          toast.error(result.error ?? "Gagal menambahkan");
-                          return;
-                        }
-                        await qc.invalidateQueries({ queryKey: ["source-of-informations"] });
-                        field.onChange(result.item!.id);
-                        toast.success(`"${name}" berhasil ditambahkan`);
-                      }}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Tanggal Event */}
               <FormField
                 control={form.control}
                 name="eventDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tanggal Event</FormLabel>
+                    <FormLabel>Tanggal Event *</FormLabel>
                     <Popover>
                       <PopoverTrigger render={
                         <Button
                           variant="outline"
-                          disabled={!watchedVenueId}
                           className={cn(
                             "w-full justify-start text-left font-normal",
                             !field.value && "text-muted-foreground",
                           )}
                         >
                           <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                          {watchedVenueId
-                            ? (field.value
-                              ? format(new Date(field.value + "T00:00:00"), "PPP")
-                              : "Pilih tanggal event")
-                            : "Pilih venue terlebih dahulu"}
+                          {field.value
+                            ? format(new Date(field.value + "T00:00:00"), "PPP")
+                            : "Pilih tanggal event"}
                         </Button>
                       } />
                       <PopoverContent className="w-auto p-0" align="start">
@@ -638,8 +723,10 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                               const m = String(date.getMonth() + 1).padStart(2, "0");
                               const d = String(date.getDate()).padStart(2, "0");
                               field.onChange(`${y}-${m}-${d}`);
+                              form.setValue("weddingSession", "");
                             } else {
                               field.onChange("");
+                              form.setValue("weddingSession", "");
                             }
                           }}
                           disabled={(d) => getDateStatus(d) === "unavailable"}
@@ -669,6 +756,58 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                       </p>
                     )}
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Session */}
+              <FormField
+                control={form.control}
+                name="weddingSession"
+                render={({ field }) => {
+                  const dateStr = watchedEventDate || null;
+                  const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
+                  return (
+                    <FormItem>
+                      <FormLabel>Session *</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={!watchedVenueId || !watchedEventDate}
+                      >
+                        <FormControl>
+                          <SelectTrigger className={cn("w-full", (!watchedVenueId || !watchedEventDate) && "opacity-60")}>
+                            <SelectValue placeholder={!watchedVenueId ? "Pilih venue dulu" : !watchedEventDate ? "Pilih tanggal dulu" : "Pilih session..."} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {sessions.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {SESSION_LABELS[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
+              {/* Time */}
+              <FormField
+                control={form.control}
+                name="time"
+                render={({ field }) => (
+                  <FormItem className="flex w-full flex-col">
+                    <FormLabel>Time *</FormLabel>
+                    <FormControl>
+                      <TimeRangePicker
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Pilih waktu (bisa rentang)..."
+                      />
+                    </FormControl>
                   </FormItem>
                 )}
               />
@@ -703,6 +842,56 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 )}
               />
 
+              {/* Sumber Informasi */}
+              <FormField
+                control={form.control}
+                name="sourceOfInformationId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sumber Informasi *</FormLabel>
+                    <SearchableSelect
+                      options={sourceOptions}
+                      value={field.value}
+                      onChange={(id) => {
+                        field.onChange(id);
+                        const isBitrix = sourceOptions.find((o) => o.id === id)?.name.toLowerCase().includes("bitrix") ?? false;
+                        if (!isBitrix) setBitrixId("");
+                      }}
+                      placeholder="Pilih sumber informasi..."
+                      searchPlaceholder="Cari sumber..."
+                      emptyText="Tidak ada data"
+                      onAdd={async (name) => {
+                        const { createSourceOfInformation } = await import(
+                          "@/actions/source-of-information"
+                        );
+                        const result = await createSourceOfInformation(name);
+                        if (!result.success) {
+                          toast.error(result.error ?? "Gagal menambahkan");
+                          return;
+                        }
+                        await qc.invalidateQueries({ queryKey: ["source-of-informations"] });
+                        field.onChange(result.item!.id);
+                        toast.success(`"${name}" berhasil ditambahkan`);
+                      }}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Bitrix ID — hanya muncul jika sumber informasi adalah Bitrix */}
+              {isBitrixSource && (
+                <div>
+                  <FormLabel className="text-sm font-medium">Bitrix ID *</FormLabel>
+                  <Input
+                    placeholder="e.g. 12345"
+                    value={bitrixId}
+                    onChange={(e) => setBitrixId(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              )}
+
               {/* Catatan */}
               <FormField
                 control={form.control}
@@ -734,7 +923,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
             <Button
               onClick={form.handleSubmit(onSubmit)}
               className="flex-1 cursor-pointer"
-              disabled={isPending}
+              disabled={isPending || (!isEdit && isFormIncomplete)}
             >
               {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
             </Button>
