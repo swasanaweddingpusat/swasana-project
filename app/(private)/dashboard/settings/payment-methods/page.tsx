@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Card as CardIcon, Refresh } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Card as CardIcon, Refresh } from "@solar-icons/react";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { toast } from "sonner";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -205,7 +206,43 @@ export default function PaymentMethodsPage() {
               <p>No payment methods yet</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile: card list (<sm) */}
+            <div className="block sm:hidden px-3 py-2 space-y-2">
+              {paginated.map((item, idx) => (
+                <Card key={item.id} className="rounded-lg border bg-card shadow-none">
+                  <CardContent className="px-3 py-2.5 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}. {item.bankName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{item.venue?.name ?? "-"}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {(can("settings-payment-methods", "edit") || isAdmin) && (
+                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)} aria-label="Edit">
+                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                          </button>
+                        )}
+                        {(can("settings-payment-methods", "delete") || isAdmin) && (
+                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }} aria-label="Hapus">
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-0.5 pt-1 border-t border-border">
+                      <p>No. Rek: <span className="text-foreground">{item.bankAccountNumber}</span></p>
+                      <p>a.n: <span className="text-foreground">{item.bankRecipient}</span></p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Desktop/tablet: table (sm+) */}
+            <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
@@ -214,7 +251,7 @@ export default function PaymentMethodsPage() {
                     <TableHead>Bank Name</TableHead>
                     <TableHead className="hidden sm:table-cell">Account Number</TableHead>
                     <TableHead className="hidden md:table-cell">Account Holder</TableHead>
-                    <TableHead className="w-24"></TableHead>
+                    <TableHead className="w-24 text-right pr-6">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -226,7 +263,7 @@ export default function PaymentMethodsPage() {
                       <TableCell className="hidden sm:table-cell">{item.bankAccountNumber}</TableCell>
                       <TableCell className="hidden md:table-cell">{item.bankRecipient}</TableCell>
                       <TableCell>
-                        <div className={cn('flex', 'gap-1', 'justify-end')}>
+                        <div className={cn('flex', 'gap-1', 'justify-end', 'pr-2')}>
                           {(can("settings-payment-methods", "edit") || isAdmin) && (
                             <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)}>
                               <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
@@ -244,24 +281,17 @@ export default function PaymentMethodsPage() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
 
           {/* Pagination */}
-          {total > 0 && (
-            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'justify-between', 'items-start', 'sm:items-center', 'px-4', 'sm:px-6', 'py-3', 'border-t', 'gap-2')}>
-              <span className={cn('text-sm', 'text-muted-foreground')}>
-                Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, total)} of {total}
-              </span>
-              <div className={cn('flex', 'items-center', 'gap-2')}>
-                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Previous
-                </Button>
-                <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages || 1}</span>
-                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  Next <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'ml-1')} />
-                </Button>
-              </div>
-            </div>
+          {total > 0 && totalPages > 1 && (
+            <PaginationBar
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              label="Navigasi halaman payment method"
+            />
           )}
         </CardContent>
       </Card>

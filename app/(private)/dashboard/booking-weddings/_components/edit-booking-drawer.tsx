@@ -167,7 +167,22 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setCurrentStep(1);
     setCustomerName(booking.snapCustomer?.name ?? "");
     const raw = booking.snapCustomer?.mobileNumber ?? "";
-    try { const arr = JSON.parse(raw); if (Array.isArray(arr)) setContactNumbers(arr); else throw 0; } catch { setContactNumbers(raw.split(",").map((s) => s.trim()).filter(Boolean).map((n) => ({ name: "", number: n }))); }
+    // Persisted format is a display string: "label: number, number2, label2: number3"
+    // Each entry is either "label: number" or just "number", joined by ", ".
+    // Parse back to MobileNumberEntry[] by splitting on ", " and checking for ": ".
+    if (raw.trim()) {
+      const parsed: MobileNumberEntry[] = raw.split(",").map((segment) => {
+        const s = segment.trim();
+        const colonIdx = s.indexOf(": ");
+        if (colonIdx > 0) {
+          return { name: s.slice(0, colonIdx).trim(), number: s.slice(colonIdx + 2).trim() };
+        }
+        return { name: "", number: s };
+      }).filter((e) => e.number.trim() !== "");
+      setContactNumbers(parsed);
+    } else {
+      setContactNumbers([]);
+    }
     setVenueId(booking.venueId ?? "");
     setPackageId(booking.packageId ?? "");
     setOriginalVenueId(booking.venueId ?? "");
@@ -269,10 +284,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // Detect significant changes
   const hasSignificantChange = venueId !== originalVenueId || packageId !== originalPackageId;
+  // Serialize current contactNumbers back to display string for change-detection,
+  // matching the persisted format: "label: number" or "number", joined by ", ".
+  const currentContactDisplay = contactNumbers
+    .map((e) => e.name ? `${e.name}: ${e.number}` : e.number)
+    .join(", ");
   const hasAnyChange = !booking ? false : (
     hasSignificantChange ||
     customerName !== (booking.snapCustomer?.name ?? "") ||
-    JSON.stringify(contactNumbers) !== (() => { try { const arr = JSON.parse(booking.snapCustomer?.mobileNumber ?? ""); return JSON.stringify(Array.isArray(arr) ? arr : []); } catch { return "[]"; } })() ||
+    currentContactDisplay !== (booking.snapCustomer?.mobileNumber ?? "") ||
     (bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : "") !== (booking.bookingDate ? format(new Date(booking.bookingDate), "yyyy-MM-dd") : "") ||
     weddingSession !== (booking.weddingSession ?? "") ||
     weddingType !== (booking.weddingType ?? "") ||
@@ -398,7 +418,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Popover>
                   <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => !!venueId && getDateStatus(d) === "unavailable"} modifiers={{ available: (d) => !!venueId && getDateStatus(d) === "available", partial: (d) => !!venueId && getDateStatus(d) === "partial", unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable" }} modifiersClassNames={{ available: "day-available", partial: "day-partial", unavailable: "day-unavailable" }} />
+                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      // Allow the existing booking date even if it is in the past,
+                      // so the form stays operable for historical bookings.
+                      const isExistingDate = bookingDate && format(d, "yyyy-MM-dd") === format(new Date(bookingDate), "yyyy-MM-dd");
+                      if (isExistingDate) return false;
+                      return d < today || (!!venueId && getDateStatus(d) === "unavailable");
+                    }} modifiers={{ available: (d) => !!venueId && getDateStatus(d) === "available", partial: (d) => !!venueId && getDateStatus(d) === "partial", unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable" }} modifiersClassNames={{ available: "day-available", partial: "day-partial", unavailable: "day-unavailable" }} />
                   </PopoverContent>
                 </Popover>
               </div>

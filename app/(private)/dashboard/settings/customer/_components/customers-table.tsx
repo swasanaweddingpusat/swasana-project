@@ -12,7 +12,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pen, TrashBinTrash, AddCircle, UsersGroupRounded, ArrowLeft, ArrowRight, Magnifer, Copy, Refresh } from "@solar-icons/react";
+import { Pen, TrashBinTrash, AddCircle, UsersGroupRounded, Magnifer, Copy, Refresh } from "@solar-icons/react";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useCustomers, useDeleteCustomer, useDeleteBulkCustomers } from "@/hooks/use-customers";
@@ -334,7 +335,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                     <TableHead className="px-3">Notes</TableHead>
                     <TableHead className="px-3">Updated By</TableHead>
                     <TableHead className="px-3">Updated At</TableHead>
-                    <TableHead className={cn('px-3', 'w-20')}></TableHead>
+                    <TableHead className={cn('px-3', 'w-20', 'text-right')}>Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -378,7 +379,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
                       <TableCell className={cn('px-3', 'text-muted-foreground')}>{customer.updatedBy || "—"}</TableCell>
                       <TableCell className={cn('px-3', 'text-muted-foreground', 'whitespace-nowrap')}>{format(new Date(customer.updatedAt), "dd MMM yyyy")}</TableCell>
                       <TableCell className="px-3">
-                        <div className={cn('flex', 'items-center', 'gap-1')}>
+                        <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
                           <PermissionGate module="customers" action="edit">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
                               <Pen weight="BoldDuotone" className={cn('h-4', 'w-4')} />
@@ -400,33 +401,12 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <nav
-              aria-label="Navigasi halaman customer"
-              className={cn('flex', 'flex-col', 'gap-3', 'px-4', 'sm:px-6', 'py-4', 'border-t', 'sm:flex-row', 'sm:justify-between', 'sm:items-center')}
-            >
-              <Button variant="outline" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-                <ArrowLeft weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Previous
-              </Button>
-              {/* Mobile: page X / Y */}
-              <span className="text-sm text-muted-foreground text-center sm:hidden">
-                {currentPage} / {totalPages}
-              </span>
-              {/* Desktop: numbered pages */}
-              <div className={cn('hidden', 'sm:flex', 'items-center', 'gap-1', 'overflow-x-auto', 'justify-center')}>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button key={page} onClick={() => setCurrentPage(page)}
-                    className={cn(
-                      "px-3 py-1 rounded-md text-sm font-medium cursor-pointer",
-                      currentPage === page ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
-                    )}>
-                    {page}
-                  </button>
-                ))}
-              </div>
-              <Button variant="outline" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-                Next <ArrowRight weight="BoldDuotone" className={cn('w-4', 'h-4', 'ml-2')} />
-              </Button>
-            </nav>
+            <PaginationBar
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              label="Navigasi halaman customer"
+            />
           )}
         </CardContent>
       </Card>

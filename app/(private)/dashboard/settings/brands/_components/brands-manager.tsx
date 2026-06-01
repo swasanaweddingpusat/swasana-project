@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Refresh } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Refresh } from "@solar-icons/react";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { createBrand, updateBrand, deleteBrand } from "@/actions/brand";
 import type { BrandsQueryResult, BrandQueryItem } from "@/lib/queries/venues";
 import { cn } from "../../../../../../lib/utils";
@@ -129,7 +130,38 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
           {sortedBrands.length === 0 ? (
             <div className={cn('text-center', 'py-12', 'text-muted-foreground')}>Belum ada brand.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile: card list (<sm) */}
+            <div className="block sm:hidden px-3 py-2 space-y-2">
+              {paginated.map((brand, idx) => (
+                <Card key={brand.id} className="rounded-lg border bg-card shadow-none">
+                  <CardContent className="px-3 py-2.5 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}. {brand.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {brand.venues.length} venue{brand.venues.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <span className={cn('shrink-0', 'px-2', 'py-1', 'rounded-full', 'text-xs', 'font-medium', 'bg-secondary', 'text-secondary-foreground')}>{brand.code}</span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-end pt-1 border-t border-border">
+                      <button onClick={() => handleOpenEdit(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                        <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                      </button>
+                      <button onClick={() => setDeleteTarget(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                        <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Desktop/tablet: table (sm+) */}
+            <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -137,7 +169,7 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
                     <TableHead>Brand Name</TableHead>
                     <TableHead className="hidden sm:table-cell">Code</TableHead>
                     <TableHead className="hidden md:table-cell">Venues</TableHead>
-                    <TableHead className="w-24"></TableHead>
+                    <TableHead className="w-24 text-right pr-6">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -164,23 +196,17 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'sm:px-6', 'py-3', 'border-t')}>
-              <span className={cn('text-sm', 'text-muted-foreground')}>
-                Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, sortedBrands.length)} of {sortedBrands.length}
-              </span>
-              <div className={cn('flex', 'gap-1')}>
-                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                </Button>
-                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                </Button>
-              </div>
-            </div>
+            <PaginationBar
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              label="Navigasi halaman brand"
+            />
           )}
         </CardContent>
       </Card>

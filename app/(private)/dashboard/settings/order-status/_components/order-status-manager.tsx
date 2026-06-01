@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Refresh } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Refresh } from "@solar-icons/react";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { createOrderStatus, updateOrderStatus, deleteOrderStatus } from "@/actions/order-status";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { OrderStatusesResult, OrderStatusItem } from "@/lib/queries/order-status";
@@ -110,14 +111,43 @@ export function OrderStatusManager({ initialData }: Props) {
               </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            {/* Mobile: card list (<sm) */}
+            <div className="block sm:hidden px-3 py-2 space-y-2">
+              {paginatedItems.length === 0 ? (
+                <div className={cn('text-center', 'py-8', 'text-muted-foreground', 'text-sm')}>Belum ada data.</div>
+              ) : (
+                paginatedItems.map((item, idx) => (
+                  <Card key={item.id} className="rounded-lg border bg-card shadow-none">
+                    <CardContent className="px-3 py-2.5 flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}. {item.name}
+                      </p>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {(can("settings-order-status", "edit") || isAdmin) && (
+                          <button onClick={() => handleOpenEdit(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                          </button>
+                        )}
+                        {(can("settings-order-status", "delete") || isAdmin) && (
+                          <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                          </button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+
+            {/* Desktop/tablet: table (sm+) */}
+            <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className={cn('w-12', 'px-4', 'sm:px-6')}>#</TableHead>
                     <TableHead>Nama Status</TableHead>
-                    <TableHead className="w-24"></TableHead>
+                    <TableHead className="w-24 text-right pr-6">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -153,19 +183,12 @@ export function OrderStatusManager({ initialData }: Props) {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'sm:px-6', 'py-3', 'border-t')}>
-                <span className={cn('text-sm', 'text-muted-foreground')}>
-                  Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, items.length)} of {items.length}
-                </span>
-                <div className={cn('flex', 'gap-1')}>
-                  <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                    <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                    <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                  </Button>
-                </div>
-              </div>
+              <PaginationBar
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                label="Navigasi halaman order status"
+              />
             )}
           </CardContent>
         </Card>

@@ -34,7 +34,9 @@ import {
   Calendar as CalendarIcon,
   TrashBinTrash,
   AddCircle,
+  AltArrowDown,
 } from "@solar-icons/react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -158,7 +160,17 @@ export function MiceBookingDrawer({
 
   const [currentStep, setCurrentStep] = useState(1);
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
+  // Track COLLAPSED terms — default empty = semua kebuka
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
   const [signingLocation, setSigningLocation] = useState("");
+
+  function toggleTerm(idx: number) {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
+      return next;
+    });
+  }
 
   // Venue availability (mirrors Wedding drawer pattern)
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -385,13 +397,19 @@ export function MiceBookingDrawer({
   function addTerm() {
     setTerms((prev) => [
       ...prev.slice(0, -1),
-      { name: "Term Baru", amount: 0, dueDate: "", sortOrder: prev.length - 1, paymentStatus: "unpaid" },
+      { name: "Term Baru", amount: 0, dueDate: "", sortOrder: prev.length - 1, paymentStatus: "unpaid" as TermRow["paymentStatus"] },
       { ...prev[prev.length - 1], sortOrder: prev.length },
     ]);
+    // term baru otomatis kebuka (default open)
   }
 
   function removeTerm(idx: number) {
     setTerms((prev) => prev.filter((_, i) => i !== idx).map((t, i) => ({ ...t, sortOrder: i })));
+    setCollapsedTerms((prev) => {
+      const next = new Set<number>();
+      prev.forEach((n) => { if (n < idx) { next.add(n); } else if (n > idx) { next.add(n - 1); } });
+      return next;
+    });
   }
 
   function updateTerm<K extends keyof TermRow>(idx: number, key: K, val: TermRow[K]) {
@@ -686,85 +704,137 @@ export function MiceBookingDrawer({
                 <div className="space-y-4">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Pembayaran</p>
 
-                  {terms.map((t, idx) => {
-                    const isLast = idx === terms.length - 1;
-                    return (
-                      <div key={idx} className="space-y-2">
-                        {/* Term name + status + delete */}
-                        <div className={cn("flex", "items-center", "gap-2")}>
-                          <div className="flex items-center gap-0.5 flex-1">
-                            <Input
-                              value={t.name}
-                              onChange={(e) => updateTerm(idx, "name", e.target.value)}
-                              placeholder="Nama term"
-                              className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                            />
-                            {idx === 0 && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Select
-                              value={t.paymentStatus}
-                              onValueChange={(v) => updateTerm(idx, "paymentStatus", v as TermRow["paymentStatus"])}
-                            >
-                              <SelectTrigger className="w-24 h-7">
-                                <span className={cn("text-xs font-semibold", t.paymentStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                  {t.paymentStatus.charAt(0).toUpperCase() + t.paymentStatus.slice(1)}
-                                </span>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PAYMENT_STATUS.map((s) => (
-                                  <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {terms.length > 1 && !(idx === 0 || isLast) && (
-                              <button type="button" onClick={() => removeTerm(idx)} className="text-destructive hover:text-destructive shrink-0">
+                  <div className="space-y-2">
+                    {terms.map((t, idx) => {
+                      const isLast = idx === terms.length - 1;
+                      const isOpen = !collapsedTerms.has(idx);
+                      const payStatus = t.paymentStatus;
+                      const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
+                      // Middle terms (not first, not last) are removable
+                      const canRemove = terms.length > 1 && !(idx === 0 || isLast);
+                      return (
+                        <Collapsible
+                          key={idx}
+                          open={isOpen}
+                          onOpenChange={() => toggleTerm(idx)}
+                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                        >
+                          {/* ── Collapsible header — trigger area + hapus sebagai sibling ── */}
+                          <div className="flex items-center gap-1 px-3 py-2.5">
+                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                              <AltArrowDown
+                                weight="BoldDuotone"
+                                className={cn(
+                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                  isOpen && "rotate-180",
+                                )}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-sm font-medium truncate",
+                                  t.name ? "text-foreground" : "text-muted-foreground italic",
+                                )}>
+                                  {t.name || "Term tanpa nama"}
+                                  {idx === 0 && <span className="text-destructive ml-1">*</span>}
+                                </p>
+                                {!isOpen && (
+                                  <p className="text-xs text-muted-foreground tabular-nums">
+                                    <span className={cn(payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
+                                      {statusLabel}
+                                    </span>
+                                    {t.amount ? ` · Rp${fmtAmount(t.amount)}` : ""}
+                                    {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
+                                  </p>
+                                )}
+                              </div>
+                            </CollapsibleTrigger>
+                            {/* Tombol hapus — SIBLING dari trigger, bukan child-nya */}
+                            {canRemove && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeTerm(idx);
+                                }}
+                                aria-label="Hapus term"
+                                className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                              >
                                 <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </div>
-                        </div>
 
-                        {/* Amount + Due Date */}
-                        <div className={cn("flex", "flex-col", "sm:flex-row", "gap-3", "sm:items-center")}>
-                          <div className="sm:flex-[2]">
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none">Rp</span>
-                              <Input
-                                className="pl-9"
-                                value={fmtAmount(t.amount)}
-                                onChange={(e) => updateTerm(idx, "amount", parseRpToNumber(e.target.value))}
-                                placeholder="15.000.000"
-                                inputMode="numeric"
-                              />
-                            </div>
-                          </div>
-                          <div className="sm:flex-1">
-                            <Popover>
-                              <PopoverTrigger render={
-                                <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
-                                  <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                  {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Pilih tanggal"}
-                                </Button>
-                              } />
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  captionLayout="dropdown"
-                                  selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                                  onSelect={(date) => updateTerm(idx, "dueDate", date ? date.toISOString().split("T")[0] : "")}
-                                  fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                          {/* ── Collapsible body ── */}
+                          <CollapsibleContent>
+                            <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+                              {/* Term name editable */}
+                              <div className="pt-2 flex items-center gap-1">
+                                <Input
+                                  value={t.name}
+                                  onChange={(e) => updateTerm(idx, "name", e.target.value)}
+                                  placeholder="Nama term (mis. Booking Fee / DP)"
+                                  className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
                                 />
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                        </div>
+                                {idx === 0 && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
+                              </div>
 
-                        {/* Separator between terms */}
-                        {idx < terms.length - 1 && <div className="border-b border-dashed border-border" />}
-                      </div>
-                    );
-                  })}
+                              {/* Status pembayaran */}
+                              <Select
+                                value={payStatus}
+                                onValueChange={(v) => updateTerm(idx, "paymentStatus", v as TermRow["paymentStatus"])}
+                              >
+                                <SelectTrigger className="w-32 h-8">
+                                  <span className={cn("text-xs font-semibold", payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
+                                    {statusLabel}
+                                  </span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PAYMENT_STATUS.map((s) => (
+                                    <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              {/* Amount + Due Date */}
+                              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                                <div className="sm:flex-[2]">
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none">Rp</span>
+                                    <Input
+                                      className="pl-9"
+                                      value={fmtAmount(t.amount)}
+                                      onChange={(e) => updateTerm(idx, "amount", parseRpToNumber(e.target.value))}
+                                      placeholder="15.000.000"
+                                      inputMode="numeric"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="sm:flex-1">
+                                  <Popover>
+                                    <PopoverTrigger render={
+                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
+                                        <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                        {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Pilih tanggal"}
+                                      </Button>
+                                    } />
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar
+                                        mode="single"
+                                        captionLayout="dropdown"
+                                        selected={t.dueDate ? new Date(t.dueDate) : undefined}
+                                        onSelect={(date) => updateTerm(idx, "dueDate", date ? date.toISOString().split("T")[0] : "")}
+                                        fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                </div>
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
 
                   {/* Add Term button — inserts between first and last */}
                   <Button type="button" variant="outline" onClick={addTerm} className="w-full border-dashed gap-1.5 text-muted-foreground">

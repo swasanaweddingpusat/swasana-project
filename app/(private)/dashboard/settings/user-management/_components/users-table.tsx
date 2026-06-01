@@ -337,13 +337,15 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
             </div>
           </div>
 
-          {/* Table */}
-          <div className={cn('relative', 'overflow-x-auto', 'w-full')}>
-            {!isFetching && paginatedUsers.length === 0 ? (
-              <div className={cn('flex', 'justify-center', 'items-center', 'py-8')}>
-                <div className={cn('text-xs', 'text-gray-500')}>No users found</div>
-              </div>
-            ) : (
+          {/* Empty state (shared) */}
+          {!isFetching && paginatedUsers.length === 0 ? (
+            <div className={cn('flex', 'justify-center', 'items-center', 'py-8')}>
+              <div className={cn('text-xs', 'text-gray-500')}>No users found</div>
+            </div>
+          ) : (
+          <>
+          {/* Table — desktop (sm+) */}
+          <div className={cn('relative', 'hidden', 'sm:block', 'overflow-x-auto', 'w-full')}>
               <Table className={cn('min-w-full', 'text-xs')}>
                 <TableHeader>
                   <TableRow className={cn('border-b-2', 'border-border', 'bg-secondary')}>
@@ -357,7 +359,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Data Access</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Created Date</TableHead>
                     <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs')}>Status</TableHead>
-                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs', 'text-right')}></TableHead>
+                    <TableHead className={cn('px-2', 'py-2.5', 'font-semibold', 'text-muted-foreground', 'text-xs', 'text-right')}>Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 {isFetching ? (
@@ -440,8 +442,96 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                 </TableBody>
                 )}
               </Table>
-            )}
           </div>
+
+          {/* Mobile (<sm): card list */}
+          <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
+            {paginatedUsers.map((user, index) => {
+              const roleName = user.profile?.role?.name ?? "";
+              const isVerified = user.profile?.isEmailVerified ?? false;
+              const dataScope = user.profile?.dataScope ?? "own";
+              const rowNumber = (page - 1) * rowsPerPage + index + 1;
+              const createdDate = user.createdAt
+                ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
+                : "—";
+              return (
+                <div
+                  key={user.id}
+                  className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', selectedUsers.has(user.id) && "border-primary/40 bg-primary/5")}
+                >
+                  {/* Row 1: checkbox + avatar + name + status badge */}
+                  <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
+                    <div className={cn('flex', 'items-center', 'gap-2', 'min-w-0')}>
+                      <Checkbox checked={selectedUsers.has(user.id)} onCheckedChange={(c) => handleSelectUser(user.id, c as boolean)} className="cursor-pointer shrink-0" />
+                      <ProfileAvatar name={user.profile?.fullName ?? user.email} src={user.profile?.avatarUrl ?? undefined} size="sm" />
+                      <div className="min-w-0">
+                        <p className={cn('font-medium', 'text-sm', 'text-foreground', 'truncate')}>
+                          {rowNumber}. {user.profile?.fullName ?? user.name ?? "—"}
+                        </p>
+                        <p className={cn('text-xs', 'text-muted-foreground', 'truncate')}>{user.email}</p>
+                      </div>
+                    </div>
+                    <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium", getStatusBadgeClass(isVerified))}>
+                      {isVerified ? "Verified" : "Pending"}
+                    </span>
+                  </div>
+
+                  {/* Row 2: role + data access + created date */}
+                  <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs', 'text-muted-foreground')}>
+                    {roleName && (
+                      <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", getRoleBadgeClass())}>{roleName}</span>
+                    )}
+                    <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary text-secondary-foreground')}>{dataScope}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{createdDate}</span>
+                  </div>
+
+                  {/* Group memberships */}
+                  {(user.profile?.dataGroupMemberships?.length ?? 0) > 0 && (
+                    <div className={cn('flex', 'flex-wrap', 'gap-1')}>
+                      {user.profile!.dataGroupMemberships!.map((m) => (
+                        <span key={m.group.id} className={cn('px-1.5', 'py-0.5', 'text-[10px]', 'bg-secondary', 'text-secondary-foreground', 'rounded-full', 'border')}>{m.group.name}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Footer: actions */}
+                  <div className={cn('flex', 'items-center', 'gap-1', 'pt-1', 'border-t', 'border-border')}>
+                    <Button
+                      variant="outline"
+                      className={cn('h-9', 'flex-1', 'text-xs')}
+                      onClick={() => handleEdit(user)}
+                      aria-label={`Edit ${user.profile?.fullName ?? user.email}`}
+                    >
+                      <PenNewSquare weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
+                    </Button>
+                    {!isVerified && (
+                      <Button
+                        variant="outline"
+                        className={cn('h-9', 'flex-1', 'text-xs')}
+                        onClick={() => handleResend(user)}
+                        disabled={resendingId === user.profile?.id}
+                        aria-label={`Resend invitation ${user.email}`}
+                      >
+                        <Letter weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> {resendingId === user.profile?.id ? "..." : "Resend"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className={cn('h-9', 'w-9', 'shrink-0', 'text-destructive', 'hover:text-destructive', 'hover:bg-destructive/10')}
+                      onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }}
+                      aria-label={`Delete ${user.profile?.fullName ?? user.email}`}
+                    >
+                      <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className={cn('h-4', 'w-4')} />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
+          )}
 
           {/* Pagination */}
           {total > 0 && (

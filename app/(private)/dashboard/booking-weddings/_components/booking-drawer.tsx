@@ -5,7 +5,8 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle } from "@solar-icons/react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown } from "@solar-icons/react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -85,16 +86,18 @@ function fmtRp(n: number) {
 }
 
 function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
-  const [prev, setPrev] = useState(file);
-  const [url, setUrl] = useState<string | null>(() => file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
+  const [url, setUrl] = useState<string | null>(null);
 
-  if (prev !== file) {
-    if (url) URL.revokeObjectURL(url);
-    setUrl(file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
-    setPrev(file);
-  }
-
-  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  // Create the object URL inside the effect (not during render) so the create
+  // and revoke stay balanced — React StrictMode double-invokes effects, and a
+  // render-phase URL would get revoked without being recreated, blanking the
+  // preview.
+  useEffect(() => {
+    if (!file.type.startsWith("image/")) { setUrl(null); return; }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
 
   if (!url) return null;
   // eslint-disable-next-line @next/next/no-img-element
@@ -115,10 +118,15 @@ function toLocalISO(date: Date): string {
   return `${y}-${m}-${d}T00:00:00.000Z`;
 }
 
+// Fixed defaults: Booking Fee Rp5jt, DP Rp10jt. The rest of the package price
+// (after these two) is split evenly across the remaining terms up to Final.
+const BOOKING_FEE_DEFAULT = 5_000_000;
+const DP_DEFAULT = 10_000_000;
+
 function makeDefaultTerms(): TermRow[] {
   return [
-    { name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "unpaid" },
-    { name: "DP", amount: 0, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
+    { name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
+    { name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
     { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
     { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
     { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
@@ -313,6 +321,16 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
   const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
 
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
+  // Track COLLAPSED terms — default empty = semua kebuka
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
+
+  function toggleTerm(idx: number) {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
+      return next;
+    });
+  }
 
   const form = useForm<BookingInput>({
     defaultValues: {
@@ -422,12 +440,31 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
   const getDifference = () => getTotalTerms() - getPriceAfterDiscount();
 
+  // Booking Fee (index 0) and DP (index 1) stay fixed at their defaults; the
+  // leftover (total − fee − dp) is split evenly across the remaining terms, with
+  // the last term absorbing the rounding remainder.
   const allocatePrice = (price: number, discount: number) => {
     const total = Math.max(0, price - discount);
-    const n = terms.length || 1;
-    const base = Math.floor(total / n);
-    const remainder = total % n;
-    setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
+    setTerms((prev) => {
+      const n = prev.length || 1;
+      // Fewer than 3 terms: no "rest" buckets — fall back to an even split.
+      if (n <= 2) {
+        const base = Math.floor(total / n);
+        const remainder = total % n;
+        return prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base }));
+      }
+      const fee = Math.min(BOOKING_FEE_DEFAULT, total);
+      const dp = Math.min(DP_DEFAULT, Math.max(0, total - fee));
+      const rest = Math.max(0, total - fee - dp);
+      const restCount = n - 2;
+      const base = Math.floor(rest / restCount);
+      const remainder = rest % restCount;
+      return prev.map((t, i) => {
+        if (i === 0) return { ...t, amount: fee };
+        if (i === 1) return { ...t, amount: dp };
+        return { ...t, amount: i === n - 1 ? base + remainder : base };
+      });
+    });
   };
 
   const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId, wSalesId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId", "salesId"]);
@@ -928,7 +965,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                             captionLayout="dropdown"
                             selected={field.value ? new Date(field.value) : undefined}
                             onSelect={(date) => { field.onChange(date ? date.toISOString() : ""); form.setValue("weddingSession", null); }}
-                            disabled={(d) => getDateStatus(d) === "unavailable"}
+                            disabled={(d) => {
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              return d < today || getDateStatus(d) === "unavailable";
+                            }}
                             fromYear={new Date().getFullYear() - 10}
                             toYear={new Date().getFullYear() + 5}
                             defaultMonth={field.value ? new Date(field.value) : new Date()}
@@ -1169,114 +1210,187 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
 
                   {/* Term of Payments */}
                   <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Term of Payments</FormLabel>
-                    <div className="space-y-4">
+                    <FormLabel className="text-sm font-medium text-foreground mb-2 block">Term of Payments</FormLabel>
+                    <div className="space-y-2">
                       {terms.map((t, idx) => {
                         const isFirstTerm = idx === 0;
                         const isFirstInvalid = isFirstTerm && (!t.amount || t.amount <= 0);
+                        const isOpen = !collapsedTerms.has(idx);
+                        const payStatus = t.paymentStatus ?? "unpaid";
+                        const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
                         return (
-                        <div key={idx} className={cn('bg-muted', 'border', 'border-border', 'rounded-md', 'px-3', 'py-2', 'space-y-2')}>
-                          {/* Term name — inline editable */}
-                          <div className={cn('flex', 'items-center', 'gap-2')}>
-                            <div className="flex items-center gap-0.5 flex-1">
-                              <Input
-                                value={t.name}
-                                onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                                placeholder="Term name"
-                                className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-foreground', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
-                              />
-                              {isFirstTerm && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Select value={t.paymentStatus ?? "unpaid"} onValueChange={(v) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentStatus: v as TermRow["paymentStatus"] } : x))}>
-                                <SelectTrigger className="w-24 h-7">
-                                  <span className={cn("text-xs font-semibold", (t.paymentStatus ?? "unpaid") === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                    {((t.paymentStatus ?? "unpaid").charAt(0).toUpperCase() + (t.paymentStatus ?? "unpaid").slice(1))}
-                                  </span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {PAYMENT_STATUS.map((s) => (
-                                    <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                          <Collapsible
+                            key={idx}
+                            open={isOpen}
+                            onOpenChange={() => toggleTerm(idx)}
+                            className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                          >
+                            {/* ── Collapsible header — trigger area + hapus sebagai sibling ── */}
+                            <div className="flex items-center gap-1 px-3 py-2.5">
+                              <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                                <AltArrowDown
+                                  weight="BoldDuotone"
+                                  className={cn(
+                                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                    isOpen && "rotate-180",
+                                  )}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className={cn(
+                                    "text-sm font-medium truncate",
+                                    t.name ? "text-foreground" : "text-muted-foreground italic",
+                                  )}>
+                                    {t.name || "Term tanpa nama"}
+                                    {isFirstTerm && <span className="text-destructive ml-1">*</span>}
+                                  </p>
+                                  {!isOpen && (
+                                    <p className="text-xs text-muted-foreground tabular-nums">
+                                      <span className={cn(payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
+                                        {statusLabel}
+                                      </span>
+                                      {t.amount ? ` · Rp${fmtRp(t.amount)}` : ""}
+                                      {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
+                                    </p>
+                                  )}
+                                </div>
+                              </CollapsibleTrigger>
+                              {/* Tombol hapus — SIBLING dari trigger, bukan child-nya */}
                               {terms.length > 1 && (
-                                <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), wBookingDate))} className={cn('text-destructive', 'hover:text-destructive', 'shrink-0')}>
-                                  <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), wBookingDate));
+                                    setCollapsedTerms((prev) => {
+                                      const next = new Set<number>();
+                                      prev.forEach((n) => { if (n < idx) { next.add(n); } else if (n > idx) { next.add(n - 1); } });
+                                      return next;
+                                    });
+                                  }}
+                                  aria-label="Hapus term"
+                                  className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                                >
+                                  <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
                                 </button>
                               )}
                             </div>
-                          </div>
-                          {/* Amount + Date row */}
-                          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'gap-3', 'sm:items-center')}>
-                            <div className="sm:flex-2">
-                              <Input
-                                value={t.amount ? fmtRp(t.amount) : ""}
-                                onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }}
-                                placeholder="Amount"
-                                inputMode="numeric"
-                              />
-                            </div>
-                            <div className="sm:flex-1">
-                              <Popover>
-                                <PopoverTrigger render={
-                                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
-                                    <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
-                                    {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
-                                  </Button>
-                                } />
-                                <PopoverContent className={cn('w-auto', 'p-0')} align="start">
-                                  <Calendar
-                              mode="single"
-                              captionLayout="dropdown"
-                              selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                              onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
-                              disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-                              fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
-                            />
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                          </div>
-                          {/* Upload bukti pembayaran — semua term yang statusnya paid */}
-                          {(t.paymentStatus ?? "unpaid") === "paid" && (
-                            <div>
-                              <div className={cn('relative', 'flex', 'items-center', 'gap-2', 'px-3', 'py-2', 'border', 'rounded-md', 'bg-muted/30', 'text-muted-foreground', 'cursor-pointer', 'hover:bg-muted/50', 'text-xs')}>
-                                {t.paymentEvidence instanceof File && t.paymentEvidence.type.startsWith("image/") ? (
-                                  <FilePreview file={t.paymentEvidence} onOpen={() => { const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }} />
-                                ) : (
-                                  <FileText weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'shrink-0')} />
+
+                            {/* ── Collapsible body ── */}
+                            <CollapsibleContent>
+                              <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+                                {/* Term name + Status pembayaran — satu row dua kolom */}
+                                <div className="pt-2 flex items-center gap-2">
+                                  <div className="flex flex-1 min-w-0 items-center gap-1">
+                                    <Input
+                                      value={t.name}
+                                      onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                                      placeholder="Nama term (mis. Booking Fee)"
+                                      className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                                    />
+                                    {isFirstTerm && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
+                                  </div>
+
+                                  <Select
+                                    value={payStatus}
+                                    onValueChange={(v) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentStatus: v as TermRow["paymentStatus"] } : x))}
+                                  >
+                                    <SelectTrigger className="w-32 h-8 bg-background shrink-0">
+                                      <span className={cn("text-xs font-semibold", payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
+                                        {statusLabel}
+                                      </span>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {PAYMENT_STATUS.map((s) => (
+                                        <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {/* Amount + Date row */}
+                                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                                  <div className="sm:flex-[2]">
+                                    <Input
+                                      value={t.amount ? fmtRp(t.amount) : ""}
+                                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }}
+                                      placeholder="Amount"
+                                      inputMode="numeric"
+                                      className="bg-background"
+                                    />
+                                  </div>
+                                  <div className="sm:flex-1">
+                                    <Popover>
+                                      <PopoverTrigger render={
+                                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-background", !t.dueDate && "text-muted-foreground")}>
+                                          <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                          {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
+                                        </Button>
+                                      } />
+                                      <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                          mode="single"
+                                          captionLayout="dropdown"
+                                          selected={t.dueDate ? new Date(t.dueDate) : undefined}
+                                          onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
+                                          disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                                          fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                                        />
+                                      </PopoverContent>
+                                    </Popover>
+                                  </div>
+                                </div>
+
+                                {/* Upload bukti pembayaran — hanya kalau paid */}
+                                {payStatus === "paid" && (
+                                  <div>
+                                    <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs">
+                                      {t.paymentEvidence instanceof File && t.paymentEvidence.type.startsWith("image/") ? (
+                                        <FilePreview file={t.paymentEvidence} onOpen={() => { const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }} />
+                                      ) : (
+                                        <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                                      )}
+                                      {t.paymentEvidence ? (
+                                        <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }}>
+                                          {t.paymentEvidence.name}
+                                        </button>
+                                      ) : (
+                                        <span className="flex-1 truncate">Upload bukti pembayaran</span>
+                                      )}
+                                      {t.paymentEvidence && (
+                                        <button type="button" className="shrink-0 hover:text-destructive z-10 relative" onClick={(e) => { e.stopPropagation(); setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x)); }}>
+                                          <CloseCircle weight="BoldDuotone" className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                      <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      Bukti pembayaran wajib diupload untuk melanjutkan ke langkah berikutnya.
+                                    </p>
+                                  </div>
                                 )}
-                                {t.paymentEvidence ? (
-                                  <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }}>
-                                    {t.paymentEvidence.name}
-                                  </button>
-                                ) : (
-                                  <span className="flex-1 truncate">Upload bukti pembayaran</span>
+
+                                {isFirstInvalid && (
+                                  <p className="text-xs text-destructive">Nominal Booking Fee wajib diisi</p>
                                 )}
-                                {t.paymentEvidence && (
-                                  <button type="button" className={cn('shrink-0', 'hover:text-destructive', 'z-10', 'relative')} onClick={(e) => { e.stopPropagation(); setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x)); }}>
-                                    <CloseCircle weight="BoldDuotone" className={cn('h-3', 'w-3')} />
-                                  </button>
-                                )}
-                                <input type="file" accept="image/*,application/pdf" className={cn('absolute', 'inset-0', 'opacity-0', 'cursor-pointer')} onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
                               </div>
-                              <p className={cn('mt-1', 'text-xs', 'text-muted-foreground')}>
-                                Bukti pembayaran wajib diupload untuk melanjutkan ke langkah berikutnya.
-                              </p>
-                            </div>
-                          )}
-                          {isFirstInvalid && (
-                            <p className="text-xs text-destructive">Nominal Booking Fee wajib diisi</p>
-                          )}
-                        </div>
+                            </CollapsibleContent>
+                          </Collapsible>
                         );
                       })}
                     </div>
 
                     {/* Add button */}
-                    <div className={cn('flex', 'gap-2', 'mt-4')}>
-                      <Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], wBookingDate))}>
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 border-dashed gap-1.5 text-muted-foreground"
+                        onClick={() => {
+                          setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], wBookingDate));
+                          // term baru otomatis kebuka (default open)
+                        }}
+                      >
+                        <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                         Tambah Payment
                       </Button>
                     </div>

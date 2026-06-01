@@ -10,7 +10,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Magnifer, Refresh } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Magnifer, Refresh } from "@solar-icons/react";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { deleteVenue } from "@/actions/venue";
 import { VenueDrawer } from "./venue-drawer";
 import type { VenuesQueryResult, VenueQueryItem, BrandsQueryResult } from "@/lib/queries/venues";
@@ -171,8 +172,45 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
+          {/* Mobile: card list (<sm) */}
+          <div className="block sm:hidden px-3 py-2 space-y-2">
+            {filtered.length === 0 ? (
+              <div className={cn('text-center', 'py-8', 'text-muted-foreground', 'text-sm')}>
+                {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada venue."}
+              </div>
+            ) : (
+              paginated.map((venue, idx) => (
+                <Card key={venue.id} className="rounded-lg border bg-card shadow-none">
+                  <CardContent className="px-3 py-2.5 space-y-1.5">
+                    <div className="flex items-start gap-2">
+                      <Checkbox checked={selected.has(venue.id)} onCheckedChange={(c) => handleSelect(venue.id, c as boolean)} className="cursor-pointer mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}. {venue.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{venue.brand?.name ?? "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>Kode: <span className="text-foreground">{venue.code}</span></span>
+                      <span>Pax: <span className="text-foreground">{venue.capacity ?? "—"}</span></span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-end pt-1 border-t border-border">
+                      <button onClick={() => handleEdit(venue)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                        <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                      </button>
+                      <button onClick={() => setDeleteTarget(venue)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                        <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+
+          {/* Desktop/tablet: table (sm+) */}
+          <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -184,7 +222,7 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
                   <TableHead>Nama Venue</TableHead>
                   <TableHead className="hidden sm:table-cell">Kode</TableHead>
                   <TableHead className="hidden md:table-cell">Kapasitas (Pax)</TableHead>
-                  <TableHead className="w-20"></TableHead>
+                  <TableHead className="w-20 text-right pr-6">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -240,19 +278,12 @@ export function VenuesTable({ initialVenues, brands }: VenuesTableProps) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'sm:px-6', 'py-3', 'border-t')}>
-              <span className={cn('text-sm', 'text-muted-foreground')}>
-                Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, filtered.length)} of {filtered.length}
-              </span>
-              <div className={cn('flex', 'gap-1')}>
-                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                  <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                </Button>
-                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                  <ArrowRight weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-                </Button>
-              </div>
-            </div>
+            <PaginationBar
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              label="Navigasi halaman venue"
+            />
           )}
         </CardContent>
       </Card>

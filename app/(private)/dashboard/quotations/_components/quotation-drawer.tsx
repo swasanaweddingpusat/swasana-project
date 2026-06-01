@@ -1336,9 +1336,9 @@ export function QuotationDrawer({
                           onOpenChange={() => toggleItem(fieldItem.id)}
                           className="rounded-xl border border-border bg-muted/30 overflow-hidden"
                         >
-                          {/* ── Accordion header / trigger ── */}
-                          <CollapsibleTrigger className="w-full cursor-pointer">
-                            <div className="flex items-center gap-2 px-3 py-2.5">
+                          {/* ── Accordion header — trigger (chevron+judul) dan hapus sebagai sibling ── */}
+                          <div className="flex items-center gap-1 px-3 py-2.5">
+                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
                               <AltArrowDown
                                 weight="BoldDuotone"
                                 className={cn(
@@ -1346,7 +1346,7 @@ export function QuotationDrawer({
                                   isOpen && "rotate-180",
                                 )}
                               />
-                              <div className="flex-1 min-w-0 text-left">
+                              <div className="flex-1 min-w-0">
                                 <p
                                   className={cn(
                                     "text-sm truncate",
@@ -1366,22 +1366,23 @@ export function QuotationDrawer({
                                   </p>
                                 )}
                               </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  remove(index);
-                                }}
-                                disabled={fields.length === 1}
-                                aria-label="Hapus item"
-                                className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
-                              >
-                                <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </CollapsibleTrigger>
+                            </CollapsibleTrigger>
+                            {/* Tombol hapus — SIBLING dari trigger, bukan child-nya (fix nested button) */}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                remove(index);
+                              }}
+                              disabled={fields.length === 1}
+                              aria-label="Hapus item"
+                              className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
 
                           {/* ── Accordion body / detail fields ── */}
                           <CollapsibleContent>

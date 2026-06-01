@@ -34,6 +34,11 @@ export async function createBooking(data: unknown) {
     // When lead already converted → reuse existing customer; otherwise create new
     let leadRecord: { id: string; name: string; email: string | null; contactNumbers: unknown; address: string | null; bitrixId: string | null; sourceOfInformationId: string | null; convertedToCustomerId: string | null } | null = null;
 
+    // Track whether this request "won" the first-conversion lock for a lead.
+    // When true, the lead was already stamped with convertedToCustomerId before
+    // the main transaction runs — no need to include the lead stamp in ops[].
+    let didLockLeadConversion = false;
+
     if (leadId) {
       leadRecord = await db.lead.findUnique({
         where: { id: leadId },
@@ -56,9 +61,41 @@ export async function createBooking(data: unknown) {
         const existing = await db.customer.findUnique({ where: { id: customerId }, select: { id: true } });
         if (!existing) return { success: false, error: "Customer dari lead tidak ditemukan." };
       } else {
-        // Lead belum pernah dikonversi — buat customer baru dari data lead
+        // Lead belum pernah dikonversi — buat customer baru dari data lead.
+        //
+        // Race-condition guard (optimistic lock):
+        // Two concurrent requests both reading convertedToCustomerId=null would
+        // both try to create a new customer and stamp the lead.
+        // We prevent this by claiming the lock HERE, before the main transaction,
+        // using updateMany(WHERE convertedToCustomerId IS NULL).
+        // Only one request wins (count=1); the other gets count=0 → return early.
+        // This means a duplicate customer is never created because we only generate
+        // customerId and proceed to the transaction after winning the lock.
         customerId = crypto.randomUUID();
-        isNewCustomer = true;
+        const lockResult = await db.lead.updateMany({
+          where: { id: leadRecord.id, convertedToCustomerId: null },
+          data: { convertedToCustomerId: customerId },
+        });
+        if (lockResult.count === 0) {
+          // Another concurrent request already converted this lead — re-read and reuse
+          const refreshed = await db.lead.findUnique({
+            where: { id: leadRecord.id },
+            select: { convertedToCustomerId: true },
+          });
+          if (refreshed?.convertedToCustomerId) {
+            customerId = refreshed.convertedToCustomerId;
+            isNewCustomer = false;
+            // Update leadRecord reference so downstream booking-pointer update works
+            leadRecord = { ...leadRecord, convertedToCustomerId: customerId };
+          } else {
+            return { success: false, error: "Gagal mengkonversi lead, coba lagi." };
+          }
+        } else {
+          isNewCustomer = true;
+          didLockLeadConversion = true;
+          // Update leadRecord reference so the stamp is not re-applied in ops[]
+          leadRecord = { ...leadRecord, convertedToCustomerId: customerId };
+        }
       }
     } else if (!customerId && input.customerName) {
       // Fallback: booking tanpa lead, tanpa existing customer — buat baru dari input manual
@@ -99,6 +136,14 @@ export async function createBooking(data: unknown) {
 
     let emateraiResult: { sn: string; qrBase64: string } | null = null;
 
+    // Resolve "Deal" lead status (system final) — used when booking is created from a lead
+    const convertedStatus = leadRecord
+      ? await db.leadStatus.findFirst({
+          where: { isSystem: true, isFinal: true },
+          select: { id: true },
+        })
+      : null;
+
     // Fetch data needed for transaction — for new customers, build from input
     const [existingCustomer, venue, pkg] = await Promise.all([
       isNewCustomer ? null : db.customer.findUniqueOrThrow({ where: { id: customerId } }),
@@ -134,7 +179,7 @@ export async function createBooking(data: unknown) {
             // Customer baru dari input manual (fallback path)
             id: customerId,
             name: input.customerName!,
-            mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
+            mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? ""),
             email: input.contactEmail || "-@placeholder.com",
             nikNumber: input.contactNik || null,
             ktpAddress: input.contactKtpAddress || null,
@@ -210,7 +255,7 @@ export async function createBooking(data: unknown) {
             data: {
               id: customerId,
               name: input.customerName!,
-              mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
+              mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? "") as Prisma.InputJsonValue,
               email: input.contactEmail || "-@placeholder.com",
               nikNumber: input.contactNik || null,
               ktpAddress: input.contactKtpAddress || null,
@@ -224,7 +269,7 @@ export async function createBooking(data: unknown) {
       }
     } else {
       const updates: Record<string, unknown> = {};
-      if (input.contactNumbers) updates.mobileNumber = JSON.parse(input.contactNumbers);
+      if (input.contactNumbers) updates.mobileNumber = parseContactNumbersToArray(input.contactNumbers) as Prisma.InputJsonValue;
       if (input.contactEmail) updates.email = input.contactEmail;
       if (input.contactNik) updates.nikNumber = input.contactNik;
       if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
@@ -235,18 +280,21 @@ export async function createBooking(data: unknown) {
       }
     }
 
-    // If booking created from a lead → update lead.convertedTo* fields atomically
-    // - convertedToCustomerId: only set first time (dedup: if already set, keep existing)
-    // - convertedToBookingId: update to latest booking (so lead tracks last booking created from it)
-    // - convertedAt: only set first time
+    // If booking created from a lead → update lead.convertedTo* fields atomically.
+    // convertedToCustomerId is already stamped outside via optimistic lock (didLockLeadConversion),
+    // so here we only need to:
+    //   • stamp convertedAt + convertedToBookingId + statusId for first conversion
+    //   • stamp convertedToBookingId + statusId for already-converted leads
     if (leadRecord) {
       const leadUpdateData: Record<string, unknown> = {
         convertedToBookingId: bookingId,
       };
-      if (!leadRecord.convertedToCustomerId) {
-        // First conversion — stamp customer + timestamp
-        leadUpdateData.convertedToCustomerId = customerId;
+      if (didLockLeadConversion) {
+        // First conversion — stamp timestamp (convertedToCustomerId already set above)
         leadUpdateData.convertedAt = new Date();
+      }
+      if (convertedStatus) {
+        leadUpdateData.statusId = convertedStatus.id;
       }
       ops.push(
         db.lead.update({
@@ -288,7 +336,9 @@ export async function createBooking(data: unknown) {
           name: customerData.name,
           email: customerData.email,
           mobileNumber: Array.isArray(customerData.mobileNumber)
-            ? (customerData.mobileNumber as Array<{ name?: string; number: string }>).map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", ")
+            ? (customerData.mobileNumber as Array<{ name?: string; number: string }>)
+                .map((e) => (e.name ? `${e.name}: ${e.number}` : e.number))
+                .join(", ")
             : String(customerData.mobileNumber ?? ""),
           nikNumber: customerData.nikNumber,
           ktpAddress: customerData.ktpAddress,
@@ -507,6 +557,43 @@ export async function createBooking(data: unknown) {
   }
 }
 
+/**
+ * Serialize wire-format contactNumbers (JSON string of MobileNumberEntry[]) to
+ * the display string persisted in `snapCustomer.mobileNumber`.
+ *
+ * Wire format: JSON.stringify([{ name: string; number: string }, ...])
+ * Persisted format: "name: number, name: number" (name omitted when empty)
+ *
+ * Returns empty string on parse failure (safe fallback).
+ */
+function serializeContactNumbersToDisplay(contactNumbers: string): string {
+  if (!contactNumbers) return "";
+  try {
+    const arr = JSON.parse(contactNumbers) as Array<{ name?: string; number: string }>;
+    if (!Array.isArray(arr)) return "";
+    return arr.map((e) => (e.name ? `${e.name}: ${e.number}` : e.number)).join(", ");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Parse wire-format contactNumbers (JSON string) to structured array for
+ * storage in `customer.mobileNumber` (Json column).
+ *
+ * Returns empty array on parse failure (safe fallback).
+ */
+function parseContactNumbersToArray(contactNumbers: string): Array<{ name: string; number: string }> {
+  if (!contactNumbers) return [];
+  try {
+    const arr = JSON.parse(contactNumbers) as Array<{ name?: string; number: string }>;
+    if (!Array.isArray(arr)) return [];
+    return arr.map((e) => ({ name: e.name ?? "", number: e.number }));
+  } catch {
+    return [];
+  }
+}
+
 export async function updateBooking(data: unknown) {
   const parsed = updateBookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -523,6 +610,7 @@ export async function updateBooking(data: unknown) {
 
   const { session, error } = await requirePermission({ module: "booking", action: requiredAction });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
@@ -563,6 +651,7 @@ export async function updateBooking(data: unknown) {
 export async function deleteBooking(id: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "delete" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
@@ -667,6 +756,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
 export async function editBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-edit:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = editBookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -745,18 +835,19 @@ export async function editBooking(data: unknown) {
         where: { bookingId: id },
         data: {
           name: customerName,
-          mobileNumber: contactNumbers ? (() => { try { const arr = JSON.parse(contactNumbers) as Array<{name?: string; number: string}>; return arr.map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { return contactNumbers; } })() : "-",
+          // snapCustomer.mobileNumber persists as display string: "name: number, ..."
+          mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
           email: contactEmail || "-@placeholder.com",
           nikNumber: contactNik || null,
           ktpAddress: contactKtpAddress || null,
         },
       }),
-      // Update actual customer
+      // Update actual customer — mobileNumber is a Json column (structured array)
       db.customer.update({
         where: { id: booking.customerId },
         data: {
           name: customerName,
-          mobileNumber: contactNumbers ? (() => { try { return JSON.parse(contactNumbers); } catch { return contactNumbers; } })() : "-",
+          mobileNumber: parseContactNumbersToArray(contactNumbers ?? "") as Prisma.InputJsonValue,
           email: contactEmail || "-@placeholder.com",
           nikNumber: contactNik || null,
           ktpAddress: contactKtpAddress || null,
@@ -966,11 +1057,10 @@ export async function editBooking(data: unknown) {
       changes: await (async () => {
         const diff: Record<string, unknown> = {};
         const fmtNum = (n: number) => `Rp${new Intl.NumberFormat("id-ID").format(n)}`;
-        const fmtContact = (raw: string) => { try { const arr = JSON.parse(raw) as Array<{name?: string; number: string}>; return arr.map((e) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { return raw; } };
 
         if (customerName !== (booking.snapCustomer?.name ?? "")) diff.customerName = customerName;
         const oldContact = booking.snapCustomer?.mobileNumber ?? "";
-        const newContact = contactNumbers ? fmtContact(contactNumbers) : "";
+        const newContact = contactNumbers ? serializeContactNumbersToDisplay(contactNumbers) : "";
         if (newContact !== oldContact) diff.contactNumbers = newContact;
         if (contactEmail !== (booking.snapCustomer?.email ?? "")) diff.email = contactEmail;
         if (rest.bookingDate !== booking.bookingDate.toISOString().split("T")[0]) diff.bookingDate = rest.bookingDate;
