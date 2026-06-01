@@ -18,10 +18,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
+import {
+  getWeddingTimeRange,
+  type WeddingSession,
+  type WeddingEventType,
+} from "@/lib/constants/wedding-session-times";
+
+/** Map weddingType (R/AR/TR/PR/VO) ke WeddingEventType untuk auto-fill time.
+ *  TR, PR, VO tidak punya padanan standar → return "" (user isi manual). */
+function mapWeddingTypeToEventType(weddingType: string | null): WeddingEventType | "" {
+  if (weddingType === "R") return "resepsi";
+  if (weddingType === "AR") return "akad-dan-resepsi";
+  return "";
+}
 
 interface BookingDrawerProps {
   open: boolean;
@@ -145,6 +159,7 @@ interface BookingDraft {
   formValues: Record<string, unknown>;
   takeoutPrices?: Record<string, number>;
   categoryToggles?: Record<string, boolean>;
+  time?: string;
 }
 
 function saveDraft(d: BookingDraft) {
@@ -176,6 +191,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [contactKtpAddress, setContactKtpAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
+  const [time, setTime] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -305,6 +321,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setTerms(draft.terms.some((t) => t.dueDate) ? draft.terms : makeDefaultTerms());
         if (draft.takeoutPrices) setTakeoutPrices(draft.takeoutPrices);
         if (draft.categoryToggles) setCategoryToggles(draft.categoryToggles);
+        if (draft.time) setTime(draft.time);
         form.reset(draft.formValues as BookingInput);
       } else {
         form.reset();
@@ -315,6 +332,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
         setTakeoutPrices({});
         setCategoryToggles({});
+        setTime("");
         sigSalesRef.current?.clear();
       }
     }
@@ -331,11 +349,11 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         contactKtpAddress,
         contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
         specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice,
-        bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles,
+        bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles, time,
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles, time]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBasePrice = () => selectedPackagePrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
@@ -352,7 +370,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId"]);
   const isBitrixSource = sourceOptions.find((o) => o.id === wSourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()));
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()) && time.trim());
 
   const selectedVariantData = packages.find((p: PackageData) => p.id === wPackageId);
 
@@ -394,7 +412,19 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   // Recalc term dates when event date changes
   useEffect(() => {
     if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
-  }, [wBookingDate]);  
+  }, [wBookingDate]);
+
+  // Auto-fill time dari session + weddingType (weddings only, R/AR saja)
+  useEffect(() => {
+    const mappedType = mapWeddingTypeToEventType(wWeddingType ?? null);
+    const autoTime = getWeddingTimeRange(
+      (wWeddingSession as WeddingSession | "") ?? "",
+      mappedType,
+    );
+    if (autoTime) {
+      setTime(autoTime);
+    }
+  }, [wWeddingSession, wWeddingType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) {
@@ -818,6 +848,23 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       <FormMessage />
                     </FormItem>
                   )} />
+
+                  {/* Time */}
+                  <div className="flex flex-col gap-1">
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>
+                      Time *
+                      {wWeddingSession && mapWeddingTypeToEventType(wWeddingType ?? null) && (
+                        <span className="ml-2 font-normal text-muted-foreground text-xs">
+                          (auto-filled, bisa diubah manual)
+                        </span>
+                      )}
+                    </FormLabel>
+                    <TimeRangePicker
+                      value={time}
+                      onChange={setTime}
+                      placeholder="Pilih waktu (bisa rentang)..."
+                    />
+                  </div>
 
                   {/* Note Date Event */}
                   <div>

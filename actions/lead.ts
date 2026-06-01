@@ -39,6 +39,7 @@ export async function createLead(data: CreateLeadInput) {
     email,
     address,
     eventDate,
+    time,
     estimatedPax,
     budgetRange,
     notes,
@@ -62,6 +63,7 @@ export async function createLead(data: CreateLeadInput) {
           email: email || null,
           address: address || null,
           eventDate: eventDate ? new Date(eventDate) : null,
+          time: time || null,
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
           notes: notes || null,
@@ -131,6 +133,7 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.eventDate !== undefined && {
             eventDate: fields.eventDate ? new Date(fields.eventDate) : null,
           }),
+          ...(fields.time !== undefined && { time: fields.time || null }),
           ...(fields.estimatedPax !== undefined && { estimatedPax: fields.estimatedPax ?? null }),
           ...(fields.budgetRange !== undefined && { budgetRange: fields.budgetRange || null }),
           ...(fields.notes !== undefined && { notes: fields.notes || null }),

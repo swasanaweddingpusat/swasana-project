@@ -10,6 +10,7 @@ const leadSelect = {
   email: true,
   address: true,
   eventDate: true,
+  time: true,
   estimatedPax: true,
   budgetRange: true,
   notes: true,

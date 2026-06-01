@@ -174,7 +174,9 @@ export function QuotationPreview({
                   />
                   <InfoRow label="To" value={q.leadName} />
                   <InfoRow label="No. Hp" value={q.leadPhone} />
-                  <InfoRow label="Instansi" value={q.instansi} />
+                  {q.instansi && q.instansi.trim() ? (
+                    <InfoRow label="Instansi" value={q.instansi} />
+                  ) : null}
                   <div className="h-1" />
                   <InfoRow label="Sales" value={q.salesName} />
                   <InfoRow label="No. Hp" value={q.salesPhone} />

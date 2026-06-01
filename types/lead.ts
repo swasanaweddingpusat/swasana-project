@@ -44,6 +44,7 @@ export type LeadListItem = {
   email: string | null;
   address: string | null;
   eventDate: Date | null;
+  time: string | null;
   estimatedPax: number | null;
   budgetRange: string | null;
   notes: string | null;

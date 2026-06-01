@@ -28,6 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Calendar as CalendarSolarIcon, CloseCircle } from "@solar-icons/react";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn } from "@/lib/utils";
 import { createLeadSchema } from "@/lib/validations/lead";
 import type { CreateLeadInput } from "@/lib/validations/lead";
@@ -56,6 +57,7 @@ interface LeadFormValues {
   assignedToId: string;
   eventDate: string;
   weddingSession: "morning" | "evening" | "fullday" | "";
+  time: string;
   estimatedPax: string;
   budgetRange: string;
   notes: string;
@@ -87,6 +89,7 @@ const DEFAULT_VALUES: LeadFormValues = {
   assignedToId: "",
   eventDate: "",
   weddingSession: "",
+  time: "",
   estimatedPax: "",
   budgetRange: "",
   notes: "",
@@ -162,6 +165,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const watchedCategory = form.watch("category");
   const watchedSourceId = form.watch("sourceOfInformationId");
   const isBitrixSource = sourceOptions.find((o) => o.id === watchedSourceId)?.name.toLowerCase().includes("bitrix") ?? false;
+  const isWeddings = watchedCategory === "WEDDINGS";
 
   // Watch all required fields so the submit button reacts to completeness.
   const watchedName = form.watch("name");
@@ -245,6 +249,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
           ? new Date(editLead.eventDate).toISOString().split("T")[0]
           : "",
         weddingSession: (editLead.weddingSession as "morning" | "evening" | "fullday" | "") ?? "",
+        time: editLead.time ?? "",
         estimatedPax: editLead.estimatedPax ? String(editLead.estimatedPax) : "",
         budgetRange: editLead.budgetRange ?? "",
         notes: editLead.notes ?? "",
@@ -318,6 +323,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       email: values.email || undefined,
       address: values.address || undefined,
       eventDate: values.eventDate,
+      time: values.time || undefined,
       weddingSession: values.weddingSession as "morning" | "evening" | "fullday",
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       budgetRange: values.budgetRange || undefined,
@@ -748,6 +754,24 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                     </FormItem>
                   );
                 }}
+              />
+
+              {/* Time */}
+              <FormField
+                control={form.control}
+                name="time"
+                render={({ field }) => (
+                  <FormItem className="flex w-full flex-col">
+                    <FormLabel>Time</FormLabel>
+                    <FormControl>
+                      <TimeRangePicker
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Pilih waktu (bisa rentang)..."
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
               />
 
               {/* Estimasi Pax */}

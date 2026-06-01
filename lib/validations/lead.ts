@@ -23,6 +23,7 @@ export const createLeadSchema = z.object({
   email: z.string().trim().email("Format email tidak valid").optional().or(z.literal("")),
   address: z.string().trim().max(500).optional(),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  time: z.string().trim().max(100).optional(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(2000).optional(),
