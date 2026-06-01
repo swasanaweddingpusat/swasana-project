@@ -171,10 +171,11 @@ export function MiceTable() {
     <Card>
       <CardContent className="p-0">
         {/* Header + Filters */}
-        <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
+        <div className="flex flex-col gap-3 px-4 sm:px-6 pb-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
-              {total} bookings
+            <h2 className="text-base font-bold text-foreground">MICE Bookings</h2>
+            <span className="text-foreground text-sm rounded-full border border-border bg-muted px-3 py-1">
+              {total} Bookings
             </span>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
