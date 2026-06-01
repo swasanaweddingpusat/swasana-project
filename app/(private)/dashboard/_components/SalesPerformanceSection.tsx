@@ -392,7 +392,7 @@ export function SalesPerformanceSection({
           Achievement & Performance Sales
         </h2>
         <span className="text-xs text-muted-foreground ml-1">
-          (top {data.length} sales terbaru)
+          (top 5 by revenue)
         </span>
       </div>
 

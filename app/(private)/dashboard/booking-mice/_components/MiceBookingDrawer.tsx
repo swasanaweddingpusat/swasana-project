@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
 import {
@@ -45,6 +45,7 @@ import {
 } from "@/hooks/use-mice-bookings";
 import { createMiceBookingSchema } from "@/lib/validations/booking-mice";
 import type { MiceBookingItem } from "./types";
+import type { BookingPrefillLead } from "@/types/lead";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,6 +54,10 @@ interface MiceBookingDrawerProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   booking: MiceBookingItem | null;
+  /** When provided (create mode), the drawer opens pre-filled from this lead. */
+  prefillLead?: BookingPrefillLead | null;
+  /** Called after a successful create/update. */
+  onSuccess?: () => void;
 }
 
 interface MiceFormValues {
@@ -61,7 +66,6 @@ interface MiceFormValues {
   venueId: string;
   eventTypeId: string;
   eventDate: string;
-  bookingDate: string;
   estimatedPax: string;
   salesId: string;
   notes: string;
@@ -109,15 +113,12 @@ interface TermRow {
 
 const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
 
-const today = new Date().toISOString().split("T")[0];
-
 const DEFAULT_VALUES: MiceFormValues = {
   clientName: "",
   clientPhone: "",
   venueId: "",
   eventTypeId: "",
   eventDate: "",
-  bookingDate: today,
   estimatedPax: "",
   salesId: "",
   notes: "",
@@ -148,6 +149,8 @@ export function MiceBookingDrawer({
   open,
   onOpenChange,
   booking,
+  prefillLead,
+  onSuccess,
 }: MiceBookingDrawerProps) {
   const isEdit = !!booking;
   const form = useForm<MiceFormValues>({ defaultValues: DEFAULT_VALUES });
@@ -156,6 +159,13 @@ export function MiceBookingDrawer({
   const [currentStep, setCurrentStep] = useState(1);
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   const [signingLocation, setSigningLocation] = useState("");
+
+  // Venue availability (mirrors Wedding drawer pattern)
+  type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
+  const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
+  const [availLoading, setAvailLoading] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
+  const [eventDatePopoverOpen, setEventDatePopoverOpen] = useState(false);
 
   // Customer / Lead picker (mirror wedding drawer)
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -225,6 +235,32 @@ export function MiceBookingDrawer({
     return salesMice.find((s) => s.id === user.profileId)?.fullName ?? user.name ?? null;
   }, [currentUserIsSalesMice, salesMice, user]);
 
+  // Watch venueId from form to trigger availability fetch
+  const watchedVenueId = form.watch("venueId");
+
+  // Fetch venue availability whenever venue or visible month changes
+  useEffect(() => {
+    if (!watchedVenueId) { setAvailability({}); return; }
+    setAvailLoading(true);
+    const month = format(startOfMonth(visibleMonth), "yyyy-MM");
+    const params = new URLSearchParams({ month });
+    fetch(`/api/venues/${watchedVenueId}/availability?${params}`)
+      .then((r) => r.json())
+      .then((data: Record<string, DayAvail>) => setAvailability(data))
+      .catch(() => setAvailability({}))
+      .finally(() => setAvailLoading(false));
+  }, [watchedVenueId, visibleMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
+    const key = format(d, "yyyy-MM-dd");
+    const a = availability[key];
+    if (!a) return null;
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
+  }
+
   // Pre-compute terms from booking OUTSIDE the effect so the effect body
   // doesn't perform complex reactive-value derivation (which triggers the
   // react-hooks/set-state-in-effect lint rule).
@@ -275,7 +311,6 @@ export function MiceBookingDrawer({
           venueId: booking.venue.id,
           eventTypeId: "",
           eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().split("T")[0] : "",
-          bookingDate: booking.bookingDate ? new Date(booking.bookingDate).toISOString().split("T")[0] : today,
           estimatedPax: "",
           salesId: booking.sales?.id ?? "",
           notes: "",
@@ -283,6 +318,26 @@ export function MiceBookingDrawer({
         setTerms(bookingTerms ?? makeDefaultTerms());
         setSigningLocation("");
         setSelectedCustomerId(booking.customer.id);
+      } else if (prefillLead) {
+        // ── Create mode, pre-filled from a lead ──
+        const autoSalesId = currentUserIsSalesMice && user?.profileId
+          ? user.profileId
+          : (prefillLead.assignedTo?.id ?? "");
+        const phone = prefillLead.contactNumbers?.[0]?.number ?? "";
+        form.reset({
+          ...DEFAULT_VALUES,
+          clientName: prefillLead.name,
+          clientPhone: phone.replace(/\D/g, ""),
+          venueId: prefillLead.venue?.id ?? "",
+          eventTypeId: prefillLead.eventType?.id ?? "",
+          eventDate: prefillLead.eventDate ? new Date(prefillLead.eventDate).toISOString().split("T")[0] : "",
+          estimatedPax: prefillLead.estimatedPax != null ? String(prefillLead.estimatedPax) : "",
+          salesId: autoSalesId,
+          notes: prefillLead.notes ?? "",
+        });
+        setTerms(makeDefaultTerms());
+        setSigningLocation("");
+        setSelectedCustomerId("");
       } else {
         const autoSalesId = currentUserIsSalesMice && user?.profileId ? user.profileId : "";
         form.reset({ ...DEFAULT_VALUES, salesId: autoSalesId });
@@ -292,8 +347,11 @@ export function MiceBookingDrawer({
       }
       setCurrentStep(1);
       setClientSearch("");
-      setSelectedLeadId("");
+      setSelectedLeadId(!booking && prefillLead ? prefillLead.leadId : "");
       setClientDropdownOpen(false);
+      setAvailability({});
+      setVisibleMonth(new Date());
+      setEventDatePopoverOpen(false);
     } else {
       signatureRef.current = null;
     }
@@ -311,7 +369,7 @@ export function MiceBookingDrawer({
   async function handleNext() {
     if (currentStep === 1) {
       const ok = await form.trigger([
-        "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate", "bookingDate",
+        "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate",
       ]);
       if (!ok) return;
     }
@@ -355,7 +413,8 @@ export function MiceBookingDrawer({
       venueId: values.venueId,
       eventTypeId: values.eventTypeId,
       eventDate: values.eventDate,
-      bookingDate: values.bookingDate,
+      // bookingDate is auto-set to today — never collected from user input
+      bookingDate: new Date().toISOString().split("T")[0],
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       salesId: resolvedSalesId ?? null,
       salesSignature: signatureRef.current ?? null,
@@ -387,6 +446,7 @@ export function MiceBookingDrawer({
       if (!result.success) { toast.error(result.error ?? "Gagal menyimpan booking."); return; }
       toast.success("Booking MICE berhasil disimpan.");
     }
+    onSuccess?.();
     onOpenChange(false);
   }
 
@@ -529,22 +589,53 @@ export function MiceBookingDrawer({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <FormField control={form.control} name="bookingDate" rules={{ required: "Tanggal booking wajib diisi" }} render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tanggal Booking *</FormLabel>
-                          <FormControl><Input type="date" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tanggal Event *</FormLabel>
-                          <FormControl><Input type="date" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
+                    <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tanggal Event *</FormLabel>
+                        <Popover open={eventDatePopoverOpen} onOpenChange={setEventDatePopoverOpen}>
+                          <PopoverTrigger render={
+                            <Button
+                              variant="outline"
+                              disabled={!watchedVenueId}
+                              className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                            >
+                              <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                              {watchedVenueId
+                                ? (field.value ? format(new Date(field.value), "dd MMM yyyy") : "Pilih tanggal event")
+                                : "Pilih venue terlebih dahulu"}
+                            </Button>
+                          } />
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              captionLayout="dropdown"
+                              selected={field.value ? new Date(field.value) : undefined}
+                              onSelect={(date) => {
+                                field.onChange(date ? date.toISOString().split("T")[0] : "");
+                                setEventDatePopoverOpen(false);
+                              }}
+                              disabled={(d) => getDateStatus(d) === "unavailable"}
+                              fromYear={new Date().getFullYear() - 2}
+                              toYear={new Date().getFullYear() + 5}
+                              defaultMonth={field.value ? new Date(field.value) : new Date()}
+                              onMonthChange={setVisibleMonth}
+                              modifiers={{
+                                available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                                partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                                unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
+                              }}
+                              modifiersClassNames={{
+                                available: "day-available",
+                                partial: "day-partial",
+                                unavailable: "day-unavailable",
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <FormField control={form.control} name="estimatedPax" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Jumlah Pax (Estimasi)</FormLabel>

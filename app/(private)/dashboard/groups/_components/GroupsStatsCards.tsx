@@ -84,7 +84,7 @@ export function GroupsStatsCards({
         <div className="space-y-3.5">
           <StatRow icon={UsersGroupRounded} label="Total Groups" value={totalGroups.toString()} />
           <div className="border-t border-stone-200/70" />
-          <StatRow icon={Dollar} label="Total Sales" value={formatRp(totalSales)} />
+          <StatRow icon={Dollar} label="Total Revenue" value={formatRp(totalSales)} />
           <div className="border-t border-stone-200/70" />
           <StatRow icon={CalendarMark} label="Booking Confirmed" value={totalConfirmed.toString()} />
         </div>

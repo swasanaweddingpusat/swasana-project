@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Crown,
   Pen,
+  TrashBinTrash,
   MedalStar,
   GraphDown,
   GraphUp,
@@ -19,7 +20,9 @@ import type { GroupWithPerformance } from "@/lib/queries/groups";
 interface Props {
   groups: GroupWithPerformance[];
   canEdit: boolean;
+  canDelete: boolean;
   onEdit: (group: GroupWithPerformance) => void;
+  onDelete: (group: GroupWithPerformance) => void;
 }
 
 function formatRp(n: number) {
@@ -109,12 +112,16 @@ function GroupCard({
   group,
   rank,
   canEdit,
+  canDelete,
   onEdit,
+  onDelete,
 }: {
   group: GroupWithPerformance;
   rank: number;
   canEdit: boolean;
+  canDelete: boolean;
   onEdit: (group: GroupWithPerformance) => void;
+  onDelete: (group: GroupWithPerformance) => void;
 }) {
   const pct = Math.min(group.avgAchievement, 100);
   const tier = getCardTier(rank);
@@ -173,6 +180,23 @@ function GroupCard({
                 aria-label={`Edit group ${group.name}`}
               >
                 <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 sm:h-8 sm:w-8 relative z-10",
+                  "hover:bg-black/5 text-destructive hover:text-destructive",
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(group);
+                }}
+                aria-label={`Hapus group ${group.name}`}
+              >
+                <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
               </Button>
             )}
             <Link
@@ -286,7 +310,7 @@ function GroupCard({
         >
           <div className="flex flex-col items-center gap-0.5 px-2 first:pl-0 last:pr-0">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Sales
+              Revenue
             </span>
             <span className="text-sm font-semibold tabular-nums">{formatRp(group.revenue)}</span>
           </div>
@@ -308,7 +332,7 @@ function GroupCard({
   );
 }
 
-function GroupsLeaderboard({ groups, canEdit, onEdit }: Props) {
+function GroupsLeaderboard({ groups, canEdit, canDelete, onEdit, onDelete }: Props) {
   if (groups.length === 0) {
     return (
       <div
@@ -330,7 +354,9 @@ function GroupsLeaderboard({ groups, canEdit, onEdit }: Props) {
           group={group}
           rank={idx + 1}
           canEdit={canEdit}
+          canDelete={canDelete}
           onEdit={onEdit}
+          onDelete={onDelete}
         />
       ))}
     </div>

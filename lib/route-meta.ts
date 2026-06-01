@@ -11,7 +11,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
 
   "/dashboard/profile": {
-    title: "Profil",
+    title: "Profile",
     subtitle: "Kelola informasi pribadi dan keamanan akun Anda.",
   },
 

@@ -191,9 +191,14 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
     const ids = Array.from(selectedUsers);
     const profileIds = ids.map(id => users.find(u => u.id === id)?.profile?.id).filter(Boolean) as string[];
     const results = await Promise.allSettled(profileIds.map(id => deleteUserMutation.mutateAsync(id)));
-    const succeeded = results.filter(r => r.status === "fulfilled").length;
-    const failed = results.filter(r => r.status === "rejected").length;
-    if (succeeded > 0) toast.success(`${succeeded} user berhasil dihapus`);
+    const succeeded = results.filter(
+      r => r.status === "fulfilled" && r.value.success === true
+    ).length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`${succeeded} user berhasil dihapus`);
+      await refetch();
+    }
     if (failed > 0) toast.error(`${failed} user gagal dihapus`);
     setSelectedUsers(new Set());
     setBulkDeleteOpen(false);

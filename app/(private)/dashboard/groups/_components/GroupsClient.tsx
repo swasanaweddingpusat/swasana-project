@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AddCircle } from "@solar-icons/react";
+import { toast } from "sonner";
 import { GroupsStatsCards } from "./GroupsStatsCards";
 import { GroupsTable } from "./GroupsTable";
 import { GroupFormDialog } from "./GroupFormDialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useGroupsPerformance } from "@/hooks/use-groups-performance";
+import { useDeleteGroup } from "@/hooks/use-groups";
 import type { GroupWithPerformance, EligibleLeader } from "@/lib/queries/groups";
 
 interface Props {
@@ -17,9 +20,12 @@ interface Props {
   eligibleLeaders?: EligibleLeader[];
 }
 
-export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _canDelete, eligibleLeaders = [] }: Props) {
+export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete, eligibleLeaders = [] }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<GroupWithPerformance | null>(null);
+  const [deleteGroup, setDeleteGroup] = useState<GroupWithPerformance | null>(null);
+
+  const deleteMutation = useDeleteGroup();
 
   const { data } = useGroupsPerformance();
   const groups = data?.groups ?? initialGroups;
@@ -32,6 +38,21 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _ca
       : 0,
     totalConfirmed: initialGroups.reduce((s, g) => s + g.confirmedCount, 0),
   };
+
+  function handleConfirmDelete() {
+    if (!deleteGroup) return;
+    deleteMutation.mutate(deleteGroup.id, {
+      onSuccess: (res) => {
+        if (res.success) {
+          toast.success(`Grup "${deleteGroup.name}" berhasil dihapus`);
+          setDeleteGroup(null);
+        } else {
+          toast.error(res.error ?? "Terjadi kesalahan");
+        }
+      },
+      onError: () => toast.error("Terjadi kesalahan"),
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -46,7 +67,13 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _ca
             </Button>
           )}
         </div>
-        <GroupsTable groups={groups} canEdit={canEdit} onEdit={setEditGroup} />
+        <GroupsTable
+          groups={groups}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onEdit={setEditGroup}
+          onDelete={setDeleteGroup}
+        />
       </div>
 
       <GroupFormDialog
@@ -61,6 +88,15 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete: _ca
         onOpenChange={(o) => { if (!o) setEditGroup(null); }}
         group={editGroup}
         eligibleLeaders={eligibleLeaders}
+      />
+      <ConfirmDialog
+        open={!!deleteGroup}
+        onOpenChange={(o) => { if (!o) setDeleteGroup(null); }}
+        title="Hapus Group"
+        description={`Yakin ingin menghapus grup "${deleteGroup?.name ?? ""}"? Semua data anggota dalam grup ini akan ikut terhapus.`}
+        confirmLabel={deleteMutation.isPending ? "Menghapus..." : "Hapus"}
+        onConfirm={handleConfirmDelete}
+        destructive
       />
     </div>
   );

@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Pen,
   ArrowLeft,
   ArrowRight,
@@ -22,6 +29,12 @@ import {
   CalendarMark,
   UserCircle,
   TrashBinTrash,
+  CheckCircle,
+  CloseCircle,
+  MenuDots,
+  HeartShine,
+  Suitcase,
+  Refresh,
 } from "@solar-icons/react";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { cn } from "@/lib/utils";
@@ -42,7 +55,16 @@ interface LeadsListViewProps {
   onEdit: (lead: LeadItem) => void;
   onDelete: (lead: LeadItem) => void;
   onBuatQuotation: (lead: LeadItem) => void;
+  onMarkDeal: (lead: LeadItem) => void;
+  onMarkLost: (lead: LeadItem) => void;
+  onReset: (lead: LeadItem) => void;
+  onCreateBooking: (lead: LeadItem) => void;
   isLoading?: boolean;
+}
+
+/** Resolve the lead's booking category (eventType.category wins over lead.category). */
+function leadBookingCategory(lead: LeadItem): "WEDDINGS" | "MICE" {
+  return lead.eventType?.category ?? lead.category;
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -119,12 +141,20 @@ function MobileLeadCard({
   onEdit,
   onDelete,
   onBuatQuotation,
+  onMarkDeal,
+  onMarkLost,
+  onReset,
+  onCreateBooking,
 }: {
   lead: LeadItem;
   rowNumber: number;
   onEdit: (lead: LeadItem) => void;
   onDelete: (lead: LeadItem) => void;
   onBuatQuotation: (lead: LeadItem) => void;
+  onMarkDeal: (lead: LeadItem) => void;
+  onMarkLost: (lead: LeadItem) => void;
+  onReset: (lead: LeadItem) => void;
+  onCreateBooking: (lead: LeadItem) => void;
 }) {
   const firstContact = Array.isArray(lead.contactNumbers)
     ? (lead.contactNumbers[0] as { number?: string } | undefined)?.number ?? ""
@@ -135,10 +165,11 @@ function MobileLeadCard({
     : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—");
 
   const showBuatQuotation = lead.status.name === "Hot" && !lead.status.isFinal;
+  const showFinalActions = !lead.status.isFinal;
 
   return (
     <Card className="rounded-lg border bg-card">
-      <CardContent className="p-3 space-y-2">
+      <CardContent className="px-3 py-2 space-y-1.5">
         {/* Row 1: Nama + Status */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -220,17 +251,57 @@ function MobileLeadCard({
               Quotation
             </Button>
           )}
-          <PermissionGate module="leads" action="delete">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => onDelete(lead)}
-              aria-label={`Hapus lead ${lead.name}`}
-            >
-              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5" />
-            </Button>
-          </PermissionGate>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 shrink-0"
+                aria-label={`Aksi lainnya untuk lead ${lead.name}`}
+              >
+                <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onCreateBooking(lead)}>
+                {leadBookingCategory(lead) === "MICE" ? (
+                  <Suitcase weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                ) : (
+                  <HeartShine weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                )}
+                {leadBookingCategory(lead) === "MICE" ? "Create Booking MICE" : "Create Booking Wedding"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {showFinalActions && (
+                <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
+                  <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                  Tandai sebagai Deal
+                </DropdownMenuItem>
+              )}
+              {showFinalActions && (
+                <DropdownMenuItem onClick={() => onMarkLost(lead)}>
+                  <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
+                  Tandai sebagai Lost
+                </DropdownMenuItem>
+              )}
+              {lead.status.isFinal && (
+                <DropdownMenuItem onClick={() => onReset(lead)}>
+                  <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Reset ke Cold
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <PermissionGate module="leads" action="delete">
+                <DropdownMenuItem
+                  onClick={() => onDelete(lead)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
+                  Hapus
+                </DropdownMenuItem>
+              </PermissionGate>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardContent>
     </Card>
@@ -249,6 +320,10 @@ export function LeadsListView({
   onEdit,
   onDelete,
   onBuatQuotation,
+  onMarkDeal,
+  onMarkLost,
+  onReset,
+  onCreateBooking,
   isLoading,
 }: LeadsListViewProps) {
   // ── Loading state ──
@@ -256,7 +331,7 @@ export function LeadsListView({
     return (
       <>
         {/* Mobile skeleton */}
-        <div className="block sm:hidden p-4 space-y-3">
+        <div className="block sm:hidden px-3 py-2 space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-28 w-full rounded-lg" />
           ))}
@@ -287,7 +362,7 @@ export function LeadsListView({
   return (
     <>
       {/* ── Mobile: Card List (<sm) ── */}
-      <div className="block sm:hidden p-4 space-y-3">
+      <div className="block sm:hidden px-3 py-2 space-y-2">
         {leads.map((lead, index) => {
           const rowNumber = (currentPage - 1) * pageSize + index + 1;
           return (
@@ -298,6 +373,10 @@ export function LeadsListView({
               onEdit={onEdit}
               onDelete={onDelete}
               onBuatQuotation={onBuatQuotation}
+              onMarkDeal={onMarkDeal}
+              onMarkLost={onMarkLost}
+              onReset={onReset}
+              onCreateBooking={onCreateBooking}
             />
           );
         })}
@@ -327,7 +406,7 @@ export function LeadsListView({
               {/* Sumber Info — lg+ */}
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Sumber Info</TableHead>
               {/* Action — always visible */}
-              <TableHead className="px-4 whitespace-nowrap w-28">Aksi</TableHead>
+              <TableHead className="px-4 whitespace-nowrap w-20 text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -416,7 +495,7 @@ export function LeadsListView({
 
                   {/* Action */}
                   <TableCell className="px-4">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -435,17 +514,56 @@ export function LeadsListView({
                           <FileText weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       )}
-                      <PermissionGate module="leads" action="delete">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => onDelete(lead)}
-                          aria-label={`Hapus lead ${lead.name}`}
-                        >
-                          <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                      </PermissionGate>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Aksi lainnya untuk lead ${lead.name}`}
+                          >
+                            <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onCreateBooking(lead)}>
+                            {leadBookingCategory(lead) === "MICE" ? (
+                              <Suitcase weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                            ) : (
+                              <HeartShine weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                            )}
+                            {leadBookingCategory(lead) === "MICE" ? "Create Booking MICE" : "Create Booking Wedding"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {!lead.status.isFinal && (
+                            <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
+                              <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                              Tandai sebagai Deal
+                            </DropdownMenuItem>
+                          )}
+                          {!lead.status.isFinal && (
+                            <DropdownMenuItem onClick={() => onMarkLost(lead)}>
+                              <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
+                              Tandai sebagai Lost
+                            </DropdownMenuItem>
+                          )}
+                          {lead.status.isFinal && (
+                            <DropdownMenuItem onClick={() => onReset(lead)}>
+                              <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
+                              Reset ke Cold
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <PermissionGate module="leads" action="delete">
+                            <DropdownMenuItem
+                              onClick={() => onDelete(lead)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
+                              Hapus
+                            </DropdownMenuItem>
+                          </PermissionGate>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Refresh } from "@solar-icons/react";
 import { createBrand, updateBrand, deleteBrand } from "@/actions/brand";
 import type { BrandsQueryResult, BrandQueryItem } from "@/lib/queries/venues";
 import { cn } from "../../../../../../lib/utils";
@@ -25,9 +25,34 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
   const [editingBrand, setEditingBrand] = useState<BrandQueryItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<BrandQueryItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const totalPages = Math.ceil(brands.length / ROWS_PER_PAGE);
-  const paginated = brands.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/brands");
+      if (res.ok) {
+        const data = await res.json() as BrandsQueryResult;
+        setBrands(data);
+        toast.success("Data diperbarui.");
+      } else {
+        toast.error("Gagal memuat ulang data.");
+      }
+    } catch {
+      toast.error("Gagal memuat ulang data.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Sort descending by createdAt so newest brand appears first
+  const sortedBrands = useMemo(
+    () => [...brands].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [brands]
+  );
+
+  const totalPages = Math.ceil(sortedBrands.length / ROWS_PER_PAGE);
+  const paginated = sortedBrands.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
   function handleOpenAdd() {
     setEditingBrand(null);
@@ -58,7 +83,7 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
       setBrands((prev) => prev.map((b) => b.id === editingBrand.id ? { ...b, name: formName.trim(), code: formCode.trim().toUpperCase() } : b));
       toast.success("Brand diperbarui.");
     } else {
-      setBrands((prev) => [...prev, { ...result.brand!, venues: [] } as BrandQueryItem]);
+      setBrands((prev) => [{ ...result.brand!, venues: [] } as BrandQueryItem, ...prev]);
       toast.success("Brand ditambahkan.");
     }
     setFormOpen(false);
@@ -78,59 +103,75 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'justify-between', 'items-start', 'sm:items-center', 'px-4', 'sm:px-6', 'pb-4', 'gap-3', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
-              <span className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Brand Management</span>
-              <span className={cn('text-sm', 'text-muted-foreground')}>({brands.length})</span>
+              <span className={cn('text-base', 'font-bold', 'text-foreground')}>Brand Management</span>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({sortedBrands.length})</span>
             </div>
-            <Button onClick={handleOpenAdd} className={cn('cursor-pointer')}>
-              <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Add Brand
-            </Button>
+            <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2', 'w-full', 'sm:w-auto')}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className={cn('h-9', 'w-9', 'p-0', 'cursor-pointer', 'shrink-0')}
+                aria-label="Refresh"
+              >
+                <Refresh weight="BoldDuotone" className={cn('w-4', 'h-4', refreshing && 'animate-spin')} />
+              </Button>
+              <Button onClick={handleOpenAdd} className={cn('cursor-pointer', 'shrink-0')}>
+                <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Add Brand
+              </Button>
+            </div>
           </div>
 
           {/* Table */}
-          {brands.length === 0 ? (
-            <div className={cn('text-center', 'py-12', 'text-gray-400')}>Belum ada brand.</div>
+          {sortedBrands.length === 0 ? (
+            <div className={cn('text-center', 'py-12', 'text-muted-foreground')}>Belum ada brand.</div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={cn('w-12', 'px-6')}>#</TableHead>
-                  <TableHead>Brand Name</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Venues</TableHead>
-                  <TableHead className="w-24"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.map((brand, idx) => (
-                  <TableRow key={brand.id}>
-                    <TableCell className={cn('px-6', 'text-muted-foreground')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
-                    <TableCell className="font-medium">{brand.name}</TableCell>
-                    <TableCell>
-                      <span className={cn('px-2', 'py-1', 'rounded-full', 'text-xs', 'font-medium', 'bg-secondary', 'text-secondary-foreground')}>{brand.code}</span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{brand.venues.length} venue{brand.venues.length !== 1 ? "s" : ""}</TableCell>
-                    <TableCell>
-                      <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
-                        <button onClick={() => handleOpenEdit(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
-                          <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
-                        </button>
-                        <button onClick={() => setDeleteTarget(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                          <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
-                        </button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className={cn('w-12', 'px-4', 'sm:px-6')}>#</TableHead>
+                    <TableHead>Brand Name</TableHead>
+                    <TableHead className="hidden sm:table-cell">Code</TableHead>
+                    <TableHead className="hidden md:table-cell">Venues</TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((brand, idx) => (
+                    <TableRow key={brand.id}>
+                      <TableCell className={cn('px-4', 'sm:px-6', 'text-muted-foreground')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                      <TableCell className="font-medium">{brand.name}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <span className={cn('px-2', 'py-1', 'rounded-full', 'text-xs', 'font-medium', 'bg-secondary', 'text-secondary-foreground')}>{brand.code}</span>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-muted-foreground">{brand.venues.length} venue{brand.venues.length !== 1 ? "s" : ""}</TableCell>
+                      <TableCell>
+                        <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
+                          <button onClick={() => handleOpenEdit(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                          </button>
+                          <button onClick={() => setDeleteTarget(brand)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
-              <span className={cn('text-sm', 'text-muted-foreground')}>Page {currentPage} of {totalPages}</span>
+            <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'sm:px-6', 'py-3', 'border-t')}>
+              <span className={cn('text-sm', 'text-muted-foreground')}>
+                Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, sortedBrands.length)} of {sortedBrands.length}
+              </span>
               <div className={cn('flex', 'gap-1')}>
                 <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
                   <ArrowLeft weight="BoldDuotone" className={cn('h-4', 'w-4')} />
@@ -150,11 +191,11 @@ export function BrandsManager({ initialData }: { initialData: BrandsQueryResult 
           <DialogTitle>{editingBrand ? "Edit" : "Tambah"} Brand</DialogTitle>
           <div className={cn('space-y-4', 'pt-2')}>
             <div>
-              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Brand Name *</Label>
+              <Label className={cn('text-sm', 'font-medium')}>Brand Name *</Label>
               <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Swasana" className="mt-1" />
             </div>
             <div>
-              <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Code *</Label>
+              <Label className={cn('text-sm', 'font-medium')}>Code *</Label>
               <Input
                 value={formCode}
                 onChange={(e) => setFormCode(e.target.value.toUpperCase())}

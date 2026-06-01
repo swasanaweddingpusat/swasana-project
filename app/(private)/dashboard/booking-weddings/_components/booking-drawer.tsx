@@ -25,6 +25,7 @@ import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
+import type { BookingPrefillLead } from "@/types/lead";
 import {
   getWeddingTimeRange,
   type WeddingSession,
@@ -43,6 +44,8 @@ interface BookingDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** When provided, the drawer opens pre-filled from this lead (skips draft). */
+  prefillLead?: BookingPrefillLead | null;
 }
 
 type Option = { id: string; name: string };
@@ -175,7 +178,19 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
 }
 
-export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerProps) {
+/** Map a lead's wedding eventType.name back to the drawer's weddingType code. */
+function mapEventTypeNameToWeddingType(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  if (n.includes("akad") && n.includes("resepsi")) return "AR";
+  if (n.includes("teapai")) return "TR";
+  if (n.includes("pemberkatan")) return "PR";
+  if (n.includes("venue only") || n === "vo") return "VO";
+  if (n.includes("resepsi")) return "R";
+  return null;
+}
+
+export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: BookingDrawerProps) {
   const createMut = useCreateBooking();
   const qc = useQueryClient();
   const { users: salesUsers } = useSalesUsers();
@@ -245,7 +260,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
   const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
 
   const [selectedVenueId, setSelectedVenueId] = useState("");
-  const { data: packages = [], isLoading: packagesLoading } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000 });
+  const { data: packages = [], isLoading: packagesLoading, isError: packagesError } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000, retry: 1 });
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
@@ -314,6 +329,38 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
   useEffect(() => {
     if (open) {
       setBonusPickerOpen(false);
+      // Prefill from a lead takes precedence over any saved draft.
+      if (prefillLead) {
+        form.reset();
+        setBonuses([]); setTerms(makeDefaultTerms());
+        setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
+        setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
+        setTakeoutPrices({}); setCategoryToggles({});
+        setSelectedPackageId(""); setSelectedPackagePrice(0);
+
+        setCustomerName(prefillLead.name);
+        setSelectedLeadId(prefillLead.leadId);
+        form.setValue("customerId", "");
+        const mappedNumbers = (prefillLead.contactNumbers ?? [])
+          .map((e) => ({ name: e.label ?? "", number: e.number }))
+          .filter((e) => e.number);
+        setContactNumbers(mappedNumbers);
+        setContactEmail(prefillLead.email ?? "");
+        setContactNik("");
+        setContactKtpAddress(prefillLead.address ?? "");
+        setContactBitrixId(prefillLead.bitrixId ?? "");
+        setNoteDateEvent(prefillLead.notes ?? "");
+        setTime(prefillLead.time ?? "");
+        if (prefillLead.sourceOfInformation?.id) form.setValue("sourceOfInformationId", prefillLead.sourceOfInformation.id);
+        if (prefillLead.assignedTo?.id) form.setValue("salesId", prefillLead.assignedTo.id);
+        if (prefillLead.venue?.id) { form.setValue("venueId", prefillLead.venue.id); setSelectedVenueId(prefillLead.venue.id); }
+        else setSelectedVenueId("");
+        if (prefillLead.package?.id) { form.setValue("packageId", prefillLead.package.id); setSelectedPackageId(prefillLead.package.id); }
+        if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
+        if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
+        if (prefillLead.eventDate) form.setValue("bookingDate", new Date(prefillLead.eventDate).toISOString());
+        return;
+      }
       const draft = loadDraft();
       if (draft) {
         setCurrentStep(draft.currentStep);
@@ -352,10 +399,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save draft (debounced)
+  // Auto-save draft (debounced). Skipped when opened pre-filled from a lead —
+  // that flow is a one-off and must not clobber the shared global create draft.
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!open) return;
+    if (!open || prefillLead) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => {
       saveDraft({
@@ -431,6 +479,18 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
   useEffect(() => {
     if (wBookingDate) setTerms((prev) => recalcTermDates(prev, wBookingDate));
   }, [wBookingDate]);
+
+  // Resolve package price once packages load for a prefilled package (price
+  // starts at 0 because the lead only carries the package id, not its pricing).
+  useEffect(() => {
+    if (!selectedPackageId || selectedPackagePrice > 0 || packages.length === 0) return;
+    const pkg = packages.find((p) => p.id === selectedPackageId);
+    if (pkg) {
+      const p = getPackagePrice(pkg);
+      setSelectedPackagePrice(p);
+      allocatePrice(p, specialBonusAmount);
+    }
+  }, [packages, selectedPackageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fill time dari session + weddingType (weddings only, R/AR saja)
   useEffect(() => {
@@ -538,7 +598,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
       );
     }
 
-    clearDraft();
+    if (!prefillLead) clearDraft();
     toast.success("Booking berhasil dibuat.");
     onSuccess?.();
     onOpenChange(false);
@@ -821,7 +881,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -1114,7 +1175,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
                         const isFirstTerm = idx === 0;
                         const isFirstInvalid = isFirstTerm && (!t.amount || t.amount <= 0);
                         return (
-                        <div key={idx} className="space-y-2">
+                        <div key={idx} className={cn('bg-muted', 'border', 'border-border', 'rounded-md', 'px-3', 'py-2', 'space-y-2')}>
                           {/* Term name — inline editable */}
                           <div className={cn('flex', 'items-center', 'gap-2')}>
                             <div className="flex items-center gap-0.5 flex-1">
@@ -1205,8 +1266,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
                               </p>
                             </div>
                           )}
-                          {/* Divider between terms */}
-                          {idx < terms.length - 1 && <div className={cn('border-b', 'border-border', 'pt-1')} />}
                           {isFirstInvalid && (
                             <p className="text-xs text-destructive">Nominal Booking Fee wajib diisi</p>
                           )}
@@ -1257,35 +1316,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerPr
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan *</FormLabel>
                     <Input placeholder="Contoh: Jakarta, Bandung, Surabaya..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} />
                   </div>
-                  <FormField
-                    control={form.control}
-                    name="withMaterai"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border p-3 space-y-2">
-                        <div className="flex flex-row items-center justify-between gap-3">
-                          <FormLabel className="text-sm font-medium">E-Meterai <span className="font-normal text-muted-foreground">(opsional)</span></FormLabel>
-                          <FormControl>
-                            <Switch
-                              checked={field.value ?? false}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Bubuhkan e-meterai resmi (Peruri) pada dokumen PO booking ini.
-                        </p>
-                        <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground space-y-1">
-                          <p className="font-medium text-foreground">Yang akan terjadi saat booking dibuat:</p>
-                          <ul className="list-disc list-inside space-y-0.5">
-                            <li>Sistem akan menghubungi Peruri untuk menghasilkan Serial Number e-meterai</li>
-                            <li>QR code e-meterai akan tampil di dokumen PO sebelah kiri area tanda tangan</li>
-                            <li>Proses ini membutuhkan waktu beberapa detik ekstra</li>
-                            <li className="text-destructive font-medium">Kuota e-meterai akan berkurang — pastikan saldo mencukupi</li>
-                          </ul>
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                  {/* E-Meterai — hidden for WEDDINGS category, reserved for future use */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Tanda Tangan Sales *</FormLabel>
                     <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>

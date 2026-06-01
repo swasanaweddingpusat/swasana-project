@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Refresh } from "@solar-icons/react";
 import { createEducationLevel, updateEducationLevel, deleteEducationLevel } from "@/actions/education-level";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { EducationLevelsResult, EducationLevelItem } from "@/lib/queries/education-level";
@@ -31,6 +31,25 @@ export function EducationLevelManager({ initialData }: Props) {
   const [editingItem, setEditingItem] = useState<EducationLevelItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<EducationLevelItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/education-levels");
+      if (res.ok) {
+        const data = await res.json() as EducationLevelsResult;
+        setItems(data);
+        toast.success("Data diperbarui.");
+      } else {
+        toast.error("Gagal memuat ulang data.");
+      }
+    } catch {
+      toast.error("Gagal memuat ulang data.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const totalPages = Math.ceil(items.length / ROWS_PER_PAGE);
   const paginatedItems = items.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
@@ -81,72 +100,86 @@ export function EducationLevelManager({ initialData }: Props) {
 
   return (
     <>
-      <div className={cn('px-6', 'pb-6')}>
+      <div className={cn('px-2', 'sm:px-6', 'pb-6')}>
         <Card>
           <CardContent className="p-0">
             {/* Header */}
-            <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'pb-4', 'border-b')}>
+            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'px-4', 'sm:px-6', 'pb-4', 'gap-3', 'border-b')}>
               <div className={cn('flex', 'items-center', 'gap-2')}>
-                <h2 className={cn('text-base', 'font-bold', 'text-[#1D1D1D]')}>Tingkat Pendidikan</h2>
+                <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Tingkat Pendidikan</h2>
                 <span className={cn('text-sm', 'text-muted-foreground')}>({items.length})</span>
               </div>
-              {(can("settings-education-level", "create") || isAdmin) && (
-                <Button onClick={handleOpenAdd} className={cn('cursor-pointer')}>
-                  <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Tambah
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className={cn('h-9', 'w-9', 'p-0', 'cursor-pointer')}
+                  aria-label="Refresh"
+                >
+                  <Refresh weight="BoldDuotone" className={cn('w-4', 'h-4', refreshing && 'animate-spin')} />
                 </Button>
-              )}
+                {(can("settings-education-level", "create") || isAdmin) && (
+                  <Button onClick={handleOpenAdd} className={cn('cursor-pointer')}>
+                    <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-2')} /> Tambah
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Table */}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={cn('w-12', 'px-6')}>#</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead className={cn('w-24', 'text-center')}>Urutan</TableHead>
-                  <TableHead className="w-24"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedItems.length === 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={4} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
-                      Belum ada data.
-                    </TableCell>
+                    <TableHead className={cn('w-12', 'px-4', 'sm:px-6')}>#</TableHead>
+                    <TableHead>Nama</TableHead>
+                    <TableHead className={cn('w-24', 'text-center')}>Urutan</TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
-                ) : (
-                  paginatedItems.map((item, idx) => (
-                    <TableRow key={item.id}>
-                      <TableCell className={cn('px-6', 'text-muted-foreground')}>
-                        {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
-                      </TableCell>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell className={cn('text-center', 'text-muted-foreground')}>{item.order}</TableCell>
-                      <TableCell>
-                        <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
-                          {(can("settings-education-level", "edit") || isAdmin) && (
-                            <button onClick={() => handleOpenEdit(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
-                              <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
-                            </button>
-                          )}
-                          {(can("settings-education-level", "delete") || isAdmin) && (
-                            <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
-                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
-                            </button>
-                          )}
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {paginatedItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className={cn('text-center', 'py-8', 'text-muted-foreground')}>
+                        Belum ada data.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paginatedItems.map((item, idx) => (
+                      <TableRow key={item.id}>
+                        <TableCell className={cn('px-4', 'sm:px-6', 'text-muted-foreground')}>
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className={cn('text-center', 'text-muted-foreground')}>{item.order}</TableCell>
+                        <TableCell>
+                          <div className={cn('flex', 'items-center', 'gap-1', 'justify-end', 'pr-2')}>
+                            {(can("settings-education-level", "edit") || isAdmin) && (
+                              <button onClick={() => handleOpenEdit(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Edit">
+                                <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                              </button>
+                            )}
+                            {(can("settings-education-level", "delete") || isAdmin) && (
+                              <button onClick={() => setDeleteTarget(item)} className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')} aria-label="Hapus">
+                                <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                              </button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className={cn('flex', 'items-center', 'justify-between', 'px-6', 'py-3', 'border-t')}>
+              <div className={cn('flex', 'items-center', 'justify-between', 'px-4', 'sm:px-6', 'py-3', 'border-t')}>
                 <span className={cn('text-sm', 'text-muted-foreground')}>
-                  Page {currentPage} of {totalPages}
+                  Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, items.length)} of {items.length}
                 </span>
                 <div className={cn('flex', 'gap-1')}>
                   <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>

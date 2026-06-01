@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { buildResetApprovalOps } from "@/lib/approval-helpers";
 import { resolveApprovalSteps } from "@/lib/approval-flows";
 import { createNotifications } from "@/lib/notifications";
 import {
@@ -392,9 +391,9 @@ export async function savePackagePrices(
     });
     if (!pkg) return { success: false, error: "Package tidak ditemukan." };
 
-    const shouldReset = pkg.approvalStatus === "approved";
-
-    const priceOps: Prisma.PrismaPromise<unknown>[] = [
+    // Set-harga does NOT re-trigger approval regardless of current status.
+    // Prices can be updated freely; approval state is managed separately.
+    await db.$transaction([
       db.packageCategoryPrice.deleteMany({ where: { packageId } }),
       db.packageCategoryPrice.createMany({
         data: categories.map((c) => ({
@@ -407,25 +406,15 @@ export async function savePackagePrices(
         })),
       }),
       db.package.update({ where: { id: packageId }, data: { margin, sellingPrice } }),
-    ];
+    ]);
 
-    if (shouldReset) {
-      const resetOps = await buildResetApprovalOps(packageId, {
-        profileId: session.user.profileId,
-        roleId: session.user.roleId,
-      });
-      await db.$transaction([...priceOps, ...resetOps]);
-
-      await logAudit({
-        userId: session.user.id,
-        action: "package.approval_reset",
-        entityType: "package",
-        entityId: packageId,
-        description: `Approval reset: harga package diubah pada approved package`,
-      });
-    } else {
-      await db.$transaction(priceOps);
-    }
+    await logAudit({
+      userId: session.user.id,
+      action: "package.set_harga",
+      entityType: "package",
+      entityId: packageId,
+      description: `Set harga package (sellingPrice: ${sellingPrice}, margin: ${margin})`,
+    });
 
     revalidateTag("packages", "max");
     return { success: true };
@@ -517,6 +506,49 @@ export async function togglePackageAvailable(id: string): Promise<
     return { success: true, available: updated.available };
   } catch (err) {
     console.error("[togglePackageAvailable]", err);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Unverify Package (Approved → Draft) ─────────────────────────────────────
+
+/** Reset a package's approval status from "approved" back to "draft".
+ *  Requires the same "set-status" permission used to approve.
+ *  This does NOT touch existing ApprovalRecord steps — manager must re-approve. */
+export async function unverifyPackage(id: string): Promise<
+  { success: true } | { success: false; error: string }
+> {
+  const permResult = await requirePermission({ module: "package", action: "set-status" });
+  if (permResult.error) return { success: false, error: permResult.error };
+  const session = permResult.session!;
+  if (!mutationLimiter.check(`pkg-unverify:${session.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    const pkg = await db.package.findUnique({
+      where: { id },
+      select: { approvalStatus: true, packageName: true },
+    });
+    if (!pkg) return { success: false, error: "Package tidak ditemukan." };
+    if (pkg.approvalStatus !== "approved") {
+      return { success: false, error: "Hanya package dengan status Approved yang dapat di-unverify." };
+    }
+
+    await db.$transaction([
+      db.package.update({ where: { id }, data: { approvalStatus: "draft" } }),
+    ]);
+
+    await logAudit({
+      userId: session.user.id,
+      action: "package.unverify",
+      entityType: "package",
+      entityId: id,
+      description: `Package "${pkg.packageName}" di-reset dari approved ke draft`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true };
+  } catch (err) {
+    console.error("[unverifyPackage]", err);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

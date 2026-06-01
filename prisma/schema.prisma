@@ -325,6 +325,7 @@ model Vendor {
   description    String?
   phone          String?
   address        String?
+  bankName       String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   category       VendorCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Refresh } from "@solar-icons/react";
 import { createEventType, updateEventType, deleteEventType } from "@/actions/event-type";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { EventTypesResult, EventTypeItem } from "@/lib/queries/event-types";
@@ -31,9 +31,34 @@ export function EventTypeManager({ initialData }: Props) {
   const [editingItem, setEditingItem] = useState<EventTypeItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<EventTypeItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const totalPages = Math.ceil(items.length / ROWS_PER_PAGE);
-  const paginatedItems = items.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  // Sort descending by createdAt
+  const sortedItems = useMemo(() =>
+    [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [items]
+  );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/event-types");
+      if (res.ok) {
+        const data = await res.json() as EventTypesResult;
+        setItems(data);
+        toast.success("Data diperbarui.");
+      } else {
+        toast.error("Gagal memuat ulang data.");
+      }
+    } catch {
+      toast.error("Gagal memuat ulang data.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  const totalPages = Math.ceil(sortedItems.length / ROWS_PER_PAGE);
+  const paginatedItems = sortedItems.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
   function handleOpenAdd() {
     setEditingItem(null);
@@ -82,73 +107,87 @@ export function EventTypeManager({ initialData }: Props) {
 
   return (
     <>
-      <div className="pb-6">
+      <div className={cn("px-2", "sm:px-6", "pb-6")}>
         <Card>
           <CardContent className="p-0">
-            <div className={cn("flex", "items-center", "justify-between", "px-6", "pb-4", "border-b")}>
+            <div className={cn("flex", "flex-col", "sm:flex-row", "items-start", "sm:items-center", "justify-between", "px-4", "sm:px-6", "pb-4", "gap-3", "border-b")}>
               <div className={cn("flex", "items-center", "gap-2")}>
-                <h2 className={cn("text-base", "font-bold")}>Event Types</h2>
+                <h2 className={cn("text-base", "font-bold", "text-foreground")}>Event Types</h2>
                 <span className={cn("text-sm", "text-muted-foreground")}>({items.length})</span>
               </div>
-              {(can("settings-event-types", "create") || isAdmin) && (
-                <Button onClick={handleOpenAdd} className={cn("cursor-pointer")}>
-                  <AddCircle weight="BoldDuotone" className={cn("w-4", "h-4", "mr-2")} /> Tambah
+              <div className={cn("flex", "items-center", "gap-2")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className={cn("h-9", "w-9", "p-0", "cursor-pointer")}
+                  aria-label="Refresh"
+                >
+                  <Refresh weight="BoldDuotone" className={cn("w-4", "h-4", refreshing && "animate-spin")} />
                 </Button>
-              )}
+                {(can("settings-event-types", "create") || isAdmin) && (
+                  <Button onClick={handleOpenAdd} className={cn("cursor-pointer")}>
+                    <AddCircle weight="BoldDuotone" className={cn("w-4", "h-4", "mr-2")} /> Tambah
+                  </Button>
+                )}
+              </div>
             </div>
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={cn("w-12", "px-6")}>#</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead className="w-28">Kode PO</TableHead>
-                  <TableHead className="w-24"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedItems.length === 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={4} className={cn("text-center", "py-8", "text-muted-foreground")}>
-                      Belum ada data.
-                    </TableCell>
+                    <TableHead className={cn("w-12", "px-4", "sm:px-6")}>#</TableHead>
+                    <TableHead>Nama</TableHead>
+                    <TableHead className="w-28">Kode PO</TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
-                ) : (
-                  paginatedItems.map((item, idx) => (
-                    <TableRow key={item.id}>
-                      <TableCell className={cn("px-6", "text-muted-foreground")}>
-                        {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
-                      </TableCell>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell>
-                        <span className={cn("inline-flex", "items-center", "rounded-md", "bg-gray-100", "px-2", "py-0.5", "text-xs", "font-mono", "font-medium")}>
-                          {item.code}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
-                          {(can("settings-event-types", "edit") || isAdmin) && (
-                            <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
-                              <PenNewSquare weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
-                            </button>
-                          )}
-                          {(can("settings-event-types", "delete") || isAdmin) && (
-                            <button onClick={() => setDeleteTarget(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
-                              <TrashBinTrash weight="BoldDuotone" className={cn("w-4", "h-4", "text-destructive")} />
-                            </button>
-                          )}
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {paginatedItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className={cn("text-center", "py-8", "text-muted-foreground")}>
+                        Belum ada data.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paginatedItems.map((item, idx) => (
+                      <TableRow key={item.id}>
+                        <TableCell className={cn("px-4", "sm:px-6", "text-muted-foreground")}>
+                          {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell>
+                          <span className={cn("inline-flex", "items-center", "rounded-md", "bg-secondary", "px-2", "py-0.5", "text-xs", "font-mono", "font-medium")}>
+                            {item.code}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
+                            {(can("settings-event-types", "edit") || isAdmin) && (
+                              <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
+                                <PenNewSquare weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
+                              </button>
+                            )}
+                            {(can("settings-event-types", "delete") || isAdmin) && (
+                              <button onClick={() => setDeleteTarget(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
+                                <TrashBinTrash weight="BoldDuotone" className={cn("w-4", "h-4", "text-destructive")} />
+                              </button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
             {totalPages > 1 && (
-              <div className={cn("flex", "items-center", "justify-between", "px-6", "py-3", "border-t")}>
+              <div className={cn("flex", "items-center", "justify-between", "px-4", "sm:px-6", "py-3", "border-t")}>
                 <span className={cn("text-sm", "text-muted-foreground")}>
-                  Page {currentPage} of {totalPages}
+                  Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, sortedItems.length)} of {sortedItems.length}
                 </span>
                 <div className={cn("flex", "gap-1")}>
                   <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>

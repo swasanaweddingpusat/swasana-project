@@ -22,12 +22,19 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   SearchableSelect,
 } from "@/components/ui/searchable-select";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
+import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import {
   AddCircle,
   TrashBinTrash,
   Refresh,
   ArrowRight,
+  AltArrowDown,
   Calendar as CalendarSolarIcon,
 } from "@solar-icons/react";
 import {
@@ -38,8 +45,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  WEDDING_SESSION_LABELS,
-  WEDDING_EVENT_TYPE_LABELS,
   getWeddingTimeRange,
   type WeddingSession,
   type WeddingEventType,
@@ -61,7 +66,8 @@ interface QuotationDrawerProps {
 }
 
 interface QuotationItemForm {
-  description: string;
+  title: string;
+  description: string; // rich text (HTML) dari TipTap
   qty: string;
   price: string;
   total: string;
@@ -82,7 +88,6 @@ interface QuotationFormValues {
   details: string;
   time: string;
   weddingSession: WeddingSession | "";
-  weddingEventType: WeddingEventType | "";
   venueId: string;
   venue: string;
   eventDate: string;
@@ -160,9 +165,119 @@ const SESSION_LABELS: Record<string, string> = {
   fullday: "Full Day",
 };
 
+/**
+ * Map nama Event Type (mis. "Akad & Resepsi", "Resepsi") ke kategori waktu
+ * akad/resepsi yang dipakai untuk auto-fill jam wedding. Gantikan field
+ * "Type Acara" terpisah karena infonya sudah ada di Event Type.
+ */
+function deriveWeddingEventType(eventTypeName: string): WeddingEventType | "" {
+  const n = eventTypeName.toLowerCase();
+  const hasAkad = n.includes("akad");
+  const hasResepsi = n.includes("resepsi");
+  if (hasAkad && hasResepsi) return "akad-dan-resepsi";
+  if (hasAkad) return "akad";
+  if (hasResepsi) return "resepsi";
+  return "";
+}
+
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
 
 // ── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Default facility breakdown untuk quotation baru (dummy template, bisa diedit).
+ * Section bundling (A/B/C) = 1 card: title = judul section, description = daftar
+ * fasilitas (bullet list HTML untuk TipTap). Section ber-harga per-item (D/E)
+ * tetap 1 card per item. Baris berharga di-set manualTotal karena total final
+ * tidak selalu sama dengan qty × harga.
+ */
+function listHtml(lines: string[]): string {
+  return `<ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
+}
+
+function makeItem(
+  title: string,
+  qty = "",
+  price = "",
+  total = "",
+  description = "",
+): QuotationItemForm {
+  return { title, description, qty, price, total, manualTotal: total !== "" };
+}
+
+const DEFAULT_ITEMS: QuotationItemForm[] = [
+  // A. Ballroom Facilities — 1 card, daftar fasilitas di description
+  makeItem(
+    "A. Ballroom Facilities :",
+    "400",
+    "408.333",
+    "163.333.333",
+    listHtml([
+      "Samisara Grand Ballroom for Full Day",
+      "Full Carpet Ballroom",
+      "Full Air Conditioned",
+      "Voyager Area",
+      "6-meter High Ceiling",
+      "1 Changing Rooms",
+      "Exclusive Restroom",
+      "Parking area lot up to 800",
+      "Cleaning Service",
+      "Electricity 10.000 watt",
+      "Security",
+    ]),
+  ),
+  // B. Equipments — 1 card
+  makeItem(
+    "B. Equipments :",
+    "",
+    "",
+    "",
+    listHtml([
+      "Main Stage",
+      "100 Banquet Chairs",
+      "LED Videotron 4x3",
+      "Soundsystem Standart 1000 Watt (2 MIC)",
+      "5 Roundtables (d120)",
+      "10 Squaretables (d120)",
+      "4 Registration Table",
+    ]),
+  ),
+  // C. Food & Beverage Inclusions — 1 card
+  makeItem(
+    "C. Food & Beverage Inclusions :",
+    "",
+    "",
+    "",
+    listHtml(["1x Coffe Break", "1x Buffet Meals", "Air Mineral"]),
+  ),
+  // D. Additional — per-item ber-harga
+  makeItem("D. Additional :"),
+  makeItem("Nasi Box for Breakfast", "150", "79.444", "11.916.666"),
+  makeItem("Additional Snack", "400", "36.667", "14.666.667"),
+  makeItem("Sofa Single VIP", "10", "138.889", "1.388.889"),
+  makeItem("Meja VIP", "5", "111.111", "555.556"),
+  makeItem("Internet 100 mbps", "", "7.222.222", "7.222.222"),
+  makeItem("Equil", "30", "73.945", "2.218.350"),
+  makeItem("Es Podeng", "2", "2.566.666", "5.133.330"),
+  makeItem("Soto Bandung", "40", "47.666", "1.906.640"),
+  makeItem("Mie Kangkung", "40", "46.445", "1.857.800"),
+  makeItem("Nasi Pasundan", "40", "89.222", "3.568.880"),
+  makeItem("creamy Grilled Salmon", "40", "73.944", "2.957.760"),
+  makeItem("Buah Potong", "40", "55.000", "2.200.000"),
+  makeItem("Buah Bite VIP", "20", "183.334", "3.666.680"),
+  makeItem("Jajanan Pasar", "6", "733.334", "4.400.004"),
+  makeItem("Coffee Break VIP", "50", "54.444", "2.722.200"),
+  makeItem("Coffe by Barista", "50", "67.223", "3.361.150"),
+  makeItem("Round Table VIP", "2", "672.227", "1.344.454"),
+  makeItem("Waitress", "2", "366.666", "733.332"),
+  makeItem("Cover Kursi", "37", "16.666", "616.642"),
+  // E. Complimentary
+  makeItem("E. Complimentary :"),
+  makeItem("Es Leci (Alfabet)", "200"),
+  makeItem("Holding Room", "2"),
+  makeItem("Banquet Chair", "300"),
+  makeItem("Cover Chair", "400"),
+];
 
 const DEFAULT_VALUES: QuotationFormValues = {
   clientName: "",
@@ -177,17 +292,51 @@ const DEFAULT_VALUES: QuotationFormValues = {
   details: "",
   time: "",
   weddingSession: "",
-  weddingEventType: "",
   venueId: "",
   venue: "",
   eventDate: "",
-  items: [{ description: "", qty: "", price: "", total: "", manualTotal: false }],
+  items: DEFAULT_ITEMS.map((it) => ({ ...it })),
   discount: "",
   validUntil: "",
   notes: "",
 };
 
+// ── Draft persistence (create mode only) ─────────────────────────────────────
+
+const QUOTATION_DRAFT_KEY = "quotation-draft-v1";
+
+type QuotationDraft = { values: Partial<QuotationFormValues> };
+
+function readQuotationDraft(): QuotationDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(QUOTATION_DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as QuotationDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistQuotationDraft(values: Partial<QuotationFormValues>) {
+  if (typeof window === "undefined") return;
+  const hasContent = Object.values(values).some((v) => {
+    if (Array.isArray(v)) return v.some((item: QuotationItemForm) => item.title?.trim());
+    return typeof v === "string" && v.trim() !== "";
+  });
+  if (hasContent) {
+    localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify({ values }));
+  } else {
+    localStorage.removeItem(QUOTATION_DRAFT_KEY);
+  }
+}
+
+function clearQuotationDraft() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(QUOTATION_DRAFT_KEY);
+}
+
 const EMPTY_ITEM: QuotationItemForm = {
+  title: "",
   description: "",
   qty: "",
   price: "",
@@ -205,6 +354,22 @@ export function QuotationDrawer({
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
   const [step, setStep] = useState<1 | 2>(1);
+  // Track which field ids are expanded in the accordion.
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  // Ref to signal that the next fields update should auto-expand the last item.
+  const pendingExpandRef = useRef(false);
+
+  function toggleItem(id: string) {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   // ── Real data hooks ──────────────────────────────────────────────────────
   const { data: venues = [] } = useVenues();
@@ -274,15 +439,37 @@ export function QuotationDrawer({
     name: "items",
   });
 
+  // Auto-expand the last item when a new one is appended.
+  useEffect(() => {
+    if (pendingExpandRef.current && fields.length > 0) {
+      const lastId = fields[fields.length - 1].id;
+      setExpandedItems((prev) => new Set([...prev, lastId]));
+      pendingExpandRef.current = false;
+    }
+  }, [fields]);
+
+  const watchedClientName = form.watch("clientName");
   const watchedSalesId = form.watch("salesId");
   const watchedVenueId = form.watch("venueId");
   const watchedItems = form.watch("items");
   const watchedDiscount = form.watch("discount");
   const watchedCategory = form.watch("category");
+  const watchedEventTypeId = form.watch("eventTypeId");
+  const watchedEventTypeName = form.watch("eventTypeName");
   const watchedWeddingSession = form.watch("weddingSession");
-  const watchedWeddingEventType = form.watch("weddingEventType");
   const watchedEventDate = form.watch("eventDate");
+  const watchedTime = form.watch("time");
   const isWeddings = watchedCategory === "WEDDINGS";
+
+  const isStep1Incomplete =
+    !watchedClientName?.trim() ||
+    !watchedSalesId ||
+    !watchedVenueId ||
+    !watchedCategory ||
+    !watchedEventTypeId ||
+    !watchedEventDate ||
+    !watchedWeddingSession ||
+    !watchedTime?.trim();
 
   // Name shown in the locked sales field — resolves from the current salesId so
   // edit mode displays the record's actual sales (not the logged-in user).
@@ -299,14 +486,16 @@ export function QuotationDrawer({
     }
   }, [watchedSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-fill time for weddings based on session + event type ────────────
+  // ── Auto-fill time for weddings based on session + derived event type ────
+  // Tipe acara (akad/resepsi) diturunkan dari nama Event Type, bukan field terpisah.
+  const derivedWeddingEventType = deriveWeddingEventType(watchedEventTypeName);
   useEffect(() => {
     if (!isWeddings) return;
-    const autoTime = getWeddingTimeRange(watchedWeddingSession, watchedWeddingEventType);
+    const autoTime = getWeddingTimeRange(watchedWeddingSession, derivedWeddingEventType);
     if (autoTime) {
       form.setValue("time", autoTime);
     }
-  }, [watchedWeddingSession, watchedWeddingEventType, isWeddings]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedWeddingSession, derivedWeddingEventType, isWeddings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Venue availability ───────────────────────────────────────────────────
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -319,8 +508,9 @@ export function QuotationDrawer({
       setAvailability({});
       return;
     }
-    // Reset session when venue changes
-    form.setValue("weddingSession", "");
+    // NOTE: session reset dilakukan di venue picker onChange (saat venue benar-benar
+    // berganti), BUKAN di sini — kalau di-reset di effect ini, session hasil restore
+    // draft / navigasi bulan kalender ikut kehapus.
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const params = new URLSearchParams({ month });
@@ -398,7 +588,8 @@ export function QuotationDrawer({
       const items: QuotationItemForm[] =
         editQuotation.items && editQuotation.items.length > 0
           ? editQuotation.items.map((it) => ({
-              description: it.description,
+              title: it.description,
+              description: "",
               qty: it.qty > 0 ? String(it.qty) : "",
               price: it.price > 0 ? formatNumericDisplay(it.price) : "",
               total: it.total > 0 ? formatNumericDisplay(it.total) : "",
@@ -420,7 +611,6 @@ export function QuotationDrawer({
         details: editQuotation.details ?? "",
         time: editQuotation.time ?? "",
         weddingSession: "",
-        weddingEventType: "",
         venueId: matchedVenue?.id ?? "",
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
@@ -433,7 +623,28 @@ export function QuotationDrawer({
         notes: editQuotation.notes,
       });
     } else {
-      form.reset(DEFAULT_VALUES);
+      const draft = readQuotationDraft();
+      if (draft?.values) {
+        // Draft lama bisa berisi items kosong dari versi sebelum template default
+        // ada. Kalau tidak ada item yang berisi, pakai DEFAULT_ITEMS biar template
+        // tetap muncul saat create.
+        const draftItems = draft.values.items;
+        const draftHasItems =
+          Array.isArray(draftItems) &&
+          draftItems.some((it) => it?.title?.trim());
+        form.reset({
+          ...DEFAULT_VALUES,
+          ...draft.values,
+          items: draftHasItems
+            ? draftItems
+            : DEFAULT_ITEMS.map((it) => ({ ...it })),
+        });
+      } else {
+        form.reset({
+          ...DEFAULT_VALUES,
+          items: DEFAULT_ITEMS.map((it) => ({ ...it })),
+        });
+      }
     }
   }, [open, editQuotation]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -444,6 +655,15 @@ export function QuotationDrawer({
       form.setValue("salesId", user.profileId);
     }
   }, [open, isEdit, currentUserIsSales, user?.profileId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist draft on form changes (create mode only).
+  useEffect(() => {
+    if (!open || isEdit) return;
+    const sub = form.watch((values) => {
+      persistQuotationDraft(values as Partial<QuotationFormValues>);
+    });
+    return () => sub.unsubscribe();
+  }, [open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-fill from lead ──────────────────────────────────────────────────
   function applyLeadAutofill(lead: LeadOption) {
@@ -536,6 +756,7 @@ export function QuotationDrawer({
   }
 
   function onSubmit(_values: QuotationFormValues) {
+    if (!isEdit) clearQuotationDraft();
     toast.success(
       isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
     );
@@ -553,8 +774,6 @@ export function QuotationDrawer({
       steps={step}
       totalSteps={2}
       stepperType="short"
-      onBack={step === 2 ? () => setStep(1) : undefined}
-      backButtonLabel="Kembali ke Informasi"
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto px-2">
@@ -856,7 +1075,7 @@ export function QuotationDrawer({
                       )}
                     />
 
-                    {/* Event Type — dropdown real, difilter by category */}
+                    {/* Event Type — searchable, difilter by category */}
                     <FormField
                       control={form.control}
                       name="eventTypeId"
@@ -864,41 +1083,25 @@ export function QuotationDrawer({
                       render={({ field }) => (
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>Event Type *</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={(v) => {
-                              field.onChange(v);
-                              const matched = filteredEventTypes.find((et) => et.id === v);
-                              form.setValue("eventTypeName", matched?.name ?? "");
-                            }}
-                            disabled={filteredEventTypes.length === 0}
-                          >
-                            <FormControl>
-                              <SelectTrigger
-                                className={cn(
-                                  "w-full",
-                                  filteredEventTypes.length === 0 && "opacity-60",
-                                )}
-                              >
-                                <SelectValue
-                                  placeholder={
-                                    !watchedCategory
-                                      ? "Pilih tipe booking dulu"
-                                      : filteredEventTypes.length === 0
-                                        ? "Tidak ada event type"
-                                        : "Pilih event type..."
-                                  }
-                                />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {filteredEventTypes.map((et) => (
-                                <SelectItem key={et.id} value={et.id}>
-                                  {et.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <SearchableSelect
+                              options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
+                              value={field.value}
+                              onChange={(v) => {
+                                field.onChange(v);
+                                const matched = filteredEventTypes.find((et) => et.id === v);
+                                form.setValue("eventTypeName", matched?.name ?? "");
+                              }}
+                              placeholder={
+                                !watchedCategory
+                                  ? "Pilih tipe booking dulu"
+                                  : "Pilih event type..."
+                              }
+                              searchPlaceholder="Cari event type..."
+                              emptyText="Tidak ada event type"
+                              disabled={!watchedCategory || filteredEventTypes.length === 0}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1053,43 +1256,7 @@ export function QuotationDrawer({
                       }}
                     />
 
-                    {/* Wedding Event Type — weddings only */}
-                    {isWeddings && (
-                      <FormField
-                        control={form.control}
-                        name="weddingEventType"
-                        render={({ field }) => (
-                          <FormItem className="w-full">
-                            <FormLabel className={LABEL_CLASS}>Type Acara</FormLabel>
-                            <Select
-                              value={field.value}
-                              onValueChange={(v) =>
-                                field.onChange(v as WeddingEventType)
-                              }
-                            >
-                              <FormControl>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Pilih type acara" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {(
-                                  Object.entries(
-                                    WEDDING_EVENT_TYPE_LABELS,
-                                  ) as [WeddingEventType, string][]
-                                ).map(([val, label]) => (
-                                  <SelectItem key={val} value={val}>
-                                    {label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FormItem>
-                        )}
-                      />
-                    )}
-
-                    {/* Time — auto-fill dari session+type untuk weddings */}
+                    {/* Time — auto-fill dari session + event type untuk weddings */}
                     <FormField
                       control={form.control}
                       name="time"
@@ -1100,7 +1267,7 @@ export function QuotationDrawer({
                             Time *
                             {isWeddings &&
                               watchedWeddingSession &&
-                              watchedWeddingEventType && (
+                              derivedWeddingEventType && (
                                 <span className="ml-2 font-normal text-muted-foreground text-xs">
                                   (auto-filled, bisa diubah manual)
                                 </span>
@@ -1149,7 +1316,7 @@ export function QuotationDrawer({
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Akhiri deskripsi dengan &quot;:&quot; untuk jadi judul section
+                    Akhiri judul dengan &quot;:&quot; untuk jadi judul section
                     (mis. &quot;A. Ballroom Facilities :&quot;). Harga boleh
                     dikosongkan untuk item tanpa biaya.
                   </p>
@@ -1157,141 +1324,208 @@ export function QuotationDrawer({
                   <div className="space-y-2">
                     {fields.map((fieldItem, index) => {
                       const isManual = form.getValues(`items.${index}.manualTotal`);
+                      const isOpen = expandedItems.has(fieldItem.id);
+                      const titleVal = watchedItems?.[index]?.title ?? "";
+                      const totalVal = watchedItems?.[index]?.total ?? "";
+                      const qtyVal = watchedItems?.[index]?.qty ?? "";
+                      const isSectionHeader = titleVal.trimEnd().endsWith(":");
                       return (
-                        <div
+                        <Collapsible
                           key={fieldItem.id}
-                          className="rounded-xl border border-border bg-muted/30 p-3 space-y-2"
+                          open={isOpen}
+                          onOpenChange={() => toggleItem(fieldItem.id)}
+                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
                         >
-                          <div className="flex items-start gap-2">
-                            <FormField
-                              control={form.control}
-                              name={`items.${index}.description`}
-                              render={({ field }) => (
-                                <FormItem className="flex-1">
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      placeholder="Deskripsi fasilitas / judul section"
-                                      className="w-full"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => remove(index)}
-                              disabled={fields.length === 1}
-                              aria-label="Hapus item"
-                              className="shrink-0 text-destructive hover:bg-destructive/10"
-                            >
-                              <TrashBinTrash
+                          {/* ── Accordion header / trigger ── */}
+                          <CollapsibleTrigger className="w-full cursor-pointer">
+                            <div className="flex items-center gap-2 px-3 py-2.5">
+                              <AltArrowDown
                                 weight="BoldDuotone"
-                                className="h-4 w-4"
+                                className={cn(
+                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                  isOpen && "rotate-180",
+                                )}
                               />
-                            </Button>
-                          </div>
+                              <div className="flex-1 min-w-0 text-left">
+                                <p
+                                  className={cn(
+                                    "text-sm truncate",
+                                    isSectionHeader
+                                      ? "font-semibold text-foreground"
+                                      : "font-medium text-foreground",
+                                    !titleVal && "text-muted-foreground italic",
+                                  )}
+                                >
+                                  {titleVal || "Item tanpa judul"}
+                                </p>
+                                {!isOpen && (totalVal || qtyVal) && (
+                                  <p className="text-xs text-muted-foreground tabular-nums">
+                                    {qtyVal ? `Qty ${qtyVal}` : ""}
+                                    {qtyVal && totalVal ? " · " : ""}
+                                    {totalVal ? `Rp ${totalVal}` : ""}
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  remove(index);
+                                }}
+                                disabled={fields.length === 1}
+                                aria-label="Hapus item"
+                                className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+                              >
+                                <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </CollapsibleTrigger>
 
-                          <div className="grid grid-cols-3 gap-2">
-                            <FormField
-                              control={form.control}
-                              name={`items.${index}.qty`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs text-muted-foreground">
-                                    Qty
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      value={field.value}
-                                      onChange={(e) => {
-                                        field.onChange(
-                                          e.target.value.replace(/\D/g, ""),
-                                        );
-                                        recomputeRowTotal(index);
-                                      }}
-                                      placeholder="0"
-                                      inputMode="numeric"
-                                      className="w-full"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`items.${index}.price`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs text-muted-foreground">
-                                    Harga
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      value={field.value}
-                                      onChange={(e) => {
-                                        field.onChange(
-                                          formatNumericDisplay(e.target.value),
-                                        );
-                                        recomputeRowTotal(index);
-                                      }}
-                                      placeholder="0"
-                                      inputMode="numeric"
-                                      className="w-full"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`items.${index}.total`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
-                                    <span>Total</span>
-                                    {isManual && (
-                                      <button
-                                        type="button"
-                                        onClick={() => revertRowTotal(index)}
-                                        className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
-                                        aria-label="Kembalikan ke otomatis"
-                                      >
-                                        <Refresh
-                                          weight="BoldDuotone"
-                                          className="h-3 w-3"
+                          {/* ── Accordion body / detail fields ── */}
+                          <CollapsibleContent>
+                            <div className="px-3 pb-3 space-y-2 border-t border-border/60">
+                              <FormField
+                                control={form.control}
+                                name={`items.${index}.title`}
+                                render={({ field }) => (
+                                  <FormItem className="pt-2">
+                                    <FormLabel className="text-xs text-muted-foreground">
+                                      Judul / Nama Item
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        placeholder="mis. A. Ballroom Facilities : atau Nasi Box"
+                                        className="w-full"
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+
+                              <div className="grid grid-cols-3 gap-2">
+                                <FormField
+                                  control={form.control}
+                                  name={`items.${index}.qty`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs text-muted-foreground">
+                                        Qty
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          value={field.value}
+                                          onChange={(e) => {
+                                            field.onChange(
+                                              e.target.value.replace(/\D/g, ""),
+                                            );
+                                            recomputeRowTotal(index);
+                                          }}
+                                          placeholder="0"
+                                          inputMode="numeric"
+                                          className="w-full"
                                         />
-                                        auto
-                                      </button>
-                                    )}
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      value={field.value}
-                                      onChange={(e) => {
-                                        form.setValue(
-                                          `items.${index}.manualTotal`,
-                                          true,
-                                        );
-                                        field.onChange(
-                                          formatNumericDisplay(e.target.value),
-                                        );
-                                      }}
-                                      placeholder="0"
-                                      inputMode="numeric"
-                                      className={cn(
-                                        "w-full",
-                                        isManual && "border-primary/50",
-                                      )}
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                        </div>
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name={`items.${index}.price`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs text-muted-foreground">
+                                        Harga
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          value={field.value}
+                                          onChange={(e) => {
+                                            field.onChange(
+                                              formatNumericDisplay(e.target.value),
+                                            );
+                                            recomputeRowTotal(index);
+                                          }}
+                                          placeholder="0"
+                                          inputMode="numeric"
+                                          className="w-full"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name={`items.${index}.total`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
+                                        <span>Total</span>
+                                        {isManual && (
+                                          <button
+                                            type="button"
+                                            onClick={() => revertRowTotal(index)}
+                                            className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
+                                            aria-label="Kembalikan ke otomatis"
+                                          >
+                                            <Refresh
+                                              weight="BoldDuotone"
+                                              className="h-3 w-3"
+                                            />
+                                            auto
+                                          </button>
+                                        )}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          value={field.value}
+                                          onChange={(e) => {
+                                            form.setValue(
+                                              `items.${index}.manualTotal`,
+                                              true,
+                                            );
+                                            field.onChange(
+                                              formatNumericDisplay(e.target.value),
+                                            );
+                                          }}
+                                          placeholder="0"
+                                          inputMode="numeric"
+                                          className={cn(
+                                            "w-full",
+                                            isManual && "border-primary/50",
+                                          )}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+
+                              {/* Description — rich text (TipTap) */}
+                              <FormField
+                                control={form.control}
+                                name={`items.${index}.description`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs text-muted-foreground">
+                                      Description{" "}
+                                      <span className="font-normal">(opsional)</span>
+                                    </FormLabel>
+                                    <FormControl>
+                                      <SimpleEditor
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        placeholder="Deskripsi detail item..."
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
                       );
                     })}
                   </div>
@@ -1299,7 +1533,12 @@ export function QuotationDrawer({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => append({ ...EMPTY_ITEM })}
+                    onClick={() => {
+                      append({ ...EMPTY_ITEM });
+                      // pendingExpandRef will be checked on the next render after
+                      // fields updates so we can expand the newly added item by id.
+                      pendingExpandRef.current = true;
+                    }}
                     className="w-full rounded-xl border-dashed"
                   >
                     <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
@@ -1422,7 +1661,11 @@ export function QuotationDrawer({
               </Button>
             )}
             {step === 1 ? (
-              <Button onClick={handleNext} className="flex-[60%] cursor-pointer">
+              <Button
+                onClick={handleNext}
+                disabled={isStep1Incomplete}
+                className="flex-[60%] cursor-pointer"
+              >
                 Lanjut
                 <ArrowRight weight="BoldDuotone" className="h-4 w-4 ml-1" />
               </Button>

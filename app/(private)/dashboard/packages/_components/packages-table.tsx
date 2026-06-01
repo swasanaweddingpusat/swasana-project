@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useVenues } from "@/hooks/use-venues";
-import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable } from "@/hooks/use-packages";
+import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable, useUnverifyPackage } from "@/hooks/use-packages";
 import type { PackageQueryItem, PackagesQueryResult } from "@/lib/queries/packages";
 import { fetchPackages } from "@/services/package-service";
 import { toast } from "sonner";
@@ -205,6 +205,7 @@ export function PackagesTable() {
   const { canCreate, can, isAdmin } = usePermissions();
   const qc = useQueryClient();
   const toggleAvailableMutation = useTogglePackageAvailable();
+  const unverifyMutation = useUnverifyPackage();
   const [refreshing, setRefreshing] = useState(false);
 
   async function handleRefresh() {
@@ -615,6 +616,18 @@ export function PackagesTable() {
                             >
                               {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
                             </button>
+                          ) : can("package", "set-status") ? (
+                            <button
+                              type="button"
+                              disabled={unverifyMutation.isPending}
+                              onClick={async () => {
+                                const res = await unverifyMutation.mutateAsync(pkg.id);
+                                if (!res.success) toast.error(res.error ?? "Gagal unverify");
+                              }}
+                              className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity")}
+                            >
+                              Approved
+                            </button>
                           ) : (
                             <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground")}>Approved</span>
                           )}
@@ -711,6 +724,18 @@ export function PackagesTable() {
                             )}
                           >
                             {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
+                          </button>
+                        ) : can("package", "set-status") ? (
+                          <button
+                            type="button"
+                            disabled={unverifyMutation.isPending}
+                            onClick={async () => {
+                              const res = await unverifyMutation.mutateAsync(pkg.id);
+                              if (!res.success) toast.error(res.error ?? "Gagal unverify");
+                            }}
+                            className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity")}
+                          >
+                            Approved
                           </button>
                         ) : (
                           <span className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground")}>Approved</span>

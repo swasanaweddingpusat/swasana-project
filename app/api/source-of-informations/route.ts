@@ -8,8 +8,9 @@ export async function GET() {
   if (!apiLimiter.check(`source-of-info:${session.user.id}`)) return rateLimitResponse();
 
   const items = await db.sourceOfInformation.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
+    select: { id: true, name: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: 500,
   });
   return Response.json(items);
 }

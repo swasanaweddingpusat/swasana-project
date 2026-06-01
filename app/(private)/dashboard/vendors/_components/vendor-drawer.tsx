@@ -33,6 +33,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
   const [description, setDescription] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [bankName, setBankName] = useState("");
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodInput[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -46,6 +47,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
       setDescription(vendor.description ?? "");
       setPhone(vendor.phone ?? "");
       setAddress(vendor.address ?? "");
+      setBankName(vendor.bankName ?? "");
       setPaymentMethods(
         (vendor.paymentMethods ?? []).map((pm) => ({
           bankName: pm.bankName,
@@ -59,6 +61,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
       setDescription("");
       setPhone("");
       setAddress("");
+      setBankName("");
       setPaymentMethods([]);
     }
   }, [isOpen, vendor, categories]);
@@ -90,6 +93,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
         description: description.trim() || null,
         phone: phone.trim() || null,
         address: address.trim() || null,
+        bankName: bankName.trim() || null,
         paymentMethods: paymentMethods.filter((pm) => pm.bankName && pm.bankAccountNumber && pm.bankRecipient),
       };
       const res = isEdit
@@ -150,6 +154,11 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
           <div className="space-y-1">
             <Label className={cn('text-sm', 'font-medium')}>Alamat</Label>
             <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Alamat vendor..." className={cn('min-h-15', 'text-sm', 'resize-y')} />
+          </div>
+
+          <div className="space-y-1">
+            <Label className={cn('text-sm', 'font-medium')}>Nama Bank</Label>
+            <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Contoh: BCA, Mandiri, BRI" className={cn('h-9', 'text-sm')} />
           </div>
 
           <div className="space-y-2">

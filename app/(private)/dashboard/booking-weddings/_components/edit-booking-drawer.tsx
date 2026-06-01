@@ -133,7 +133,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // Data queries
   const { data: venues = [] } = useQuery<VenueOption[]>({ queryKey: ["venues"], queryFn: () => fetchJson("/api/venues"), staleTime: 5 * 60_000 });
-  const { data: packages = [] } = useQuery<PackageOption[]>({ queryKey: ["packages", venueId, "booking"], queryFn: () => fetchJson(`/api/packages?venueId=${venueId}&forBooking=true`), enabled: !!venueId, staleTime: 5 * 60_000 });
+  const { data: packages = [], isError: packagesError } = useQuery<PackageOption[]>({ queryKey: ["packages", venueId, "booking"], queryFn: () => fetchJson(`/api/packages?venueId=${venueId}&forBooking=true`), enabled: !!venueId, staleTime: 5 * 60_000, retry: 1 });
   const { data: sources = [] } = useQuery<{ id: string; name: string }[]>({ queryKey: ["source-of-informations"], queryFn: () => fetchJson("/api/source-of-informations"), staleTime: 10 * 60_000 });
   const { data: vendorCategories = [] } = useQuery<VendorCategoryData[]>({ queryKey: ["vendors"], queryFn: () => fetchJson("/api/vendors"), staleTime: 5 * 60_000 });
 
@@ -386,7 +386,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div><label className={LBL}>Venue *</label><SearchableSelect options={venues} value={venueId} onChange={(id) => { setVenueId(id); setPackageId(""); setSelectedPackagePrice(0); setPaymentMethodId(""); setCategoryToggles({}); setTakeoutPrices({}); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" /></div>
 
               {/* Package */}
-              <div><label className={LBL}>Pilih Paket *</label><SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} · ${p.pax} PAX` }))} value={packageId} onChange={(id) => { setPackageId(id); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" /></div>
+              <div>
+                <label className={LBL}>Pilih Paket *</label>
+                <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} · ${p.pax} PAX` }))} value={packageId} onChange={(id) => { setPackageId(id); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
+              </div>
 
               {/* Event Date */}
               <div>

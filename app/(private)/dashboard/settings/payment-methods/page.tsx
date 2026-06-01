@@ -8,9 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Card as CardIcon } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, ArrowLeft, ArrowRight, Card as CardIcon, Refresh } from "@solar-icons/react";
 import { toast } from "sonner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { usePermissions } from "@/hooks/use-permissions";
 import { createPaymentMethod, updatePaymentMethod, deletePaymentMethod } from "@/actions/payment-method";
@@ -130,7 +129,7 @@ export default function PaymentMethodsPage() {
       <div className={cn('px-2', 'pb-6')}>
         <Card className="shadow-none">
           <CardContent className="p-0">
-            <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
+            <div className={cn('flex', 'justify-between', 'items-center', 'px-4', 'sm:px-6', 'pb-4', 'border-b')}>
               <div className={cn('flex', 'items-center', 'gap-2')}>
                 <Skeleton className={cn('h-5', 'w-36')} />
                 <Skeleton className={cn('h-4', 'w-8')} />
@@ -167,22 +166,32 @@ export default function PaymentMethodsPage() {
       <Card className="shadow-none">
         <CardContent className="p-0">
           {/* Header */}
-          <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'pb-4', 'border-b')}>
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'justify-between', 'items-start', 'sm:items-center', 'px-4', 'sm:px-6', 'pb-4', 'gap-3', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
-              <span className={cn('text-base', 'font-semibold', 'text-gray-900')}>Payment Methods</span>
+              <span className={cn('text-base', 'font-semibold', 'text-foreground')}>Payment Methods</span>
               <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
             </div>
-            <div className={cn('flex', 'items-center', 'gap-3')}>
+            <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2', 'w-full', 'sm:w-auto')}>
               <SearchableSelect
                 options={[{ id: "all", name: "All Venues" }, ...venues]}
                 value={venueFilter}
                 onChange={(v) => { setVenueFilter(v); setCurrentPage(1); }}
                 placeholder="All Venues"
                 searchPlaceholder="Cari venue..."
-                className="w-50"
+                className="w-full sm:w-48"
               />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { void fetchItems(currentPage, venueFilter); }}
+                disabled={loading}
+                className={cn('h-9', 'w-9', 'p-0', 'cursor-pointer', 'shrink-0')}
+                aria-label="Refresh"
+              >
+                <Refresh weight="BoldDuotone" className={cn('w-4', 'h-4', loading && 'animate-spin')} />
+              </Button>
               {(can("settings-payment-methods", "create") || isAdmin) && (
-                <Button onClick={openAdd}>
+                <Button onClick={openAdd} className="shrink-0">
                   <AddCircle weight="BoldDuotone" className={cn('w-4', 'h-4', 'mr-1')} /> Add Payment Method
                 </Button>
               )}
@@ -196,48 +205,50 @@ export default function PaymentMethodsPage() {
               <p>No payment methods yet</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="w-14">No</TableHead>
-                  <TableHead>Venue</TableHead>
-                  <TableHead>Bank Name</TableHead>
-                  <TableHead>Account Number</TableHead>
-                  <TableHead>Account Holder</TableHead>
-                  <TableHead className="w-24"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.map((item, idx) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-muted-foreground">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
-                    <TableCell>{item.venue?.name ?? "-"}</TableCell>
-                    <TableCell>{item.bankName}</TableCell>
-                    <TableCell>{item.bankAccountNumber}</TableCell>
-                    <TableCell>{item.bankRecipient}</TableCell>
-                    <TableCell>
-                      <div className={cn('flex', 'gap-1', 'justify-end')}>
-                        {(can("settings-payment-methods", "edit") || isAdmin) && (
-                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)}>
-                            <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
-                          </button>
-                        )}
-                        {(can("settings-payment-methods", "delete") || isAdmin) && (
-                          <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
-                            <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
-                          </button>
-                        )}
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="w-14">No</TableHead>
+                    <TableHead>Venue</TableHead>
+                    <TableHead>Bank Name</TableHead>
+                    <TableHead className="hidden sm:table-cell">Account Number</TableHead>
+                    <TableHead className="hidden md:table-cell">Account Holder</TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((item, idx) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="text-muted-foreground">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
+                      <TableCell>{item.venue?.name ?? "-"}</TableCell>
+                      <TableCell>{item.bankName}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{item.bankAccountNumber}</TableCell>
+                      <TableCell className="hidden md:table-cell">{item.bankRecipient}</TableCell>
+                      <TableCell>
+                        <div className={cn('flex', 'gap-1', 'justify-end')}>
+                          {(can("settings-payment-methods", "edit") || isAdmin) && (
+                            <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => openEdit(item)}>
+                              <PenNewSquare weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-muted-foreground')} />
+                            </button>
+                          )}
+                          {(can("settings-payment-methods", "delete") || isAdmin) && (
+                            <button className={cn('p-1.5', 'hover:bg-muted', 'rounded', 'cursor-pointer')} onClick={() => { setItemToDelete(item); setDeleteOpen(true); }}>
+                              <TrashBinTrash weight="BoldDuotone" className={cn('w-4', 'h-4', 'text-destructive')} />
+                            </button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
 
           {/* Pagination */}
           {total > 0 && (
-            <div className={cn('flex', 'justify-between', 'items-center', 'px-6', 'py-3', 'border-t')}>
+            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'justify-between', 'items-start', 'sm:items-center', 'px-4', 'sm:px-6', 'py-3', 'border-t', 'gap-2')}>
               <span className={cn('text-sm', 'text-muted-foreground')}>
                 Showing {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, total)} of {total}
               </span>
@@ -262,16 +273,14 @@ export default function PaymentMethodsPage() {
           <div className={cn('space-y-3', 'mt-2')}>
             <div>
               <Label className="text-sm">Venue *</Label>
-              <Select value={formData.venueId} onValueChange={(v) => setFormData((p) => ({ ...p, venueId: v }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Pilih venue" />
-                </SelectTrigger>
-                <SelectContent>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={venues}
+                value={formData.venueId}
+                onChange={(v) => setFormData((p) => ({ ...p, venueId: v }))}
+                placeholder="Pilih venue"
+                searchPlaceholder="Cari venue..."
+                className="mt-1 w-full"
+              />
             </div>
             <div>
               <Label className="text-sm">Bank Name *</Label>

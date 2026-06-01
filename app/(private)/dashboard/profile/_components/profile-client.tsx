@@ -201,7 +201,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
             <AvatarUpload
               currentUrl={profile?.avatarUrl ?? user.image ?? null}
               name={form.fullName || user.name}
-              onUploaded={() => {}}
+              onUploaded={(url) => { void updateSession({ image: url }); }}
             />
             <div className={cn('flex-1', 'min-w-0')}>
               <h2 className={cn('text-lg', 'font-semibold', 'truncate')}>{form.fullName || user.name || "—"}</h2>
@@ -282,9 +282,6 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                 <Field label="Email">
                   <Input value={user.email} readOnly className={cn('bg-muted', 'text-muted-foreground', 'cursor-not-allowed')} />
                 </Field>
-                <Field label="Kota">
-                  <Input value={form.city} onChange={(e) => set("city", e.target.value)} placeholder="Kota domisili" />
-                </Field>
                 <Field label="Pendidikan Terakhir">
                   <SearchableSelect
                     options={eduOptions}
@@ -301,6 +298,9 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                 </Field>
                 <Field label="Alamat Tinggal Saat Ini">
                   <Textarea value={form.currentAddress} onChange={(e) => set("currentAddress", e.target.value)} placeholder="Alamat tinggal saat ini" rows={2} />
+                </Field>
+                <Field label="Kota Domisili">
+                  <Input value={form.city} onChange={(e) => set("city", e.target.value)} placeholder="Kota domisili" />
                 </Field>
               </div>
             </CardContent>
