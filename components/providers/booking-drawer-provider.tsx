@@ -1,22 +1,28 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
+import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface BookingDrawerContextValue {
-  openBookingDrawer: () => void;
+  openBookingDrawer: (opts?: OpenDrawerOptions) => void;
 }
 
 const BookingDrawerContext = createContext<BookingDrawerContextValue | null>(null);
 
 export function BookingDrawerProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const openBookingDrawer = useCallback(() => setOpen(true), []);
+  const { open, setOpen, openDrawer, handleSuccess } = useDrawerController();
 
   return (
-    <BookingDrawerContext.Provider value={{ openBookingDrawer }}>
+    <BookingDrawerContext.Provider value={{ openBookingDrawer: openDrawer }}>
       {children}
-      {open && <BookingDrawer open={open} onOpenChange={setOpen} />}
+      {open && (
+        <BookingDrawer
+          open={open}
+          onOpenChange={setOpen}
+          onSuccess={handleSuccess}
+        />
+      )}
     </BookingDrawerContext.Provider>
   );
 }

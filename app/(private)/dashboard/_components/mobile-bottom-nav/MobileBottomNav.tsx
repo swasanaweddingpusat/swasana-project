@@ -23,8 +23,17 @@ import {
 import { usePermissions } from "@/hooks/use-permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
+import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
+import { useQuotationDrawer } from "@/components/providers/quotation-drawer-provider";
+import type { OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
+
+/** Items that own a global "create" drawer. Tapping the nav entry while off the
+ *  item's page opens the drawer instead of navigating; on submit it redirects
+ *  to the list page. While already on the page, the entry is a plain link. */
+type DrawerKey = "lead" | "quotation" | "booking";
 
 interface BottomNavItem {
   key: string;
@@ -33,6 +42,7 @@ interface BottomNavItem {
   Icon: SolarIcon;
   visible: (can: (m: string, a: string) => boolean, isGroupMember: boolean) => boolean;
   isBookingTrigger?: true;
+  drawerKey?: DrawerKey;
 }
 
 interface BookingSheetItem {
@@ -41,6 +51,7 @@ interface BookingSheetItem {
   href: string;
   Icon: SolarIcon;
   visible: (can: (m: string, a: string) => boolean) => boolean;
+  drawerKey?: DrawerKey;
 }
 
 const NAV_ITEMS: BottomNavItem[] = [
@@ -64,6 +75,7 @@ const NAV_ITEMS: BottomNavItem[] = [
     href: "/dashboard/leads",
     Icon: Volume,
     visible: (can) => can("leads", "view"),
+    drawerKey: "lead",
   },
   {
     key: "quotations",
@@ -71,6 +83,7 @@ const NAV_ITEMS: BottomNavItem[] = [
     href: "/dashboard/quotations",
     Icon: DocumentAdd,
     visible: (can) => can("quotations", "view"),
+    drawerKey: "quotation",
   },
   {
     key: "bookings",
@@ -88,6 +101,7 @@ const BOOKING_SHEET_ITEMS: BookingSheetItem[] = [
     href: "/dashboard/booking-weddings",
     Icon: Heart,
     visible: (can) => can("booking", "view"),
+    drawerKey: "booking",
   },
   {
     key: "booking-mice",
@@ -100,11 +114,49 @@ const BOOKING_SHEET_ITEMS: BookingSheetItem[] = [
 
 const GOLD_DOT = { backgroundColor: "var(--brand-gold)" } as const;
 
+/** Icon + label + active indicator — shared across link / drawer / sheet entries. */
+function NavItemBody({
+  Icon,
+  label,
+  active,
+}: {
+  Icon: SolarIcon;
+  label: string;
+  active: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      <Icon weight="BoldDuotone" className="h-6 w-6 shrink-0" />
+      <span className="text-[10px] font-medium leading-none truncate">{label}</span>
+      {active && (
+        <span
+          className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-5 rounded-full"
+          style={GOLD_DOT}
+        />
+      )}
+    </>
+  );
+}
+
 export function MobileBottomNav(): React.JSX.Element | null {
   const pathname = usePathname();
   const router = useRouter();
   const { can, isLoading, isGroupMember } = usePermissions();
   const [bookingSheetOpen, setBookingSheetOpen] = useState(false);
+  const { openLeadDrawer } = useLeadDrawer();
+  const { openBookingDrawer } = useBookingDrawer();
+  const { openQuotationDrawer } = useQuotationDrawer();
+
+  const drawerOpeners: Record<DrawerKey, (opts?: OpenDrawerOptions) => void> = {
+    lead: openLeadDrawer,
+    quotation: openQuotationDrawer,
+    booking: openBookingDrawer,
+  };
+
+  /** Open the create drawer for `key`; redirect to `href` once a record is saved. */
+  const openCreateDrawer = (key: DrawerKey, href: string): void => {
+    drawerOpeners[key]({ onSuccess: () => router.push(href) });
+  };
 
   const isActive = (href: string): boolean => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -158,6 +210,7 @@ export function MobileBottomNav(): React.JSX.Element | null {
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           {visibleItems.map((item) => {
+            // Bookings → opens the category bottom sheet.
             if (item.isBookingTrigger) {
               const active = isBookingActive || bookingSheetOpen;
               return (
@@ -167,37 +220,30 @@ export function MobileBottomNav(): React.JSX.Element | null {
                   onClick={() => setBookingSheetOpen(true)}
                   className={navItemClass(active)}
                 >
-                  <item.Icon weight="BoldDuotone" className="h-6 w-6 shrink-0" />
-                  <span className="text-[10px] font-medium leading-none truncate">
-                    {item.label}
-                  </span>
-                  {active && (
-                    <span
-                      className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-5 rounded-full"
-                      style={GOLD_DOT}
-                    />
-                  )}
+                  <NavItemBody Icon={item.Icon} label={item.label} active={active} />
                 </button>
               );
             }
 
             const active = isActive(item.href!);
+
+            // Create-drawer items, while off-page → open drawer instead of navigating.
+            if (item.drawerKey && !active) {
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => openCreateDrawer(item.drawerKey!, item.href!)}
+                  className={navItemClass(active)}
+                >
+                  <NavItemBody Icon={item.Icon} label={item.label} active={active} />
+                </button>
+              );
+            }
+
             return (
-              <Link
-                key={item.key}
-                href={item.href!}
-                className={navItemClass(active)}
-              >
-                <item.Icon weight="BoldDuotone" className="h-6 w-6 shrink-0" />
-                <span className="text-[10px] font-medium leading-none truncate">
-                  {item.label}
-                </span>
-                {active && (
-                  <span
-                    className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-5 rounded-full"
-                    style={GOLD_DOT}
-                  />
-                )}
+              <Link key={item.key} href={item.href!} className={navItemClass(active)}>
+                <NavItemBody Icon={item.Icon} label={item.label} active={active} />
               </Link>
             );
           })}
@@ -226,7 +272,12 @@ export function MobileBottomNav(): React.JSX.Element | null {
                   type="button"
                   onClick={() => {
                     setBookingSheetOpen(false);
-                    router.push(item.href);
+                    if (active) return;
+                    if (item.drawerKey) {
+                      openCreateDrawer(item.drawerKey, item.href);
+                    } else {
+                      router.push(item.href);
+                    }
                   }}
                   className={cn(
                     "flex items-center gap-3 rounded-xl px-4 py-3 w-full text-left",

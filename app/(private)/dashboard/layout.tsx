@@ -6,6 +6,7 @@ import { AuthGate } from "../_components/auth-gate";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
 import { LeadDrawerProvider } from "@/components/providers/lead-drawer-provider";
+import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
 import { MobileBottomNav } from "./_components/mobile-bottom-nav/MobileBottomNav";
 
 export default function DashboardLayout({
@@ -17,24 +18,26 @@ export default function DashboardLayout({
     <SidebarProvider>
       <HeaderActionProvider>
         <BookingDrawerProvider>
-          <LeadDrawerProvider>
-            <Suspense fallback={null}>
-              <SwasanaSidebar />
-            </Suspense>
-            <SidebarInset>
-              <Suspense>
-                <Header />
-              </Suspense>
-              <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-6 lg:p-6">
-                <Suspense>
-                  <AuthGate>{children}</AuthGate>
-                </Suspense>
-              </main>
+          <QuotationDrawerProvider>
+            <LeadDrawerProvider>
               <Suspense fallback={null}>
-                <MobileBottomNav />
+                <SwasanaSidebar />
               </Suspense>
-            </SidebarInset>
-          </LeadDrawerProvider>
+              <SidebarInset>
+                <Suspense>
+                  <Header />
+                </Suspense>
+                <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-6 lg:p-6">
+                  <Suspense>
+                    <AuthGate>{children}</AuthGate>
+                  </Suspense>
+                </main>
+                <Suspense fallback={null}>
+                  <MobileBottomNav />
+                </Suspense>
+              </SidebarInset>
+            </LeadDrawerProvider>
+          </QuotationDrawerProvider>
         </BookingDrawerProvider>
       </HeaderActionProvider>
     </SidebarProvider>

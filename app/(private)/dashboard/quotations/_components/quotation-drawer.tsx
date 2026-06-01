@@ -57,6 +57,7 @@ interface QuotationDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editQuotation: QuotationItem | null;
+  onSuccess?: () => void;
 }
 
 interface QuotationItemForm {
@@ -200,6 +201,7 @@ export function QuotationDrawer({
   open,
   onOpenChange,
   editQuotation,
+  onSuccess,
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
   const [step, setStep] = useState<1 | 2>(1);
@@ -537,6 +539,7 @@ export function QuotationDrawer({
     toast.success(
       isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
     );
+    if (!isEdit) onSuccess?.();
     onOpenChange(false);
   }
 

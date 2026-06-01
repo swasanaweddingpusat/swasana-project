@@ -44,11 +44,11 @@ export function Header() {
           <Button
             variant="default"
             size="sm"
-            className={cn("cursor-pointer gap-1.5")}
-            onClick={openLeadDrawer}
+            className={cn("cursor-pointer gap-1.5 hidden sm:inline-flex")}
+            onClick={() => openLeadDrawer()}
           >
             <UserPlus weight="BoldDuotone" className="h-4 w-4" />
-            <span className={cn("hidden sm:inline")}>Tambah Lead</span>
+            <span>Tambah Lead</span>
           </Button>
         </PermissionGate>
         <Button

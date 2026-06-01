@@ -419,7 +419,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground", isFetching && "animate-spin")} />
                 </Button>
                 {can("booking", "create") && (
-                  <Button onClick={openBookingDrawer} className={cn('cursor-pointer', 'shrink-0')}>
+                  <Button onClick={() => openBookingDrawer()} className={cn('cursor-pointer', 'shrink-0')}>
                     <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                     <span className={cn('hidden', 'sm:inline', 'ml-1')}>Tambah Booking</span>
                   </Button>

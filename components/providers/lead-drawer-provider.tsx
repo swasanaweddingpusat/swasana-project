@@ -1,22 +1,29 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { LeadDrawer } from "@/app/(private)/dashboard/leads/_components/lead-drawer";
+import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface LeadDrawerContextValue {
-  openLeadDrawer: () => void;
+  openLeadDrawer: (opts?: OpenDrawerOptions) => void;
 }
 
 const LeadDrawerContext = createContext<LeadDrawerContextValue | null>(null);
 
 export function LeadDrawerProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const openLeadDrawer = useCallback(() => setOpen(true), []);
+  const { open, setOpen, openDrawer, handleSuccess } = useDrawerController();
 
   return (
-    <LeadDrawerContext.Provider value={{ openLeadDrawer }}>
+    <LeadDrawerContext.Provider value={{ openLeadDrawer: openDrawer }}>
       {children}
-      {open && <LeadDrawer open={open} onOpenChange={setOpen} editLead={null} />}
+      {open && (
+        <LeadDrawer
+          open={open}
+          onOpenChange={setOpen}
+          editLead={null}
+          onSuccess={handleSuccess}
+        />
+      )}
     </LeadDrawerContext.Provider>
   );
 }

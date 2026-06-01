@@ -42,6 +42,7 @@ function mapWeddingTypeToEventType(weddingType: string | null): WeddingEventType
 interface BookingDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 type Option = { id: string; name: string };
@@ -174,7 +175,7 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
 }
 
-export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
+export function BookingDrawer({ open, onOpenChange, onSuccess }: BookingDrawerProps) {
   const createMut = useCreateBooking();
   const qc = useQueryClient();
   const { users: salesUsers } = useSalesUsers();
@@ -539,6 +540,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
     clearDraft();
     toast.success("Booking berhasil dibuat.");
+    onSuccess?.();
     onOpenChange(false);
   }
 

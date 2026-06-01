@@ -44,6 +44,7 @@ interface LeadDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editLead: LeadListItem | null;
+  onSuccess?: () => void;
 }
 
 interface LeadFormValues {
@@ -134,7 +135,7 @@ function clearLeadDraft() {
   localStorage.removeItem(LEAD_DRAFT_KEY);
 }
 
-export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
+export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDrawerProps) {
   const isEdit = !!editLead;
   const qc = useQueryClient();
 
@@ -381,6 +382,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       }
       clearLeadDraft();
       toast.success("Lead berhasil disimpan.");
+      onSuccess?.();
     }
 
     onOpenChange(false);
