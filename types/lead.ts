@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, WeddingSession } from "@prisma/client";
 
 // ─── Primitive types derived from Prisma ─────────────────────────────────────
 
@@ -48,6 +48,7 @@ export type LeadListItem = {
   budgetRange: string | null;
   notes: string | null;
   category: "WEDDINGS" | "MICE";
+  weddingSession: WeddingSession | null;
   bitrixId: string | null;
   status: Pick<LeadStatusRow, "id" | "name" | "color" | "isFinal" | "isSystem">;
   venue: { id: string; name: string } | null;

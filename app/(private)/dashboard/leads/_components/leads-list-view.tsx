@@ -21,7 +21,9 @@ import {
   FileText,
   CalendarMark,
   UserCircle,
+  TrashBinTrash,
 } from "@solar-icons/react";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 
@@ -38,6 +40,7 @@ interface LeadsListViewProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   onEdit: (lead: LeadItem) => void;
+  onDelete: (lead: LeadItem) => void;
   onBuatQuotation: (lead: LeadItem) => void;
   isLoading?: boolean;
 }
@@ -114,11 +117,13 @@ function MobileLeadCard({
   lead,
   rowNumber,
   onEdit,
+  onDelete,
   onBuatQuotation,
 }: {
   lead: LeadItem;
   rowNumber: number;
   onEdit: (lead: LeadItem) => void;
+  onDelete: (lead: LeadItem) => void;
   onBuatQuotation: (lead: LeadItem) => void;
 }) {
   const firstContact = Array.isArray(lead.contactNumbers)
@@ -210,6 +215,17 @@ function MobileLeadCard({
               Quotation
             </Button>
           )}
+          <PermissionGate module="leads" action="delete">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => onDelete(lead)}
+              aria-label={`Hapus lead ${lead.name}`}
+            >
+              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
+          </PermissionGate>
         </div>
       </CardContent>
     </Card>
@@ -226,6 +242,7 @@ export function LeadsListView({
   totalPages,
   onPageChange,
   onEdit,
+  onDelete,
   onBuatQuotation,
   isLoading,
 }: LeadsListViewProps) {
@@ -274,6 +291,7 @@ export function LeadsListView({
               lead={lead}
               rowNumber={rowNumber}
               onEdit={onEdit}
+              onDelete={onDelete}
               onBuatQuotation={onBuatQuotation}
             />
           );
@@ -304,9 +322,7 @@ export function LeadsListView({
               {/* Sumber Info — lg+ */}
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Sumber Info</TableHead>
               {/* Action — always visible */}
-              <TableHead className="px-4 whitespace-nowrap w-28">
-                <span className="sr-only">Aksi</span>
-              </TableHead>
+              <TableHead className="px-4 whitespace-nowrap w-28">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -408,6 +424,17 @@ export function LeadsListView({
                           <FileText weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       )}
+                      <PermissionGate module="leads" action="delete">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => onDelete(lead)}
+                          aria-label={`Hapus lead ${lead.name}`}
+                        >
+                          <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                        </Button>
+                      </PermissionGate>
                     </div>
                   </TableCell>
                 </TableRow>

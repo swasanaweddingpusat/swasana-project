@@ -33,6 +33,9 @@ export const createLeadSchema = z.object({
   sourceOfInformationId: z.string().min(1, "Sumber informasi wajib dipilih"),
   assignedToId: z.string().min(1, "Assign ke sales wajib dipilih"),
   statusId: z.string().min(1, "Status wajib dipilih"),
+  weddingSession: z.enum(["morning", "evening", "fullday"], {
+    error: "Session wajib dipilih",
+  }),
   bitrixId: z.string().trim().max(100).optional().nullable(),
 });
 
@@ -44,6 +47,7 @@ export const leadFilterSchema = z.object({
   search: z.string().optional(),
   statusId: z.string().optional(),
   venueId: z.string().optional(),
+  eventTypeId: z.string().optional(),
   assignedToId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

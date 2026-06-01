@@ -36,7 +36,7 @@ import { useCreateLead, useUpdateLead } from "@/hooks/use-leads";
 import { useVenues } from "@/hooks/use-venues";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useEventTypes } from "@/hooks/use-event-types";
-import { useUsers } from "@/hooks/use-users";
+import { useSalesUsers } from "@/hooks/use-sales-users";
 
 interface LeadDrawerProps {
   open: boolean;
@@ -55,6 +55,7 @@ interface LeadFormValues {
   sourceOfInformationId: string;
   assignedToId: string;
   eventDate: string;
+  weddingSession: "morning" | "evening" | "fullday" | "";
   estimatedPax: string;
   budgetRange: string;
   notes: string;
@@ -68,6 +69,12 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
+const SESSION_LABELS: Record<string, string> = {
+  morning: "Pagi",
+  evening: "Malam",
+  fullday: "Full Day",
+};
+
 const DEFAULT_VALUES: LeadFormValues = {
   name: "",
   email: "",
@@ -79,6 +86,7 @@ const DEFAULT_VALUES: LeadFormValues = {
   sourceOfInformationId: "",
   assignedToId: "",
   eventDate: "",
+  weddingSession: "",
   estimatedPax: "",
   budgetRange: "",
   notes: "",
@@ -133,11 +141,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
   const { data: statuses = [] } = useLeadStatuses();
-  const { data: usersData } = useUsers(undefined, { page: 1, limit: 100 });
-  const assignableUsers = (usersData?.users ?? []).map((u) => ({
-    id: u.profile?.id ?? u.id,
-    fullName: u.profile?.fullName ?? u.name ?? u.email,
-  }));
+  const { users: salesUsers } = useSalesUsers();
 
   const [sourceOptions, setSourceOptions] = useState<Option[]>([]);
   useEffect(() => {
@@ -159,6 +163,28 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const watchedSourceId = form.watch("sourceOfInformationId");
   const isBitrixSource = sourceOptions.find((o) => o.id === watchedSourceId)?.name.toLowerCase().includes("bitrix") ?? false;
 
+  // Watch all required fields so the submit button reacts to completeness.
+  const watchedName = form.watch("name");
+  const watchedStatusId = form.watch("statusId");
+  const watchedEventTypeId = form.watch("eventTypeId");
+  const watchedAssignedToId = form.watch("assignedToId");
+  const watchedEventDate = form.watch("eventDate");
+  const watchedWeddingSession = form.watch("weddingSession");
+
+  // Create-mode only: disable submit until every required field is filled.
+  const isFormIncomplete =
+    !watchedName?.trim() ||
+    contactNumbers.length === 0 ||
+    !watchedStatusId ||
+    !watchedCategory ||
+    !watchedEventTypeId ||
+    !watchedAssignedToId ||
+    !watchedVenueId ||
+    !watchedSourceId ||
+    !watchedEventDate ||
+    !watchedWeddingSession ||
+    (isBitrixSource && !bitrixId.trim());
+
   // ── Venue availability ───────────────────────────────────────────────────────
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
@@ -170,6 +196,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       setAvailability({});
       return;
     }
+    form.setValue("weddingSession", "");
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const params = new URLSearchParams({ month });
@@ -178,7 +205,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [watchedVenueId, visibleMonth]);
+  }, [watchedVenueId, visibleMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
@@ -188,6 +215,16 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
     if (count === 0) return "unavailable";
     if (count === 3) return "available";
     return "partial";
+  }
+
+  function getAvailableSessions(dateStr: string): string[] {
+    const a = availability[dateStr];
+    if (!a) return ["morning", "evening", "fullday"];
+    const sessions: string[] = [];
+    if (a.morning) sessions.push("morning");
+    if (a.evening) sessions.push("evening");
+    if (a.fullday && a.morning && a.evening) sessions.push("fullday");
+    return sessions;
   }
 
   useEffect(() => {
@@ -207,6 +244,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
         eventDate: editLead.eventDate
           ? new Date(editLead.eventDate).toISOString().split("T")[0]
           : "",
+        weddingSession: (editLead.weddingSession as "morning" | "evening" | "fullday" | "") ?? "",
         estimatedPax: editLead.estimatedPax ? String(editLead.estimatedPax) : "",
         budgetRange: editLead.budgetRange ?? "",
         notes: editLead.notes ?? "",
@@ -280,6 +318,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
       email: values.email || undefined,
       address: values.address || undefined,
       eventDate: values.eventDate,
+      weddingSession: values.weddingSession as "morning" | "evening" | "fullday",
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       budgetRange: values.budgetRange || undefined,
       notes: values.notes || undefined,
@@ -563,7 +602,10 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                   <FormItem>
                     <FormLabel>Assigned To (Sales) *</FormLabel>
                     <SearchableSelect
-                      options={assignableUsers.map((u) => ({ id: u.id, name: u.fullName }))}
+                      options={salesUsers.map((u) => ({
+                        id: u.id,
+                        name: u.fullName ?? "",
+                      }))}
                       value={field.value}
                       onChange={field.onChange}
                       placeholder="Pilih sales..."
@@ -599,6 +641,140 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Tanggal Event */}
+              <FormField
+                control={form.control}
+                name="eventDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tanggal Event *</FormLabel>
+                    <Popover>
+                      <PopoverTrigger render={
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !field.value && "text-muted-foreground",
+                          )}
+                        >
+                          <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                          {field.value
+                            ? format(new Date(field.value + "T00:00:00"), "PPP")
+                            : "Pilih tanggal event"}
+                        </Button>
+                      } />
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          captionLayout="dropdown"
+                          selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const y = date.getFullYear();
+                              const m = String(date.getMonth() + 1).padStart(2, "0");
+                              const d = String(date.getDate()).padStart(2, "0");
+                              field.onChange(`${y}-${m}-${d}`);
+                              form.setValue("weddingSession", "");
+                            } else {
+                              field.onChange("");
+                              form.setValue("weddingSession", "");
+                            }
+                          }}
+                          disabled={(d) => getDateStatus(d) === "unavailable"}
+                          fromYear={new Date().getFullYear() - 10}
+                          toYear={new Date().getFullYear() + 5}
+                          defaultMonth={
+                            field.value ? new Date(field.value + "T00:00:00") : new Date()
+                          }
+                          onMonthChange={setVisibleMonth}
+                          modifiers={{
+                            available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                            partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                            unavailable: (d) =>
+                              !!watchedVenueId && getDateStatus(d) === "unavailable",
+                          }}
+                          modifiersClassNames={{
+                            available: "day-available",
+                            partial: "day-partial",
+                            unavailable: "day-unavailable",
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {availLoading && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Mengecek ketersediaan...
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Session */}
+              <FormField
+                control={form.control}
+                name="weddingSession"
+                render={({ field }) => {
+                  const dateStr = watchedEventDate || null;
+                  const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
+                  return (
+                    <FormItem>
+                      <FormLabel>Session *</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={!watchedVenueId || !watchedEventDate}
+                      >
+                        <FormControl>
+                          <SelectTrigger className={cn("w-full", (!watchedVenueId || !watchedEventDate) && "opacity-60")}>
+                            <SelectValue placeholder={!watchedVenueId ? "Pilih venue dulu" : !watchedEventDate ? "Pilih tanggal dulu" : "Pilih session..."} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {sessions.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {SESSION_LABELS[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
+              {/* Estimasi Pax */}
+              <FormField
+                control={form.control}
+                name="estimatedPax"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estimasi Pax</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" min={1} placeholder="300" inputMode="numeric" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Budget Range */}
+              <FormField
+                control={form.control}
+                name="budgetRange"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Budget Range</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="e.g. 50 - 75 juta (opsional)" />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -654,104 +830,6 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 </div>
               )}
 
-              {/* Tanggal Event */}
-              <FormField
-                control={form.control}
-                name="eventDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tanggal Event *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger render={
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !field.value && "text-muted-foreground",
-                          )}
-                        >
-                          <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                          {field.value
-                            ? format(new Date(field.value + "T00:00:00"), "PPP")
-                            : "Pilih tanggal event"}
-                        </Button>
-                      } />
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          captionLayout="dropdown"
-                          selected={field.value ? new Date(field.value + "T00:00:00") : undefined}
-                          onSelect={(date) => {
-                            if (date) {
-                              const y = date.getFullYear();
-                              const m = String(date.getMonth() + 1).padStart(2, "0");
-                              const d = String(date.getDate()).padStart(2, "0");
-                              field.onChange(`${y}-${m}-${d}`);
-                            } else {
-                              field.onChange("");
-                            }
-                          }}
-                          disabled={(d) => getDateStatus(d) === "unavailable"}
-                          fromYear={new Date().getFullYear() - 10}
-                          toYear={new Date().getFullYear() + 5}
-                          defaultMonth={
-                            field.value ? new Date(field.value + "T00:00:00") : new Date()
-                          }
-                          onMonthChange={setVisibleMonth}
-                          modifiers={{
-                            available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
-                            partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
-                            unavailable: (d) =>
-                              !!watchedVenueId && getDateStatus(d) === "unavailable",
-                          }}
-                          modifiersClassNames={{
-                            available: "day-available",
-                            partial: "day-partial",
-                            unavailable: "day-unavailable",
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {availLoading && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Mengecek ketersediaan...
-                      </p>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Estimasi Pax */}
-              <FormField
-                control={form.control}
-                name="estimatedPax"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Estimasi Pax</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="number" min={1} placeholder="300" inputMode="numeric" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Budget Range */}
-              <FormField
-                control={form.control}
-                name="budgetRange"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Budget Range</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="e.g. 50 - 75 juta (opsional)" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Catatan */}
               <FormField
                 control={form.control}
@@ -783,7 +861,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
             <Button
               onClick={form.handleSubmit(onSubmit)}
               className="flex-1 cursor-pointer"
-              disabled={isPending}
+              disabled={isPending || (!isEdit && isFormIncomplete)}
             >
               {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
             </Button>

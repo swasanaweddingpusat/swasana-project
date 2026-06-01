@@ -1083,7 +1083,8 @@ model Lead {
   budgetRange    String?
   notes          String?
 
-  category       EventCategory @default(WEDDINGS)
+  category        EventCategory  @default(WEDDINGS)
+  weddingSession  WeddingSession?
 
   bitrixId       String?
 

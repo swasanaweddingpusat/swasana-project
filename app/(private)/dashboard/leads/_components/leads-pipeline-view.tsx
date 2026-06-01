@@ -8,6 +8,7 @@ import {
   type DropResult,
 } from "@hello-pangea/dnd";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 import type { LeadStatusItem } from "@/lib/queries/leads";
@@ -22,6 +23,7 @@ interface LeadsPipelineViewProps {
   statuses: LeadStatusItem[];
   onDragEnd: (result: DropResult) => void;
   onEdit: (lead: LeadItem) => void;
+  isLoading?: boolean;
 }
 
 export function LeadsPipelineView({
@@ -29,7 +31,30 @@ export function LeadsPipelineView({
   statuses,
   onDragEnd,
   onEdit,
+  isLoading,
 }: LeadsPipelineViewProps) {
+  if (isLoading) {
+    return (
+      <div className="overflow-x-auto px-4 sm:px-6 py-4">
+        <div className="flex gap-4 min-w-max">
+          {statuses.map((status) => (
+            <div key={status.id} className="w-72 shrink-0 flex flex-col rounded-lg border border-border bg-muted/20">
+              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+                <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <div className="flex-1 p-2 space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-28 w-full rounded-lg" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="overflow-x-auto px-4 sm:px-6 py-4">

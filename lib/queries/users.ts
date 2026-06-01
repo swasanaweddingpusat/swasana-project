@@ -134,3 +134,21 @@ export async function getMentionableUsers() {
 }
 
 export type MentionableUser = Awaited<ReturnType<typeof getMentionableUsers>>[number];
+
+export async function getAssignableSalesUsers() {
+  return db.profile.findMany({
+    where: {
+      status: "active",
+      role: { name: { in: ["sales", "sales-mice"] } },
+    },
+    select: {
+      id: true,
+      fullName: true,
+      role: { select: { name: true } },
+    },
+    orderBy: { fullName: "asc" },
+    take: 200,
+  });
+}
+
+export type AssignableSalesUser = Awaited<ReturnType<typeof getAssignableSalesUsers>>[number];
