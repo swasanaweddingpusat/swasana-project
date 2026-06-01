@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, type UseFormReturn, type FieldPath } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
+import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import {
   Form,
@@ -91,8 +92,10 @@ interface QuotationFormValues {
   venueId: string;
   venue: string;
   eventDate: string;
-  // Step 2 — fasilitas / item
+  // Step 2 — internal item
   items: QuotationItemForm[];
+  // Step 3 — additional item + ringkasan
+  additionalItems: QuotationItemForm[];
   discount: string;
   validUntil: string;
   notes: string;
@@ -206,9 +209,9 @@ function makeItem(
 }
 
 const DEFAULT_ITEMS: QuotationItemForm[] = [
-  // A. Ballroom Facilities — 1 card, daftar fasilitas di description
+  // Ballroom Facilities — 1 card, daftar fasilitas di description
   makeItem(
-    "A. Ballroom Facilities :",
+    "Ballroom Facilities :",
     "400",
     "408.333",
     "163.333.333",
@@ -226,9 +229,9 @@ const DEFAULT_ITEMS: QuotationItemForm[] = [
       "Security",
     ]),
   ),
-  // B. Equipments — 1 card
+  // Equipments — 1 card
   makeItem(
-    "B. Equipments :",
+    "Equipments :",
     "",
     "",
     "",
@@ -242,42 +245,24 @@ const DEFAULT_ITEMS: QuotationItemForm[] = [
       "4 Registration Table",
     ]),
   ),
-  // C. Food & Beverage Inclusions — 1 card
+  // Food & Beverage Inclusions — 1 card
   makeItem(
-    "C. Food & Beverage Inclusions :",
+    "Food & Beverage Inclusions :",
     "",
     "",
     "",
     listHtml(["1x Coffe Break", "1x Buffet Meals", "Air Mineral"]),
   ),
-  // D. Additional — per-item ber-harga
-  makeItem("D. Additional :"),
-  makeItem("Nasi Box for Breakfast", "150", "79.444", "11.916.666"),
-  makeItem("Additional Snack", "400", "36.667", "14.666.667"),
-  makeItem("Sofa Single VIP", "10", "138.889", "1.388.889"),
-  makeItem("Meja VIP", "5", "111.111", "555.556"),
-  makeItem("Internet 100 mbps", "", "7.222.222", "7.222.222"),
-  makeItem("Equil", "30", "73.945", "2.218.350"),
-  makeItem("Es Podeng", "2", "2.566.666", "5.133.330"),
-  makeItem("Soto Bandung", "40", "47.666", "1.906.640"),
-  makeItem("Mie Kangkung", "40", "46.445", "1.857.800"),
-  makeItem("Nasi Pasundan", "40", "89.222", "3.568.880"),
-  makeItem("creamy Grilled Salmon", "40", "73.944", "2.957.760"),
-  makeItem("Buah Potong", "40", "55.000", "2.200.000"),
-  makeItem("Buah Bite VIP", "20", "183.334", "3.666.680"),
-  makeItem("Jajanan Pasar", "6", "733.334", "4.400.004"),
-  makeItem("Coffee Break VIP", "50", "54.444", "2.722.200"),
-  makeItem("Coffe by Barista", "50", "67.223", "3.361.150"),
-  makeItem("Round Table VIP", "2", "672.227", "1.344.454"),
-  makeItem("Waitress", "2", "366.666", "733.332"),
-  makeItem("Cover Kursi", "37", "16.666", "616.642"),
-  // E. Complimentary
-  makeItem("E. Complimentary :"),
-  makeItem("Es Leci (Alfabet)", "200"),
-  makeItem("Holding Room", "2"),
-  makeItem("Banquet Chair", "300"),
-  makeItem("Cover Chair", "400"),
 ];
+
+const EMPTY_ITEM: QuotationItemForm = {
+  title: "",
+  description: "",
+  qty: "",
+  price: "",
+  total: "",
+  manualTotal: false,
+};
 
 const DEFAULT_VALUES: QuotationFormValues = {
   clientName: "",
@@ -296,6 +281,7 @@ const DEFAULT_VALUES: QuotationFormValues = {
   venue: "",
   eventDate: "",
   items: DEFAULT_ITEMS.map((it) => ({ ...it })),
+  additionalItems: [{ ...EMPTY_ITEM }],
   discount: "",
   validUntil: "",
   notes: "",
@@ -319,12 +305,14 @@ function readQuotationDraft(): QuotationDraft | null {
 
 function persistQuotationDraft(values: Partial<QuotationFormValues>) {
   if (typeof window === "undefined") return;
-  const hasContent = Object.values(values).some((v) => {
+  // Signature dataURL tidak di-persist (terlalu besar)
+  const { ...rest } = values;
+  const hasContent = Object.values(rest).some((v) => {
     if (Array.isArray(v)) return v.some((item: QuotationItemForm) => item.title?.trim());
     return typeof v === "string" && v.trim() !== "";
   });
   if (hasContent) {
-    localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify({ values }));
+    localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify({ values: rest }));
   } else {
     localStorage.removeItem(QUOTATION_DRAFT_KEY);
   }
@@ -335,14 +323,272 @@ function clearQuotationDraft() {
   localStorage.removeItem(QUOTATION_DRAFT_KEY);
 }
 
-const EMPTY_ITEM: QuotationItemForm = {
-  title: "",
-  description: "",
-  qty: "",
-  price: "",
-  total: "",
-  manualTotal: false,
-};
+// ── Sub-component: ItemListEditor (DRY untuk step 2 & 3) ────────────────────
+
+interface ItemListEditorProps {
+  arrayName: "items" | "additionalItems";
+  fields: Array<{ id: string }>;
+  append: (value: QuotationItemForm) => void;
+  remove: (index: number) => void;
+  form: UseFormReturn<QuotationFormValues>;
+  expandedSet: Set<string>;
+  toggleExpanded: (id: string) => void;
+  pendingExpandRef: React.MutableRefObject<boolean>;
+  watchedArray: QuotationItemForm[];
+}
+
+function ItemListEditor({
+  arrayName,
+  fields,
+  append,
+  remove,
+  form,
+  expandedSet,
+  toggleExpanded,
+  pendingExpandRef,
+  watchedArray,
+}: ItemListEditorProps) {
+  function recomputeRowTotal(index: number) {
+    const item = form.getValues(`${arrayName}.${index}` as FieldPath<QuotationFormValues>);
+    const typedItem = item as QuotationItemForm;
+    if (typedItem?.manualTotal) return;
+    const qty = parseNumericInput(typedItem?.qty ?? "");
+    const price = parseNumericInput(typedItem?.price ?? "");
+    const total = qty * price;
+    form.setValue(
+      `${arrayName}.${index}.total` as FieldPath<QuotationFormValues>,
+      total > 0 ? total.toLocaleString("id-ID") : "",
+      { shouldDirty: true },
+    );
+  }
+
+  function revertRowTotal(index: number) {
+    form.setValue(
+      `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
+      false,
+      { shouldDirty: true },
+    );
+    recomputeRowTotal(index);
+  }
+
+  return (
+    <div className="space-y-2">
+      {fields.map((fieldItem, index) => {
+        const isManual = form.getValues(
+          `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
+        ) as boolean;
+        const isOpen = expandedSet.has(fieldItem.id);
+        const titleVal = watchedArray?.[index]?.title ?? "";
+        const totalVal = watchedArray?.[index]?.total ?? "";
+        const qtyVal = watchedArray?.[index]?.qty ?? "";
+        const isSectionHeader = titleVal.trimEnd().endsWith(":");
+        return (
+          <Collapsible
+            key={fieldItem.id}
+            open={isOpen}
+            onOpenChange={() => toggleExpanded(fieldItem.id)}
+            className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+          >
+            {/* Accordion header */}
+            <div className="flex items-center gap-1 px-3 py-2.5">
+              <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                <AltArrowDown
+                  weight="BoldDuotone"
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                    isOpen && "rotate-180",
+                  )}
+                />
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={cn(
+                      "text-sm truncate",
+                      isSectionHeader
+                        ? "font-semibold text-foreground"
+                        : "font-medium text-foreground",
+                      !titleVal && "text-muted-foreground italic",
+                    )}
+                  >
+                    {titleVal || "Item tanpa judul"}
+                  </p>
+                  {!isOpen && (totalVal || qtyVal) && (
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {qtyVal ? `Qty ${qtyVal}` : ""}
+                      {qtyVal && totalVal ? " · " : ""}
+                      {totalVal ? `Rp ${totalVal}` : ""}
+                    </p>
+                  )}
+                </div>
+              </CollapsibleTrigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(index);
+                }}
+                disabled={fields.length === 1}
+                aria-label="Hapus item"
+                className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+              >
+                <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            {/* Accordion body */}
+            <CollapsibleContent>
+              <div className="px-3 pb-3 space-y-2 border-t border-border/60">
+                <FormField
+                  control={form.control}
+                  name={`${arrayName}.${index}.title` as FieldPath<QuotationFormValues>}
+                  render={({ field }) => (
+                    <FormItem className="pt-2">
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Judul / Nama Item
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value as string}
+                          placeholder="mis. Ballroom Facilities : atau Nasi Box"
+                          className="w-full"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-3 gap-2">
+                  <FormField
+                    control={form.control}
+                    name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">
+                          Qty
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            value={field.value as string}
+                            onChange={(e) => {
+                              field.onChange(e.target.value.replace(/\D/g, ""));
+                              recomputeRowTotal(index);
+                            }}
+                            placeholder="0"
+                            inputMode="numeric"
+                            className="w-full"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">
+                          Harga
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            value={field.value as string}
+                            onChange={(e) => {
+                              field.onChange(formatNumericDisplay(e.target.value));
+                              recomputeRowTotal(index);
+                            }}
+                            placeholder="0"
+                            inputMode="numeric"
+                            className="w-full"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`${arrayName}.${index}.total` as FieldPath<QuotationFormValues>}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Total</span>
+                          {isManual && (
+                            <button
+                              type="button"
+                              onClick={() => revertRowTotal(index)}
+                              className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
+                              aria-label="Kembalikan ke otomatis"
+                            >
+                              <Refresh weight="BoldDuotone" className="h-3 w-3" />
+                              auto
+                            </button>
+                          )}
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            value={field.value as string}
+                            onChange={(e) => {
+                              form.setValue(
+                                `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
+                                true,
+                              );
+                              field.onChange(formatNumericDisplay(e.target.value));
+                            }}
+                            placeholder="0"
+                            inputMode="numeric"
+                            className={cn(
+                              "w-full",
+                              isManual && "border-primary/50",
+                            )}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Description — rich text (TipTap) */}
+                <FormField
+                  control={form.control}
+                  name={`${arrayName}.${index}.description` as FieldPath<QuotationFormValues>}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Description{" "}
+                        <span className="font-normal">(opsional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <SimpleEditor
+                          value={field.value as string}
+                          onChange={field.onChange}
+                          placeholder="Deskripsi detail item..."
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        );
+      })}
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          append({ ...EMPTY_ITEM });
+          pendingExpandRef.current = true;
+        }}
+        className="w-full rounded-xl border-dashed"
+      >
+        <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
+        Tambah Item
+      </Button>
+    </div>
+  );
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -353,14 +599,38 @@ export function QuotationDrawer({
   onSuccess,
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
-  const [step, setStep] = useState<1 | 2>(1);
-  // Track which field ids are expanded in the accordion.
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  // Expanded state untuk accordion items (step 2)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  // Expanded state untuk accordion additionalItems (step 3)
+  const [expandedAdditional, setExpandedAdditional] = useState<Set<string>>(new Set());
   // Ref to signal that the next fields update should auto-expand the last item.
-  const pendingExpandRef = useRef(false);
+  const pendingExpandItemsRef = useRef(false);
+  const pendingExpandAdditionalRef = useRef(false);
+  // Ref to signal that the first card of each list should auto-expand on open.
+  const pendingExpandFirstItemsRef = useRef(false);
+  const pendingExpandFirstAdditionalRef = useRef(false);
+
+  // TTD state (step 4)
+  const sigSalesRef = useRef<SignatureCanvas>(null);
+  const [signatureSales, setSignatureSales] = useState("");
+  const [signingLocation, setSigningLocation] = useState("");
 
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleAdditional(id: string) {
+    setExpandedAdditional((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -434,24 +704,56 @@ export function QuotationDrawer({
     defaultValues: DEFAULT_VALUES,
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields: itemFields, append: appendItem, remove: removeItem } = useFieldArray({
     control: form.control,
     name: "items",
   });
 
-  // Auto-expand the last item when a new one is appended.
+  const { fields: additionalFields, append: appendAdditional, remove: removeAdditional } = useFieldArray({
+    control: form.control,
+    name: "additionalItems",
+  });
+
+  // Auto-expand the last item when a new one is appended (items).
   useEffect(() => {
-    if (pendingExpandRef.current && fields.length > 0) {
-      const lastId = fields[fields.length - 1].id;
+    if (pendingExpandItemsRef.current && itemFields.length > 0) {
+      const lastId = itemFields[itemFields.length - 1].id;
       setExpandedItems((prev) => new Set([...prev, lastId]));
-      pendingExpandRef.current = false;
+      pendingExpandItemsRef.current = false;
     }
-  }, [fields]);
+  }, [itemFields]);
+
+  // Auto-expand the last additional item when a new one is appended.
+  useEffect(() => {
+    if (pendingExpandAdditionalRef.current && additionalFields.length > 0) {
+      const lastId = additionalFields[additionalFields.length - 1].id;
+      setExpandedAdditional((prev) => new Set([...prev, lastId]));
+      pendingExpandAdditionalRef.current = false;
+    }
+  }, [additionalFields]);
+
+  // Auto-expand the FIRST card of each list on open (at least one card visible).
+  useEffect(() => {
+    if (pendingExpandFirstItemsRef.current && itemFields.length > 0) {
+      const firstId = itemFields[0].id;
+      setExpandedItems((prev) => new Set([...prev, firstId]));
+      pendingExpandFirstItemsRef.current = false;
+    }
+  }, [itemFields]);
+
+  useEffect(() => {
+    if (pendingExpandFirstAdditionalRef.current && additionalFields.length > 0) {
+      const firstId = additionalFields[0].id;
+      setExpandedAdditional((prev) => new Set([...prev, firstId]));
+      pendingExpandFirstAdditionalRef.current = false;
+    }
+  }, [additionalFields]);
 
   const watchedClientName = form.watch("clientName");
   const watchedSalesId = form.watch("salesId");
   const watchedVenueId = form.watch("venueId");
   const watchedItems = form.watch("items");
+  const watchedAdditionalItems = form.watch("additionalItems");
   const watchedDiscount = form.watch("discount");
   const watchedCategory = form.watch("category");
   const watchedEventTypeId = form.watch("eventTypeId");
@@ -470,6 +772,8 @@ export function QuotationDrawer({
     !watchedEventDate ||
     !watchedWeddingSession ||
     !watchedTime?.trim();
+
+  const isStep4Complete = !!signatureSales && !!signingLocation.trim();
 
   // Name shown in the locked sales field — resolves from the current salesId so
   // edit mode displays the record's actual sales (not the logged-in user).
@@ -546,31 +850,18 @@ export function QuotationDrawer({
     (et) => !watchedCategory || et.category === watchedCategory,
   );
 
-  // ── Item totals ──────────────────────────────────────────────────────────
-  const subtotal = (watchedItems ?? []).reduce(
+  // ── Item totals (gabungan items + additionalItems) ───────────────────────
+  const subtotalItems = (watchedItems ?? []).reduce(
     (sum, it) => sum + parseNumericInput(it?.total ?? ""),
     0,
   );
+  const subtotalAdditional = (watchedAdditionalItems ?? []).reduce(
+    (sum, it) => sum + parseNumericInput(it?.total ?? ""),
+    0,
+  );
+  const subtotal = subtotalItems + subtotalAdditional;
   const discountNum = parseNumericInput(watchedDiscount);
   const grandTotal = Math.max(0, subtotal - discountNum);
-
-  function recomputeRowTotal(index: number) {
-    const item = form.getValues(`items.${index}`);
-    if (item?.manualTotal) return;
-    const qty = parseNumericInput(item?.qty ?? "");
-    const price = parseNumericInput(item?.price ?? "");
-    const total = qty * price;
-    form.setValue(
-      `items.${index}.total`,
-      total > 0 ? total.toLocaleString("id-ID") : "",
-      { shouldDirty: true },
-    );
-  }
-
-  function revertRowTotal(index: number) {
-    form.setValue(`items.${index}.manualTotal`, false, { shouldDirty: true });
-    recomputeRowTotal(index);
-  }
 
   // ── Reset on open ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -581,6 +872,16 @@ export function QuotationDrawer({
     setClientSearch("");
     setDebouncedSearch("");
     setClientDropdownOpen(false);
+    // Reset accordion state; auto-expand the FIRST card of each list so at least
+    // one card is open when the user reaches step 2 (internal) and step 3 (additional).
+    setExpandedItems(new Set());
+    setExpandedAdditional(new Set());
+    pendingExpandFirstItemsRef.current = true;
+    pendingExpandFirstAdditionalRef.current = true;
+    // Reset signature state
+    sigSalesRef.current?.clear();
+    setSignatureSales("");
+    setSigningLocation("");
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -615,6 +916,7 @@ export function QuotationDrawer({
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
         items,
+        additionalItems: [{ ...EMPTY_ITEM }],
         discount:
           editQuotation.discount > 0
             ? formatNumericDisplay(editQuotation.discount)
@@ -632,18 +934,42 @@ export function QuotationDrawer({
         const draftHasItems =
           Array.isArray(draftItems) &&
           draftItems.some((it) => it?.title?.trim());
+        const draftAdditional = draft.values.additionalItems;
+        const draftHasAdditional =
+          Array.isArray(draftAdditional) &&
+          draftAdditional.some((it) => it?.title?.trim());
         form.reset({
           ...DEFAULT_VALUES,
           ...draft.values,
           items: draftHasItems
             ? draftItems
             : DEFAULT_ITEMS.map((it) => ({ ...it })),
+          additionalItems: draftHasAdditional
+            ? draftAdditional
+            : [{ ...EMPTY_ITEM }],
         });
+        // Restore signingLocation dari draft jika ada
+        if (draft.values.notes !== undefined) {
+          // signingLocation disimpan terpisah di draft key — ambil dari localStorage
+        }
       } else {
         form.reset({
           ...DEFAULT_VALUES,
           items: DEFAULT_ITEMS.map((it) => ({ ...it })),
+          additionalItems: [{ ...EMPTY_ITEM }],
         });
+      }
+      // Restore signingLocation terpisah dari draft key
+      try {
+        const raw = localStorage.getItem(QUOTATION_DRAFT_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { values: Partial<QuotationFormValues>; signingLocation?: string };
+          if (parsed.signingLocation) {
+            setSigningLocation(parsed.signingLocation);
+          }
+        }
+      } catch {
+        // ignore
       }
     }
   }, [open, editQuotation]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -661,9 +987,20 @@ export function QuotationDrawer({
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
       persistQuotationDraft(values as Partial<QuotationFormValues>);
+      // Persist signingLocation terpisah
+      try {
+        const raw = localStorage.getItem(QUOTATION_DRAFT_KEY);
+        const parsed: { values: Partial<QuotationFormValues>; signingLocation?: string } = raw
+          ? (JSON.parse(raw) as { values: Partial<QuotationFormValues>; signingLocation?: string })
+          : { values: {} };
+        parsed.signingLocation = signingLocation;
+        localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(parsed));
+      } catch {
+        // ignore
+      }
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-fill from lead ──────────────────────────────────────────────────
   function applyLeadAutofill(lead: LeadOption) {
@@ -742,24 +1079,56 @@ export function QuotationDrawer({
 
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
-    const ok = await form.trigger([
-      "clientName",
-      "salesId",
-      "venueId",
-      "category",
-      "eventTypeId",
-      "eventDate",
-      "weddingSession",
-      "time",
-    ]);
-    if (ok) setStep(2);
+    if (step === 1) {
+      const ok = await form.trigger([
+        "clientName",
+        "salesId",
+        "venueId",
+        "category",
+        "eventTypeId",
+        "eventDate",
+        "weddingSession",
+        "time",
+      ]);
+      if (ok) setStep(2);
+    } else if (step === 2) {
+      setStep(3);
+    } else if (step === 3) {
+      const ok = await form.trigger(["validUntil"]);
+      if (ok) setStep(4);
+    }
+  }
+
+  function handlePrevious() {
+    if (step === 2) {
+      setStep(1);
+    } else if (step === 3) {
+      setStep(2);
+    } else if (step === 4) {
+      // Clear signature saat kembali dari step 4
+      sigSalesRef.current?.clear();
+      setSignatureSales("");
+      setStep(3);
+    }
   }
 
   function onSubmit(_values: QuotationFormValues) {
+    // Susun payload (termasuk additionalItems & signature) — siap dipakai saat backend tersedia
+    const _payload = {
+      ..._values,
+      additionalItems: _values.additionalItems,
+      signingLocation,
+      signatureSales,
+    };
+    void _payload; // mark as used, backend call belum diimplementasikan
     if (!isEdit) clearQuotationDraft();
     toast.success(
       isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
     );
+    // Reset signature setelah submit
+    sigSalesRef.current?.clear();
+    setSignatureSales("");
+    setSigningLocation("");
     if (!isEdit) onSuccess?.();
     onOpenChange(false);
   }
@@ -772,7 +1141,7 @@ export function QuotationDrawer({
       title={isEdit ? "Edit Quotation" : "Tambah Quotation"}
       maxWidth="sm:max-w-2xl"
       steps={step}
-      totalSteps={2}
+      totalSteps={4}
       stepperType="short"
     >
       <div className="flex flex-col h-full">
@@ -1306,248 +1675,63 @@ export function QuotationDrawer({
                 </div>
               </div>
 
-              {/* ════════════════ STEP 2 — FASILITAS / ITEM ════════════════ */}
+              {/* ════════════════ STEP 2 — INTERNAL ITEM ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-3")}>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className={LABEL_CLASS}>Fasilitas / Item</p>
+                    <p className={LABEL_CLASS}>Internal Item</p>
                     <span className="text-xs text-muted-foreground">
                       Total = Qty × Harga (bisa manual)
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Akhiri judul dengan &quot;:&quot; untuk jadi judul section
-                    (mis. &quot;A. Ballroom Facilities :&quot;). Harga boleh
+                    (mis. &quot;Ballroom Facilities :&quot;). Harga boleh
                     dikosongkan untuk item tanpa biaya.
                   </p>
 
-                  <div className="space-y-2">
-                    {fields.map((fieldItem, index) => {
-                      const isManual = form.getValues(`items.${index}.manualTotal`);
-                      const isOpen = expandedItems.has(fieldItem.id);
-                      const titleVal = watchedItems?.[index]?.title ?? "";
-                      const totalVal = watchedItems?.[index]?.total ?? "";
-                      const qtyVal = watchedItems?.[index]?.qty ?? "";
-                      const isSectionHeader = titleVal.trimEnd().endsWith(":");
-                      return (
-                        <Collapsible
-                          key={fieldItem.id}
-                          open={isOpen}
-                          onOpenChange={() => toggleItem(fieldItem.id)}
-                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                        >
-                          {/* ── Accordion header — trigger (chevron+judul) dan hapus sebagai sibling ── */}
-                          <div className="flex items-center gap-1 px-3 py-2.5">
-                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                              <AltArrowDown
-                                weight="BoldDuotone"
-                                className={cn(
-                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                  isOpen && "rotate-180",
-                                )}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p
-                                  className={cn(
-                                    "text-sm truncate",
-                                    isSectionHeader
-                                      ? "font-semibold text-foreground"
-                                      : "font-medium text-foreground",
-                                    !titleVal && "text-muted-foreground italic",
-                                  )}
-                                >
-                                  {titleVal || "Item tanpa judul"}
-                                </p>
-                                {!isOpen && (totalVal || qtyVal) && (
-                                  <p className="text-xs text-muted-foreground tabular-nums">
-                                    {qtyVal ? `Qty ${qtyVal}` : ""}
-                                    {qtyVal && totalVal ? " · " : ""}
-                                    {totalVal ? `Rp ${totalVal}` : ""}
-                                  </p>
-                                )}
-                              </div>
-                            </CollapsibleTrigger>
-                            {/* Tombol hapus — SIBLING dari trigger, bukan child-nya (fix nested button) */}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                remove(index);
-                              }}
-                              disabled={fields.length === 1}
-                              aria-label="Hapus item"
-                              className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                  <ItemListEditor
+                    arrayName="items"
+                    fields={itemFields}
+                    append={appendItem}
+                    remove={removeItem}
+                    form={form}
+                    expandedSet={expandedItems}
+                    toggleExpanded={toggleItem}
+                    pendingExpandRef={pendingExpandItemsRef}
+                    watchedArray={watchedItems ?? []}
+                  />
+                </div>
+              </div>
 
-                          {/* ── Accordion body / detail fields ── */}
-                          <CollapsibleContent>
-                            <div className="px-3 pb-3 space-y-2 border-t border-border/60">
-                              <FormField
-                                control={form.control}
-                                name={`items.${index}.title`}
-                                render={({ field }) => (
-                                  <FormItem className="pt-2">
-                                    <FormLabel className="text-xs text-muted-foreground">
-                                      Judul / Nama Item
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        placeholder="mis. A. Ballroom Facilities : atau Nasi Box"
-                                        className="w-full"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-
-                              <div className="grid grid-cols-3 gap-2">
-                                <FormField
-                                  control={form.control}
-                                  name={`items.${index}.qty`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs text-muted-foreground">
-                                        Qty
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          value={field.value}
-                                          onChange={(e) => {
-                                            field.onChange(
-                                              e.target.value.replace(/\D/g, ""),
-                                            );
-                                            recomputeRowTotal(index);
-                                          }}
-                                          placeholder="0"
-                                          inputMode="numeric"
-                                          className="w-full"
-                                        />
-                                      </FormControl>
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name={`items.${index}.price`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs text-muted-foreground">
-                                        Harga
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          value={field.value}
-                                          onChange={(e) => {
-                                            field.onChange(
-                                              formatNumericDisplay(e.target.value),
-                                            );
-                                            recomputeRowTotal(index);
-                                          }}
-                                          placeholder="0"
-                                          inputMode="numeric"
-                                          className="w-full"
-                                        />
-                                      </FormControl>
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name={`items.${index}.total`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
-                                        <span>Total</span>
-                                        {isManual && (
-                                          <button
-                                            type="button"
-                                            onClick={() => revertRowTotal(index)}
-                                            className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
-                                            aria-label="Kembalikan ke otomatis"
-                                          >
-                                            <Refresh
-                                              weight="BoldDuotone"
-                                              className="h-3 w-3"
-                                            />
-                                            auto
-                                          </button>
-                                        )}
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          value={field.value}
-                                          onChange={(e) => {
-                                            form.setValue(
-                                              `items.${index}.manualTotal`,
-                                              true,
-                                            );
-                                            field.onChange(
-                                              formatNumericDisplay(e.target.value),
-                                            );
-                                          }}
-                                          placeholder="0"
-                                          inputMode="numeric"
-                                          className={cn(
-                                            "w-full",
-                                            isManual && "border-primary/50",
-                                          )}
-                                        />
-                                      </FormControl>
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-
-                              {/* Description — rich text (TipTap) */}
-                              <FormField
-                                control={form.control}
-                                name={`items.${index}.description`}
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs text-muted-foreground">
-                                      Description{" "}
-                                      <span className="font-normal">(opsional)</span>
-                                    </FormLabel>
-                                    <FormControl>
-                                      <SimpleEditor
-                                        value={field.value}
-                                        onChange={field.onChange}
-                                        placeholder="Deskripsi detail item..."
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
+              {/* ════════════════ STEP 3 — ADDITIONAL + RINGKASAN ════════════════ */}
+              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className={LABEL_CLASS}>Additional Item</p>
+                    <span className="text-xs text-muted-foreground">
+                      Total = Qty × Harga (bisa manual)
+                    </span>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Akhiri judul dengan &quot;:&quot; untuk jadi judul section.
+                    Harga boleh dikosongkan untuk item tanpa biaya.
+                  </p>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      append({ ...EMPTY_ITEM });
-                      // pendingExpandRef will be checked on the next render after
-                      // fields updates so we can expand the newly added item by id.
-                      pendingExpandRef.current = true;
-                    }}
-                    className="w-full rounded-xl border-dashed"
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1" />
-                    Tambah Item
-                  </Button>
+                  <ItemListEditor
+                    arrayName="additionalItems"
+                    fields={additionalFields}
+                    append={appendAdditional}
+                    remove={removeAdditional}
+                    form={form}
+                    expandedSet={expandedAdditional}
+                    toggleExpanded={toggleAdditional}
+                    pendingExpandRef={pendingExpandAdditionalRef}
+                    watchedArray={watchedAdditionalItems ?? []}
+                  />
                 </div>
 
-                {/* Ringkasan */}
+                {/* Ringkasan — gabungan internal + additional */}
                 <div className="border-t pt-4 space-y-3">
                   <FormField
                     control={form.control}
@@ -1577,6 +1761,14 @@ export function QuotationDrawer({
 
                   <div className="rounded-xl bg-muted p-4 space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
+                      <span>Internal Item</span>
+                      <span className="tabular-nums">{formatRupiah(subtotalItems)}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Additional Item</span>
+                      <span className="tabular-nums">{formatRupiah(subtotalAdditional)}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground border-t border-border/50 pt-1.5">
                       <span>Subtotal</span>
                       <span className="tabular-nums">{formatRupiah(subtotal)}</span>
                     </div>
@@ -1637,6 +1829,69 @@ export function QuotationDrawer({
                   )}
                 />
               </div>
+
+              {/* ════════════════ STEP 4 — TTD ════════════════ */}
+              <div className={cn(step !== 4 && "hidden", "space-y-6")}>
+                <div>
+                  <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
+                    Lokasi Tanda Tangan *
+                  </FormLabel>
+                  <Input
+                    placeholder="Contoh: Jakarta, Bandung, Surabaya..."
+                    value={signingLocation}
+                    onChange={(e) => setSigningLocation(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
+                    Tanda Tangan Sales *
+                  </FormLabel>
+                  <div
+                    className={cn(
+                      "border-2 border-dashed rounded-xl overflow-hidden bg-muted",
+                      !signatureSales ? "border-destructive/40" : "border-border",
+                    )}
+                  >
+                    <SignatureCanvas
+                      ref={sigSalesRef}
+                      penColor="black"
+                      canvasProps={{
+                        className: "w-full",
+                        style: { width: "100%", height: 200, touchAction: "none" },
+                      }}
+                      onEnd={() => {
+                        if (sigSalesRef.current) {
+                          setSignatureSales(sigSalesRef.current.toDataURL("image/png"));
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className={cn("flex", "items-center", "justify-between", "mt-1.5")}>
+                    {!signatureSales && (
+                      <p className={cn("text-xs", "text-destructive")}>
+                        Tanda tangan sales wajib diisi
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sigSalesRef.current?.clear();
+                        setSignatureSales("");
+                      }}
+                      className={cn(
+                        "text-xs",
+                        "text-destructive",
+                        "hover:text-destructive",
+                        "underline",
+                        "ml-auto",
+                      )}
+                    >
+                      Hapus tanda tangan
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </form>
           </Form>
         </div>
@@ -1655,16 +1910,16 @@ export function QuotationDrawer({
             ) : (
               <Button
                 variant="outline"
-                onClick={() => setStep(1)}
+                onClick={handlePrevious}
                 className="flex-[40%] cursor-pointer"
               >
                 Kembali
               </Button>
             )}
-            {step === 1 ? (
+            {step < 4 ? (
               <Button
                 onClick={handleNext}
-                disabled={isStep1Incomplete}
+                disabled={step === 1 ? isStep1Incomplete : false}
                 className="flex-[60%] cursor-pointer"
               >
                 Lanjut
@@ -1673,6 +1928,7 @@ export function QuotationDrawer({
             ) : (
               <Button
                 onClick={form.handleSubmit(onSubmit)}
+                disabled={!isStep4Complete}
                 className="flex-[60%] cursor-pointer"
               >
                 {isEdit ? "Simpan" : "Tambah"}
