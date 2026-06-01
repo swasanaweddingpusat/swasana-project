@@ -16,10 +16,10 @@
 
 */
 -- DropIndex
-DROP INDEX "approval_records_module_entityId_idx";
+DROP INDEX IF EXISTS "approval_records_module_entityId_idx";
 
 -- DropIndex
-DROP INDEX "customers_mobileNumber_idx";
+DROP INDEX IF EXISTS "customers_mobileNumber_idx";
 
 -- AlterTable
 ALTER TABLE "booking_payment_settlements" ALTER COLUMN "amount" SET DATA TYPE INTEGER;

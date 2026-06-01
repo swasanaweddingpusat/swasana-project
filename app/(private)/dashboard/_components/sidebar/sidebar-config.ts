@@ -79,6 +79,12 @@ export const navItems: NavItem[] = [
     icon: Widget,
   },
   {
+    name: "Groups",
+    href: "/dashboard/groups",
+    icon: UsersGroupRounded,
+    permission: { module: "groups", action: "view" },
+  },
+  {
     name: "Leads",
     href: "/dashboard/leads",
     icon: Volume,
@@ -89,12 +95,6 @@ export const navItems: NavItem[] = [
     href: "/dashboard/quotations",
     icon: DocumentAdd,
     permission: { module: "quotations", action: "view" },
-  },
-  {
-    name: "Customers",
-    href: "/dashboard/customers",
-    icon: UserRounded,
-    permission: { module: "customers", action: "view" },
   },
   {
     name: "Booking Weddings",
@@ -121,10 +121,10 @@ export const navItems: NavItem[] = [
     permission: { module: "vendor-specialist", action: "view" },
   },
   {
-    name: "Groups",
-    href: "/dashboard/groups",
-    icon: UsersGroupRounded,
-    permission: { module: "groups", action: "view" },
+    name: "Customers",
+    href: "/dashboard/customers",
+    icon: UserRounded,
+    permission: { module: "customers", action: "view" },
   },
   {
     name: "Finance",
