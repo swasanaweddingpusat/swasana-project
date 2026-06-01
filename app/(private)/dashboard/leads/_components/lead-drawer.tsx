@@ -38,6 +38,7 @@ import { useVenues } from "@/hooks/use-venues";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface LeadDrawerProps {
   open: boolean;
@@ -145,6 +146,13 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const { data: eventTypes = [] } = useEventTypes();
   const { data: statuses = [] } = useLeadStatuses();
   const { users: salesUsers } = useSalesUsers();
+  const { user } = useCurrentUser();
+
+  // Sales auto-detect: salesUsers already contains both "sales" & "sales-mice"
+  // roles, and s.id === profileId. If the logged-in user is in that list, lock
+  // the assignee field (create → self; edit → record's sales, shown as-is).
+  // Admin/manager picks freely.
+  const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
 
   const [sourceOptions, setSourceOptions] = useState<Option[]>([]);
   useEffect(() => {
@@ -164,6 +172,12 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const watchedVenueId = form.watch("venueId");
   const watchedCategory = form.watch("category");
   const watchedSourceId = form.watch("sourceOfInformationId");
+  const watchedAssignedToId = form.watch("assignedToId");
+  // Name shown in the locked sales field — resolves from the current field value
+  // so edit mode displays the record's actual sales (not the logged-in user).
+  const lockedSalesName =
+    salesUsers.find((s) => s.id === watchedAssignedToId)?.fullName ??
+    (currentUserIsSales ? (user?.name ?? "—") : "—");
   const isBitrixSource = sourceOptions.find((o) => o.id === watchedSourceId)?.name.toLowerCase().includes("bitrix") ?? false;
   const isWeddings = watchedCategory === "WEDDINGS";
 
@@ -171,9 +185,9 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
   const watchedName = form.watch("name");
   const watchedStatusId = form.watch("statusId");
   const watchedEventTypeId = form.watch("eventTypeId");
-  const watchedAssignedToId = form.watch("assignedToId");
   const watchedEventDate = form.watch("eventDate");
   const watchedWeddingSession = form.watch("weddingSession");
+  const watchedTime = form.watch("time");
 
   // Create-mode only: disable submit until every required field is filled.
   const isFormIncomplete =
@@ -187,6 +201,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
     !watchedSourceId ||
     !watchedEventDate ||
     !watchedWeddingSession ||
+    !watchedTime?.trim() ||
     (isBitrixSource && !bitrixId.trim());
 
   // ── Venue availability ───────────────────────────────────────────────────────
@@ -271,6 +286,14 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
     setContactInput({ name: "", number: "" });
     setContactPopoverOpen(false);
   }, [open, editLead]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Create mode: force-assign to the logged-in sales user (also covers the case
+  // where salesUsers loads after the reset effect above has already run).
+  useEffect(() => {
+    if (open && !isEdit && currentUserIsSales && user?.profileId) {
+      form.setValue("assignedToId", user.profileId);
+    }
+  }, [open, isEdit, currentUserIsSales, user?.profileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist draft on form field changes (create mode only)
   useEffect(() => {
@@ -601,27 +624,40 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
               />
 
               {/* Assigned To */}
-              <FormField
-                control={form.control}
-                name="assignedToId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Assigned To (Sales) *</FormLabel>
-                    <SearchableSelect
-                      options={salesUsers.map((u) => ({
-                        id: u.id,
-                        name: u.fullName ?? "",
-                      }))}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Pilih sales..."
-                      searchPlaceholder="Cari sales..."
-                      emptyText="Sales tidak ditemukan"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {currentUserIsSales ? (
+                /* Logged-in user is a sales → locked to themselves */
+                <div className="w-full">
+                  <FormLabel>Assigned To (Sales) *</FormLabel>
+                  <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                    {lockedSalesName}
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Lead ini akan tercatat atas nama Anda.
+                  </p>
+                </div>
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="assignedToId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Assigned To (Sales) *</FormLabel>
+                      <SearchableSelect
+                        options={salesUsers.map((u) => ({
+                          id: u.id,
+                          name: u.fullName ?? "",
+                        }))}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Pilih sales..."
+                        searchPlaceholder="Cari sales..."
+                        emptyText="Sales tidak ditemukan"
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Venue */}
               <FormField
@@ -762,7 +798,7 @@ export function LeadDrawer({ open, onOpenChange, editLead }: LeadDrawerProps) {
                 name="time"
                 render={({ field }) => (
                   <FormItem className="flex w-full flex-col">
-                    <FormLabel>Time</FormLabel>
+                    <FormLabel>Time *</FormLabel>
                     <FormControl>
                       <TimeRangePicker
                         value={field.value}

@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { QuotationItem } from "./quotations-table";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ interface LeadOption {
   venueId: string | null;
   eventType: { id: string; name: string } | null;
   eventDate: string | null;
+  assignedTo: { id: string; fullName: string | null } | null;
 }
 
 interface CustomerOption {
@@ -206,6 +208,12 @@ export function QuotationDrawer({
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
   const { users: salesUsers } = useSalesUsers();
+  const { user } = useCurrentUser();
+
+  // Sales auto-detect: salesUsers already contains both "sales" & "sales-mice"
+  // roles, and s.id === profileId. If the logged-in user is in that list, lock
+  // the sales field to themselves; admin/manager picks freely.
+  const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
 
   // ── Client picker state ──────────────────────────────────────────────────
   const [selectedLeadId, setSelectedLeadId] = useState("");
@@ -273,6 +281,12 @@ export function QuotationDrawer({
   const watchedWeddingEventType = form.watch("weddingEventType");
   const watchedEventDate = form.watch("eventDate");
   const isWeddings = watchedCategory === "WEDDINGS";
+
+  // Name shown in the locked sales field — resolves from the current salesId so
+  // edit mode displays the record's actual sales (not the logged-in user).
+  const lockedSalesName =
+    salesUsers.find((s) => s.id === watchedSalesId)?.fullName ??
+    (currentUserIsSales ? (user?.name ?? "—") : "—");
 
   // ── Auto-fill sales name when salesId changes ────────────────────────────
   useEffect(() => {
@@ -421,6 +435,14 @@ export function QuotationDrawer({
     }
   }, [open, editQuotation]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Create mode: force-assign the sales field to the logged-in sales user (also
+  // covers salesUsers loading after the reset effect above has already run).
+  useEffect(() => {
+    if (open && !isEdit && currentUserIsSales && user?.profileId) {
+      form.setValue("salesId", user.profileId);
+    }
+  }, [open, isEdit, currentUserIsSales, user?.profileId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auto-fill from lead ──────────────────────────────────────────────────
   function applyLeadAutofill(lead: LeadOption) {
     setSelectedLeadId(lead.id);
@@ -460,6 +482,12 @@ export function QuotationDrawer({
       const dateStr = new Date(lead.eventDate).toISOString().split("T")[0];
       form.setValue("eventDate", dateStr);
     }
+    // Sales — autofill dari sales yang di-assign ke lead. Skip kalau user yang
+    // login adalah sales (field-nya terkunci ke dirinya sendiri).
+    if (!currentUserIsSales && lead.assignedTo?.id) {
+      form.setValue("salesId", lead.assignedTo.id);
+      form.setValue("salesName", lead.assignedTo.fullName ?? "");
+    }
     setClientSearch(lead.name);
     setClientDropdownOpen(false);
   }
@@ -492,7 +520,16 @@ export function QuotationDrawer({
 
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
-    const ok = await form.trigger(["clientName", "salesId"]);
+    const ok = await form.trigger([
+      "clientName",
+      "salesId",
+      "venueId",
+      "category",
+      "eventTypeId",
+      "eventDate",
+      "weddingSession",
+      "time",
+    ]);
     if (ok) setStep(2);
   }
 
@@ -683,30 +720,43 @@ export function QuotationDrawer({
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Sales
                   </p>
-                  <FormField
-                    control={form.control}
-                    name="salesId"
-                    rules={{ required: "Sales wajib dipilih" }}
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel className={LABEL_CLASS}>Sales *</FormLabel>
-                        <FormControl>
-                          <SearchableSelect
-                            options={salesUsers.map((u) => ({
-                              id: u.id,
-                              name: u.fullName ?? "",
-                            }))}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Pilih sales..."
-                            searchPlaceholder="Cari sales..."
-                            emptyText="Sales tidak ditemukan"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {currentUserIsSales ? (
+                    /* Logged-in user is a sales → locked to themselves */
+                    <div className="w-full">
+                      <FormLabel className={LABEL_CLASS}>Sales *</FormLabel>
+                      <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                        {lockedSalesName}
+                      </div>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Quotation ini akan tercatat atas nama Anda.
+                      </p>
+                    </div>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="salesId"
+                      rules={{ required: "Sales wajib dipilih" }}
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <FormLabel className={LABEL_CLASS}>Sales *</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              options={salesUsers.map((u) => ({
+                                id: u.id,
+                                name: u.fullName ?? "",
+                              }))}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="Pilih sales..."
+                              searchPlaceholder="Cari sales..."
+                              emptyText="Sales tidak ditemukan"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   <FormField
                     control={form.control}
                     name="salesPhone"
@@ -741,13 +791,44 @@ export function QuotationDrawer({
                   </p>
                   <div className="flex flex-col gap-3">
 
+                    {/* Venue */}
+                    <FormField
+                      control={form.control}
+                      name="venueId"
+                      rules={{ required: "Venue wajib dipilih" }}
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <FormLabel className={LABEL_CLASS}>Venue *</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              options={venues.map((v) => ({ id: v.id, name: v.name }))}
+                              value={field.value}
+                              onChange={(id) => {
+                                field.onChange(id);
+                                const matched = venues.find((v) => v.id === id);
+                                form.setValue("venue", matched?.name ?? "");
+                                // Reset date & session when venue changes
+                                form.setValue("eventDate", "");
+                                form.setValue("weddingSession", "");
+                              }}
+                              placeholder="Pilih / cari venue..."
+                              searchPlaceholder="Cari venue..."
+                              emptyText="Venue tidak ditemukan"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     {/* Tipe Booking */}
                     <FormField
                       control={form.control}
                       name="category"
+                      rules={{ required: "Tipe booking wajib dipilih" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Tipe Booking</FormLabel>
+                          <FormLabel className={LABEL_CLASS}>Tipe Booking *</FormLabel>
                           <Select
                             value={field.value}
                             onValueChange={(v) => {
@@ -776,9 +857,10 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="eventTypeId"
+                      rules={{ required: "Event type wajib dipilih" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Event Type</FormLabel>
+                          <FormLabel className={LABEL_CLASS}>Event Type *</FormLabel>
                           <Select
                             value={field.value}
                             onValueChange={(v) => {
@@ -818,34 +900,6 @@ export function QuotationDrawer({
                         </FormItem>
                       )}
                     />
-
-                    {/* Venue */}
-                    <FormField
-                      control={form.control}
-                      name="venueId"
-                      render={({ field }) => (
-                        <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Venue</FormLabel>
-                          <FormControl>
-                            <SearchableSelect
-                              options={venues.map((v) => ({ id: v.id, name: v.name }))}
-                              value={field.value}
-                              onChange={(id) => {
-                                field.onChange(id);
-                                const matched = venues.find((v) => v.id === id);
-                                form.setValue("venue", matched?.name ?? "");
-                                // Reset date & session when venue changes
-                                form.setValue("eventDate", "");
-                                form.setValue("weddingSession", "");
-                              }}
-                              placeholder="Pilih / cari venue..."
-                              searchPlaceholder="Cari venue..."
-                              emptyText="Venue tidak ditemukan"
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
                   </div>
 
                   <div className="space-y-3">
@@ -853,9 +907,10 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="eventDate"
+                      rules={{ required: "Tanggal event wajib diisi" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Tanggal Event</FormLabel>
+                          <FormLabel className={LABEL_CLASS}>Tanggal Event *</FormLabel>
                           <Popover>
                             <PopoverTrigger
                               render={
@@ -947,13 +1002,14 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="weddingSession"
+                      rules={{ required: "Session wajib dipilih" }}
                       render={({ field }) => {
                         const sessions = watchedEventDate
                           ? getAvailableSessions(watchedEventDate)
                           : ["morning", "evening", "fullday"];
                         return (
                           <FormItem className="w-full">
-                            <FormLabel className={LABEL_CLASS}>Session</FormLabel>
+                            <FormLabel className={LABEL_CLASS}>Session *</FormLabel>
                             <Select
                               value={field.value}
                               onValueChange={(v) =>
@@ -1034,10 +1090,11 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="time"
+                      rules={{ required: "Time wajib diisi" }}
                       render={({ field }) => (
                         <FormItem className="flex w-full flex-col">
                           <FormLabel className={LABEL_CLASS}>
-                            Time
+                            Time *
                             {isWeddings &&
                               watchedWeddingSession &&
                               watchedWeddingEventType && (
@@ -1053,6 +1110,7 @@ export function QuotationDrawer({
                               placeholder="Pilih waktu (bisa rentang)..."
                             />
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />

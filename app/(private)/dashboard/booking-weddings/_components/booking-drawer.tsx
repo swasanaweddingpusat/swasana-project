@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle } from "@solar-icons/react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -21,6 +21,8 @@ import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
+import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 import {
@@ -44,7 +46,7 @@ interface BookingDrawerProps {
 
 type Option = { id: string; name: string };
 interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
-interface LeadOption { id: string; name: string; email: string | null; contactNumbers: Array<{ label?: string; name?: string; number: string }>; address: string | null; sourceOfInformation: { id: string; name: string } | null; bitrixId: string | null; convertedToCustomerId: string | null }
+interface LeadOption { id: string; name: string; email: string | null; contactNumbers: Array<{ label?: string; name?: string; number: string }>; address: string | null; sourceOfInformation: { id: string; name: string } | null; bitrixId: string | null; convertedToCustomerId: string | null; assignedTo: { id: string; fullName: string | null } | null }
 interface CategoryPriceEntry {
   id: string;
   categoryName: string;
@@ -175,6 +177,14 @@ function clearDraft() {
 export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const createMut = useCreateBooking();
   const qc = useQueryClient();
+  const { users: salesUsers } = useSalesUsers();
+  const { user } = useCurrentUser();
+
+  // Sales auto-detect: salesUsers already contains both "sales" & "sales-mice"
+  // roles, and s.id === profileId. If the logged-in user is in that list, lock
+  // the sales field to themselves; admin/manager picks freely.
+  const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
+
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
 
@@ -282,6 +292,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   }
 
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
+  const [bonusPickerOpen, setBonusPickerOpen] = useState(false);
   const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id, categoryName: c.name })));
   const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
 
@@ -290,6 +301,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const form = useForm<BookingInput>({
     defaultValues: {
       bookingDate: "", customerId: "", venueId: "", packageId: "",
+      salesId: null,
       paymentMethodId: null, sourceOfInformationId: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
       specialBonusName: null, specialBonusAmount: null,
@@ -300,6 +312,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
 
   useEffect(() => {
     if (open) {
+      setBonusPickerOpen(false);
       const draft = loadDraft();
       if (draft) {
         setCurrentStep(draft.currentStep);
@@ -368,9 +381,13 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     setTerms((prev) => prev.map((t, i) => ({ ...t, amount: i === n - 1 ? base + remainder : base })));
   };
 
-  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId"]);
+  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId, wSalesId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId", "salesId"]);
+  // Name shown in the locked sales field — resolves from the current salesId.
+  const lockedSalesName =
+    salesUsers.find((s) => s.id === wSalesId)?.fullName ??
+    (currentUserIsSales ? (user?.name ?? "—") : "—");
   const isBitrixSource = sourceOptions.find((o) => o.id === wSourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()) && time.trim());
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && wVenueId && wPackageId && wBookingDate && wWeddingSession && wWeddingType && wSourceOfInformationId && (!isBitrixSource || contactBitrixId.trim()) && time.trim() && wSalesId);
 
   const selectedVariantData = packages.find((p: PackageData) => p.id === wPackageId);
 
@@ -426,8 +443,17 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     }
   }, [wWeddingSession, wWeddingType]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Force-assign the sales field to the logged-in sales user (covers salesUsers
+  // loading after the open/draft reset, and re-applies if it gets cleared).
+  useEffect(() => {
+    if (open && currentUserIsSales && user?.profileId && wSalesId !== user.profileId) {
+      form.setValue("salesId", user.profileId);
+    }
+  }, [open, currentUserIsSales, user?.profileId, wSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleNext = () => {
     if (currentStep === 1 && !isStep1Complete) {
+      if (!wSalesId) { toast.error("Sales PIC wajib dipilih."); return; }
       if (!wSourceOfInformationId) { toast.error("Sumber informasi wajib diisi."); return; }
       if (isBitrixSource && !contactBitrixId.trim()) { toast.error("Bitrix ID wajib diisi jika sumber informasi adalah Bitrix."); return; }
       toast.error("Lengkapi field yang wajib diisi terlebih dahulu.");
@@ -577,6 +603,9 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                                     if (lead.address) setContactKtpAddress(lead.address);
                                     if (lead.bitrixId) setContactBitrixId(lead.bitrixId);
                                     if (lead.sourceOfInformation?.id) form.setValue("sourceOfInformationId", lead.sourceOfInformation.id);
+                                    // Sales — autofill dari sales lead. Skip kalau user login adalah
+                                    // sales (field-nya terkunci ke dirinya sendiri).
+                                    if (!currentUserIsSales && lead.assignedTo?.id) form.setValue("salesId", lead.assignedTo.id);
                                     setCustomerDropdownOpen(false);
                                   }}
                                 >
@@ -693,6 +722,35 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                       </Popover>
                     </div>
                   </div>
+
+                  {/* Sales PIC */}
+                  {currentUserIsSales ? (
+                    /* Logged-in user is a sales → locked to themselves */
+                    <div>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Sales PIC *</FormLabel>
+                      <div className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                        {lockedSalesName}
+                      </div>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Booking ini akan tercatat atas nama Anda.
+                      </p>
+                    </div>
+                  ) : (
+                    <FormField control={form.control} name="salesId" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Sales PIC *</FormLabel>
+                        <SearchableSelect
+                          options={salesUsers.map((u) => ({ id: u.id, name: u.fullName ?? "" }))}
+                          value={field.value ?? ""}
+                          onChange={(id) => field.onChange(id || null)}
+                          placeholder="Pilih sales..."
+                          searchPlaceholder="Cari sales..."
+                          emptyText="Sales tidak ditemukan"
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
 
                   {/* Sumber Informasi */}
                   <FormField control={form.control} name="sourceOfInformationId" render={({ field }) => (
@@ -875,14 +933,21 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   {/* Complimentary (Bonus) */}
                   <div className="space-y-2">
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Complimentary (Bonus)</FormLabel>
-                    <SearchableSelect
-                      options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
-                      value=""
-                      onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); }}
-                      placeholder="Pilih vendor..."
-                      searchPlaceholder="Cari vendor..."
-                      emptyText="Tidak ada vendor"
-                    />
+                    {bonusPickerOpen ? (
+                      <SearchableSelect
+                        options={availableVendorsForBonus.map((v) => ({ id: v.id, name: v.name }))}
+                        value=""
+                        onChange={(vendorId) => { const v = allVendors.find((x) => x.id === vendorId); if (v) setBonuses((prev) => [...prev, { vendorId: v.id, vendorCategoryId: v.categoryId, vendorName: v.name, description: "", qty: 1, nominal: 0 }]); setBonusPickerOpen(false); }}
+                        placeholder="Pilih vendor..."
+                        searchPlaceholder="Cari vendor..."
+                        emptyText="Tidak ada vendor"
+                      />
+                    ) : (
+                      <Button type="button" variant="outline" className="w-full rounded-xl border-dashed" onClick={() => setBonusPickerOpen(true)}>
+                        <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-1')} />
+                        Tambah Complimentary
+                      </Button>
+                    )}
                     {bonuses.map((b, idx) => (
                       <div key={idx} className={cn('bg-muted', 'border', 'border-border', 'rounded-md', 'px-3', 'py-2', 'space-y-1.5')}>
                         <div className={cn('flex', 'items-center', 'justify-between', 'gap-2')}>

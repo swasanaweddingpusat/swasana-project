@@ -13,6 +13,9 @@ export const bookingSchema = z.object({
   contactBitrixId: z.string().optional().default(""),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().min(1, "Package wajib dipilih"),
+  // Optional: admin/manager assigns on behalf of a sales. When omitted, the
+  // action falls back to the caller's own profileId.
+  salesId: z.string().optional().nullable(),
   paymentMethodId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   specialBonusName: z.string().optional().nullable(),

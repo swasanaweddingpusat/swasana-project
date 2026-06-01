@@ -256,13 +256,17 @@ export async function createBooking(data: unknown) {
       );
     }
 
+    // Sales auto-detect: use explicit salesId if provided (admin/manager
+    // assigning on behalf), otherwise fall back to the caller's own profile.
+    const salesId = input.salesId ?? session!.user.profileId!;
+
     ops.push(
       db.booking.create({
         data: {
           id: bookingId,
           bookingDate: new Date(input.bookingDate),
-          salesId: session!.user.profileId!,
-          managerId: await resolveManagerId(session!.user.profileId!),
+          salesId,
+          managerId: await resolveManagerId(salesId),
           customerId,
           venueId: input.venueId,
           packageId: input.packageId,
