@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AddCircle, Book } from "@solar-icons/react";
+import { Book } from "@solar-icons/react";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { NotificationBell } from "./notification-bell";
 import { useHeaderAction } from "@/components/providers/header-action-provider";
-import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { Button } from "@/components/ui/button";
-import { usePermissions } from "@/hooks/use-permissions";
 import { usePoll } from "@/hooks/use-poll";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +16,6 @@ export function Header() {
   const pathname = usePathname();
   const meta = resolveRouteMeta(pathname)?.meta;
   const { action } = useHeaderAction();
-  const { openBookingDrawer } = useBookingDrawer();
-  const { can } = usePermissions();
   usePoll();
 
   return (
@@ -41,16 +37,6 @@ export function Header() {
 
       <div className={cn("flex items-center gap-2")}>
         {action}
-        {can("booking", "create") && (
-          <Button
-            size="sm"
-            onClick={openBookingDrawer}
-            className={cn("cursor-pointer")}
-          >
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            <span className={cn("hidden sm:inline ml-1")}>Tambah Booking</span>
-          </Button>
-        )}
         <Button
           variant="outline"
           size="sm"
