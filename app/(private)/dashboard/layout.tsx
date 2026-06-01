@@ -5,6 +5,8 @@ import { Header } from "./_components/header/header";
 import { AuthGate } from "../_components/auth-gate";
 import { HeaderActionProvider } from "@/components/providers/header-action-provider";
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
+import { LeadDrawerProvider } from "@/components/providers/lead-drawer-provider";
+import { MobileBottomNav } from "./_components/mobile-bottom-nav/MobileBottomNav";
 
 export default function DashboardLayout({
   children,
@@ -15,19 +17,22 @@ export default function DashboardLayout({
     <SidebarProvider>
       <HeaderActionProvider>
         <BookingDrawerProvider>
-          <Suspense fallback={null}>
-            <SwasanaSidebar />
-          </Suspense>
-          <SidebarInset>
-            <Suspense>
-              <Header />
+          <LeadDrawerProvider>
+            <Suspense fallback={null}>
+              <SwasanaSidebar />
             </Suspense>
-            <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+            <SidebarInset>
               <Suspense>
-                <AuthGate>{children}</AuthGate>
+                <Header />
               </Suspense>
-            </main>
-          </SidebarInset>
+              <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-6 lg:p-6">
+                <Suspense>
+                  <AuthGate>{children}</AuthGate>
+                </Suspense>
+              </main>
+              <MobileBottomNav />
+            </SidebarInset>
+          </LeadDrawerProvider>
         </BookingDrawerProvider>
       </HeaderActionProvider>
     </SidebarProvider>

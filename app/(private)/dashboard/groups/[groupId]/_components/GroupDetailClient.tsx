@@ -438,7 +438,12 @@ export function GroupDetailClient({
                           src={p.avatarUrl ?? undefined}
                           size="sm"
                         />
-                        <span>{p.fullName ?? p.id}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-foreground">{p.fullName ?? p.id}</p>
+                          {p.email && (
+                            <p className="truncate text-xs text-muted-foreground">{p.email}</p>
+                          )}
+                        </div>
                       </button>
                     ))}
                   {availableProfiles.filter((p) =>

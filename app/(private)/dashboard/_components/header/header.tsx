@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Book } from "@solar-icons/react";
+import { Book, UserPlus } from "@solar-icons/react";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { NotificationBell } from "./notification-bell";
 import { useHeaderAction } from "@/components/providers/header-action-provider";
+import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
+import { PermissionGate } from "@/components/shared/permission-gate";
 import { Button } from "@/components/ui/button";
 import { usePoll } from "@/hooks/use-poll";
 import { cn } from "@/lib/utils";
@@ -16,6 +18,7 @@ export function Header() {
   const pathname = usePathname();
   const meta = resolveRouteMeta(pathname)?.meta;
   const { action } = useHeaderAction();
+  const { openLeadDrawer } = useLeadDrawer();
   usePoll();
 
   return (
@@ -37,6 +40,17 @@ export function Header() {
 
       <div className={cn("flex items-center gap-2")}>
         {action}
+        <PermissionGate module="leads" action="create">
+          <Button
+            variant="default"
+            size="sm"
+            className={cn("cursor-pointer gap-1.5")}
+            onClick={openLeadDrawer}
+          >
+            <UserPlus weight="BoldDuotone" className="h-4 w-4" />
+            <span className={cn("hidden sm:inline")}>Tambah Lead</span>
+          </Button>
+        </PermissionGate>
         <Button
           variant="outline"
           size="sm"

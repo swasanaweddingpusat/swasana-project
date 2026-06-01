@@ -383,7 +383,7 @@ export async function getAvailableSalesProfiles(excludeIds: string[]) {
       id: { notIn: excludeIds },
       status: "active",
     },
-    select: { id: true, fullName: true, avatarUrl: true },
+    select: { id: true, fullName: true, avatarUrl: true, email: true },
     orderBy: { fullName: "asc" },
     take: 200,
   });

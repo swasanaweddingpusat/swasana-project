@@ -250,28 +250,12 @@ export function MiceBookingDrawer({
           <Form {...form}>
             <form className="space-y-5 pb-2">
 
-              {/* === Section: Quotation (deferred) === */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Quotation
-                </p>
-                <div className="w-full">
-                  <p className="text-sm font-medium mb-1.5">Pilih Quotation</p>
-                  <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground cursor-not-allowed select-none">
-                    Modul Quotation menyusul
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    Integrasi quotation akan tersedia di versi berikutnya.
-                  </p>
-                </div>
-              </div>
-
               {/* === Section: Informasi Client === */}
-              <div className="border-t border-border pt-4 space-y-3">
+              <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Informasi Client
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-3">
                   <FormField
                     control={form.control}
                     name="clientName"
@@ -305,6 +289,22 @@ export function MiceBookingDrawer({
                       </FormItem>
                     )}
                   />
+                </div>
+              </div>
+
+              {/* === Section: Quotation (deferred) === */}
+              <div className="border-t border-border pt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Quotation
+                </p>
+                <div className="w-full">
+                  <p className="text-sm font-medium mb-1.5">Pilih Quotation</p>
+                  <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground cursor-not-allowed select-none">
+                    Modul Quotation menyusul
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Integrasi quotation akan tersedia di versi berikutnya.
+                  </p>
                 </div>
               </div>
 
@@ -419,6 +419,73 @@ export function MiceBookingDrawer({
                 />
               </div>
 
+              {/* === Section: Informasi Sales === */}
+              <div className="border-t border-border pt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Informasi Sales
+                </p>
+
+                {currentUserIsSalesMice ? (
+                  /* Current user IS a sales-mice → show read-only */
+                  <div className="w-full">
+                    <p className="text-sm font-medium mb-1.5">Sales *</p>
+                    <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
+                      {currentSalesName ?? "—"}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Booking ini akan tercatat atas nama Anda.
+                    </p>
+                  </div>
+                ) : (
+                  /* Admin / manager → pick from sales-mice list */
+                  <FormField
+                    control={form.control}
+                    name="salesId"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel>Sales</FormLabel>
+                        <FormControl>
+                          <SearchableSelect
+                            options={salesOptions}
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Pilih sales (opsional)..."
+                            searchPlaceholder="Cari sales..."
+                            emptyText="Tidak ada sales MICE"
+                            className="w-full"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+
+              {/* === Section: Catatan === */}
+              <div className="border-t border-border pt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Catatan
+                </p>
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem className="w-full">
+                      <FormLabel>Catatan Tambahan</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={3}
+                          placeholder="Catatan tambahan (opsional)..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               {/* === Section: Informasi Pembayaran === */}
               <div className="border-t border-border pt-4 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -520,73 +587,6 @@ export function MiceBookingDrawer({
                     )}
                   />
                 </div>
-              </div>
-
-              {/* === Section: Informasi Sales === */}
-              <div className="border-t border-border pt-4 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Informasi Sales
-                </p>
-
-                {currentUserIsSalesMice ? (
-                  /* Current user IS a sales-mice → show read-only */
-                  <div className="w-full">
-                    <p className="text-sm font-medium mb-1.5">Sales *</p>
-                    <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed select-none">
-                      {currentSalesName ?? "—"}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Booking ini akan tercatat atas nama Anda.
-                    </p>
-                  </div>
-                ) : (
-                  /* Admin / manager → pick from sales-mice list */
-                  <FormField
-                    control={form.control}
-                    name="salesId"
-                    render={({ field }) => (
-                      <FormItem className="w-full">
-                        <FormLabel>Sales</FormLabel>
-                        <FormControl>
-                          <SearchableSelect
-                            options={salesOptions}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Pilih sales (opsional)..."
-                            searchPlaceholder="Cari sales..."
-                            emptyText="Tidak ada sales MICE"
-                            className="w-full"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </div>
-
-              {/* === Section: Catatan === */}
-              <div className="border-t border-border pt-4 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Catatan
-                </p>
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel>Catatan Tambahan</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          rows={3}
-                          placeholder="Catatan tambahan (opsional)..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
 
               {/* === Section: Tanda Tangan Sales === */}
