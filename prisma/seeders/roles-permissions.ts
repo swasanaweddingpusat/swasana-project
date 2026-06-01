@@ -64,7 +64,8 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view"],
     "finance-ar": ["view"],
-    leads: ["view", "create", "edit", "delete"],
+    // leads:delete is intentionally reserved for super-admin & manager only.
+    leads: ["view", "create", "edit"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
   },
@@ -103,7 +104,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement"],
     customers: ["view", "create", "edit"],
-    groups: ["view", "create", "edit"],
+    groups: ["view"],
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
     leads: ["view", "create", "edit"],
@@ -266,10 +267,13 @@ export async function seedRolesPermissions(): Promise<void> {
     if (!existing) await prisma.rolePermission.create({ data: { roleId: adminRole.id, permissionId: perm.id } });
   }
 
-  // 6. Assign permissions per role from the matrix
+  // 6. Assign permissions per role from the matrix (wipe-and-replace per role for idempotency)
   for (const [roleName, modules] of Object.entries(rolePermissionMap)) {
     const role = await prisma.role.findUnique({ where: { name: roleName } });
     if (!role) continue;
+
+    // Wipe existing assignments for this role so removals take effect
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
 
     for (const [mod, actions] of Object.entries(modules)) {
       for (const action of actions) {
@@ -277,10 +281,7 @@ export async function seedRolesPermissions(): Promise<void> {
           where: { module_action: { module: mod, action } },
         });
         if (!perm) continue;
-        const existing = await prisma.rolePermission.findUnique({
-          where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
-        });
-        if (!existing) await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+        await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
       }
     }
   }
