@@ -179,7 +179,12 @@ function MobileLeadCard({
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            {formatEventDate(lead.eventDate)}
+            <span>
+              <span>{formatEventDate(lead.eventDate)}</span>
+              {lead.time && (
+                <span className="block text-muted-foreground">{lead.time}</span>
+              )}
+            </span>
           </span>
           <span className="flex items-center gap-1">
             <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
@@ -347,6 +352,9 @@ export function LeadsListView({
                     {/* Tablet only: show event date inline since Tanggal Event col is hidden at md */}
                     <div className="text-xs text-muted-foreground mt-0.5 lg:hidden">
                       {formatEventDate(lead.eventDate)}
+                      {lead.time && (
+                        <span className="block text-muted-foreground">{lead.time}</span>
+                      )}
                     </div>
                   </TableCell>
 
@@ -370,8 +378,11 @@ export function LeadsListView({
                   </TableCell>
 
                   {/* Tanggal Event */}
-                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden lg:table-cell">
-                    {formatEventDate(lead.eventDate)}
+                  <TableCell className="px-4 text-foreground/80 hidden lg:table-cell">
+                    <div>{formatEventDate(lead.eventDate)}</div>
+                    {lead.time && (
+                      <div className="text-xs text-muted-foreground">{lead.time}</div>
+                    )}
                   </TableCell>
 
                   {/* Pax */}

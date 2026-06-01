@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { auth } from "@/lib/auth";
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
 import { getGroupsWithPerformance, getEligibleLeaders } from "@/lib/queries/groups";
 import { GroupsClient } from "./_components/GroupsClient";
 
 export default async function GroupsPage() {
+  await connection();
   const session = await auth();
   if (!session?.user.profileId) redirect("/auth/login");
 

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { connection } from "next/server";
 import { auth } from "@/lib/auth";
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
 import {
@@ -17,6 +18,7 @@ interface Props {
 export default async function GroupDetailPage({ params }: Props) {
   const { groupId } = await params;
 
+  await connection();
   const session = await auth();
   if (!session?.user.profileId) redirect("/auth/login");
 

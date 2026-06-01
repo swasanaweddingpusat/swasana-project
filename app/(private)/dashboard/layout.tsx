@@ -30,7 +30,9 @@ export default function DashboardLayout({
                   <AuthGate>{children}</AuthGate>
                 </Suspense>
               </main>
-              <MobileBottomNav />
+              <Suspense fallback={null}>
+                <MobileBottomNav />
+              </Suspense>
             </SidebarInset>
           </LeadDrawerProvider>
         </BookingDrawerProvider>

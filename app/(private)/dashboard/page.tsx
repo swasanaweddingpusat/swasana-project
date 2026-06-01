@@ -73,7 +73,7 @@ export default async function DashboardPage({
   });
 
   return (
-    <div className={cn("flex", "flex-col", "gap-6", "py-6")}>
+    <div className={cn("flex", "flex-col", "gap-6", "pt-3", "pb-6")}>
       {params.error === "forbidden" && (
         <div className={cn("flex", "items-center", "gap-3", "p-4", "bg-destructive/10", "border", "border-destructive/20", "rounded-lg", "text-destructive")}>
           <ShieldCross weight="BoldDuotone" className={cn("h-5", "w-5", "shrink-0")} />
