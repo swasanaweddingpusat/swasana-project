@@ -42,6 +42,7 @@ export const bookingSchema = z.object({
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
   withMaterai: z.boolean().default(false),
+  leadId: z.string().optional().nullable(),
 });
 
 export const updateBookingSchema = z.object({

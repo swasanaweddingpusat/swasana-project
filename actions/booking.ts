@@ -29,9 +29,39 @@ export async function createBooking(data: unknown) {
   try {
     let customerId = input.customerId;
     let isNewCustomer = false;
+    // leadId — set when booking is created from a Lead (not from existing Customer)
+    const leadId = input.leadId ?? null;
+    // When lead already converted → reuse existing customer; otherwise create new
+    let leadRecord: { id: string; name: string; email: string | null; contactNumbers: unknown; address: string | null; bitrixId: string | null; sourceOfInformationId: string | null; convertedToCustomerId: string | null } | null = null;
 
-    // Resolve customer: validate existing or prepare new
-    if (!customerId && input.customerName) {
+    if (leadId) {
+      leadRecord = await db.lead.findUnique({
+        where: { id: leadId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          contactNumbers: true,
+          address: true,
+          bitrixId: true,
+          sourceOfInformationId: true,
+          convertedToCustomerId: true,
+        },
+      });
+      if (!leadRecord) return { success: false, error: "Lead tidak ditemukan." };
+
+      if (leadRecord.convertedToCustomerId) {
+        // Lead sudah pernah dikonversi — reuse existing customer
+        customerId = leadRecord.convertedToCustomerId;
+        const existing = await db.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+        if (!existing) return { success: false, error: "Customer dari lead tidak ditemukan." };
+      } else {
+        // Lead belum pernah dikonversi — buat customer baru dari data lead
+        customerId = crypto.randomUUID();
+        isNewCustomer = true;
+      }
+    } else if (!customerId && input.customerName) {
+      // Fallback: booking tanpa lead, tanpa existing customer — buat baru dari input manual
       customerId = crypto.randomUUID();
       isNewCustomer = true;
     } else if (customerId) {
@@ -79,16 +109,36 @@ export async function createBooking(data: unknown) {
       }),
     ]);
 
-    // Build customer data (from input for new, from DB for existing)
+    // Map lead contactNumbers format { label, number } → customer format { name, number }
+    function mapLeadContactNumbers(raw: unknown): Array<{ name: string; number: string }> {
+      if (!Array.isArray(raw)) return [];
+      return (raw as Array<Record<string, unknown>>).map((e) => ({
+        name: typeof e.label === "string" ? e.label : typeof e.name === "string" ? e.name : "",
+        number: typeof e.number === "string" ? e.number : "",
+      })).filter((e) => e.number);
+    }
+
+    // Build customer data (from input for new/lead-from-input, from DB for existing)
     const customerData = isNewCustomer
-      ? {
-          id: customerId,
-          name: input.customerName!,
-          mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
-          email: input.contactEmail || "-@placeholder.com",
-          nikNumber: input.contactNik || null,
-          ktpAddress: input.contactKtpAddress || null,
-        }
+      ? leadRecord
+        ? {
+            // Customer baru dari lead data
+            id: customerId,
+            name: leadRecord.name,
+            mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers),
+            email: leadRecord.email || "-@placeholder.com",
+            nikNumber: null as string | null,
+            ktpAddress: leadRecord.address ?? null,
+          }
+        : {
+            // Customer baru dari input manual (fallback path)
+            id: customerId,
+            name: input.customerName!,
+            mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
+            email: input.contactEmail || "-@placeholder.com",
+            nikNumber: input.contactNik || null,
+            ktpAddress: input.contactKtpAddress || null,
+          }
       : {
           id: existingCustomer!.id,
           name: existingCustomer!.name,
@@ -134,22 +184,44 @@ export async function createBooking(data: unknown) {
     const ops: Prisma.PrismaPromise<unknown>[] = [];
 
     if (isNewCustomer) {
-      ops.push(
-        db.customer.create({
-          data: {
-            id: customerId,
-            name: input.customerName!,
-            mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
-            email: input.contactEmail || "-@placeholder.com",
-            nikNumber: input.contactNik || null,
-            ktpAddress: input.contactKtpAddress || null,
-            bitrixId: input.contactBitrixId || null,
-            type: "Other",
-            memberStatus: "Non-Member",
-            updatedBy: session!.user.name ?? session!.user.email,
-          },
-        })
-      );
+      if (leadRecord) {
+        // Create customer from lead data — mapping contactNumbers label→name
+        ops.push(
+          db.customer.create({
+            data: {
+              id: customerId,
+              name: leadRecord.name,
+              mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers) as Prisma.InputJsonValue,
+              email: leadRecord.email || "-@placeholder.com",
+              nikNumber: null,
+              ktpAddress: leadRecord.address ?? null,
+              bitrixId: leadRecord.bitrixId ?? null,
+              sourceOfInformationId: leadRecord.sourceOfInformationId ?? null,
+              type: "Other",
+              memberStatus: "Non-Member",
+              updatedBy: session!.user.name ?? session!.user.email,
+            },
+          })
+        );
+      } else {
+        // Create customer from manual input (fallback path — no lead)
+        ops.push(
+          db.customer.create({
+            data: {
+              id: customerId,
+              name: input.customerName!,
+              mobileNumber: input.contactNumbers ? JSON.parse(input.contactNumbers) : [],
+              email: input.contactEmail || "-@placeholder.com",
+              nikNumber: input.contactNik || null,
+              ktpAddress: input.contactKtpAddress || null,
+              bitrixId: input.contactBitrixId || null,
+              type: "Other",
+              memberStatus: "Non-Member",
+              updatedBy: session!.user.name ?? session!.user.email,
+            },
+          })
+        );
+      }
     } else {
       const updates: Record<string, unknown> = {};
       if (input.contactNumbers) updates.mobileNumber = JSON.parse(input.contactNumbers);
@@ -161,6 +233,27 @@ export async function createBooking(data: unknown) {
         updates.updatedBy = session!.user.name ?? session!.user.email;
         ops.push(db.customer.update({ where: { id: customerId }, data: updates }));
       }
+    }
+
+    // If booking created from a lead → update lead.convertedTo* fields atomically
+    // - convertedToCustomerId: only set first time (dedup: if already set, keep existing)
+    // - convertedToBookingId: update to latest booking (so lead tracks last booking created from it)
+    // - convertedAt: only set first time
+    if (leadRecord) {
+      const leadUpdateData: Record<string, unknown> = {
+        convertedToBookingId: bookingId,
+      };
+      if (!leadRecord.convertedToCustomerId) {
+        // First conversion — stamp customer + timestamp
+        leadUpdateData.convertedToCustomerId = customerId;
+        leadUpdateData.convertedAt = new Date();
+      }
+      ops.push(
+        db.lead.update({
+          where: { id: leadRecord.id },
+          data: leadUpdateData,
+        })
+      );
     }
 
     ops.push(
@@ -355,8 +448,8 @@ export async function createBooking(data: unknown) {
       action: "created",
       entityType: "booking",
       entityId: bookingId,
-      changes: { customerId, venueId: input.venueId, packageId: input.packageId, withMaterai: input.withMaterai ?? false },
-      description: `Created booking for ${customerData.name}`,
+      changes: { customerId, venueId: input.venueId, packageId: input.packageId, withMaterai: input.withMaterai ?? false, ...(leadId ? { leadId } : {}) },
+      description: `Created booking for ${customerData.name}${leadId ? " (from lead)" : ""}`,
     });
 
     // Create initial PO revision snapshot + link approval steps
@@ -368,6 +461,7 @@ export async function createBooking(data: unknown) {
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
+    if (leadRecord) revalidateTag("leads", "max");
 
     // Notify all super admins about new booking (exclude creator)
     notifySuperAdmins({

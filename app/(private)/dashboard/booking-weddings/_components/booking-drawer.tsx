@@ -8,7 +8,6 @@ import { format, startOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
-import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
-import { cn } from "@/lib/utils";
+import { cn, formatRupiah } from "@/lib/utils";
 import { useCreateBooking } from "@/hooks/use-bookings";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
@@ -31,6 +30,7 @@ interface BookingDrawerProps {
 
 type Option = { id: string; name: string };
 interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
+interface LeadOption { id: string; name: string; email: string | null; contactNumbers: Array<{ label?: string; name?: string; number: string }>; address: string | null; sourceOfInformation: { id: string; name: string } | null; bitrixId: string | null; convertedToCustomerId: string | null }
 interface CategoryPriceEntry {
   id: string;
   categoryName: string;
@@ -127,6 +127,7 @@ const DRAFT_KEY = "booking_draft";
 interface BookingDraft {
   currentStep: number;
   customerName: string;
+  selectedLeadId: string;
   contactNumbers: MobileNumberEntry[];
   contactEmail: string;
   contactNik: string;
@@ -176,13 +177,26 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [selectedLeadId, setSelectedLeadId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(customerSearch), 300);
     return () => clearTimeout(t);
   }, [customerSearch]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setCustomerDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const { data: customersResult } = useQuery({
     queryKey: ["customers", debouncedSearch],
@@ -191,6 +205,14 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     staleTime: 30_000,
   });
   const customers = customersResult?.data ?? [];
+
+  const { data: leadsResult } = useQuery({
+    queryKey: ["leads-search", debouncedSearch],
+    queryFn: () => fetchJson<{ items: LeadOption[] }>(`/api/leads?search=${encodeURIComponent(debouncedSearch)}&pageSize=5`),
+    enabled: debouncedSearch.length >= 1,
+    staleTime: 30_000,
+  });
+  const leadOptions = leadsResult?.items ?? [];
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
   const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
@@ -266,6 +288,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       if (draft) {
         setCurrentStep(draft.currentStep);
         setCustomerName(draft.customerName);
+        setSelectedLeadId(draft.selectedLeadId ?? "");
         setContactNumbers(draft.contactNumbers);
         setContactEmail(draft.contactEmail);
         setContactNik(draft.contactNik);
@@ -289,7 +312,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
         setBonuses([]); setTerms(makeDefaultTerms());
         setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
         setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
-        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName("");
+        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
         setTakeoutPrices({});
         setCategoryToggles({});
         sigSalesRef.current?.clear();
@@ -304,15 +327,15 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => {
       saveDraft({
-        currentStep, customerName, contactNumbers, contactEmail, contactNik,
+        currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik,
         contactKtpAddress,
-      contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
+        contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
         specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice,
         bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles,
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, currentStep, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBasePrice = () => selectedPackagePrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
@@ -429,6 +452,7 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
       specialBonusAmount: specialBonusAmount || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
+      leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
       categoryToggles: allCategoryPrices.map((c) => ({
@@ -478,39 +502,95 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
               {/* ─── Step 1: Data Booking ─── */}
               {currentStep === 1 && (
                 <div className="space-y-3">
-                  {/* Customer */}
-                  {/* Customer */}
-                  <div>
+                  {/* Customer / Lead selector */}
+                  <div ref={customerDropdownRef}>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Customer Name *</FormLabel>
-                    <AutocompleteInput
-                      options={customers.map((c) => ({ id: c.id, name: c.name }))}
-                      value={customerName}
-                      onChange={(val) => {
-                        setCustomerName(val);
-                        setCustomerSearch(val);
-                        form.setValue("customerId", "");
-                      }}
-                      onSelect={(opt) => {
-                        setCustomerName(opt.name);
-                        form.setValue("customerId", opt.id);
-                        const c = customers.find((x) => x.id === opt.id);
-                        if (c) {
-                          if (c.mobileNumber) {
-                            const entries = Array.isArray(c.mobileNumber)
-                              ? (c.mobileNumber as MobileNumberEntry[])
-                              : String(c.mobileNumber).split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
-                            setContactNumbers(entries);
-                          }
-                          if (c.email) setContactEmail(c.email);
-                          if (c.nikNumber) setContactNik(c.nikNumber);
-                          if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
-                          if (c.bitrixId) setContactBitrixId(c.bitrixId);
-                          if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
-                        }
-                      }}
-                      placeholder="e.g. John Doe & Jane Doe"
-                      className="mt-1"
-                    />
+                    {selectedLeadId && (
+                      <p className={cn('text-xs', 'text-[var(--brand-gold)]', 'mt-0.5')}>Dari Lead — konversi otomatis saat booking dibuat</p>
+                    )}
+                    <div className="relative mt-1">
+                      <Input
+                        value={customerName}
+                        onChange={(e) => {
+                          setCustomerName(e.target.value);
+                          setCustomerSearch(e.target.value);
+                          form.setValue("customerId", "");
+                          setSelectedLeadId("");
+                          setCustomerDropdownOpen(true);
+                        }}
+                        onFocus={() => { if (customerName.trim()) setCustomerDropdownOpen(true); }}
+                        placeholder="Cari lead atau customer terdaftar..."
+                        className="w-full"
+                      />
+                      {customerDropdownOpen && customerName.trim() && (leadOptions.length > 0 || customers.length > 0) && (
+                        <div className="absolute z-50 w-full mt-1 max-h-80 overflow-auto rounded-xl border bg-background shadow-md">
+                          {leadOptions.length > 0 && (
+                            <div>
+                              <p className={cn('px-3', 'pt-2', 'pb-1', 'text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Dari Leads</p>
+                              {leadOptions.map((lead) => (
+                                <div
+                                  key={lead.id}
+                                  className={cn('cursor-pointer', 'px-3', 'py-2', 'text-sm', 'hover:bg-accent', 'transition-colors')}
+                                  onClick={() => {
+                                    setCustomerName(lead.name);
+                                    setSelectedLeadId(lead.id);
+                                    form.setValue("customerId", "");
+                                    // Auto-populate: contactNumbers (label→name mapping)
+                                    if (Array.isArray(lead.contactNumbers) && lead.contactNumbers.length > 0) {
+                                      const mapped = lead.contactNumbers.map((e) => ({
+                                        name: e.label ?? e.name ?? "",
+                                        number: e.number,
+                                      })).filter((e) => e.number);
+                                      setContactNumbers(mapped);
+                                    }
+                                    if (lead.email) setContactEmail(lead.email);
+                                    if (lead.address) setContactKtpAddress(lead.address);
+                                    if (lead.bitrixId) setContactBitrixId(lead.bitrixId);
+                                    if (lead.sourceOfInformation?.id) form.setValue("sourceOfInformationId", lead.sourceOfInformation.id);
+                                    setCustomerDropdownOpen(false);
+                                  }}
+                                >
+                                  <p className="font-medium">{lead.name}</p>
+                                  {lead.email && <p className="text-xs text-muted-foreground">{lead.email}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {customers.length > 0 && (
+                            <div>
+                              {leadOptions.length > 0 && <div className="border-t my-1" />}
+                              <p className={cn('px-3', 'pt-2', 'pb-1', 'text-xs', 'font-semibold', 'text-muted-foreground', 'uppercase', 'tracking-wide')}>Customer Terdaftar</p>
+                              {customers.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className={cn('cursor-pointer', 'px-3', 'py-2', 'text-sm', 'hover:bg-accent', 'transition-colors')}
+                                  onClick={() => {
+                                    setCustomerName(c.name);
+                                    form.setValue("customerId", c.id);
+                                    setSelectedLeadId("");
+                                    if (c.mobileNumber) {
+                                      const entries = Array.isArray(c.mobileNumber)
+                                        ? (c.mobileNumber as MobileNumberEntry[])
+                                        : String(c.mobileNumber).split(",").map((n) => ({ name: "", number: n.trim() })).filter((e) => e.number);
+                                      setContactNumbers(entries);
+                                    }
+                                    if (c.email) setContactEmail(c.email);
+                                    if (c.nikNumber) setContactNik(c.nikNumber);
+                                    if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
+                                    if (c.bitrixId) setContactBitrixId(c.bitrixId);
+                                    if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
+                                    setCustomerDropdownOpen(false);
+                                  }}
+                                >
+                                  <p className="font-medium">{c.name}</p>
+                                  {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Contact Person */}
@@ -651,7 +731,25 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: p.packageName }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Event Type */}
+                  <FormField control={form.control} name="weddingType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Type *</FormLabel>
+                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="R">Resepsi</SelectItem>
+                          <SelectItem value="AR">Akad & Resepsi</SelectItem>
+                          <SelectItem value="TR">Teapai & Resepsi</SelectItem>
+                          <SelectItem value="PR">Pemberkatan Resepsi</SelectItem>
+                          <SelectItem value="VO">Venue Only</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -715,24 +813,6 @@ export function BookingDrawer({ open, onOpenChange }: BookingDrawerProps) {
                             const labels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
                             return sessions.map((s) => <SelectItem key={s} value={s}>{labels[s]}</SelectItem>);
                           })()}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-
-                  {/* Event Type */}
-                  <FormField control={form.control} name="weddingType" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Type *</FormLabel>
-                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="R">Resepsi</SelectItem>
-                          <SelectItem value="AR">Akad & Resepsi</SelectItem>
-                          <SelectItem value="TR">Teapai & Resepsi</SelectItem>
-                          <SelectItem value="PR">Pemberkatan Resepsi</SelectItem>
-                          <SelectItem value="VO">Venue Only</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
