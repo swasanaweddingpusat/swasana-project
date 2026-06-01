@@ -424,12 +424,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
     if (!open || prefillLead) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => {
+      // Strip File payment evidence before persisting — File can't survive JSON
+      // serialization and would restore as a broken {} (truthy but unusable).
+      const draftTerms = terms.map((t) =>
+        t.paymentEvidence instanceof File ? { ...t, paymentEvidence: null } : t,
+      );
       saveDraft({
         currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik,
         contactKtpAddress,
         contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
         specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice,
-        bonuses, terms, formValues: form.getValues(), takeoutPrices, categoryToggles, time,
+        bonuses, terms: draftTerms, formValues: form.getValues(), takeoutPrices, categoryToggles, time,
       });
     }, 500);
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
@@ -620,8 +625,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
 
-    // Upload payment evidence per term jika ada
-    const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence);
+    // Upload payment evidence per term jika ada.
+    // Guard `instanceof File`: a restored draft turns File → {} (JSON can't
+    // serialize File), which is truthy but not uploadable.
+    const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
     if (termsWithEvidence.length > 0 && result.termIds?.length) {
       await Promise.allSettled(
         termsWithEvidence.map((t) => {
@@ -1363,7 +1370,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                                       )}
                                       <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
                                     </div>
-                                    <p className="mt-1 text-xs text-muted-foreground">
+                                    <p className="mt-1 text-xs text-destructive">
                                       Bukti pembayaran wajib diupload untuk melanjutkan ke langkah berikutnya.
                                     </p>
                                   </div>

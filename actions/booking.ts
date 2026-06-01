@@ -63,21 +63,48 @@ export async function createBooking(data: unknown) {
       } else {
         // Lead belum pernah dikonversi — buat customer baru dari data lead.
         //
-        // Race-condition guard (optimistic lock):
-        // Two concurrent requests both reading convertedToCustomerId=null would
-        // both try to create a new customer and stamp the lead.
-        // We prevent this by claiming the lock HERE, before the main transaction,
-        // using updateMany(WHERE convertedToCustomerId IS NULL).
-        // Only one request wins (count=1); the other gets count=0 → return early.
-        // This means a duplicate customer is never created because we only generate
-        // customerId and proceed to the transaction after winning the lock.
+        // Race-condition guard (create-then-lock pattern):
+        // Step 1: Create the customer row first (standalone, outside main transaction).
+        //         FK constraint on leads.convertedToCustomerId requires the customer to
+        //         exist before the lead row is stamped — the previous "stamp-then-create"
+        //         approach caused P2003 every time.
+        // Step 2: Claim the conversion lock via updateMany(WHERE convertedToCustomerId IS NULL).
+        //         Only one concurrent winner (count=1); loser (count=0) cleans up the orphan
+        //         customer it just created and reuses the winner's customerId.
+        // Self-healing: if the main transaction fails after the customer is created and the lead
+        //         is stamped, the next attempt finds convertedToCustomerId already set and falls
+        //         into the "reuse existing customer" path (lines above) — no permanent deadlock.
         customerId = crypto.randomUUID();
+
+        // Step 1: create customer row so FK is satisfiable before the stamp.
+        await db.customer.create({
+          data: {
+            id: customerId,
+            name: leadRecord.name,
+            mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers) as Prisma.InputJsonValue,
+            email: leadRecord.email || "-@placeholder.com",
+            nikNumber: null,
+            ktpAddress: leadRecord.address ?? null,
+            bitrixId: leadRecord.bitrixId ?? null,
+            sourceOfInformationId: leadRecord.sourceOfInformationId ?? null,
+            type: "Other",
+            memberStatus: "Non-Member",
+            updatedBy: session!.user.name ?? session!.user.email,
+          },
+        });
+
+        // Step 2: claim the conversion lock — FK is now valid.
         const lockResult = await db.lead.updateMany({
           where: { id: leadRecord.id, convertedToCustomerId: null },
           data: { convertedToCustomerId: customerId },
         });
+
         if (lockResult.count === 0) {
-          // Another concurrent request already converted this lead — re-read and reuse
+          // Lost the race — a concurrent request already stamped the lead.
+          // Delete the orphan customer we created, then reuse the winner's customer.
+          await db.customer.delete({ where: { id: customerId } }).catch(() => {
+            // Deletion is best-effort; if it fails the row stays as a harmless orphan.
+          });
           const refreshed = await db.lead.findUnique({
             where: { id: leadRecord.id },
             select: { convertedToCustomerId: true },
@@ -91,7 +118,10 @@ export async function createBooking(data: unknown) {
             return { success: false, error: "Gagal mengkonversi lead, coba lagi." };
           }
         } else {
-          isNewCustomer = true;
+          // Won the race — customer already created standalone; do NOT create again in ops[].
+          // isNewCustomer stays false so ops[] skips db.customer.create for this path.
+          // didLockLeadConversion = true tells ops[] to stamp convertedAt on the lead.
+          isNewCustomer = false;
           didLockLeadConversion = true;
           // Update leadRecord reference so the stamp is not re-applied in ops[]
           leadRecord = { ...leadRecord, convertedToCustomerId: customerId };
@@ -280,30 +310,6 @@ export async function createBooking(data: unknown) {
       }
     }
 
-    // If booking created from a lead → update lead.convertedTo* fields atomically.
-    // convertedToCustomerId is already stamped outside via optimistic lock (didLockLeadConversion),
-    // so here we only need to:
-    //   • stamp convertedAt + convertedToBookingId + statusId for first conversion
-    //   • stamp convertedToBookingId + statusId for already-converted leads
-    if (leadRecord) {
-      const leadUpdateData: Record<string, unknown> = {
-        convertedToBookingId: bookingId,
-      };
-      if (didLockLeadConversion) {
-        // First conversion — stamp timestamp (convertedToCustomerId already set above)
-        leadUpdateData.convertedAt = new Date();
-      }
-      if (convertedStatus) {
-        leadUpdateData.statusId = convertedStatus.id;
-      }
-      ops.push(
-        db.lead.update({
-          where: { id: leadRecord.id },
-          data: leadUpdateData,
-        })
-      );
-    }
-
     // Sales auto-detect: use explicit salesId if provided (admin/manager
     // assigning on behalf), otherwise fall back to the caller's own profile.
     const salesId = input.salesId ?? session!.user.profileId!;
@@ -364,6 +370,33 @@ export async function createBooking(data: unknown) {
         },
       }),
     );
+
+    // If booking created from a lead → update lead.convertedTo* fields atomically.
+    // MUST be pushed AFTER db.booking.create above: the convertedToBookingId FK
+    // (leads_convertedToBookingId_fkey) requires the booking row to exist first.
+    // Neon HTTP array transactions execute ops in order and check FKs per-statement.
+    // convertedToCustomerId is already stamped outside via optimistic lock (didLockLeadConversion),
+    // so here we only need to:
+    //   • stamp convertedAt + convertedToBookingId + statusId for first conversion
+    //   • stamp convertedToBookingId + statusId for already-converted leads
+    if (leadRecord) {
+      const leadUpdateData: Record<string, unknown> = {
+        convertedToBookingId: bookingId,
+      };
+      if (didLockLeadConversion) {
+        // First conversion — stamp timestamp (convertedToCustomerId already set above)
+        leadUpdateData.convertedAt = new Date();
+      }
+      if (convertedStatus) {
+        leadUpdateData.statusId = convertedStatus.id;
+      }
+      ops.push(
+        db.lead.update({
+          where: { id: leadRecord.id },
+          data: leadUpdateData,
+        })
+      );
+    }
 
     // Snapshot package pax + pricing (with takeout toggle support)
     {
