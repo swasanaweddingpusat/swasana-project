@@ -127,9 +127,10 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
 
   // ─── Customers ─────────────────────────────────────────────────────────────
-  "/dashboard/customers": {
+  "/dashboard/settings/customer": {
     title: "Customers",
     subtitle: "Kelola data customer",
+    parent: "/dashboard/settings",
   },
 
   // ─── Calendar Events ──────────────────────────────────────────────────────

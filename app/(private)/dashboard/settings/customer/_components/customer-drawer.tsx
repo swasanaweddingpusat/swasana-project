@@ -16,7 +16,7 @@ import { useCreateCustomer, useUpdateCustomer } from "@/hooks/use-customers";
 import { createSourceOfInformation } from "@/actions/source-of-information";
 import { createMemberStatus } from "@/actions/member-status";
 import type { CustomerItem } from "@/lib/queries/customers";
-import { cn } from "../../../../../lib/utils";
+import { cn } from "@/lib/utils";
 
 interface CustomerDrawerProps {
   open: boolean;

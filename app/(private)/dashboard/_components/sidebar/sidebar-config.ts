@@ -27,7 +27,6 @@ import {
   UserHands,
   GraphNew,
   TicketSale,
-  UserRounded,
   Settings,
   Volume,
   Bill,
@@ -70,6 +69,7 @@ export const SETTINGS_MODULES = [
   "settings-role-permission",
   "settings-source-of-information",
   "settings-lead-status",
+  "customers",
 ] as const;
 
 export const navItems: NavItem[] = [
@@ -119,12 +119,6 @@ export const navItems: NavItem[] = [
     href: "/dashboard/purchase-order",
     icon: Bill,
     permission: { module: "vendor-specialist", action: "view" },
-  },
-  {
-    name: "Customers",
-    href: "/dashboard/customers",
-    icon: UserRounded,
-    permission: { module: "customers", action: "view" },
   },
   {
     name: "Finance",
