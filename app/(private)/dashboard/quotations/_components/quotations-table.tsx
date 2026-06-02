@@ -515,14 +515,14 @@ export function QuotationsTable() {
                       <TableHead className="w-[4%] text-center">#</TableHead>
                       {/* Customer — 18% — always visible */}
                       <TableHead className="w-[18%]">Customer</TableHead>
-                      {/* Venue — 14% — always visible */}
-                      <TableHead className="w-[14%]">Venue</TableHead>
-                      {/* Paket / Varian — 22% — hidden on xs, visible sm+ */}
-                      <TableHead className="w-[22%] hidden sm:table-cell">
-                        Paket / Varian
+                      {/* Venue — 18% — always visible */}
+                      <TableHead className="w-[18%]">Venue</TableHead>
+                      {/* Sales — 16% — hidden on xs, visible sm+ */}
+                      <TableHead className="w-[16%] hidden sm:table-cell">
+                        Sales
                       </TableHead>
-                      {/* Event — 14% — hidden until lg */}
-                      <TableHead className="w-[14%] hidden lg:table-cell">
+                      {/* Event — 18% — hidden until lg */}
+                      <TableHead className="w-[18%] hidden lg:table-cell">
                         Event
                       </TableHead>
                       {/* Total — 14% — always visible, right-aligned */}
@@ -585,18 +585,20 @@ export function QuotationsTable() {
                             </span>
                           </TableCell>
 
-                          {/* Paket / Varian — hidden xs */}
+                          {/* Sales — hidden xs */}
                           <TableCell className="min-w-0 hidden sm:table-cell">
                             <div className="min-w-0">
-                              <span className="block truncate text-xs font-medium uppercase tracking-wide text-foreground">
-                                {q.variantName}
-                              </span>
                               <span
-                                title={q.packageName}
-                                className="block truncate text-xs text-muted-foreground"
+                                title={q.salesName}
+                                className="block truncate text-sm text-foreground"
                               >
-                                {q.packageName}
+                                {q.salesName || "—"}
                               </span>
+                              {q.salesPhone && (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {q.salesPhone}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
 
