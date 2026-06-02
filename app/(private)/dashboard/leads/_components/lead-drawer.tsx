@@ -30,7 +30,12 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Calendar as CalendarSolarIcon, CloseCircle } from "@solar-icons/react";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn } from "@/lib/utils";
-import { createLeadSchema } from "@/lib/validations/lead";
+import {
+  getWeddingTimeRange,
+  type WeddingEventType,
+  type WeddingSession,
+} from "@/lib/constants/wedding-session-times";
+import { createLeadSchema, updateLeadSchema } from "@/lib/validations/lead";
 import type { CreateLeadInput } from "@/lib/validations/lead";
 import type { LeadListItem, ContactNumber } from "@/types/lead";
 import { useCreateLead, useUpdateLead } from "@/hooks/use-leads";
@@ -78,6 +83,16 @@ const SESSION_LABELS: Record<string, string> = {
   evening: "Malam",
   fullday: "Full Day",
 };
+
+/** Map event type code → WeddingEventType for time auto-fill.
+ *  Only R (Resepsi) and AR (Akad & Resepsi) have standard session times.
+ *  All other codes return "" (user fills manually). */
+function mapCodeToWeddingEventType(code: string): WeddingEventType | "" {
+  if (code === "R") return "resepsi";
+  if (code === "AR") return "akad-dan-resepsi";
+  if (code === "A") return "akad";
+  return "";
+}
 
 const DEFAULT_VALUES: LeadFormValues = {
   name: "",
@@ -296,6 +311,19 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     }
   }, [open, isEdit, currentUserIsSales, user?.profileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-fill time from session + event type code (weddings only).
+  // Mirrors the same logic in booking-drawer and quotation-drawer.
+  useEffect(() => {
+    if (!isWeddings) return;
+    const et = eventTypes.find((e) => e.id === watchedEventTypeId);
+    if (!et) return;
+    const weddingEventType = mapCodeToWeddingEventType(et.code);
+    const autoTime = getWeddingTimeRange(watchedWeddingSession as WeddingSession | "", weddingEventType);
+    if (autoTime) {
+      form.setValue("time", autoTime);
+    }
+  }, [watchedEventTypeId, watchedWeddingSession, isWeddings]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Persist draft on form field changes (create mode only)
   useEffect(() => {
     if (!open || isEdit) return;
@@ -361,21 +389,25 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       bitrixId: isBitrixSource ? bitrixId || null : null,
     };
 
-    const validated = createLeadSchema.safeParse(payload);
+    // Edit mode: use partial schema (updateLeadSchema) so fields like
+    // weddingSession that may be null on old leads don't block the update.
+    const schema = isEdit ? updateLeadSchema : createLeadSchema;
+    const editPayload = isEdit ? { ...payload, id: editLead!.id } : payload;
+    const validated = schema.safeParse(editPayload);
     if (!validated.success) {
       toast.error(validated.error.issues[0].message);
       return;
     }
 
     if (isEdit && editLead) {
-      const result = await updateLead({ ...validated.data, id: editLead.id });
+      const result = await updateLead(validated.data as Parameters<typeof updateLead>[0]);
       if (!result.success) {
         toast.error(result.error ?? "Gagal menyimpan lead.");
         return;
       }
       toast.success("Lead berhasil diperbarui.");
     } else {
-      const result = await createLead(validated.data);
+      const result = await createLead(validated.data as CreateLeadInput);
       if (!result.success) {
         toast.error(result.error ?? "Gagal menyimpan lead.");
         return;
@@ -529,102 +561,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
-              {/* Status */}
-              <FormField
-                control={form.control}
-                name="statusId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status *</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      disabled={statuses.length === 0}
-                    >
-                      <FormControl>
-                        <SelectTrigger className={cn("w-full", statuses.length === 0 && "opacity-60")}>
-                          <SelectValue placeholder="Pilih status..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {statuses.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            <span className="flex items-center gap-2">
-                              <span
-                                className="inline-block w-2 h-2 rounded-full shrink-0"
-                                style={{ backgroundColor: s.color }}
-                              />
-                              {s.name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Tipe Booking */}
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipe Booking *</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={(v) => {
-                        field.onChange(v);
-                        form.setValue("eventTypeId", "");
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih tipe booking..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="WEDDINGS">Wedding</SelectItem>
-                        <SelectItem value="MICE">MICE</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Event Type */}
-              <FormField
-                control={form.control}
-                name="eventTypeId"
-                render={({ field }) => {
-                  const filteredEventTypes = eventTypes.filter(
-                    (et) => et.category === watchedCategory,
-                  );
-                  return (
-                    <FormItem>
-                      <FormLabel>Event Type *</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih event type..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredEventTypes.map((et) => (
-                            <SelectItem key={et.id} value={et.id}>
-                              {et.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-
               {/* Assigned To */}
               {currentUserIsSales ? (
                 /* Logged-in user is a sales → locked to themselves */
@@ -661,6 +597,42 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 />
               )}
 
+              {/* Status */}
+              <FormField
+                control={form.control}
+                name="statusId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status *</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={statuses.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger className={cn("w-full", statuses.length === 0 && "opacity-60")}>
+                          <SelectValue placeholder="Pilih status..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {statuses.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <span className="flex items-center gap-2">
+                              <span
+                                className="inline-block w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: s.color }}
+                              />
+                              {s.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Venue */}
               <FormField
                 control={form.control}
@@ -683,6 +655,35 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                             {v.name}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Tipe Booking */}
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipe Booking *</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => {
+                        field.onChange(v);
+                        form.setValue("eventTypeId", "");
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih tipe booking..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="WEDDINGS">Wedding</SelectItem>
+                        <SelectItem value="MICE">MICE</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -760,6 +761,37 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
+              {/* Event Type */}
+              <FormField
+                control={form.control}
+                name="eventTypeId"
+                render={({ field }) => {
+                  const filteredEventTypes = eventTypes.filter(
+                    (et) => et.category === watchedCategory,
+                  );
+                  return (
+                    <FormItem>
+                      <FormLabel>Event Type *</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Pilih event type..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredEventTypes.map((et) => (
+                            <SelectItem key={et.id} value={et.id}>
+                              {et.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
               {/* Session */}
               <FormField
                 control={form.control}
@@ -798,18 +830,33 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
               <FormField
                 control={form.control}
                 name="time"
-                render={({ field }) => (
-                  <FormItem className="flex w-full flex-col">
-                    <FormLabel>Time *</FormLabel>
-                    <FormControl>
-                      <TimeRangePicker
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Pilih waktu (bisa rentang)..."
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const et = eventTypes.find((e) => e.id === watchedEventTypeId);
+                  const hasAutoTime =
+                    isWeddings &&
+                    !!watchedWeddingSession &&
+                    !!et &&
+                    !!mapCodeToWeddingEventType(et.code);
+                  return (
+                    <FormItem className="flex w-full flex-col">
+                      <FormLabel>
+                        Time *
+                        {hasAutoTime && (
+                          <span className="ml-2 font-normal text-muted-foreground text-xs">
+                            (auto-filled, bisa diubah manual)
+                          </span>
+                        )}
+                      </FormLabel>
+                      <FormControl>
+                        <TimeRangePicker
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Pilih waktu (bisa rentang)..."
+                        />
+                      </FormControl>
+                    </FormItem>
+                  );
+                }}
               />
 
               {/* Estimasi Pax */}

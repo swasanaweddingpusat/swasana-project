@@ -17,7 +17,7 @@ const roleData = [
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -58,7 +58,7 @@ const moduleActions: Record<string, string[]> = {
 // "super-admin" gets ALL permissions (handled separately).
 const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "direktur-sales": {
-    booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "comment", "print", "client-agreement"],
+    booking: ["view", "create", "edit", "approve", "mark-lost", "transfer", "transfer-manager", "comment", "print", "client-agreement"],
     customers: ["view", "create", "edit"],
     groups: ["view", "view-all", "create", "edit", "delete"],
     package: ["view"],
@@ -71,7 +71,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   },
   // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement"],
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     customers: ["view", "create", "edit", "delete"],
     "finance-ar": ["view", "create", "edit", "delete"],

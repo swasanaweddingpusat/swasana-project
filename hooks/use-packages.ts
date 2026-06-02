@@ -13,6 +13,7 @@ import {
   savePackagePrices,
   updatePackageTC,
   togglePackageAvailable,
+  unverifyPackage,
 } from "@/actions/package";
 import type { PackagesQueryResult } from "@/lib/queries/packages";
 import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
@@ -123,6 +124,14 @@ export function useUpdatePackageTC() {
   return useMutation({
     mutationFn: ({ packageId, termAndCondition }: { packageId: string; termAndCondition: string | null }) =>
       updatePackageTC(packageId, termAndCondition),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function useUnverifyPackage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unverifyPackage(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }

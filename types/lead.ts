@@ -65,6 +65,27 @@ export type LeadListItem = {
   updatedAt: Date;
 };
 
+// Payload passed from a Lead into a booking drawer (wedding or MICE) to
+// pre-fill the create form. All fields optional — the drawer fills what it can.
+export type BookingPrefillLead = {
+  leadId: string;
+  name: string;
+  contactNumbers: ContactNumber[];
+  email: string | null;
+  address: string | null;
+  bitrixId: string | null;
+  eventDate: Date | string | null;
+  time: string | null;
+  estimatedPax: number | null;
+  notes: string | null;
+  weddingSession: WeddingSession | null;
+  venue: { id: string; name: string } | null;
+  package: { id: string; packageName: string } | null;
+  eventType: { id: string; name: string; category: "WEDDINGS" | "MICE" } | null;
+  sourceOfInformation: { id: string; name: string } | null;
+  assignedTo: { id: string; fullName: string | null; nickName: string | null } | null;
+};
+
 // Paginated response
 export type PaginatedLeads = {
   items: LeadListItem[];

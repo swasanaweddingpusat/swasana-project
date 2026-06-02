@@ -141,6 +141,7 @@ model Profile {
   userTargetsSet           UserTarget[]               @relation("UserTargetsSetBy")
   leadsCreated             Lead[]
   leadsAssigned            Lead[]          @relation("LeadAssignee")
+  quotations               Quotation[]
 
   @@index([roleId])
   @@index([managerId])
@@ -275,6 +276,7 @@ model Venue {
   paymentMethods  PaymentMethod[]
   bookings        Booking[]
   leads           Lead[]
+  quotations      Quotation[]
 
   @@index([brandId])
   @@map("venues")
@@ -325,6 +327,7 @@ model Vendor {
   description    String?
   phone          String?
   address        String?
+  bankName       String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   category       VendorCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
@@ -1059,7 +1062,8 @@ model EventType {
   isActive  Boolean       @default(true)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
-  leads     Lead[]
+  leads      Lead[]
+  quotations Quotation[]
 
   @@index([category])
   @@map("event_types")
@@ -1166,4 +1170,102 @@ model UserTarget {
   @@index([setById])
   @@index([type, startDate, endDate])
   @@map("user_targets")
+}
+
+// ─── Quotation ────────────────────────────────────────────────────────────────
+
+enum QuotationStatus {
+  draft
+  sent
+  revised
+  accepted
+  rejected
+}
+
+model Quotation {
+  id              String           @id @default(uuid())
+  quotationNo     String?
+  category        EventCategory    @default(WEDDINGS)
+  status          QuotationStatus  @default(draft)
+
+  // Client info
+  clientName      String
+  clientPhone     String
+  instansi        String?
+
+  // Relations
+  salesId         String
+  venueId         String
+  eventTypeId     String?
+  // Snapshot of names at creation time (for display/PDF without JOIN)
+  eventTypeName   String?
+  venueName       String?
+
+  // Event
+  weddingSession  WeddingSession?
+  eventDate       DateTime?
+  time            String?
+  details         String?
+
+  // Pricing (server-computed)
+  subtotal        Int              @default(0)
+  discount        Int              @default(0)
+  totalPrice      Int              @default(0)
+
+  // Meta
+  validUntil      DateTime?
+  notes           String?
+  signingLocation String?
+  signatureSales  String?          // base64 data URL
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  sales     Profile    @relation(fields: [salesId], references: [id], onDelete: Restrict)
+  venue     Venue      @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  eventType EventType? @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+
+  items QuotationItem[]
+  terms QuotationTerm[]
+
+  @@index([salesId])
+  @@index([venueId])
+  @@index([eventTypeId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid())
+  quotationId String
+  title       String
+  description String?   // rich HTML from TipTap
+  qty         Int       @default(0)
+  price       Int       @default(0)
+  total       Int       @default(0)
+  manualTotal Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@map("quotation_items")
+}
+
+model QuotationTerm {
+  id            String   @id @default(uuid())
+  quotationId   String
+  name          String
+  amount        Int
+  dueDate       DateTime?
+  sortOrder     Int      @default(0)
+  paymentStatus String   @default("unpaid")
+  createdAt     DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@map("quotation_terms")
 }

@@ -82,6 +82,14 @@ export async function createMiceBooking(
 
     const managerId = await resolveManagerId(salesId);
 
+    // Resolve "Deal" lead status (system final) — used when booking is created from a lead
+    const convertedStatus = leadRecord
+      ? await db.leadStatus.findFirst({
+          where: { isSystem: true, isFinal: true },
+          select: { id: true },
+        })
+      : null;
+
     const ops: Prisma.PrismaPromise<unknown>[] = [
       ...(isNewCustomer
         ? [
@@ -109,6 +117,8 @@ export async function createMiceBooking(
                 ...(leadRecord.convertedToCustomerId
                   ? {}
                   : { convertedToCustomerId: customerId, convertedAt: new Date() }),
+                // Always move lead to "Deal" status when a booking is created from it
+                ...(convertedStatus ? { statusId: convertedStatus.id } : {}),
               },
             }),
           ]

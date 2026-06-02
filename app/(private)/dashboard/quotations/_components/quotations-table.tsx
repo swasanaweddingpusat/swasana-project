@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -38,8 +39,12 @@ import {
   MenuDots,
   Pen,
   Eye,
+  TrashBinTrash,
+  Refresh,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { useQuotations, useDeleteQuotation } from "@/hooks/use-quotations";
+import type { QuotationListRow } from "@/lib/queries/quotations";
 import { QuotationDrawer } from "./quotation-drawer";
 import { QuotationPreview } from "./quotation-preview";
 
@@ -47,6 +52,8 @@ import { QuotationPreview } from "./quotation-preview";
 export interface QuotationLineItem {
   id: string;
   description: string;
+  /** Rich HTML description from TipTap (for edit prefill) */
+  richDescription?: string;
   qty: number;
   price: number;
   total: number;
@@ -102,287 +109,126 @@ export interface QuotationItem {
   /** Tanggal dokumen diterbitkan (mis. "2026-02-04") */
   issuedAt?: string;
   notes: string;
+  signingLocation?: string;
+  signatureSales?: string;
+  // ── Term of Payment (for edit prefill) ─────────────────────────
+  termOfPayments?: Array<{
+    id: string;
+    name: string;
+    amount: number;
+    dueDate: string | null;
+    sortOrder: number;
+    paymentStatus: string;
+  }>;
 }
 
-const DUMMY_QUOTATIONS: QuotationItem[] = [
-  {
-    id: "1",
-    quotationNo: "#221-MICE",
-    purchaseOrderNo: "",
-    leadName: "Ibu Henny",
-    leadPhone: "0811 960 053",
-    instansi: "Al Azhar",
-    salesName: "Metalia Yuniarti",
-    salesPhone: "0851 2108 5180",
-    venue: "Patra Jasa Yudistira Grand Ballroom",
-    category: "mice",
-    eventType: "Graduation",
-    eventDate: "2026-05-09",
-    details: "Venue Only",
-    time: "Half Day 07.00 - 13.00",
-    place: "Ballroom",
-    packageName: "PATRA JASA YUDISTIRA PACKAGE",
-    variantName: "GRAND BALLROOM",
-    pax: 600,
-    items: [
-      { id: "i1", description: "A. Ballroom Facilities :", qty: 1, price: 65000000, total: 65000000, manualTotal: true },
-      { id: "i2", description: "Patrajasa Yudistira Grand Ballroom usage for 6hrs", qty: 0, price: 0, total: 0 },
-      { id: "i3", description: "Full Carpet Ballroom", qty: 0, price: 0, total: 0 },
-      { id: "i4", description: "Full Air Conditioned", qty: 0, price: 0, total: 0 },
-      { id: "i5", description: "Voyager Area", qty: 0, price: 0, total: 0 },
-      { id: "i6", description: "Exclusive Chandeliers", qty: 0, price: 0, total: 0 },
-      { id: "i7", description: "7-meter High Ceiling", qty: 0, price: 0, total: 0 },
-      { id: "i8", description: "3 Changing Rooms", qty: 0, price: 0, total: 0 },
-      { id: "i9", description: "Exclusive Restroom", qty: 0, price: 0, total: 0 },
-      { id: "i10", description: "Parking area lot up to 600", qty: 0, price: 0, total: 0 },
-      { id: "i11", description: "Cleaning Service", qty: 0, price: 0, total: 0 },
-      { id: "i12", description: "Electricity 10.000 watt", qty: 0, price: 0, total: 0 },
-      { id: "i13", description: "Security", qty: 0, price: 0, total: 0 },
-      { id: "i14", description: "B. Equipments :", qty: 0, price: 0, total: 0 },
-      { id: "i15", description: "Main Stage", qty: 0, price: 0, total: 0 },
-      { id: "i16", description: "200 Mix Banquet & Futura Chairs", qty: 0, price: 0, total: 0 },
-      { id: "i17", description: "4 Registration Table (d120)", qty: 0, price: 0, total: 0 },
-      { id: "i18", description: "LED Videotron", qty: 0, price: 0, total: 0 },
-      { id: "i19", description: "Soundsystem Standart (2 MIC)", qty: 0, price: 0, total: 0 },
-    ],
-    price: 65000000,
-    discount: 0,
-    totalPrice: 65000000,
-    bookingFee: 10000000,
-    bankName: "Bank BCA",
-    bankAccountNo: "628 263 4470",
-    bankAccountName: "Imam",
-    downPayment: 0,
-    others: 0,
-    status: "sent",
-    validUntil: "2026-04-30",
-    createdAt: "2026-02-04",
-    issuedAt: "2026-02-04",
-    notes: "All confirm transactions are non-cancellable and non-refundable.",
-  },
-  {
-    id: "2",
-    leadName: "Ahmad Fauzi",
-    leadPhone: "081234567890",
-    venue: "Menara Bripens",
-    category: "weddings",
-    eventType: "Akad & Resepsi",
-    eventDate: "2026-08-15",
-    packageName: "MENARA BRIPENS PACKAGE",
-    variantName: "SIGNATURE",
-    pax: 800,
-    price: 240000000,
-    discount: 15000000,
-    totalPrice: 225000000,
-    status: "revised",
-    validUntil: "2026-06-30",
-    salesName: "Rina",
-    createdAt: "2026-05-17",
-    notes: "Revisi dari quotation sebelumnya",
-  },
-  {
-    id: "3",
-    leadName: "Citra Dewi",
-    leadPhone: "081355667788",
-    venue: "BRIN Thamrin",
-    category: "weddings",
-    eventType: "Teapai & Resepsi",
-    eventDate: "2026-10-05",
-    packageName: "BRIN THAMRIN PACKAGE",
-    variantName: "SAPPHIRE",
-    pax: 800,
-    price: 180000000,
-    discount: 0,
-    totalPrice: 180000000,
-    status: "accepted",
-    validUntil: "2026-07-15",
-    salesName: "Rina",
-    createdAt: "2026-05-18",
-    notes: "",
-  },
-  {
-    id: "4",
-    leadName: "PT Maju Jaya",
-    leadPhone: "02112345678",
-    venue: "Grand Slipi",
-    category: "mice",
-    eventType: "Fullday Meeting 8hrs",
-    eventDate: "2026-07-10",
-    packageName: "GRAND SLIPI PACKAGE",
-    variantName: "GOLD",
-    pax: 800,
-    price: 145000000,
-    discount: 10000000,
-    totalPrice: 135000000,
-    status: "draft",
-    validUntil: "2026-06-20",
-    salesName: "Deni",
-    createdAt: "2026-05-19",
-    notes: "Masih menunggu konfirmasi anggaran",
-  },
-  {
-    id: "5",
-    leadName: "Budi Santoso",
-    leadPhone: "081298765432",
-    venue: "Paramita",
-    category: "weddings",
-    eventType: "Resepsi",
-    eventDate: "2026-09-20",
-    packageName: "PARAMITA PACKAGE",
-    variantName: "CLASSIC",
-    pax: 800,
-    price: 140000000,
-    discount: 0,
-    totalPrice: 140000000,
-    status: "rejected",
-    validUntil: "2026-06-10",
-    salesName: "Sari",
-    createdAt: "2026-05-20",
-    notes: "Budget tidak sesuai",
-  },
-  {
-    id: "6",
-    leadName: "Dwi Prasetyo",
-    leadPhone: "081277889900",
-    venue: "Lippo Kuningan",
-    category: "weddings",
-    eventType: "Akad & Resepsi",
-    eventDate: "2026-11-22",
-    packageName: "LIPPO KUNINGAN PACKAGE",
-    variantName: "PLATINUM",
-    pax: 800,
-    price: 250000000,
-    discount: 10000000,
-    totalPrice: 240000000,
-    status: "sent",
-    validUntil: "2026-07-31",
-    salesName: "Tono",
-    createdAt: "2026-05-21",
-    notes: "",
-  },
-  {
-    id: "7",
-    leadName: "PT Global Teknologi",
-    leadPhone: "02198765432",
-    venue: "Samisara Sopodel",
-    category: "mice",
-    eventType: "Halfday Meeting 6hrs",
-    eventDate: "2026-06-25",
-    packageName: "SAMISARA SOPODEL PACKAGE",
-    variantName: "PRIORITY",
-    pax: 800,
-    price: 230000000,
-    discount: 5000000,
-    totalPrice: 225000000,
-    status: "draft",
-    validUntil: "2026-06-15",
-    salesName: "Deni",
-    createdAt: "2026-05-22",
-    notes: "",
-  },
-  {
-    id: "8",
-    leadName: "Eka Wulandari",
-    leadPhone: "081312345678",
-    venue: "Seskoad",
-    category: "weddings",
-    eventType: "Pemberkatan Resepsi",
-    eventDate: "2026-12-06",
-    packageName: "SESKOAD PACKAGE",
-    variantName: "GOLD",
-    pax: 800,
-    price: 133000000,
-    discount: 0,
-    totalPrice: 133000000,
-    status: "accepted",
-    validUntil: "2026-08-01",
-    salesName: "Rina",
-    createdAt: "2026-05-23",
-    notes: "Sudah deal, tunggu tanda tangan",
-  },
-  {
-    id: "9",
-    leadName: "PT Telkom Indonesia",
-    leadPhone: "02145678901",
-    venue: "BRIN Gatot Subroto",
-    category: "mice",
-    eventType: "Gala Dinner",
-    eventDate: "2026-09-18",
-    packageName: "BRIN GATOT SUBROTO PACKAGE",
-    variantName: "SAPPHIRE",
-    pax: 800,
-    price: 195000000,
-    discount: 15000000,
-    totalPrice: 180000000,
-    status: "sent",
-    validUntil: "2026-07-20",
-    salesName: "Sari",
-    createdAt: "2026-05-24",
-    notes: "",
-  },
-  {
-    id: "10",
-    leadName: "Fajar Nugroho",
-    leadPhone: "081356789012",
-    venue: "Dharmagati",
-    category: "weddings",
-    eventType: "Akad & Resepsi",
-    eventDate: "2026-07-26",
-    packageName: "DHARMAGATI PACKAGE",
-    variantName: "PLATINUM",
-    pax: 800,
-    price: 265000000,
-    discount: 0,
-    totalPrice: 265000000,
-    status: "revised",
-    validUntil: "2026-06-25",
-    salesName: "Tono",
-    createdAt: "2026-05-25",
-    notes: "Revisi paket dan harga",
-  },
-  {
-    id: "11",
-    leadName: "PT Astra Internasional",
-    leadPhone: "02167890123",
-    venue: "Patrajasa",
-    category: "mice",
-    eventType: "Corporate Event",
-    eventDate: "2026-08-07",
-    packageName: "PATRAJASA PACKAGE",
-    variantName: "GOLD",
-    pax: 800,
-    price: 160000000,
-    discount: 10000000,
-    totalPrice: 150000000,
-    status: "draft",
-    validUntil: "2026-07-01",
-    salesName: "Deni",
-    createdAt: "2026-05-26",
-    notes: "",
-  },
-  {
-    id: "12",
-    leadName: "Budi Santoso",
-    leadPhone: "081298765432",
-    venue: "Paramita",
-    category: "weddings",
-    eventType: "Resepsi",
-    eventDate: "2026-09-20",
-    packageName: "PARAMITA PACKAGE",
-    variantName: "ROYAL",
-    pax: 800,
-    price: 275000000,
-    discount: 5000000,
-    totalPrice: 270000000,
-    status: "sent",
-    validUntil: "2026-07-10",
-    salesName: "Sari",
-    createdAt: "2026-05-27",
-    notes: "Revisi naik tier dari CLASSIC",
-  },
-];
+// ── DB row → display type mapper ─────────────────────────────────────────────
+
+function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
+  return {
+    id: row.id,
+    quotationNo: row.quotationNo ?? undefined,
+    leadName: row.clientName,
+    leadPhone: row.clientPhone,
+    instansi: row.instansi ?? undefined,
+    salesName: row.sales.fullName ?? "",
+    salesPhone: row.sales.phoneNumber ?? undefined,
+    venue: row.venueName ?? row.venue.name,
+    category: row.category.toLowerCase() as "weddings" | "mice",
+    eventType: row.eventTypeName ?? row.eventType?.name ?? "",
+    eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
+    time: row.time ?? undefined,
+    details: row.details ?? undefined,
+    // items from DB → QuotationLineItem[]
+    items: row.items.map((it) => ({
+      id: it.id,
+      description: it.title,
+      richDescription: it.description ?? undefined,
+      qty: it.qty,
+      price: it.price,
+      total: it.total,
+      manualTotal: it.manualTotal,
+    })),
+    price: row.subtotal,
+    discount: row.discount,
+    totalPrice: row.totalPrice,
+    status: row.status as QuotationItem["status"],
+    validUntil: row.validUntil ? format(new Date(row.validUntil), "yyyy-MM-dd") : "",
+    createdAt: format(new Date(row.createdAt), "yyyy-MM-dd"),
+    notes: row.notes ?? "",
+    signingLocation: row.signingLocation ?? undefined,
+    signatureSales: row.signatureSales ?? undefined,
+    termOfPayments: row.terms.map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: t.amount,
+      dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : null,
+      sortOrder: t.sortOrder,
+      paymentStatus: t.paymentStatus,
+    })),
+    packageName: "",
+    variantName: "",
+    pax: 0,
+  };
+}
 
 const ROWS_PER_PAGE = 10;
+
+function buildPageRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  pages.add(current);
+  if (current - 1 >= 1) pages.add(current - 1);
+  if (current + 1 <= total) pages.add(current + 1);
+
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const result: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    result.push(sorted[i]);
+    if (i < sorted.length - 1 && sorted[i + 1] - sorted[i] > 1) {
+      result.push("...");
+    }
+  }
+  return result;
+}
+
+function SkeletonMobileCards({ rows = ROWS_PER_PAGE }: { rows?: number }) {
+  return (
+    <div className="block sm:hidden p-4 space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
+          {/* Row 1: number + name + status badge */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Skeleton className="h-4 w-5 rounded shrink-0" />
+              <div className="space-y-1 min-w-0">
+                <Skeleton className="h-3 w-24 rounded" />
+                <Skeleton className="h-4 rounded" style={{ width: `${100 + (i % 4) * 20}px` }} />
+              </div>
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full shrink-0" />
+          </div>
+          {/* Row 2: venue + event type + date + total */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Skeleton className="h-3 w-20 rounded" />
+            <Skeleton className="h-3 w-16 rounded" />
+            <Skeleton className="h-3 w-14 rounded" />
+          </div>
+          {/* Footer: buttons */}
+          <div className="flex items-center gap-1 pt-1 border-t border-border">
+            <Skeleton className="h-9 flex-1 rounded-lg" />
+            <Skeleton className="h-9 flex-1 rounded-lg" />
+            <Skeleton className="h-9 w-9 rounded-md shrink-0" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type QuotationStatus = QuotationItem["status"];
 
@@ -480,59 +326,58 @@ function StatusBadge({ status }: { status: QuotationStatus }) {
 
 export function QuotationsTable() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<QuotationStatus | "all">(
-    "all"
-  );
+  const [statusFilter, setStatusFilter] = useState<QuotationStatus | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editQuotation, setEditQuotation] = useState<QuotationItem | null>(
-    null
-  );
+  const [editQuotation, setEditQuotation] = useState<QuotationItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewQuotation, setPreviewQuotation] =
-    useState<QuotationItem | null>(null);
+  const [previewQuotation, setPreviewQuotation] = useState<QuotationItem | null>(null);
 
-  const filtered = DUMMY_QUOTATIONS.filter((q) => {
-    if (statusFilter !== "all" && q.status !== statusFilter) return false;
-    if (search.trim()) {
-      const query = search.toLowerCase();
-      const matches =
-        deriveQuotationNo(q).toLowerCase().includes(query) ||
-        q.leadName.toLowerCase().includes(query) ||
-        q.leadPhone.includes(query) ||
-        q.venue.toLowerCase().includes(query) ||
-        q.eventType.toLowerCase().includes(query) ||
-        q.packageName.toLowerCase().includes(query) ||
-        q.variantName.toLowerCase().includes(query) ||
-        q.salesName.toLowerCase().includes(query);
-      if (!matches) return false;
-    }
-    return true;
+  // ── Server-side data ──────────────────────────────────────────────────────
+  const { data: quotationsResult, isLoading, isError, isFetching, refetch } = useQuotations({
+    page: currentPage,
+    pageSize: ROWS_PER_PAGE,
+    search,
+    status: statusFilter === "all" ? "" : statusFilter,
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  const paginated = filtered.slice(
-    (currentPage - 1) * ROWS_PER_PAGE,
-    currentPage * ROWS_PER_PAGE
-  );
+  const deleteQuotation = useDeleteQuotation();
 
-  function handleAdd() {
+  const rawRows = quotationsResult?.data ?? [];
+  const total = quotationsResult?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
+  const paginated = rawRows.map(mapRowToQuotationItem);
+
+  const handleAdd = useCallback(() => {
     setEditQuotation(null);
     setDrawerOpen(true);
-  }
+  }, []);
 
-  function handleEdit(q: QuotationItem) {
+  const handleEdit = useCallback((q: QuotationItem) => {
     setEditQuotation(q);
     setDrawerOpen(true);
-  }
+  }, []);
 
-  function handlePreview(q: QuotationItem) {
+  const handlePreview = useCallback((q: QuotationItem) => {
     setPreviewQuotation(q);
     setPreviewOpen(true);
-  }
+  }, []);
 
   function handleConvertToBooking(q: QuotationItem) {
     toast.info(`Convert ke Booking untuk ${q.leadName} — coming soon.`);
+  }
+
+  async function handleDelete(q: QuotationItem) {
+    const confirmed = window.confirm(
+      `Hapus quotation "${deriveQuotationNo(q)}" untuk ${q.leadName}? Tindakan ini tidak bisa dibatalkan.`,
+    );
+    if (!confirmed) return;
+    const result = await deleteQuotation.mutateAsync(q.id);
+    if (result.success) {
+      toast.success("Quotation berhasil dihapus.");
+    } else {
+      toast.error(result.error ?? "Gagal menghapus quotation.");
+    }
   }
 
   function handleStatusFilterChange(value: string) {
@@ -544,7 +389,7 @@ export function QuotationsTable() {
     status: s,
     label: STATUS_META[s].label,
     dotClass: STATUS_META[s].dotClass,
-    count: DUMMY_QUOTATIONS.filter((q) => q.status === s).length,
+    count: 0, // server doesn't return per-status counts in list query
   }));
 
   return (
@@ -558,11 +403,23 @@ export function QuotationsTable() {
                 List Quotations
               </h2>
               <span className="text-sm font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
-                {filtered.length}
-                {search || statusFilter !== "all"
-                  ? ` dari ${DUMMY_QUOTATIONS.length}`
-                  : " quotations"}
+                {isLoading ? "..." : total}
+                {" quotations"}
               </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => refetch()}
+                disabled={isFetching}
+                aria-label="Refresh daftar quotation"
+                className="h-8 w-8 shrink-0"
+              >
+                <Refresh
+                  weight="BoldDuotone"
+                  aria-hidden="true"
+                  className={cn("h-4 w-4", isFetching && "animate-spin")}
+                />
+              </Button>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
               {/* Status filter */}
@@ -578,7 +435,7 @@ export function QuotationsTable() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">
-                    Semua Status ({DUMMY_QUOTATIONS.length})
+                    Semua Status
                   </SelectItem>
                   {statusCounts.map((s) => (
                     <SelectItem key={s.status} value={s.status}>
@@ -619,208 +476,345 @@ export function QuotationsTable() {
             </div>
           </div>
 
-          {/* Table */}
-          <Table className="w-full table-fixed">
-            <TableHeader>
-              <TableRow>
-                {/* # — 4% — always visible */}
-                <TableHead className="w-[4%] text-center">#</TableHead>
-                {/* Customer — 18% — always visible */}
-                <TableHead className="w-[18%]">Customer</TableHead>
-                {/* Venue — 14% — always visible */}
-                <TableHead className="w-[14%]">Venue</TableHead>
-                {/* Paket / Varian — 22% — hidden on xs, visible sm+ */}
-                <TableHead className="w-[22%] hidden sm:table-cell">
-                  Paket / Varian
-                </TableHead>
-                {/* Event — 14% — hidden until lg */}
-                <TableHead className="w-[14%] hidden lg:table-cell">
-                  Event
-                </TableHead>
-                {/* Total — 14% — always visible, right-aligned */}
-                <TableHead className="w-[14%] text-right">Total</TableHead>
-                {/* Status — 9% — always visible */}
-                <TableHead className="w-[9%]">Status</TableHead>
-                {/* Actions — 5% — always visible */}
-                <TableHead className="w-[5%]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginated.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="py-16 text-center text-muted-foreground"
-                  >
-                    <div className="flex flex-col items-center gap-3">
-                      <FileText
-                        weight="BoldDuotone"
-                        aria-hidden="true"
-                        className="h-10 w-10 opacity-40"
-                      />
-                      <p className="text-sm">
-                        {search
-                          ? `Tidak ada hasil untuk "${search}"`
-                          : "Belum ada quotation."}
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginated.map((q, idx) => (
-                  <TableRow
-                    key={q.id}
-                    onClick={() => handleEdit(q)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleEdit(q);
-                      }
-                    }}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Edit quotation ${q.leadName}`}
-                    className="cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    {/* # */}
-                    <TableCell className="text-center text-sm text-muted-foreground tabular-nums">
-                      {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
-                    </TableCell>
-                    {/* Customer */}
-                    <TableCell className="min-w-0">
-                      <div className="min-w-0">
-                        <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                          {deriveQuotationNo(q)}
-                        </span>
-                        <span
-                          title={q.leadName}
-                          className="block truncate font-medium text-sm text-foreground"
+          {/* Loading / Error / Empty — shared state for both layouts */}
+          {isLoading ? (
+            <>
+              {/* Desktop skeleton: simple spinner in table-like wrapper */}
+              <div className="hidden sm:flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <Refresh weight="BoldDuotone" aria-hidden="true" className="h-8 w-8 opacity-40 animate-spin" />
+                <p className="text-sm mt-3">Memuat data quotation...</p>
+              </div>
+              {/* Mobile skeleton: cards */}
+              <SkeletonMobileCards rows={ROWS_PER_PAGE} />
+            </>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <FileText weight="BoldDuotone" aria-hidden="true" className="h-10 w-10 opacity-40" />
+              <p className="text-sm mt-3">
+                Gagal memuat data.{" "}
+                <button onClick={() => refetch()} className="underline text-primary">
+                  Coba lagi
+                </button>
+              </p>
+            </div>
+          ) : paginated.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <FileText weight="BoldDuotone" aria-hidden="true" className="h-10 w-10 opacity-40" />
+              <p className="text-sm mt-3">
+                {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada quotation."}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Desktop table (sm+) */}
+              <div className="hidden sm:block w-full overflow-x-auto">
+                <Table className="w-full table-fixed">
+                  <TableHeader>
+                    <TableRow>
+                      {/* # — 4% — always visible */}
+                      <TableHead className="w-[4%] text-center">#</TableHead>
+                      {/* Customer — 18% — always visible */}
+                      <TableHead className="w-[18%]">Customer</TableHead>
+                      {/* Venue — 18% — always visible */}
+                      <TableHead className="w-[18%]">Venue</TableHead>
+                      {/* Sales — 16% — hidden on xs, visible sm+ */}
+                      <TableHead className="w-[16%] hidden sm:table-cell">
+                        Sales
+                      </TableHead>
+                      {/* Event — 18% — hidden until lg */}
+                      <TableHead className="w-[18%] hidden lg:table-cell">
+                        Event
+                      </TableHead>
+                      {/* Total — 14% — always visible, right-aligned */}
+                      <TableHead className="w-[14%] text-right">Total</TableHead>
+                      {/* Status — 9% — always visible */}
+                      <TableHead className="w-[9%]">Status</TableHead>
+                      {/* Actions — 5% — always visible */}
+                      <TableHead className="w-[5%]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isFetching ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                          <Refresh weight="BoldDuotone" aria-hidden="true" className="h-6 w-6 opacity-40 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginated.map((q, idx) => (
+                        <TableRow
+                          key={q.id}
+                          onClick={() => handleEdit(q)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleEdit(q);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Edit quotation ${q.leadName}`}
+                          className="cursor-pointer hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                         >
-                          {q.leadName}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {q.leadPhone}
-                        </span>
-                      </div>
-                    </TableCell>
+                          {/* # */}
+                          <TableCell className="text-center text-sm text-muted-foreground tabular-nums">
+                            {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}
+                          </TableCell>
+                          {/* Customer */}
+                          <TableCell className="min-w-0">
+                            <div className="min-w-0">
+                              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                                {deriveQuotationNo(q)}
+                              </span>
+                              <span
+                                title={q.leadName}
+                                className="block truncate font-medium text-sm text-foreground"
+                              >
+                                {q.leadName}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {q.leadPhone}
+                              </span>
+                            </div>
+                          </TableCell>
 
-                    {/* Venue */}
-                    <TableCell className="min-w-0">
-                      <span
-                        title={q.venue}
-                        className="block truncate text-sm"
-                      >
-                        {q.venue}
-                      </span>
-                    </TableCell>
+                          {/* Venue */}
+                          <TableCell className="min-w-0">
+                            <span title={q.venue} className="block truncate text-sm">
+                              {q.venue}
+                            </span>
+                          </TableCell>
 
-                    {/* Paket / Varian — hidden xs */}
-                    <TableCell className="min-w-0 hidden sm:table-cell">
-                      <div className="min-w-0">
-                        <span className="block truncate text-xs font-medium uppercase tracking-wide text-foreground">
-                          {q.variantName}
-                        </span>
-                        <span
-                          title={q.packageName}
-                          className="block truncate text-xs text-muted-foreground"
-                        >
-                          {q.packageName}
-                        </span>
-                      </div>
-                    </TableCell>
+                          {/* Sales — hidden xs */}
+                          <TableCell className="min-w-0 hidden sm:table-cell">
+                            <div className="min-w-0">
+                              <span
+                                title={q.salesName}
+                                className="block truncate text-sm text-foreground"
+                              >
+                                {q.salesName || "—"}
+                              </span>
+                              {q.salesPhone && (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {q.salesPhone}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
 
-                    {/* Event — hidden until lg */}
-                    <TableCell className="min-w-0 hidden lg:table-cell">
-                      <div className="min-w-0">
-                        <span className="block truncate text-sm">
-                          {formatDate(q.eventDate)}
-                        </span>
-                        <span
-                          title={q.eventType}
-                          className="block truncate text-xs text-muted-foreground"
-                        >
-                          {q.eventType}
-                        </span>
-                      </div>
-                    </TableCell>
+                          {/* Event — hidden until lg */}
+                          <TableCell className="min-w-0 hidden lg:table-cell">
+                            <div className="min-w-0">
+                              <span className="block truncate text-sm">
+                                {formatDate(q.eventDate)}
+                              </span>
+                              <span
+                                title={q.eventType}
+                                className="block truncate text-xs text-muted-foreground"
+                              >
+                                {q.eventType}
+                              </span>
+                            </div>
+                          </TableCell>
 
-                    {/* Total */}
-                    <TableCell className="text-right tabular-nums font-semibold text-sm">
-                      {formatRupiah(q.totalPrice)}
-                    </TableCell>
+                          {/* Total */}
+                          <TableCell className="text-right tabular-nums font-semibold text-sm">
+                            {formatRupiah(q.totalPrice)}
+                          </TableCell>
 
-                    {/* Status */}
-                    <TableCell>
-                      <StatusBadge status={q.status} />
-                    </TableCell>
+                          {/* Status */}
+                          <TableCell>
+                            <StatusBadge status={q.status} />
+                          </TableCell>
 
-                    {/* Actions */}
-                    <TableCell
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-right"
-                    >
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Aksi untuk quotation ${q.leadName}`}
+                          {/* Actions */}
+                          <TableCell
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-right"
                           >
-                            <MenuDots
-                              weight="BoldDuotone"
-                              aria-hidden="true"
-                              className="h-4 w-4"
-                            />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Aksi untuk quotation ${q.leadName}`}
+                                >
+                                  <MenuDots
+                                    weight="BoldDuotone"
+                                    aria-hidden="true"
+                                    className="h-4 w-4"
+                                  />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handlePreview(q)}>
+                                  <Eye
+                                    weight="BoldDuotone"
+                                    aria-hidden="true"
+                                    className="h-4 w-4 mr-2 text-primary"
+                                  />
+                                  Lihat / Cetak
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEdit(q)}>
+                                  <Pen
+                                    weight="BoldDuotone"
+                                    aria-hidden="true"
+                                    className="h-4 w-4 mr-2 text-primary"
+                                  />
+                                  Edit
+                                </DropdownMenuItem>
+                                {q.status === "accepted" && (
+                                  <DropdownMenuItem onClick={() => handleConvertToBooking(q)}>
+                                    <CalendarMark
+                                      weight="BoldDuotone"
+                                      aria-hidden="true"
+                                      className="h-4 w-4 mr-2 text-primary"
+                                    />
+                                    Convert ke Booking
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => handleDelete(q)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <TrashBinTrash
+                                    weight="BoldDuotone"
+                                    aria-hidden="true"
+                                    className="h-4 w-4 mr-2"
+                                  />
+                                  Hapus
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card list (<sm) */}
+              {isFetching ? (
+                <SkeletonMobileCards rows={Math.max(paginated.length, ROWS_PER_PAGE)} />
+              ) : (
+                <div className="block sm:hidden p-4 space-y-3">
+                  {paginated.map((q, idx) => {
+                    const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
+                    return (
+                      <div
+                        key={q.id}
+                        className="rounded-lg border bg-card p-3 space-y-2"
+                      >
+                        {/* Row 1: nomor + nama customer + nomor quotation + StatusBadge */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
+                              {rowNumber}.
+                            </span>
+                            <div className="min-w-0">
+                              <span className="block font-mono text-[10px] text-muted-foreground truncate">
+                                {deriveQuotationNo(q)}
+                              </span>
+                              <span
+                                title={q.leadName}
+                                className="block font-medium text-sm text-foreground truncate"
+                              >
+                                {q.leadName}
+                              </span>
+                            </div>
+                          </div>
+                          <StatusBadge status={q.status} />
+                        </div>
+
+                        {/* Row 2: venue · event type · event date · total */}
+                        <div className="flex items-center gap-1 flex-wrap text-xs text-muted-foreground">
+                          <span className="truncate">{q.venue}</span>
+                          {q.eventType && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="truncate">{q.eventType}</span>
+                            </>
+                          )}
+                          {q.eventDate && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="truncate">{formatDate(q.eventDate)}</span>
+                            </>
+                          )}
+                          <span aria-hidden="true">·</span>
+                          <span className="font-medium text-foreground tabular-nums">
+                            {formatRupiah(q.totalPrice)}
+                          </span>
+                        </div>
+
+                        {/* Footer: action buttons */}
+                        <div className="flex items-center gap-1 pt-1 border-t border-border">
+                          <Button
+                            variant="outline"
+                            className="h-9 flex-1 text-xs"
                             onClick={() => handlePreview(q)}
+                            aria-label={`Lihat/cetak ${deriveQuotationNo(q)}`}
                           >
                             <Eye
                               weight="BoldDuotone"
                               aria-hidden="true"
-                              className="h-4 w-4 mr-2 text-primary"
+                              className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                             />
-                            Lihat / Cetak
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
+                            Lihat/Cetak
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="h-9 flex-1 text-xs"
                             onClick={() => handleEdit(q)}
+                            aria-label={`Edit ${deriveQuotationNo(q)}`}
                           >
                             <Pen
                               weight="BoldDuotone"
                               aria-hidden="true"
-                              className="h-4 w-4 mr-2 text-primary"
+                              className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                             />
                             Edit
-                          </DropdownMenuItem>
+                          </Button>
                           {q.status === "accepted" && (
-                            <DropdownMenuItem
+                            <Button
+                              variant="outline"
+                              className="h-9 flex-1 text-xs"
                               onClick={() => handleConvertToBooking(q)}
+                              aria-label={`Convert ke booking ${deriveQuotationNo(q)}`}
                             >
                               <CalendarMark
                                 weight="BoldDuotone"
                                 aria-hidden="true"
-                                className="h-4 w-4 mr-2 text-primary"
+                                className="h-3.5 w-3.5 mr-1 text-muted-foreground"
                               />
-                              Convert ke Booking
-                            </DropdownMenuItem>
+                              Convert
+                            </Button>
                           )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          <Button
+                            variant="outline"
+                            className="h-9 w-9 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDelete(q)}
+                            aria-label={`Hapus ${deriveQuotationNo(q)}`}
+                          >
+                            <TrashBinTrash
+                              weight="BoldDuotone"
+                              aria-hidden="true"
+                              className="h-3.5 w-3.5"
+                            />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            </TableBody>
-          </Table>
+            </>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <nav
-              aria-label="Navigasi halaman quotation"
-              className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-t sm:flex-row sm:justify-between sm:items-center"
-            >
+            <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-t">
               <Button
                 variant="outline"
                 size="sm"
@@ -828,44 +822,52 @@ export function QuotationsTable() {
                 disabled={currentPage === 1}
                 aria-label="Halaman sebelumnya"
               >
-                <ArrowLeft weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" /> Previous
+                <ArrowLeft weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Previous</span>
               </Button>
-              <div className="flex items-center gap-1 overflow-x-auto justify-center">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => {
-                    const isCurrent = currentPage === page;
-                    return (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        aria-label={`Halaman ${page}`}
-                        aria-current={isCurrent ? "page" : undefined}
-                        className={cn(
-                          "px-3 py-1 rounded-md text-sm font-medium shrink-0",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                          isCurrent
-                            ? "bg-primary text-primary-foreground"
-                            : "text-foreground hover:bg-muted"
-                        )}
-                      >
-                        {page}
-                      </button>
-                    );
-                  }
+              {/* Mobile: X / Y */}
+              <span className="text-sm text-muted-foreground sm:hidden">
+                {currentPage} / {totalPages}
+              </span>
+              {/* Desktop: page numbers with ellipsis */}
+              <div className="hidden sm:flex items-center gap-1">
+                {buildPageRange(currentPage, totalPages).map((item, idx) =>
+                  item === "..." ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="px-2 py-1 text-sm text-muted-foreground select-none"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={item}
+                      onClick={() => setCurrentPage(item as number)}
+                      aria-label={`Halaman ${item}`}
+                      aria-current={currentPage === item ? "page" : undefined}
+                      className={cn(
+                        "px-3 py-1 rounded-md text-sm font-medium cursor-pointer",
+                        currentPage === item
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      {item}
+                    </button>
+                  )
                 )}
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(p + 1, totalPages))
-                }
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                 disabled={currentPage === totalPages}
                 aria-label="Halaman berikutnya"
               >
-                Next <ArrowRight weight="BoldDuotone" aria-hidden="true" className="w-4 h-4" />
+                <span className="hidden sm:inline">Next</span>
+                <ArrowRight weight="BoldDuotone" aria-hidden="true" className="w-4 h-4 sm:ml-2" />
               </Button>
-            </nav>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -874,6 +876,10 @@ export function QuotationsTable() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         editQuotation={editQuotation}
+        onSuccess={() => {
+          setCurrentPage(1);
+          refetch();
+        }}
       />
 
       <QuotationPreview

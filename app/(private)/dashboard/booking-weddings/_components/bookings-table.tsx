@@ -10,12 +10,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle, UsersGroupRounded } from "@solar-icons/react";
 const RefreshCw = Refresh;
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
-import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking } from "@/hooks/use-bookings";
+import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useTransferBookingManager } from "@/hooks/use-bookings";
+import { useManagers } from "@/hooks/use-managers";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -112,6 +113,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const deleteMut = useDeleteBooking();
   const updateMut = useUpdateBooking();
   const transferMut = useTransferBooking();
+  const transferManagerMut = useTransferBookingManager();
+  const { managers } = useManagers();
   const { can, isAdmin } = usePermissions();
   const { openBookingDrawer } = useBookingDrawer();
   const { user } = useCurrentUser();
@@ -156,6 +159,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
   const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
   const [transferSalesId, setTransferSalesId] = useState("");
+  const [managerTarget, setManagerTarget] = useState<BookingListItem | null>(null);
+  const [selectedManagerId, setSelectedManagerId] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
@@ -207,10 +212,26 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const { data: unreadCounts = {} } = useUnreadCommentCounts(bookings.map((b: BookingListItem) => b.id));
 
   function renderBookingActions(booking: BookingListItem) {
+    // Client Agreement is gated on internal approval: it appears only after BOTH
+    // the manager and finance approval steps (current round) are approved.
+    const agreementSteps = approvalMap.get(booking.id)?.steps ?? [];
+    const agreementFirstStep = agreementSteps[0];
+    let agreementRoundSize = agreementSteps.length;
+    for (let i = 1; i < agreementSteps.length; i++) {
+      if (agreementSteps[i].approverType === agreementFirstStep?.approverType && agreementSteps[i].approverRoleId === agreementFirstStep?.approverRoleId && agreementSteps[i].approverUserId === agreementFirstStep?.approverUserId) {
+        agreementRoundSize = i;
+        break;
+      }
+    }
+    const currentRoundSteps = agreementSteps.slice(-agreementRoundSize);
+    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
+    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
+    const internalApproved = isManagerApproved && isFinanceApproved;
     return (
       <>
-        {/* Agreement modal trigger — hidden on mobile */}
-        {can("booking", "client-agreement") && (booking.clientAgreement?.status !== "Signed" || (approvalMap.get(booking.id)?.steps.some((s) => s.approverType === "client" && s.status === "pending"))) && (
+        {/* Agreement modal trigger — hidden on mobile. Shown only once manager +
+            finance approved, and hidden again after the client has signed. */}
+        {can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
         <TooltipProvider delay={200}>
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
@@ -220,21 +241,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </Tooltip>
         </TooltipProvider>
         )}
-
-        {/* Comment button */}
-        <PermissionGate module="booking" action="comment">
-          <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} />}>
-              <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
-              {(unreadCounts[booking.id] ?? 0) > 0 && (
-                <span className={cn('absolute', '-top-0.5', '-right-0.5', 'min-w-4', 'h-4', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[9px]', 'font-bold', 'flex', 'items-center', 'justify-center', 'px-0.5')}>
-                  {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
-                </span>
-              )}
-            </TooltipTrigger>
-            <TooltipContent side="top"><p className="text-xs">Komentar</p></TooltipContent>
-          </Tooltip>
-        </PermissionGate>
 
         {/* Booking Approval dropdown */}
         {approvalMap.has(booking.id) && (() => {
@@ -293,6 +299,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           );
         })()}
 
+        {/* Comment button — placed last, right before the More actions menu */}
+        <PermissionGate module="booking" action="comment">
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} />}>
+              <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
+              {(unreadCounts[booking.id] ?? 0) > 0 && (
+                <span className={cn('absolute', '-top-0.5', '-right-0.5', 'min-w-4', 'h-4', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[9px]', 'font-bold', 'flex', 'items-center', 'justify-center', 'px-0.5')}>
+                  {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
+                </span>
+              )}
+            </TooltipTrigger>
+            <TooltipContent side="top"><p className="text-xs">Komentar</p></TooltipContent>
+          </Tooltip>
+        </PermissionGate>
+
         {/* More actions dropdown */}
         <DropdownMenu>
           <Tooltip>
@@ -347,6 +368,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             {can("booking", "transfer") && (
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
               <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Booking
+            </DropdownMenuItem>
+            )}
+            {can("booking", "transfer-manager") && (
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setManagerTarget(booking)}>
+              <UsersGroupRounded weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Manager
             </DropdownMenuItem>
             )}
             {((can("booking", "reject") && booking.bookingStatus !== "Confirmed" && booking.bookingStatus !== "Lost") || (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") || (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"))) && <DropdownMenuSeparator />}
@@ -534,10 +560,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <div className="leading-tight">
                           <span className={cn('truncate', 'block')}>{booking.snapPackage?.packageName ?? "—"}</span>
                           {booking.snapPackagePricing && (
-                            <>
-                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.packageName}</span>
-                              <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
-                            </>
+                            <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
                           )}
                         </div>
                       </TableCell>
@@ -930,6 +953,86 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 }}
               >
                 {transferMut.isPending ? "Mentransfer..." : "Transfer Booking"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Manager Modal */}
+      {managerTarget && (
+        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
+          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
+            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-6')}>
+              <div>
+                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Transfer Manager</h2>
+                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
+                  Memindahkan penugasan manager pada booking ini ke manager yang dipilih.
+                </p>
+              </div>
+              <button
+                className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')}
+                onClick={() => { setManagerTarget(null); setSelectedManagerId(""); }}
+                type="button"
+                aria-label="Tutup"
+              >
+                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Manager saat ini</p>
+              <div className={cn('flex', 'items-center', 'gap-2')}>
+                <span className={cn('text-sm', 'font-medium', 'text-foreground')}>
+                  {managerTarget.manager?.fullName ?? <span className={cn('text-muted-foreground', 'italic')}>Belum ada</span>}
+                </span>
+                {managerTarget.manager?.fullName && (
+                  <span className={cn('text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground')}>manager</span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Pilih Manager</p>
+              <SearchableSelect
+                options={managers
+                  .filter((m) => m.id !== managerTarget.manager?.id)
+                  .map((m) => ({ id: m.id, name: m.fullName ?? m.id, badge: "manager" }))}
+                value={selectedManagerId}
+                onChange={setSelectedManagerId}
+                placeholder="Pilih manager tujuan..."
+                searchPlaceholder="Cari nama manager..."
+                emptyText="Manager tidak ditemukan"
+                className="w-full"
+              />
+            </div>
+
+            <div className={cn('flex', 'gap-3', 'mt-6')}>
+              <button
+                className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-accent', 'transition', 'text-sm')}
+                onClick={() => { setManagerTarget(null); setSelectedManagerId(""); }}
+                disabled={transferManagerMut.isPending}
+                type="button"
+              >
+                Batal
+              </button>
+              <button
+                className={cn('flex-1', 'bg-primary', 'text-primary-foreground', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-primary/90', 'transition', 'text-sm', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
+                disabled={!selectedManagerId || transferManagerMut.isPending}
+                type="button"
+                onClick={async () => {
+                  const result = await transferManagerMut.mutateAsync({ bookingId: managerTarget.id, targetManagerId: selectedManagerId });
+                  if (!result.success) {
+                    toast.error(result.error);
+                  } else {
+                    toast.success("Manager berhasil ditransfer");
+                    refetch();
+                    setManagerTarget(null);
+                    setSelectedManagerId("");
+                  }
+                }}
+              >
+                {transferManagerMut.isPending ? "Mentransfer..." : "Transfer Manager"}
               </button>
             </div>
           </div>

@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import {
   Form,
   FormControl,
@@ -34,7 +35,9 @@ import {
   Calendar as CalendarIcon,
   TrashBinTrash,
   AddCircle,
+  AltArrowDown,
 } from "@solar-icons/react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -45,6 +48,7 @@ import {
 } from "@/hooks/use-mice-bookings";
 import { createMiceBookingSchema } from "@/lib/validations/booking-mice";
 import type { MiceBookingItem } from "./types";
+import type { BookingPrefillLead } from "@/types/lead";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,15 +57,20 @@ interface MiceBookingDrawerProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   booking: MiceBookingItem | null;
+  /** When provided (create mode), the drawer opens pre-filled from this lead. */
+  prefillLead?: BookingPrefillLead | null;
+  /** Called after a successful create/update. */
+  onSuccess?: () => void;
 }
 
 interface MiceFormValues {
   clientName: string;
+  companyName: string;
   clientPhone: string;
   venueId: string;
   eventTypeId: string;
   eventDate: string;
-  bookingDate: string;
+  time: string;
   estimatedPax: string;
   salesId: string;
   notes: string;
@@ -109,15 +118,14 @@ interface TermRow {
 
 const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
 
-const today = new Date().toISOString().split("T")[0];
-
 const DEFAULT_VALUES: MiceFormValues = {
   clientName: "",
+  companyName: "",
   clientPhone: "",
   venueId: "",
   eventTypeId: "",
   eventDate: "",
-  bookingDate: today,
+  time: "",
   estimatedPax: "",
   salesId: "",
   notes: "",
@@ -148,6 +156,8 @@ export function MiceBookingDrawer({
   open,
   onOpenChange,
   booking,
+  prefillLead,
+  onSuccess,
 }: MiceBookingDrawerProps) {
   const isEdit = !!booking;
   const form = useForm<MiceFormValues>({ defaultValues: DEFAULT_VALUES });
@@ -155,7 +165,24 @@ export function MiceBookingDrawer({
 
   const [currentStep, setCurrentStep] = useState(1);
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
+  // Track COLLAPSED terms — default empty = semua kebuka
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
   const [signingLocation, setSigningLocation] = useState("");
+
+  function toggleTerm(idx: number) {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
+      return next;
+    });
+  }
+
+  // Venue availability (mirrors Wedding drawer pattern)
+  type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
+  const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
+  const [availLoading, setAvailLoading] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
+  const [eventDatePopoverOpen, setEventDatePopoverOpen] = useState(false);
 
   // Customer / Lead picker (mirror wedding drawer)
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -225,6 +252,32 @@ export function MiceBookingDrawer({
     return salesMice.find((s) => s.id === user.profileId)?.fullName ?? user.name ?? null;
   }, [currentUserIsSalesMice, salesMice, user]);
 
+  // Watch venueId from form to trigger availability fetch
+  const watchedVenueId = form.watch("venueId");
+
+  // Fetch venue availability whenever venue or visible month changes
+  useEffect(() => {
+    if (!watchedVenueId) { setAvailability({}); return; }
+    setAvailLoading(true);
+    const month = format(startOfMonth(visibleMonth), "yyyy-MM");
+    const params = new URLSearchParams({ month });
+    fetch(`/api/venues/${watchedVenueId}/availability?${params}`)
+      .then((r) => r.json())
+      .then((data: Record<string, DayAvail>) => setAvailability(data))
+      .catch(() => setAvailability({}))
+      .finally(() => setAvailLoading(false));
+  }, [watchedVenueId, visibleMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
+    const key = format(d, "yyyy-MM-dd");
+    const a = availability[key];
+    if (!a) return null;
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
+  }
+
   // Pre-compute terms from booking OUTSIDE the effect so the effect body
   // doesn't perform complex reactive-value derivation (which triggers the
   // react-hooks/set-state-in-effect lint rule).
@@ -269,13 +322,16 @@ export function MiceBookingDrawer({
     if (open) {
       if (booking) {
         // ── Edit mode: hydrate form from the existing booking ──
+        // Note: MiceBookingItem does NOT have `time` or `companyName` fields yet
+        // (backend columns pending). Both default to "" until schema is extended.
         form.reset({
           clientName: booking.customer.name,
+          companyName: "",
           clientPhone: booking.customer.phone,
           venueId: booking.venue.id,
           eventTypeId: "",
           eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().split("T")[0] : "",
-          bookingDate: booking.bookingDate ? new Date(booking.bookingDate).toISOString().split("T")[0] : today,
+          time: "",
           estimatedPax: "",
           salesId: booking.sales?.id ?? "",
           notes: "",
@@ -283,6 +339,29 @@ export function MiceBookingDrawer({
         setTerms(bookingTerms ?? makeDefaultTerms());
         setSigningLocation("");
         setSelectedCustomerId(booking.customer.id);
+      } else if (prefillLead) {
+        // ── Create mode, pre-filled from a lead ──
+        // BookingPrefillLead HAS `time` field; no `companyName` field available.
+        const autoSalesId = currentUserIsSalesMice && user?.profileId
+          ? user.profileId
+          : (prefillLead.assignedTo?.id ?? "");
+        const phone = prefillLead.contactNumbers?.[0]?.number ?? "";
+        form.reset({
+          ...DEFAULT_VALUES,
+          clientName: prefillLead.name,
+          companyName: "",
+          clientPhone: phone.replace(/\D/g, ""),
+          venueId: prefillLead.venue?.id ?? "",
+          eventTypeId: prefillLead.eventType?.id ?? "",
+          eventDate: prefillLead.eventDate ? new Date(prefillLead.eventDate).toISOString().split("T")[0] : "",
+          time: prefillLead.time ?? "",
+          estimatedPax: prefillLead.estimatedPax != null ? String(prefillLead.estimatedPax) : "",
+          salesId: autoSalesId,
+          notes: prefillLead.notes ?? "",
+        });
+        setTerms(makeDefaultTerms());
+        setSigningLocation("");
+        setSelectedCustomerId("");
       } else {
         const autoSalesId = currentUserIsSalesMice && user?.profileId ? user.profileId : "";
         form.reset({ ...DEFAULT_VALUES, salesId: autoSalesId });
@@ -292,8 +371,11 @@ export function MiceBookingDrawer({
       }
       setCurrentStep(1);
       setClientSearch("");
-      setSelectedLeadId("");
+      setSelectedLeadId(!booking && prefillLead ? prefillLead.leadId : "");
       setClientDropdownOpen(false);
+      setAvailability({});
+      setVisibleMonth(new Date());
+      setEventDatePopoverOpen(false);
     } else {
       signatureRef.current = null;
     }
@@ -311,7 +393,7 @@ export function MiceBookingDrawer({
   async function handleNext() {
     if (currentStep === 1) {
       const ok = await form.trigger([
-        "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate", "bookingDate",
+        "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate",
       ]);
       if (!ok) return;
     }
@@ -327,13 +409,19 @@ export function MiceBookingDrawer({
   function addTerm() {
     setTerms((prev) => [
       ...prev.slice(0, -1),
-      { name: "Term Baru", amount: 0, dueDate: "", sortOrder: prev.length - 1, paymentStatus: "unpaid" },
+      { name: "Term Baru", amount: 0, dueDate: "", sortOrder: prev.length - 1, paymentStatus: "unpaid" as TermRow["paymentStatus"] },
       { ...prev[prev.length - 1], sortOrder: prev.length },
     ]);
+    // term baru otomatis kebuka (default open)
   }
 
   function removeTerm(idx: number) {
     setTerms((prev) => prev.filter((_, i) => i !== idx).map((t, i) => ({ ...t, sortOrder: i })));
+    setCollapsedTerms((prev) => {
+      const next = new Set<number>();
+      prev.forEach((n) => { if (n < idx) { next.add(n); } else if (n > idx) { next.add(n - 1); } });
+      return next;
+    });
   }
 
   function updateTerm<K extends keyof TermRow>(idx: number, key: K, val: TermRow[K]) {
@@ -355,7 +443,8 @@ export function MiceBookingDrawer({
       venueId: values.venueId,
       eventTypeId: values.eventTypeId,
       eventDate: values.eventDate,
-      bookingDate: values.bookingDate,
+      // bookingDate is auto-set to today — never collected from user input
+      bookingDate: new Date().toISOString().split("T")[0],
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       salesId: resolvedSalesId ?? null,
       salesSignature: signatureRef.current ?? null,
@@ -387,6 +476,7 @@ export function MiceBookingDrawer({
       if (!result.success) { toast.error(result.error ?? "Gagal menyimpan booking."); return; }
       toast.success("Booking MICE berhasil disimpan.");
     }
+    onSuccess?.();
     onOpenChange(false);
   }
 
@@ -413,10 +503,10 @@ export function MiceBookingDrawer({
                   {/* Informasi Client */}
                   <div className="space-y-3">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Client</p>
-                    {/* Nama Client — search lead atau customer terdaftar */}
-                    <FormField control={form.control} name="clientName" rules={{ required: "Nama client wajib diisi" }} render={({ field }) => (
+                    {/* Nama PIC — search lead atau customer terdaftar */}
+                    <FormField control={form.control} name="clientName" rules={{ required: "Nama PIC wajib diisi" }} render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nama Client / Perusahaan *</FormLabel>
+                        <FormLabel>Nama PIC *</FormLabel>
                         {selectedLeadId && (
                           <p className="text-xs text-[var(--brand-gold)]">Dari Lead — konversi otomatis saat booking dibuat</p>
                         )}
@@ -424,7 +514,7 @@ export function MiceBookingDrawer({
                           <FormControl>
                             <Input
                               {...field}
-                              placeholder="Cari lead / customer, atau ketik baru..."
+                              placeholder="Cari lead / customer, atau ketik nama PIC..."
                               autoComplete="off"
                               onChange={(e) => {
                                 field.onChange(e);
@@ -447,6 +537,8 @@ export function MiceBookingDrawer({
                                       className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
                                       onClick={() => {
                                         form.setValue("clientName", lead.name);
+                                        // LeadOption does not carry a company/instansi field — left empty
+                                        form.setValue("companyName", "");
                                         const phone = lead.contactNumbers?.[0]?.number ?? "";
                                         if (phone) form.setValue("clientPhone", phone.replace(/\D/g, ""));
                                         if (!currentUserIsSalesMice && lead.assignedTo?.id) form.setValue("salesId", lead.assignedTo.id);
@@ -471,6 +563,8 @@ export function MiceBookingDrawer({
                                       className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
                                       onClick={() => {
                                         form.setValue("clientName", c.name);
+                                        // CustomerOption does not carry a company field — left empty
+                                        form.setValue("companyName", "");
                                         const phone = firstPhone(c.mobileNumber);
                                         if (phone) form.setValue("clientPhone", phone.replace(/\D/g, ""));
                                         setSelectedCustomerId(c.id);
@@ -487,6 +581,13 @@ export function MiceBookingDrawer({
                             </div>
                           )}
                         </div>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="companyName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nama Perusahaan / Instansi</FormLabel>
+                        <FormControl><Input {...field} placeholder="PT. Contoh Jaya (opsional)" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -529,22 +630,66 @@ export function MiceBookingDrawer({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <FormField control={form.control} name="bookingDate" rules={{ required: "Tanggal booking wajib diisi" }} render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tanggal Booking *</FormLabel>
-                          <FormControl><Input type="date" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tanggal Event *</FormLabel>
-                          <FormControl><Input type="date" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
+                    <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tanggal Event *</FormLabel>
+                        <Popover open={eventDatePopoverOpen} onOpenChange={setEventDatePopoverOpen}>
+                          <PopoverTrigger render={
+                            <Button
+                              variant="outline"
+                              disabled={!watchedVenueId}
+                              className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                            >
+                              <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                              {watchedVenueId
+                                ? (field.value ? format(new Date(field.value), "dd MMM yyyy") : "Pilih tanggal event")
+                                : "Pilih venue terlebih dahulu"}
+                            </Button>
+                          } />
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              captionLayout="dropdown"
+                              selected={field.value ? new Date(field.value) : undefined}
+                              onSelect={(date) => {
+                                field.onChange(date ? date.toISOString().split("T")[0] : "");
+                                setEventDatePopoverOpen(false);
+                              }}
+                              disabled={(d) => getDateStatus(d) === "unavailable"}
+                              fromYear={new Date().getFullYear() - 2}
+                              toYear={new Date().getFullYear() + 5}
+                              defaultMonth={field.value ? new Date(field.value) : new Date()}
+                              onMonthChange={setVisibleMonth}
+                              modifiers={{
+                                available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
+                                partial: (d) => !!watchedVenueId && getDateStatus(d) === "partial",
+                                unavailable: (d) => !!watchedVenueId && getDateStatus(d) === "unavailable",
+                              }}
+                              modifiersClassNames={{
+                                available: "day-available",
+                                partial: "day-partial",
+                                unavailable: "day-unavailable",
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="time" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Waktu Acara</FormLabel>
+                        <FormControl>
+                          <TimeRangePicker
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Pilih rentang waktu acara..."
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <FormField control={form.control} name="estimatedPax" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Jumlah Pax (Estimasi)</FormLabel>
@@ -595,85 +740,137 @@ export function MiceBookingDrawer({
                 <div className="space-y-4">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Pembayaran</p>
 
-                  {terms.map((t, idx) => {
-                    const isLast = idx === terms.length - 1;
-                    return (
-                      <div key={idx} className="space-y-2">
-                        {/* Term name + status + delete */}
-                        <div className={cn("flex", "items-center", "gap-2")}>
-                          <div className="flex items-center gap-0.5 flex-1">
-                            <Input
-                              value={t.name}
-                              onChange={(e) => updateTerm(idx, "name", e.target.value)}
-                              placeholder="Nama term"
-                              className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                            />
-                            {idx === 0 && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Select
-                              value={t.paymentStatus}
-                              onValueChange={(v) => updateTerm(idx, "paymentStatus", v as TermRow["paymentStatus"])}
-                            >
-                              <SelectTrigger className="w-24 h-7">
-                                <span className={cn("text-xs font-semibold", t.paymentStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                  {t.paymentStatus.charAt(0).toUpperCase() + t.paymentStatus.slice(1)}
-                                </span>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PAYMENT_STATUS.map((s) => (
-                                  <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {terms.length > 1 && !(idx === 0 || isLast) && (
-                              <button type="button" onClick={() => removeTerm(idx)} className="text-destructive hover:text-destructive shrink-0">
+                  <div className="space-y-2">
+                    {terms.map((t, idx) => {
+                      const isLast = idx === terms.length - 1;
+                      const isOpen = !collapsedTerms.has(idx);
+                      const payStatus = t.paymentStatus;
+                      const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
+                      // Middle terms (not first, not last) are removable
+                      const canRemove = terms.length > 1 && !(idx === 0 || isLast);
+                      return (
+                        <Collapsible
+                          key={idx}
+                          open={isOpen}
+                          onOpenChange={() => toggleTerm(idx)}
+                          className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                        >
+                          {/* ── Collapsible header — trigger area + hapus sebagai sibling ── */}
+                          <div className="flex items-center gap-1 px-3 py-2.5">
+                            <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                              <AltArrowDown
+                                weight="BoldDuotone"
+                                className={cn(
+                                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                  isOpen && "rotate-180",
+                                )}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-sm font-medium truncate",
+                                  t.name ? "text-foreground" : "text-muted-foreground italic",
+                                )}>
+                                  {t.name || "Term tanpa nama"}
+                                  {idx === 0 && <span className="text-destructive ml-1">*</span>}
+                                </p>
+                                {!isOpen && (
+                                  <p className="text-xs text-muted-foreground tabular-nums">
+                                    <span className={cn(payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
+                                      {statusLabel}
+                                    </span>
+                                    {t.amount ? ` · Rp${fmtAmount(t.amount)}` : ""}
+                                    {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
+                                  </p>
+                                )}
+                              </div>
+                            </CollapsibleTrigger>
+                            {/* Tombol hapus — SIBLING dari trigger, bukan child-nya */}
+                            {canRemove && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeTerm(idx);
+                                }}
+                                aria-label="Hapus term"
+                                className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                              >
                                 <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </div>
-                        </div>
 
-                        {/* Amount + Due Date */}
-                        <div className={cn("flex", "flex-col", "sm:flex-row", "gap-3", "sm:items-center")}>
-                          <div className="sm:flex-[2]">
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none">Rp</span>
-                              <Input
-                                className="pl-9"
-                                value={fmtAmount(t.amount)}
-                                onChange={(e) => updateTerm(idx, "amount", parseRpToNumber(e.target.value))}
-                                placeholder="15.000.000"
-                                inputMode="numeric"
-                              />
-                            </div>
-                          </div>
-                          <div className="sm:flex-1">
-                            <Popover>
-                              <PopoverTrigger render={
-                                <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
-                                  <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                  {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Pilih tanggal"}
-                                </Button>
-                              } />
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  captionLayout="dropdown"
-                                  selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                                  onSelect={(date) => updateTerm(idx, "dueDate", date ? date.toISOString().split("T")[0] : "")}
-                                  fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                          {/* ── Collapsible body ── */}
+                          <CollapsibleContent>
+                            <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+                              {/* Term name editable */}
+                              <div className="pt-2 flex items-center gap-1">
+                                <Input
+                                  value={t.name}
+                                  onChange={(e) => updateTerm(idx, "name", e.target.value)}
+                                  placeholder="Nama term (mis. Booking Fee / DP)"
+                                  className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
                                 />
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                        </div>
+                                {idx === 0 && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
+                              </div>
 
-                        {/* Separator between terms */}
-                        {idx < terms.length - 1 && <div className="border-b border-dashed border-border" />}
-                      </div>
-                    );
-                  })}
+                              {/* Status pembayaran */}
+                              <Select
+                                value={payStatus}
+                                onValueChange={(v) => updateTerm(idx, "paymentStatus", v as TermRow["paymentStatus"])}
+                              >
+                                <SelectTrigger className="w-32 h-8">
+                                  <span className={cn("text-xs font-semibold", payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
+                                    {statusLabel}
+                                  </span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PAYMENT_STATUS.map((s) => (
+                                    <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              {/* Amount + Due Date */}
+                              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                                <div className="sm:flex-[2]">
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none">Rp</span>
+                                    <Input
+                                      className="pl-9"
+                                      value={fmtAmount(t.amount)}
+                                      onChange={(e) => updateTerm(idx, "amount", parseRpToNumber(e.target.value))}
+                                      placeholder="15.000.000"
+                                      inputMode="numeric"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="sm:flex-1">
+                                  <Popover>
+                                    <PopoverTrigger render={
+                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}>
+                                        <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                        {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Pilih tanggal"}
+                                      </Button>
+                                    } />
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar
+                                        mode="single"
+                                        captionLayout="dropdown"
+                                        selected={t.dueDate ? new Date(t.dueDate) : undefined}
+                                        onSelect={(date) => updateTerm(idx, "dueDate", date ? date.toISOString().split("T")[0] : "")}
+                                        fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                </div>
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
 
                   {/* Add Term button — inserts between first and last */}
                   <Button type="button" variant="outline" onClick={addTerm} className="w-full border-dashed gap-1.5 text-muted-foreground">

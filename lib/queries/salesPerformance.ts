@@ -52,7 +52,7 @@ function computeBreakdown(
 // ─── Main query ───────────────────────────────────────────────────────────────
 
 /**
- * Returns top-5 sales by most recently created booking.
+ * Returns top-5 sales ranked by confirmed revenue (highest first).
  * Admin (profileId = undefined) sees all sales.
  * Non-admin scoped to the given profileId list (their group members).
  *
@@ -68,34 +68,26 @@ export async function getTopSalesByRecentBooking(
   cacheTag("bookings", "groups");
   cacheLife("minutes");
 
-  // Step 1: Get top-5 most-recently-active salesIds in the date range.
-  // We query up to 500 bookings ordered by createdAt desc, then deduplicate
-  // salesId in-memory to get the 5 most recent distinct sellers.
-  const recentBookings = await db.booking.findMany({
+  // Step 1: Get all distinct salesIds active in the date range (candidates pool).
+  // Cap at 500 rows to bound memory; deduplication done in-memory.
+  const candidateBookings = await db.booking.findMany({
     where: {
       bookingDate: { gte: startDate, lte: endDate },
       ...(allowedProfileIds ? { salesId: { in: allowedProfileIds } } : {}),
     },
-    select: { salesId: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
+    select: { salesId: true },
     take: 500,
   });
 
-  const top5SalesIds: string[] = [];
-  for (const b of recentBookings) {
-    if (!top5SalesIds.includes(b.salesId)) {
-      top5SalesIds.push(b.salesId);
-      if (top5SalesIds.length === 5) break;
-    }
-  }
+  const candidateSalesIds = [...new Set(candidateBookings.map((b) => b.salesId))];
 
-  if (top5SalesIds.length === 0) return [];
+  if (candidateSalesIds.length === 0) return [];
 
-  // Step 2: Fetch all bookings for these 5 sales in the date range (for aggregation).
+  // Step 2: Fetch all bookings + profiles + targets for all candidates.
   const [allBookings, profiles, targets] = await Promise.all([
     db.booking.findMany({
       where: {
-        salesId: { in: top5SalesIds },
+        salesId: { in: candidateSalesIds },
         bookingDate: { gte: startDate, lte: endDate },
         bookingStatus: { not: BookingStatus.Canceled },
       },
@@ -109,13 +101,13 @@ export async function getTopSalesByRecentBooking(
     }),
 
     db.profile.findMany({
-      where: { id: { in: top5SalesIds } },
+      where: { id: { in: candidateSalesIds } },
       select: { id: true, fullName: true, avatarUrl: true },
     }),
 
     db.userTarget.findMany({
       where: {
-        profileId: { in: top5SalesIds },
+        profileId: { in: candidateSalesIds },
         type: "sales",
         startDate: { lte: endDate },
         endDate: { gte: startDate },
@@ -153,8 +145,8 @@ export async function getTopSalesByRecentBooking(
     bookingsBySalesId.set(b.salesId, list);
   }
 
-  // Step 4: Compose result — preserve top5SalesIds order (most recent first).
-  return top5SalesIds.map((profileId) => {
+  // Step 4: Aggregate all candidates, sort by confirmed revenue desc, take top 5.
+  const aggregated = candidateSalesIds.map((profileId) => {
     const profile = profileMap.get(profileId);
     const bookings = bookingsBySalesId.get(profileId) ?? [];
     const confirmed = bookings.filter(
@@ -180,6 +172,11 @@ export async function getTopSalesByRecentBooking(
       breakdown,
     };
   });
+
+  // Sort by confirmed revenue descending, then slice to top 5.
+  return aggregated
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
 }
 
 // ─── Return type alias ────────────────────────────────────────────────────────

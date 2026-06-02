@@ -124,7 +124,7 @@ function MentionDropdown({ users, query, activeIndex, onSelect }: MentionDropdow
   return (
     <div className={cn(
       'absolute', 'bottom-full', 'left-0', 'mb-1',
-      'w-64', 'max-h-52', 'overflow-y-auto',
+      'w-72', 'max-h-52', 'overflow-y-auto',
       'bg-card', 'border', 'border-border', 'rounded-xl',
       'shadow-md', 'z-50', 'py-1'
     )}>
@@ -151,7 +151,15 @@ function MentionDropdown({ users, query, activeIndex, onSelect }: MentionDropdow
               : getInitials(user.fullName)
             }
           </div>
-          <span className="truncate text-foreground">{user.fullName}</span>
+          <span className="truncate text-foreground min-w-0 flex-1">{user.fullName}</span>
+          {user.role?.name && (
+            <span className={cn(
+              'shrink-0', 'px-1.5', 'py-0.5', 'rounded-full', 'text-[10px]', 'font-medium',
+              'bg-secondary', 'text-secondary-foreground', 'border', 'border-border'
+            )}>
+              {user.role.name}
+            </span>
+          )}
         </button>
       ))}
     </div>
@@ -375,7 +383,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
     }
     qc.invalidateQueries({ queryKey: ["booking-comments", bookingId] });
     qc.invalidateQueries({ queryKey: ["unread-comments"] });
-    if (textareaRef.current) textareaRef.current.style.height = "36px";
+    if (textareaRef.current) textareaRef.current.style.height = "40px";
     textareaRef.current?.focus();
   };
 
@@ -431,11 +439,11 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
               {customerName}
             </SheetTitle>
             <button
-              className={cn('flex', 'items-center', 'justify-center', 'min-h-9', 'min-w-9', 'rounded-full', 'bg-muted', 'hover:bg-muted/80', 'text-foreground', 'cursor-pointer', 'shrink-0')}
+              className={cn('flex', 'items-center', 'justify-center', 'min-h-9', 'min-w-9', 'rounded-full', 'bg-destructive/10', 'hover:bg-destructive/20', 'text-destructive', 'cursor-pointer', 'shrink-0')}
               onClick={onClose}
               aria-label="Close"
             >
-              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-muted-foreground')} />
+              <CloseCircle weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-destructive')} />
             </button>
           </div>
 
@@ -623,8 +631,8 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
           <div className={cn('shrink-0', 'border-t', 'px-3', 'py-3', 'flex', 'gap-2', 'items-end')}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className={cn('p-1.5', 'rounded-lg', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
-                  <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} />
+                <button className={cn('h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
+                  <AddCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start">
@@ -654,13 +662,13 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                 onKeyDown={handleKeyDown}
                 placeholder="Ketik komentar... (@ untuk mention)"
                 rows={1}
-                className={cn('w-full', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
-                style={{ minHeight: "36px", maxHeight: "160px", overflowY: "auto" }}
+                className={cn('w-full', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2.5', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
+                style={{ minHeight: "40px", maxHeight: "160px", overflowY: "auto" }}
               />
             </div>
 
-            <Button size="icon" onClick={handleSend} disabled={sending || (!input.trim() && !pendingAttachments.length)} className={cn('shrink-0', 'rounded-xl', 'h-9', 'w-9')}>
-              {sending ? <Refresh weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin')} /> : <Plain weight="BoldDuotone" className={cn('h-4', 'w-4')} />}
+            <Button size="icon" onClick={handleSend} disabled={sending || (!input.trim() && !pendingAttachments.length)} className={cn('shrink-0', 'rounded-xl', 'h-10', 'w-10')}>
+              {sending ? <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin')} /> : <Plain weight="BoldDuotone" className={cn('h-5', 'w-5')} />}
             </Button>
           </div>
 

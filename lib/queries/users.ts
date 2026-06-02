@@ -127,7 +127,12 @@ export type ManagerProfile = Awaited<ReturnType<typeof getManagerProfiles>>[numb
 export async function getMentionableUsers() {
   return db.profile.findMany({
     where: { status: "active" },
-    select: { id: true, fullName: true, avatarUrl: true },
+    select: {
+      id: true,
+      fullName: true,
+      avatarUrl: true,
+      role: { select: { name: true } },
+    },
     orderBy: { fullName: "asc" },
     take: 200,
   });

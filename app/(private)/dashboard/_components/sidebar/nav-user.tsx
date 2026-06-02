@@ -81,7 +81,7 @@ export function NavUser(): React.ReactElement {
                       isActive={pathname === "/dashboard/profile"}
                     >
                       <User weight="BoldDuotone" className="h-4 w-4" />
-                      <span>Profil</span>
+                      <span>Profile</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>

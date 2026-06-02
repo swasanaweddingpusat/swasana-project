@@ -7,6 +7,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
+import { isSequentialFlow } from "@/lib/approval-flows";
 
 export async function approveStep(stepId: string, signature?: string | null) {
   const session = await auth();
@@ -34,9 +35,11 @@ export async function approveStep(stepId: string, signature?: string | null) {
       ? allSteps.filter((s) => s.status === "pending" && s.approverType !== "client")
       : [step];
 
-    // Enforce step order: for non-super-admin, all steps with a lower stepOrder must
-    // already be approved before the target step can be approved.
-    if (!isSuperAdmin) {
+    // Enforce step order only for sequential flows (catering, decoration).
+    // For order-independent flows (booking, booking-mice, quotations, package),
+    // manager and finance can approve in any order — record becomes "approved"
+    // only when ALL role steps are done.
+    if (!isSuperAdmin && isSequentialFlow(step.record.module)) {
       const blockedByPrior = allSteps.some(
         (s) => s.stepOrder < step.stepOrder && s.status !== "approved"
       );
@@ -89,6 +92,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
     revalidateTag("bookings", "max");
+    revalidateTag("quotations", "max");
 
     return { success: true as const };
   } catch (e) {
@@ -144,6 +148,7 @@ export async function rejectStep(stepId: string, notes: string) {
     revalidateTag("approvals", "max");
     revalidateTag("packages", "max");
     revalidateTag("bookings", "max");
+    revalidateTag("quotations", "max");
 
     return { success: true as const };
   } catch (e) {

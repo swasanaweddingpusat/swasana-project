@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { Bell, CheckRead, CalendarAdd, CalendarMark, Calendar, DangerTriangle, TransferHorizontal, FileText, Eye, UserPlus, Shop, ChefHat, Refresh, MentionCircle } from "@solar-icons/react";
@@ -50,8 +50,8 @@ export function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      <Button variant="ghost" size="icon" className={cn('relative', 'cursor-pointer')} onClick={() => setOpen(!open)}>
-        <Bell weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+      <Button variant="ghost" size="icon" className={cn('relative', 'cursor-pointer', 'bg-primary', 'text-primary-foreground', 'hover:bg-primary/90', 'hover:text-primary-foreground')} onClick={() => setOpen(!open)}>
+        <Bell weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-primary-foreground')} />
         {unreadCount > 0 && (
           <span className={cn('absolute', '-top-0.5', '-right-0.5', 'h-4', 'min-w-4', 'px-1', 'flex', 'items-center', 'justify-center', 'rounded-full', 'bg-destructive', 'text-destructive-foreground', 'text-[10px]', 'font-bold')}>
             {unreadCount > 99 ? "99+" : unreadCount}

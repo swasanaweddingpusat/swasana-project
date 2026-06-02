@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -77,6 +77,7 @@ export function GroupDetailClient({
   isSuperAdmin,
 }: Props) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const updateGroupMutation = useUpdateGroup();
   const addMemberMutation = useAddGroupMember();
@@ -181,6 +182,7 @@ export function GroupDetailClient({
           if (res.success) {
             toast.success("Anggota berhasil ditambahkan");
             setAddOpen(false);
+            void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
           } else {
             toast.error(res.error ?? "Terjadi kesalahan");
@@ -199,6 +201,7 @@ export function GroupDetailClient({
           if (res.success) {
             toast.success(`${deleteMember.name} dihapus dari grup`);
             setDeleteMember(null);
+            void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
           } else {
             toast.error(res.error ?? "Terjadi kesalahan");
@@ -237,47 +240,48 @@ export function GroupDetailClient({
   return (
     <div className="space-y-6">
       {/* Group Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3">
+        {leaderMember && (
+          <ProfileAvatar
+            name={leaderMember.profile.fullName ?? leaderMember.userId}
+            src={leaderMember.profile.avatarUrl ?? undefined}
+            size="md"
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <h1 className="text-base font-bold text-foreground truncate">{teamName}</h1>
           {leaderMember && (
-            <ProfileAvatar
-              name={leaderMember.profile.fullName ?? leaderMember.userId}
-              src={leaderMember.profile.avatarUrl ?? undefined}
-              size="md"
-            />
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              Leader: {leaderMember.profile.fullName ?? leaderMember.userId}
+            </p>
           )}
-          <div>
-            <h1 className="text-base font-bold text-foreground">{teamName}</h1>
-            {leaderMember && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Leader: {leaderMember.profile.fullName ?? leaderMember.userId}
-              </p>
-            )}
-            {teamDesc && (
-              <p className="text-sm text-muted-foreground mt-0.5">{teamDesc}</p>
-            )}
-          </div>
+          {teamDesc && (
+            <p className="text-sm text-muted-foreground mt-0.5 truncate">{teamDesc}</p>
+          )}
         </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 shrink-0">
           {isSuperAdmin && (
             <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
               onClick={() => setChangeLeaderOpen(true)}
+              aria-label="Ganti Leader"
+              title="Ganti Leader"
             >
-              <UserCircle weight="BoldDuotone" className="h-3.5 w-3.5" /> Ganti Leader
+              <UserCircle weight="BoldDuotone" className="h-4 w-4" />
             </Button>
           )}
           {canManage && (
             <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
               onClick={() => setSettingsOpen(true)}
+              aria-label="Pengaturan Grup"
+              title="Pengaturan Grup"
             >
-              <Settings weight="BoldDuotone" className="h-3.5 w-3.5" /> Pengaturan
+              <Settings weight="BoldDuotone" className="h-4 w-4" />
             </Button>
           )}
         </div>

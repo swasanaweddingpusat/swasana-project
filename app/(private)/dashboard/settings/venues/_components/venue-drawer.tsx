@@ -85,7 +85,17 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
 
     if (!result.success) { toast.error(result.error); return; }
     toast.success(isEdit ? "Venue diperbarui." : "Venue dibuat.");
-    onSaved(result.venue as VenueQueryItem, isEdit);
+
+    const raw = result.venue as VenueQueryItem & { brandId?: string | null };
+    const brand = raw.brandId
+      ? (brands.find((b) => b.id === raw.brandId) ?? null)
+      : null;
+    const enriched: VenueQueryItem = {
+      ...raw,
+      brand: brand ? { id: brand.id, name: brand.name, code: brand.code } : null,
+    };
+
+    onSaved(enriched, isEdit);
     onClose();
   }
 
@@ -95,7 +105,7 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
         <div className={cn('flex-1', 'overflow-y-auto', 'space-y-4', 'px-1')}>
           {/* Brand */}
           <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Brand</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Brand</Label>
             <SearchableSelect
               options={brands.map((b) => ({ id: b.id, name: b.name }))}
               value={form.brandId}
@@ -108,62 +118,60 @@ export function VenueDrawer({ isOpen, onClose, editingVenue, brands, onSaved }: 
 
           {/* Name */}
           <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Nama Venue *</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Nama Venue *</Label>
             <Input
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               placeholder="e.g. Brin Gatot Subroto"
-              className={cn("border-[#CCCCCC] bg-[#F9F9F9]", errors.name && "border-destructive")}
+              className={cn(errors.name && "border-destructive")}
             />
             {errors.name && <p className={cn('text-xs', 'text-destructive')}>{errors.name}</p>}
           </div>
 
           {/* Code */}
           <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Kode Venue *</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Kode Venue *</Label>
             <Input
               value={form.code}
               onChange={(e) => set("code", e.target.value.toUpperCase())}
               placeholder="e.g. BRINGATSU"
-              className={cn("border-[#CCCCCC] bg-[#F9F9F9] uppercase", errors.code && "border-destructive")}
+              className={cn("uppercase", errors.code && "border-destructive")}
             />
             {errors.code && <p className={cn('text-xs', 'text-destructive')}>{errors.code}</p>}
           </div>
 
           {/* Capacity */}
           <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Kapasitas (Pax)</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Kapasitas (Pax)</Label>
             <Input
               type="number"
               value={form.capacity}
               onChange={(e) => set("capacity", e.target.value)}
               placeholder="e.g. 500"
-              className={cn("border-[#CCCCCC] bg-[#F9F9F9]", errors.capacity && "border-destructive")}
+              className={cn(errors.capacity && "border-destructive")}
             />
             {errors.capacity && <p className={cn('text-xs', 'text-destructive')}>{errors.capacity}</p>}
           </div>
 
           {/* Address */}
           <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Alamat</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Alamat</Label>
             <Textarea
               value={form.address}
               onChange={(e) => set("address", e.target.value)}
               placeholder="e.g. Jl. Raya No. 1, Jakarta"
               rows={3}
-              className={cn('border-[#CCCCCC]', 'bg-[#F9F9F9]')}
             />
           </div>
 
           {/* Description */}
           <div className="space-y-1.5">
-            <Label className={cn('text-sm', 'font-medium', 'text-gray-700')}>Deskripsi / Fasilitas</Label>
+            <Label className={cn('text-sm', 'font-medium')}>Deskripsi / Fasilitas</Label>
             <Textarea
               value={form.description}
               onChange={(e) => set("description", e.target.value)}
               placeholder="e.g. Free parking, Free wifi, etc."
               rows={3}
-              className={cn('border-[#CCCCCC]', 'bg-[#F9F9F9]')}
             />
           </div>
         </div>

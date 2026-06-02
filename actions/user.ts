@@ -191,22 +191,25 @@ export async function updateUser(data: Record<string, unknown>) {
 // ─── Delete User ──────────────────────────────────────────────────────────────
 
 export async function deleteUser(userId: string) {
-  const permResult = await requirePermission({ module: "settings-users", action: "delete" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`user-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error: permError } = await requirePermission({ module: "settings-users", action: "delete" });
+  if (permError) return { success: false, error: permError };
+  if (!mutationLimiter.check(`user-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    const profile = await db.profile.findUnique({ where: { id: userId } });
+    const profile = await db.profile.findUnique({
+      where: { id: userId },
+      select: { id: true, userId: true, email: true, fullName: true },
+    });
     if (!profile) {
       return { success: false, error: "Pengguna tidak ditemukan." };
     }
 
+    // Invalidate active sessions first, then delete the user.
+    // Cascades from User → Profile (onDelete: Cascade) handle
+    // EmailVerificationToken, PasswordResetToken, UserGroupMember, Notification etc.
+    // ActivityLog rows are kept (onDelete: SetNull nullifies their userId).
     await db.$transaction([
-      db.emailVerificationToken.deleteMany({ where: { profileId: userId } }),
-      db.passwordResetToken.deleteMany({ where: { userId } }),
-      db.activityLog.deleteMany({ where: { userId } }),
-      db.profile.delete({ where: { id: userId } }),
+      db.session.deleteMany({ where: { userId: profile.userId } }),
       db.user.delete({ where: { id: profile.userId } }),
     ]);
 
@@ -214,6 +217,7 @@ export async function deleteUser(userId: string) {
 
     const h = await headers();
     await logAudit({
+      userId: session!.user.profileId,
       action: "user.deleted",
       entityType: "profile",
       entityId: userId,

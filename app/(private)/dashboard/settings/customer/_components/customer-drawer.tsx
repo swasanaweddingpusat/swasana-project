@@ -26,6 +26,9 @@ interface CustomerDrawerProps {
 
 type OptionItem = { id: string; name: string };
 
+// Form type excludes mobileNumber — handled separately via state + manual validation
+type CustomerFormValues = Omit<CustomerInput, "mobileNumber">;
+
 const DRAFT_KEY = "customer_drawer_draft";
 interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; email: string; nikNumber: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
 function saveDraft(d: CustomerDraft) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ } }
@@ -34,8 +37,6 @@ function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* n
 
 async function fetchOptions(url: string): Promise<OptionItem[]> {
   const res = await fetch(url);
-  // Throw on error so a transient failure isn't cached as an empty "success"
-  // under a shared queryKey (e.g. ["source-of-informations"]).
   if (!res.ok) throw new Error(`Request failed (${res.status}): ${url}`);
   return res.json();
 }
@@ -60,8 +61,9 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
 
   const [mobileNumbers, setMobileNumbers] = useState<MobileNumberEntry[]>([]);
   const [mobileInput, setMobileInput] = useState({ name: "", number: "" });
+  const [mobileError, setMobileError] = useState<string | null>(null);
 
-  const form = useForm<Omit<CustomerInput, "mobileNumber">>({
+  const form = useForm<CustomerFormValues>({
     defaultValues: { name: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
 
@@ -77,6 +79,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
 
     queueMicrotask(() => {
       setMobileInput({ name: "", number: "" });
+      setMobileError(null);
       if (!editCustomer) {
         const draft = loadDraft();
         if (draft) {
@@ -103,7 +106,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   useEffect(() => {
     if (!open || !editCustomer) return;
     if (sourceOptions.length > 0 && editCustomer.type) {
-      
       form.setValue("type", editCustomer.type);
     }
   }, [sourceOptions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,7 +113,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   useEffect(() => {
     if (!open || !editCustomer) return;
     if (memberStatusOptions.length > 0 && editCustomer.memberStatus) {
-      
       form.setValue("memberStatus", editCustomer.memberStatus);
     }
   }, [memberStatusOptions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -126,7 +127,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     const result = await createSourceOfInformation(name);
     if (!result.success) { toast.error(result.error); return; }
     qc.invalidateQueries({ queryKey: ["source-of-informations"] });
-    
     form.setValue("type", name);
     toast.success(`"${name}" ditambahkan.`);
   }
@@ -135,7 +135,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     const result = await createMemberStatus(name);
     if (!result.success) { toast.error(result.error); return; }
     qc.invalidateQueries({ queryKey: ["member-statuses"] });
-    
     form.setValue("memberStatus", name);
     toast.success(`"${name}" ditambahkan.`);
   }
@@ -153,11 +152,26 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
     if (!num) return;
     if (mobileNumbers.some((e) => e.number === num)) { toast.error("Nomor sudah ada"); return; }
     setMobileNumbers((prev) => [...prev, { name: mobileInput.name.trim(), number: num }]);
+    setMobileError(null);
     setMobileInput({ name: "", number: "" });
   }
 
-  async function onSubmit(values: Omit<CustomerInput, "mobileNumber">) {
-    if (mobileNumbers.length === 0) { toast.error("Nomor HP wajib diisi"); return; }
+  function removeMobileNumber(idx: number) {
+    setMobileNumbers((prev) => {
+      const updated = prev.filter((_, i) => i !== idx);
+      if (updated.length === 0) setMobileError("Minimal 1 nomor HP wajib diisi");
+      return updated;
+    });
+  }
+
+  async function onSubmit(values: CustomerFormValues) {
+    // Validate mobileNumbers inline
+    if (mobileNumbers.length === 0) {
+      setMobileError("Minimal 1 nomor HP wajib diisi");
+      return;
+    }
+    setMobileError(null);
+
     const payload = { ...values, mobileNumber: mobileNumbers };
 
     const result = isEdit
@@ -183,6 +197,8 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <Input {...field} placeholder="e.g. John Doe & Jane Doe" />
                 </FormControl><FormMessage /></FormItem>
               )} />
+
+              {/* No. HP — mobileNumbers state drives this field; validated on submit */}
               <FormItem>
                 <FormLabel>No. HP *</FormLabel>
                 <div className={cn('rounded-lg', 'bg-muted', 'p-3', 'space-y-2')}>
@@ -192,7 +208,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                         {entry.name && <p className={cn('text-xs', 'text-muted-foreground')}>{entry.name}</p>}
                         <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
                       </div>
-                      <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => setMobileNumbers((prev) => prev.filter((_, i) => i !== idx))}>
+                      <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => removeMobileNumber(idx)}>
                         <CloseCircle weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} />
                       </button>
                     </div>
@@ -219,7 +235,12 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                     </Button>
                   </div>
                 </div>
+                {/* Inline error message for mobileNumbers */}
+                {mobileError && (
+                  <p className="text-sm font-medium text-destructive">{mobileError}</p>
+                )}
               </FormItem>
+
               <FormField control={form.control} name="email" render={({ field }) => (
                 <FormItem><FormLabel>Email *</FormLabel><FormControl>
                   <Input {...field} placeholder="nama@email.com" />
@@ -236,11 +257,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <Textarea {...field} placeholder="Jl. Melati No. 10, Jakarta Selatan" rows={2} />
                 </FormControl><FormMessage /></FormItem>
               )} />
-              <FormField control={form.control} name="bitrixId" render={({ field }) => (
-                <FormItem><FormLabel>Bitrix ID</FormLabel><FormControl>
-                  <Input {...field} placeholder="e.g. 12345" />
-                </FormControl><FormMessage /></FormItem>
-              )} />
               <FormField control={form.control} name="type" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Source of Information *</FormLabel>
@@ -249,7 +265,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                     value={nameToId(sourceOptions, field.value)}
                     onChange={(id) => {
                       const name = idToName(sourceOptions, id);
-                      
                       field.onChange(name);
                     }}
                     placeholder="Pilih atau tambah sumber lead..."
@@ -260,6 +275,11 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   />
                   <FormMessage />
                 </FormItem>
+              )} />
+              <FormField control={form.control} name="bitrixId" render={({ field }) => (
+                <FormItem><FormLabel>Bitrix ID</FormLabel><FormControl>
+                  <Input {...field} placeholder="e.g. 12345" />
+                </FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="club" render={({ field }) => (
                 <FormItem><FormLabel>Club (opsional)</FormLabel><FormControl>
@@ -274,7 +294,6 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                     value={nameToId(memberStatusOptions, field.value)}
                     onChange={(id) => {
                       const name = idToName(memberStatusOptions, id);
-                      
                       field.onChange(name);
                     }}
                     placeholder="Pilih atau tambah status..."

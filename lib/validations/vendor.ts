@@ -20,6 +20,7 @@ export const createVendorSchema = z.object({
   description: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
+  bankName: z.string().nullable().optional(),
   paymentMethods: z.array(paymentMethodSchema).optional(),
 });
 

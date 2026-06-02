@@ -19,11 +19,13 @@ import { LeadDrawer } from "./lead-drawer";
 import { LeadsFilters, type ViewMode } from "./leads-filters";
 import { LeadsListView } from "./leads-list-view";
 import { LeadsPipelineView } from "./leads-pipeline-view";
+import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
+import { MiceBookingDrawer } from "@/app/(private)/dashboard/booking-mice/_components/MiceBookingDrawer";
 import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LeadItem } from "@/lib/queries/leads";
-import type { LeadListItem } from "@/types/lead";
+import type { LeadListItem, BookingPrefillLead, ContactNumber } from "@/types/lead";
 
 export type { LeadItem };
 
@@ -42,7 +44,14 @@ export function LeadsTable() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editLead, setEditLead] = useState<LeadListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadItem | null>(null);
+  const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
+  const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
+  const [resetTarget, setResetTarget] = useState<LeadItem | null>(null);
+  const [isMarkingStatus, setIsMarkingStatus] = useState(false);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
+  // Booking creation from a lead — routed to wedding or MICE drawer by category.
+  const [weddingPrefill, setWeddingPrefill] = useState<BookingPrefillLead | null>(null);
+  const [micePrefill, setMicePrefill] = useState<BookingPrefillLead | null>(null);
 
   const pageSize = 20;
   const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useLeads({
@@ -108,6 +117,120 @@ export function LeadsTable() {
 
   function handleBuatQuotation(lead: LeadItem) {
     toast.info(`Buat Quotation untuk ${lead.name} — coming soon.`);
+  }
+
+  // Find the system Deal and Lost status IDs from the loaded statuses list.
+  // Deal has isFinal=true & isSystem=true, Lost has isFinal=true & isSystem=false.
+  const dealStatus = statuses.find((s) => s.isFinal && s.isSystem);
+  const lostStatus = statuses.find((s) => s.isFinal && !s.isSystem);
+
+  // Open confirmation modal; the actual mutation runs on confirm.
+  function handleMarkDeal(lead: LeadItem) {
+    if (lead.status.isFinal) { toast.info("Lead sudah berstatus final."); return; }
+    setDealTarget(lead);
+  }
+
+  function handleMarkLost(lead: LeadItem) {
+    if (lead.status.isFinal) { toast.info("Lead sudah berstatus final."); return; }
+    setLostTarget(lead);
+  }
+
+  async function handleConfirmDeal() {
+    if (!dealTarget) return;
+    if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
+    setIsMarkingStatus(true);
+    try {
+      const res = await updateStatus({ id: dealTarget.id, statusId: dealStatus.id });
+      if (res.success) {
+        toast.success(`${dealTarget.name} ditandai sebagai Deal.`);
+        setDealTarget(null);
+      } else {
+        toast.error(res.error ?? "Gagal mengubah status.");
+      }
+    } catch {
+      toast.error("Gagal mengubah status.");
+    } finally {
+      setIsMarkingStatus(false);
+    }
+  }
+
+  async function handleConfirmLost() {
+    if (!lostTarget) return;
+    if (!lostStatus) { toast.error("Status Lost tidak ditemukan."); return; }
+    setIsMarkingStatus(true);
+    try {
+      const res = await updateStatus({ id: lostTarget.id, statusId: lostStatus.id });
+      if (res.success) {
+        toast.success(`${lostTarget.name} ditandai sebagai Lost.`);
+        setLostTarget(null);
+      } else {
+        toast.error(res.error ?? "Gagal mengubah status.");
+      }
+    } catch {
+      toast.error("Gagal mengubah status.");
+    } finally {
+      setIsMarkingStatus(false);
+    }
+  }
+
+  // Cold = the default pipeline status (isDefault flag), fallback to the first
+  // non-final / non-system status by load order.
+  const coldStatus =
+    statuses.find((s) => s.isDefault && !s.isFinal && !s.isSystem) ??
+    statuses.find((s) => !s.isFinal && !s.isSystem);
+
+  // Open the Reset confirmation (only meaningful for final leads).
+  function handleReset(lead: LeadItem) {
+    if (!lead.status.isFinal) { toast.info("Lead belum final, tidak perlu di-reset."); return; }
+    setResetTarget(lead);
+  }
+
+  async function handleConfirmReset() {
+    if (!resetTarget) return;
+    if (!coldStatus) { toast.error("Status Cold tidak ditemukan."); return; }
+    setIsMarkingStatus(true);
+    try {
+      const res = await updateStatus({ id: resetTarget.id, statusId: coldStatus.id });
+      if (res.success) {
+        toast.success(`${resetTarget.name} dikembalikan ke ${coldStatus.name}.`);
+        setResetTarget(null);
+      } else {
+        toast.error(res.error ?? "Gagal me-reset status.");
+      }
+    } catch {
+      toast.error("Gagal me-reset status.");
+    } finally {
+      setIsMarkingStatus(false);
+    }
+  }
+
+  // Build a booking prefill payload from a lead and open the matching drawer.
+  function handleCreateBooking(lead: LeadItem) {
+    const prefill: BookingPrefillLead = {
+      leadId: lead.id,
+      name: lead.name,
+      contactNumbers: (lead.contactNumbers as ContactNumber[] | null) ?? [],
+      email: lead.email,
+      address: lead.address,
+      bitrixId: lead.bitrixId,
+      eventDate: lead.eventDate,
+      time: lead.time,
+      estimatedPax: lead.estimatedPax,
+      notes: lead.notes,
+      weddingSession: lead.weddingSession,
+      venue: lead.venue,
+      package: lead.package,
+      eventType: lead.eventType,
+      sourceOfInformation: lead.sourceOfInformation,
+      assignedTo: lead.assignedTo,
+    };
+    // Route by the lead's category (eventType.category wins, falls back to lead.category).
+    const category = lead.eventType?.category ?? lead.category;
+    if (category === "MICE") {
+      setMicePrefill(prefill);
+    } else {
+      setWeddingPrefill(prefill);
+    }
   }
 
   async function handleConfirmDelete() {
@@ -188,6 +311,10 @@ export function LeadsTable() {
               onEdit={handleEdit}
               onDelete={setDeleteTarget}
               onBuatQuotation={handleBuatQuotation}
+              onMarkDeal={handleMarkDeal}
+              onMarkLost={handleMarkLost}
+              onReset={handleReset}
+              onCreateBooking={handleCreateBooking}
               isLoading={leadsLoading || isManualRefresh}
             />
           )}
@@ -198,6 +325,9 @@ export function LeadsTable() {
               statuses={pipelineStatuses}
               onDragEnd={handleDragEnd}
               onEdit={handleEdit}
+              onMarkDeal={handleMarkDeal}
+              onMarkLost={handleMarkLost}
+              onCreateBooking={handleCreateBooking}
               isLoading={leadsLoading || isManualRefresh}
             />
           )}
@@ -209,6 +339,27 @@ export function LeadsTable() {
         onOpenChange={setDrawerOpen}
         editLead={editLead}
       />
+
+      {/* Create Booking from a lead — wedding drawer */}
+      {weddingPrefill && (
+        <BookingDrawer
+          open={!!weddingPrefill}
+          onOpenChange={(o) => { if (!o) setWeddingPrefill(null); }}
+          prefillLead={weddingPrefill}
+          onSuccess={() => { setWeddingPrefill(null); void refetchLeads(); }}
+        />
+      )}
+
+      {/* Create Booking from a lead — MICE drawer */}
+      {micePrefill && (
+        <MiceBookingDrawer
+          open={!!micePrefill}
+          onOpenChange={(o) => { if (!o) setMicePrefill(null); }}
+          booking={null}
+          prefillLead={micePrefill}
+          onSuccess={() => { setMicePrefill(null); void refetchLeads(); }}
+        />
+      )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
@@ -226,6 +377,61 @@ export function LeadsTable() {
               className={cn("bg-destructive", "text-destructive-foreground", "hover:bg-destructive/90")}
             >
               {isDeleting ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!dealTarget} onOpenChange={(open) => !open && setDealTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tandai sebagai Deal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tandai <strong>{dealTarget?.name}</strong> sebagai <strong>Deal</strong>? Status lead akan menjadi final dan tidak bisa dipindahkan lagi di pipeline.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMarkingStatus}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeal} disabled={isMarkingStatus}>
+              {isMarkingStatus ? "Memproses..." : "Tandai Deal"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!lostTarget} onOpenChange={(open) => !open && setLostTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tandai sebagai Lost</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tandai <strong>{lostTarget?.name}</strong> sebagai <strong>Lost</strong>? Status lead akan menjadi final dan tidak bisa dipindahkan lagi di pipeline.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMarkingStatus}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmLost}
+              disabled={isMarkingStatus}
+              className={cn("bg-destructive", "text-destructive-foreground", "hover:bg-destructive/90")}
+            >
+              {isMarkingStatus ? "Memproses..." : "Tandai Lost"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Status Lead</AlertDialogTitle>
+            <AlertDialogDescription>
+              Kembalikan <strong>{resetTarget?.name}</strong> ke status <strong>{coldStatus?.name ?? "Cold"}</strong>? Lead akan kembali aktif di pipeline.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMarkingStatus}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmReset} disabled={isMarkingStatus}>
+              {isMarkingStatus ? "Memproses..." : `Reset ke ${coldStatus?.name ?? "Cold"}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

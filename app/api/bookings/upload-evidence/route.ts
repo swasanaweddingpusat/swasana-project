@@ -14,8 +14,10 @@ export async function POST(req: Request) {
 
   const fd = await req.formData();
   const termId = fd.get("termId") as string;
-  const file = fd.get("file") as File;
-  if (!termId || !file) return NextResponse.json({ error: "Missing data" }, { status: 400 });
+  const file = fd.get("file");
+  if (!termId || !(file instanceof File)) {
+    return NextResponse.json({ error: "Missing or invalid file" }, { status: 400 });
+  }
 
   let buffer: Buffer = Buffer.from(await file.arrayBuffer());
   let contentType = file.type;

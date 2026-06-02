@@ -6,7 +6,12 @@ function createPrismaClient(): PrismaClient {
 
   return new PrismaClient({
     adapter,
-    transactionOptions: { timeout: 15000 },
+    // Booking creation runs a large array-form transaction (snapshots, category
+    // prices, vendor/internal items, term-of-payments, approval records + steps,
+    // client agreement) — each op is a round trip over Neon, so the default 15s
+    // ceiling is too tight under elevated latency. 30s gives headroom without
+    // masking genuinely stuck transactions.
+    transactionOptions: { timeout: 30000 },
     log:
       process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });

@@ -24,7 +24,7 @@ export async function getBrands() {
   cacheLife("hours");
 
   return db.brand.findMany({
-    orderBy: { name: "asc" },
+    orderBy: { createdAt: "desc" },
     include: {
       venues: {
         where: { isActive: true },
