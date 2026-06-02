@@ -212,10 +212,26 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const { data: unreadCounts = {} } = useUnreadCommentCounts(bookings.map((b: BookingListItem) => b.id));
 
   function renderBookingActions(booking: BookingListItem) {
+    // Client Agreement is gated on internal approval: it appears only after BOTH
+    // the manager and finance approval steps (current round) are approved.
+    const agreementSteps = approvalMap.get(booking.id)?.steps ?? [];
+    const agreementFirstStep = agreementSteps[0];
+    let agreementRoundSize = agreementSteps.length;
+    for (let i = 1; i < agreementSteps.length; i++) {
+      if (agreementSteps[i].approverType === agreementFirstStep?.approverType && agreementSteps[i].approverRoleId === agreementFirstStep?.approverRoleId && agreementSteps[i].approverUserId === agreementFirstStep?.approverUserId) {
+        agreementRoundSize = i;
+        break;
+      }
+    }
+    const currentRoundSteps = agreementSteps.slice(-agreementRoundSize);
+    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
+    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
+    const internalApproved = isManagerApproved && isFinanceApproved;
     return (
       <>
-        {/* Agreement modal trigger — hidden on mobile */}
-        {can("booking", "client-agreement") && (booking.clientAgreement?.status !== "Signed" || (approvalMap.get(booking.id)?.steps.some((s) => s.approverType === "client" && s.status === "pending"))) && (
+        {/* Agreement modal trigger — hidden on mobile. Shown only once manager +
+            finance approved, and hidden again after the client has signed. */}
+        {can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
         <TooltipProvider delay={200}>
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'hidden', 'sm:inline-flex')} onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
