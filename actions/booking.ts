@@ -786,6 +786,57 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
   }
 }
 
+export async function transferBookingManager(
+  bookingId: string,
+  targetManagerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "transfer-manager" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-transfer-manager:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  if (!bookingId || !targetManagerId) return { success: false, error: "Parameter tidak valid." };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const booking = await db.booking.findUnique({
+      where: { id: bookingId },
+      select: { managerId: true, manager: { select: { fullName: true } } },
+    });
+    if (!booking) return { success: false, error: "Booking tidak ditemukan." };
+
+    const targetManager = await db.profile.findUnique({
+      where: { id: targetManagerId },
+      select: { fullName: true, role: { select: { name: true } } },
+    });
+    if (!targetManager) return { success: false, error: "Manager tujuan tidak ditemukan." };
+    if (targetManager.role?.name !== "manager") return { success: false, error: "User yang dipilih bukan manager." };
+
+    await db.$transaction([db.booking.update({ where: { id: bookingId }, data: { managerId: targetManagerId } })]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "updated",
+      entityType: "booking",
+      entityId: bookingId,
+      changes: {
+        managerId: { from: booking.managerId, to: targetManagerId },
+        fromManager: booking.manager?.fullName ?? "Belum ada",
+        toManager: targetManager.fullName,
+      },
+      description: `Transfer manager booking dari ${booking.manager?.fullName ?? "Belum ada"} ke ${targetManager.fullName}`,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Gagal mentransfer manager booking." };
+  }
+}
+
 export async function editBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };

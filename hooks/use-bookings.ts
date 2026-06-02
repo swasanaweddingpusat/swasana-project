@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import type { BookingsResult, BookingDetail } from "@/lib/queries/bookings";
-import { createBooking, updateBooking, deleteBooking, transferBooking } from "@/actions/booking";
+import { createBooking, updateBooking, deleteBooking, transferBooking, transferBookingManager } from "@/actions/booking";
 import type { BookingInput, UpdateBookingInput } from "@/lib/validations/booking";
 
 interface BookingsParams {
@@ -84,6 +84,15 @@ export function useTransferBooking() {
   return useMutation({
     mutationFn: ({ bookingId, targetSalesId }: { bookingId: string; targetSalesId: string }) =>
       transferBooking(bookingId, targetSalesId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
+  });
+}
+
+export function useTransferBookingManager() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, targetManagerId }: { bookingId: string; targetManagerId: string }) =>
+      transferBookingManager(bookingId, targetManagerId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
   });
 }

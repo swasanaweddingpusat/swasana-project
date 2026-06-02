@@ -59,6 +59,16 @@ import type { QuotationItem } from "./quotations-table";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+interface TermRow {
+  name: string;
+  amount: number;
+  dueDate: string;
+  sortOrder: number;
+  paymentStatus: "unpaid" | "paid" | "partial";
+}
+
+const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
+
 interface QuotationDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -92,10 +102,8 @@ interface QuotationFormValues {
   venueId: string;
   venue: string;
   eventDate: string;
-  // Step 2 — internal item
+  // Step 2 — items + ringkasan
   items: QuotationItemForm[];
-  // Step 3 — additional item + ringkasan
-  additionalItems: QuotationItemForm[];
   discount: string;
   validUntil: string;
   notes: string;
@@ -185,6 +193,52 @@ function deriveWeddingEventType(eventTypeName: string): WeddingEventType | "" {
 
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
 
+// ── Term of Payment helpers ───────────────────────────────────────────────────
+
+const BOOKING_FEE_DEFAULT = 5_000_000;
+const DP_DEFAULT = 10_000_000;
+
+function toLocalISO(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}T00:00:00.000Z`;
+}
+
+function makeDefaultTerms(category: "WEDDINGS" | "MICE" | ""): TermRow[] {
+  if (category === "WEDDINGS") {
+    return [
+      { name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
+      { name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
+      { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
+      { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
+      { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
+      { name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5, paymentStatus: "unpaid" },
+      { name: "Final", amount: 0, dueDate: "", sortOrder: 6, paymentStatus: "unpaid" },
+    ];
+  }
+  // MICE or unset → 2 terms
+  return [
+    { name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
+    { name: "Final", amount: 0, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
+  ];
+}
+
+function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
+  if (!eventDate || terms.length === 0) return terms;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const event = new Date(eventDate);
+  event.setHours(0, 0, 0, 0);
+  const totalMs = event.getTime() - now.getTime();
+  if (totalMs <= 0) return terms;
+  const n = terms.length;
+  return terms.map((t, i) => ({
+    ...t,
+    dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
+  }));
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /**
@@ -212,9 +266,9 @@ const DEFAULT_ITEMS: QuotationItemForm[] = [
   // Ballroom Facilities — 1 card, daftar fasilitas di description
   makeItem(
     "Ballroom Facilities :",
-    "400",
-    "408.333",
-    "163.333.333",
+    "",
+    "",
+    "",
     listHtml([
       "Samisara Grand Ballroom for Full Day",
       "Full Carpet Ballroom",
@@ -281,7 +335,6 @@ const DEFAULT_VALUES: QuotationFormValues = {
   venue: "",
   eventDate: "",
   items: DEFAULT_ITEMS.map((it) => ({ ...it })),
-  additionalItems: [{ ...EMPTY_ITEM }],
   discount: "",
   validUntil: "",
   notes: "",
@@ -291,7 +344,7 @@ const DEFAULT_VALUES: QuotationFormValues = {
 
 const QUOTATION_DRAFT_KEY = "quotation-draft-v1";
 
-type QuotationDraft = { values: Partial<QuotationFormValues> };
+type QuotationDraft = { values: Partial<QuotationFormValues>; terms?: TermRow[]; signingLocation?: string };
 
 function readQuotationDraft(): QuotationDraft | null {
   if (typeof window === "undefined") return null;
@@ -303,16 +356,22 @@ function readQuotationDraft(): QuotationDraft | null {
   }
 }
 
-function persistQuotationDraft(values: Partial<QuotationFormValues>) {
+function persistQuotationDraft(
+  values: Partial<QuotationFormValues>,
+  terms?: TermRow[],
+  signingLocation?: string,
+) {
   if (typeof window === "undefined") return;
-  // Signature dataURL tidak di-persist (terlalu besar)
   const { ...rest } = values;
   const hasContent = Object.values(rest).some((v) => {
     if (Array.isArray(v)) return v.some((item: QuotationItemForm) => item.title?.trim());
     return typeof v === "string" && v.trim() !== "";
   });
   if (hasContent) {
-    localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify({ values: rest }));
+    const draft: QuotationDraft = { values: rest };
+    if (terms) draft.terms = terms;
+    if (signingLocation !== undefined) draft.signingLocation = signingLocation;
+    localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(draft));
   } else {
     localStorage.removeItem(QUOTATION_DRAFT_KEY);
   }
@@ -326,7 +385,7 @@ function clearQuotationDraft() {
 // ── Sub-component: ItemListEditor (DRY untuk step 2 & 3) ────────────────────
 
 interface ItemListEditorProps {
-  arrayName: "items" | "additionalItems";
+  arrayName: "items";
   fields: Array<{ id: string }>;
   append: (value: QuotationItemForm) => void;
   remove: (index: number) => void;
@@ -603,34 +662,35 @@ export function QuotationDrawer({
 
   // Expanded state untuk accordion items (step 2)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  // Expanded state untuk accordion additionalItems (step 3)
-  const [expandedAdditional, setExpandedAdditional] = useState<Set<string>>(new Set());
   // Ref to signal that the next fields update should auto-expand the last item.
   const pendingExpandItemsRef = useRef(false);
-  const pendingExpandAdditionalRef = useRef(false);
-  // Ref to signal that the first card of each list should auto-expand on open.
+  // Ref to signal that the first card should auto-expand on open.
   const pendingExpandFirstItemsRef = useRef(false);
-  const pendingExpandFirstAdditionalRef = useRef(false);
 
   // TTD state (step 4)
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
 
-  function toggleItem(id: string) {
-    setExpandedItems((prev) => {
+  // Term of Payment state (step 3)
+  const [terms, setTerms] = useState<TermRow[]>(() => makeDefaultTerms(""));
+  // Track COLLAPSED terms — default empty = semua kebuka
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
+
+  function toggleTerm(idx: number) {
+    setCollapsedTerms((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(idx)) {
+        next.delete(idx);
       } else {
-        next.add(id);
+        next.add(idx);
       }
       return next;
     });
   }
 
-  function toggleAdditional(id: string) {
-    setExpandedAdditional((prev) => {
+  function toggleItem(id: string) {
+    setExpandedItems((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -709,11 +769,6 @@ export function QuotationDrawer({
     name: "items",
   });
 
-  const { fields: additionalFields, append: appendAdditional, remove: removeAdditional } = useFieldArray({
-    control: form.control,
-    name: "additionalItems",
-  });
-
   // Auto-expand the last item when a new one is appended (items).
   useEffect(() => {
     if (pendingExpandItemsRef.current && itemFields.length > 0) {
@@ -723,16 +778,7 @@ export function QuotationDrawer({
     }
   }, [itemFields]);
 
-  // Auto-expand the last additional item when a new one is appended.
-  useEffect(() => {
-    if (pendingExpandAdditionalRef.current && additionalFields.length > 0) {
-      const lastId = additionalFields[additionalFields.length - 1].id;
-      setExpandedAdditional((prev) => new Set([...prev, lastId]));
-      pendingExpandAdditionalRef.current = false;
-    }
-  }, [additionalFields]);
-
-  // Auto-expand the FIRST card of each list on open (at least one card visible).
+  // Auto-expand the FIRST card on open (at least one card visible).
   useEffect(() => {
     if (pendingExpandFirstItemsRef.current && itemFields.length > 0) {
       const firstId = itemFields[0].id;
@@ -741,19 +787,10 @@ export function QuotationDrawer({
     }
   }, [itemFields]);
 
-  useEffect(() => {
-    if (pendingExpandFirstAdditionalRef.current && additionalFields.length > 0) {
-      const firstId = additionalFields[0].id;
-      setExpandedAdditional((prev) => new Set([...prev, firstId]));
-      pendingExpandFirstAdditionalRef.current = false;
-    }
-  }, [additionalFields]);
-
   const watchedClientName = form.watch("clientName");
   const watchedSalesId = form.watch("salesId");
   const watchedVenueId = form.watch("venueId");
   const watchedItems = form.watch("items");
-  const watchedAdditionalItems = form.watch("additionalItems");
   const watchedDiscount = form.watch("discount");
   const watchedCategory = form.watch("category");
   const watchedEventTypeId = form.watch("eventTypeId");
@@ -850,16 +887,11 @@ export function QuotationDrawer({
     (et) => !watchedCategory || et.category === watchedCategory,
   );
 
-  // ── Item totals (gabungan items + additionalItems) ───────────────────────
-  const subtotalItems = (watchedItems ?? []).reduce(
+  // ── Item totals ──────────────────────────────────────────────────────────
+  const subtotal = (watchedItems ?? []).reduce(
     (sum, it) => sum + parseNumericInput(it?.total ?? ""),
     0,
   );
-  const subtotalAdditional = (watchedAdditionalItems ?? []).reduce(
-    (sum, it) => sum + parseNumericInput(it?.total ?? ""),
-    0,
-  );
-  const subtotal = subtotalItems + subtotalAdditional;
   const discountNum = parseNumericInput(watchedDiscount);
   const grandTotal = Math.max(0, subtotal - discountNum);
 
@@ -872,20 +904,21 @@ export function QuotationDrawer({
     setClientSearch("");
     setDebouncedSearch("");
     setClientDropdownOpen(false);
-    // Reset accordion state; auto-expand the FIRST card of each list so at least
-    // one card is open when the user reaches step 2 (internal) and step 3 (additional).
+    // Reset accordion state; auto-expand the FIRST card so at least one card is
+    // open when the user reaches step 2.
     setExpandedItems(new Set());
-    setExpandedAdditional(new Set());
     pendingExpandFirstItemsRef.current = true;
-    pendingExpandFirstAdditionalRef.current = true;
     // Reset signature state
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
+    // Reset terms & collapsed state
+    setCollapsedTerms(new Set());
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
       const matchedSales = salesUsers.find((u) => u.fullName === editQuotation.salesName);
+      const editCategory = normalizeCategoryUp(editQuotation.category);
       const items: QuotationItemForm[] =
         editQuotation.items && editQuotation.items.length > 0
           ? editQuotation.items.map((it) => ({
@@ -897,6 +930,7 @@ export function QuotationDrawer({
               manualTotal: !!it.manualTotal,
             }))
           : [{ ...EMPTY_ITEM }];
+      setTerms(makeDefaultTerms(editCategory));
       form.reset({
         clientName: editQuotation.leadName,
         clientPhone: normalizePhone(editQuotation.leadPhone),
@@ -906,7 +940,7 @@ export function QuotationDrawer({
         salesPhone: editQuotation.salesPhone
           ? normalizePhone(editQuotation.salesPhone)
           : "",
-        category: normalizeCategoryUp(editQuotation.category),
+        category: editCategory,
         eventTypeId: "",
         eventTypeName: editQuotation.eventType,
         details: editQuotation.details ?? "",
@@ -916,7 +950,6 @@ export function QuotationDrawer({
         venue: editQuotation.venue,
         eventDate: editQuotation.eventDate,
         items,
-        additionalItems: [{ ...EMPTY_ITEM }],
         discount:
           editQuotation.discount > 0
             ? formatNumericDisplay(editQuotation.discount)
@@ -934,42 +967,30 @@ export function QuotationDrawer({
         const draftHasItems =
           Array.isArray(draftItems) &&
           draftItems.some((it) => it?.title?.trim());
-        const draftAdditional = draft.values.additionalItems;
-        const draftHasAdditional =
-          Array.isArray(draftAdditional) &&
-          draftAdditional.some((it) => it?.title?.trim());
         form.reset({
           ...DEFAULT_VALUES,
           ...draft.values,
           items: draftHasItems
             ? draftItems
             : DEFAULT_ITEMS.map((it) => ({ ...it })),
-          additionalItems: draftHasAdditional
-            ? draftAdditional
-            : [{ ...EMPTY_ITEM }],
         });
-        // Restore signingLocation dari draft jika ada
-        if (draft.values.notes !== undefined) {
-          // signingLocation disimpan terpisah di draft key — ambil dari localStorage
+        // Restore terms dari draft
+        if (Array.isArray(draft.terms) && draft.terms.length > 0) {
+          setTerms(draft.terms);
+        } else {
+          const draftCat = draft.values.category ?? "";
+          setTerms(makeDefaultTerms(draftCat));
+        }
+        // Restore signingLocation dari draft
+        if (draft.signingLocation) {
+          setSigningLocation(draft.signingLocation);
         }
       } else {
         form.reset({
           ...DEFAULT_VALUES,
           items: DEFAULT_ITEMS.map((it) => ({ ...it })),
-          additionalItems: [{ ...EMPTY_ITEM }],
         });
-      }
-      // Restore signingLocation terpisah dari draft key
-      try {
-        const raw = localStorage.getItem(QUOTATION_DRAFT_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as { values: Partial<QuotationFormValues>; signingLocation?: string };
-          if (parsed.signingLocation) {
-            setSigningLocation(parsed.signingLocation);
-          }
-        }
-      } catch {
-        // ignore
+        setTerms(makeDefaultTerms(""));
       }
     }
   }, [open, editQuotation]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -986,21 +1007,16 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
-      persistQuotationDraft(values as Partial<QuotationFormValues>);
-      // Persist signingLocation terpisah
-      try {
-        const raw = localStorage.getItem(QUOTATION_DRAFT_KEY);
-        const parsed: { values: Partial<QuotationFormValues>; signingLocation?: string } = raw
-          ? (JSON.parse(raw) as { values: Partial<QuotationFormValues>; signingLocation?: string })
-          : { values: {} };
-        parsed.signingLocation = signingLocation;
-        localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(parsed));
-      } catch {
-        // ignore
-      }
+      persistQuotationDraft(values as Partial<QuotationFormValues>, terms, signingLocation);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, terms, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist terms & signingLocation changes to draft (not triggered by form.watch).
+  useEffect(() => {
+    if (!open || isEdit) return;
+    persistQuotationDraft(form.getValues(), terms, signingLocation);
+  }, [terms, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-fill from lead ──────────────────────────────────────────────────
   function applyLeadAutofill(lead: LeadOption) {
@@ -1077,6 +1093,20 @@ export function QuotationDrawer({
     setClientDropdownOpen(false);
   }
 
+  // ── Regenerate default terms saat category berubah ──────────────────────
+  // Hanya untuk create mode supaya tidak overwrite edit-mode terms.
+  useEffect(() => {
+    if (!open || isEdit) return;
+    setTerms(makeDefaultTerms(watchedCategory));
+    setCollapsedTerms(new Set());
+  }, [watchedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Recalc term dates saat event date berubah ────────────────────────────
+  useEffect(() => {
+    if (!watchedEventDate) return;
+    setTerms((prev) => recalcTermDates(prev, watchedEventDate + "T00:00:00.000Z"));
+  }, [watchedEventDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
     if (step === 1) {
@@ -1092,10 +1122,16 @@ export function QuotationDrawer({
       ]);
       if (ok) setStep(2);
     } else if (step === 2) {
-      setStep(3);
-    } else if (step === 3) {
+      // Validasi validUntil sebelum lanjut ke step 3 (TOP)
       const ok = await form.trigger(["validUntil"]);
-      if (ok) setStep(4);
+      if (ok) setStep(3);
+    } else if (step === 3) {
+      // Validasi minimal: ada minimal 1 term
+      if (terms.length === 0) {
+        toast.error("Minimal satu term of payment wajib diisi.");
+        return;
+      }
+      setStep(4);
     }
   }
 
@@ -1113,19 +1149,29 @@ export function QuotationDrawer({
   }
 
   function onSubmit(_values: QuotationFormValues) {
-    // Susun payload (termasuk additionalItems & signature) — siap dipakai saat backend tersedia
+    // Susun payload (termasuk items, terms, signature) — siap dipakai saat backend tersedia
     const _payload = {
       ..._values,
-      additionalItems: _values.additionalItems,
       signingLocation,
       signatureSales,
+      termOfPayments: terms
+        .filter((t) => t.dueDate)
+        .map((t) => ({
+          name: t.name,
+          amount: t.amount,
+          dueDate: t.dueDate,
+          sortOrder: t.sortOrder,
+          paymentStatus: t.paymentStatus,
+        })),
     };
     void _payload; // mark as used, backend call belum diimplementasikan
     if (!isEdit) clearQuotationDraft();
     toast.success(
       isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
     );
-    // Reset signature setelah submit
+    // Reset terms & signature setelah submit
+    setTerms(makeDefaultTerms(""));
+    setCollapsedTerms(new Set());
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
@@ -1675,11 +1721,12 @@ export function QuotationDrawer({
                 </div>
               </div>
 
-              {/* ════════════════ STEP 2 — INTERNAL ITEM ════════════════ */}
+              {/* ════════════════ STEP 2 — ITEMS + RINGKASAN ════════════════ */}
               <div className={cn(step !== 2 && "hidden", "space-y-3")}>
+                {/* ── Items ─────────────────────────────────────────── */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className={LABEL_CLASS}>Internal Item</p>
+                    <p className={LABEL_CLASS}>Items</p>
                     <span className="text-xs text-muted-foreground">
                       Total = Qty × Harga (bisa manual)
                     </span>
@@ -1702,36 +1749,8 @@ export function QuotationDrawer({
                     watchedArray={watchedItems ?? []}
                   />
                 </div>
-              </div>
 
-              {/* ════════════════ STEP 3 — ADDITIONAL + RINGKASAN ════════════════ */}
-              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className={LABEL_CLASS}>Additional Item</p>
-                    <span className="text-xs text-muted-foreground">
-                      Total = Qty × Harga (bisa manual)
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Akhiri judul dengan &quot;:&quot; untuk jadi judul section.
-                    Harga boleh dikosongkan untuk item tanpa biaya.
-                  </p>
-
-                  <ItemListEditor
-                    arrayName="additionalItems"
-                    fields={additionalFields}
-                    append={appendAdditional}
-                    remove={removeAdditional}
-                    form={form}
-                    expandedSet={expandedAdditional}
-                    toggleExpanded={toggleAdditional}
-                    pendingExpandRef={pendingExpandAdditionalRef}
-                    watchedArray={watchedAdditionalItems ?? []}
-                  />
-                </div>
-
-                {/* Ringkasan — gabungan internal + additional */}
+                {/* ── Ringkasan ─────────────────────────────────────── */}
                 <div className="border-t pt-4 space-y-3">
                   <FormField
                     control={form.control}
@@ -1761,14 +1780,6 @@ export function QuotationDrawer({
 
                   <div className="rounded-xl bg-muted p-4 space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Internal Item</span>
-                      <span className="tabular-nums">{formatRupiah(subtotalItems)}</span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Additional Item</span>
-                      <span className="tabular-nums">{formatRupiah(subtotalAdditional)}</span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground border-t border-border/50 pt-1.5">
                       <span>Subtotal</span>
                       <span className="tabular-nums">{formatRupiah(subtotal)}</span>
                     </div>
@@ -1793,7 +1804,7 @@ export function QuotationDrawer({
                   </div>
                 </div>
 
-                {/* Berlaku Sampai */}
+                {/* ── Berlaku Sampai ────────────────────────────────── */}
                 <FormField
                   control={form.control}
                   name="validUntil"
@@ -1809,7 +1820,7 @@ export function QuotationDrawer({
                   )}
                 />
 
-                {/* Catatan */}
+                {/* ── Catatan ───────────────────────────────────────── */}
                 <FormField
                   control={form.control}
                   name="notes"
@@ -1828,6 +1839,248 @@ export function QuotationDrawer({
                     </FormItem>
                   )}
                 />
+              </div>
+
+              {/* ════════════════ STEP 3 — TERM OF PAYMENT ════════════════ */}
+              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
+                <div>
+                  <p className={LABEL_CLASS}>Term of Payment</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {watchedCategory === "WEDDINGS"
+                      ? "7 termin default (Wedding). Tanggal jatuh tempo dikalkulasi otomatis dari tanggal event."
+                      : "2 termin default (MICE / lainnya). Sesuaikan nama, nominal, dan tanggal jatuh tempo."}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {terms.map((t, idx) => {
+                    const isOpen = !collapsedTerms.has(idx);
+                    const payStatus = t.paymentStatus ?? "unpaid";
+                    const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
+                    return (
+                      <Collapsible
+                        key={idx}
+                        open={isOpen}
+                        onOpenChange={() => toggleTerm(idx)}
+                        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                      >
+                        {/* ── Header — trigger + hapus sebagai sibling (bukan nested button) ── */}
+                        <div className="flex items-center gap-1 px-3 py-2.5">
+                          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                            <AltArrowDown
+                              weight="BoldDuotone"
+                              className={cn(
+                                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                isOpen && "rotate-180",
+                              )}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className={cn(
+                                  "text-sm font-medium truncate",
+                                  t.name ? "text-foreground" : "text-muted-foreground italic",
+                                )}
+                              >
+                                {t.name || "Term tanpa nama"}
+                              </p>
+                              {!isOpen && (
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  <span
+                                    className={cn(
+                                      payStatus === "paid" ? "text-foreground" : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {statusLabel}
+                                  </span>
+                                  {t.amount ? ` · Rp${t.amount.toLocaleString("id-ID")}` : ""}
+                                  {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
+                                </p>
+                              )}
+                            </div>
+                          </CollapsibleTrigger>
+                          {/* Tombol hapus — sibling dari CollapsibleTrigger, bukan child-nya */}
+                          {terms.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const eventDateStr = watchedEventDate
+                                  ? watchedEventDate + "T00:00:00.000Z"
+                                  : "";
+                                setTerms((prev) =>
+                                  recalcTermDates(
+                                    prev.filter((_, i) => i !== idx),
+                                    eventDateStr,
+                                  ),
+                                );
+                                setCollapsedTerms((prev) => {
+                                  const next = new Set<number>();
+                                  prev.forEach((n) => {
+                                    if (n < idx) {
+                                      next.add(n);
+                                    } else if (n > idx) {
+                                      next.add(n - 1);
+                                    }
+                                  });
+                                  return next;
+                                });
+                              }}
+                              aria-label="Hapus term"
+                              className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* ── Body ── */}
+                        <CollapsibleContent>
+                          <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+                            {/* Term name + Status — satu row */}
+                            <div className="pt-2 flex items-center gap-2">
+                              <Input
+                                value={t.name}
+                                onChange={(e) =>
+                                  setTerms((prev) =>
+                                    prev.map((x, i) =>
+                                      i === idx ? { ...x, name: e.target.value } : x,
+                                    ),
+                                  )
+                                }
+                                placeholder="Nama term (mis. Booking Fee)"
+                                className="flex-1 border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                              />
+                              <Select
+                                value={payStatus}
+                                onValueChange={(v) =>
+                                  setTerms((prev) =>
+                                    prev.map((x, i) =>
+                                      i === idx
+                                        ? { ...x, paymentStatus: v as TermRow["paymentStatus"] }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                              >
+                                <SelectTrigger className="w-32 h-8 bg-background shrink-0">
+                                  <span
+                                    className={cn(
+                                      "text-xs font-semibold",
+                                      payStatus === "paid"
+                                        ? "text-foreground"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {statusLabel}
+                                  </span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PAYMENT_STATUS.map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {/* Amount + Due Date row */}
+                            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                              <div className="sm:flex-[2]">
+                                <Input
+                                  value={t.amount ? t.amount.toLocaleString("id-ID") : ""}
+                                  onChange={(e) => {
+                                    const num =
+                                      parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
+                                    setTerms((prev) =>
+                                      prev.map((x, i) =>
+                                        i === idx ? { ...x, amount: num } : x,
+                                      ),
+                                    );
+                                  }}
+                                  placeholder="Amount"
+                                  inputMode="numeric"
+                                  className="bg-background"
+                                />
+                              </div>
+                              <div className="sm:flex-1">
+                                <Popover>
+                                  <PopoverTrigger
+                                    render={
+                                      <Button
+                                        variant="outline"
+                                        className={cn(
+                                          "w-full justify-start text-left font-normal bg-background",
+                                          !t.dueDate && "text-muted-foreground",
+                                        )}
+                                      >
+                                        <CalendarSolarIcon
+                                          weight="BoldDuotone"
+                                          className="mr-2 h-4 w-4"
+                                        />
+                                        {t.dueDate
+                                          ? format(new Date(t.dueDate), "dd MMM yyyy")
+                                          : "Pilih Tanggal"}
+                                      </Button>
+                                    }
+                                  />
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                      mode="single"
+                                      captionLayout="dropdown"
+                                      selected={
+                                        t.dueDate ? new Date(t.dueDate) : undefined
+                                      }
+                                      onSelect={(date) =>
+                                        setTerms((prev) =>
+                                          prev.map((x, i) =>
+                                            i === idx
+                                              ? { ...x, dueDate: date ? date.toISOString() : "" }
+                                              : x,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
+                </div>
+
+                {/* Tambah Payment button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-dashed gap-1.5 text-muted-foreground rounded-xl"
+                  onClick={() => {
+                    const eventDateStr = watchedEventDate
+                      ? watchedEventDate + "T00:00:00.000Z"
+                      : "";
+                    setTerms((prev) =>
+                      recalcTermDates(
+                        [
+                          ...prev,
+                          {
+                            name: "",
+                            amount: 0,
+                            dueDate: "",
+                            sortOrder: prev.length,
+                            paymentStatus: "unpaid",
+                          },
+                        ],
+                        eventDateStr,
+                      ),
+                    );
+                  }}
+                >
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                  Tambah Payment
+                </Button>
               </div>
 
               {/* ════════════════ STEP 4 — TTD ════════════════ */}

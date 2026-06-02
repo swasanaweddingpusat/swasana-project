@@ -3,8 +3,10 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getManagerProfiles } from "@/lib/queries/users";
 
 export async function GET() {
+  // Guard: booking:view — semua role yang perlu pilih manager pasti punya ini.
+  // Lebih inclusive dari settings-users:view tanpa kehilangan auth check.
   const { session, response } = await requirePermissionForRoute({
-    module: "settings-users",
+    module: "booking",
     action: "view",
   });
   if (response) return response;

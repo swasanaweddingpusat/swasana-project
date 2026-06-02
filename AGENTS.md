@@ -443,7 +443,7 @@ Permission `(module, action)` tuples — kebab-case format:
 
 | Module | Actions |
 |---|---|
-| `booking` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `reject`, `comment`, `client-agreement` |
+| `booking` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `transfer-manager`, `reject`, `comment`, `client-agreement` |
 | `booking-mice` | `view`, `create`, `edit`, `delete`, `print`, `approve`, `mark-lost`, `restore`, `transfer`, `reject`, `comment`, `client-agreement` |
 | `customers` | `view`, `create`, `edit`, `delete` |
 | `finance-ar` | `view`, `create`, `edit`, `delete` |

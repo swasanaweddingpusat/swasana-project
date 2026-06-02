@@ -623,7 +623,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
           <div className={cn('shrink-0', 'border-t', 'px-3', 'py-3', 'flex', 'gap-2', 'items-end')}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className={cn('p-1.5', 'rounded-lg', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
+                <button className={cn('h-9', 'w-9', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
                   <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                 </button>
               </DropdownMenuTrigger>

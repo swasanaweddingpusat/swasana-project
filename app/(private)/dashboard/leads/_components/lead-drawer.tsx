@@ -597,35 +597,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 />
               )}
 
-              {/* Venue */}
-              <FormField
-                control={form.control}
-                name="venueId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Venue *</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih venue..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {venues.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            {v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Status */}
               <FormField
                 control={form.control}
@@ -653,6 +624,35 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                               />
                               {s.name}
                             </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Venue */}
+              <FormField
+                control={form.control}
+                name="venueId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Venue *</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih venue..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {venues.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            {v.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
