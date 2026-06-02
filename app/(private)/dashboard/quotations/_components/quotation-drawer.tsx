@@ -2,7 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray, type UseFormReturn, type FieldPath } from "react-hook-form";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useQuery } from "@tanstack/react-query";
+import { useCreateQuotation, useUpdateQuotation } from "@/hooks/use-quotations";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
 import SignatureCanvas from "react-signature-canvas";
@@ -37,6 +52,7 @@ import {
   ArrowRight,
   AltArrowDown,
   Calendar as CalendarSolarIcon,
+  MenuDots,
 } from "@solar-icons/react";
 import {
   Select,
@@ -389,6 +405,7 @@ interface ItemListEditorProps {
   fields: Array<{ id: string }>;
   append: (value: QuotationItemForm) => void;
   remove: (index: number) => void;
+  move: (from: number, to: number) => void;
   form: UseFormReturn<QuotationFormValues>;
   expandedSet: Set<string>;
   toggleExpanded: (id: string) => void;
@@ -396,17 +413,275 @@ interface ItemListEditorProps {
   watchedArray: QuotationItemForm[];
 }
 
+// ── Sortable item row (inner component used by ItemListEditor) ───────────────
+
+interface SortableItemRowProps {
+  fieldItem: { id: string };
+  index: number;
+  arrayName: "items";
+  fields: Array<{ id: string }>;
+  remove: (index: number) => void;
+  form: UseFormReturn<QuotationFormValues>;
+  expandedSet: Set<string>;
+  toggleExpanded: (id: string) => void;
+  watchedArray: QuotationItemForm[];
+  recomputeRowTotal: (index: number) => void;
+  revertRowTotal: (index: number) => void;
+}
+
+function SortableItemRow({
+  fieldItem,
+  index,
+  arrayName,
+  fields,
+  remove,
+  form,
+  expandedSet,
+  toggleExpanded,
+  watchedArray,
+  recomputeRowTotal,
+  revertRowTotal,
+}: SortableItemRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: fieldItem.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  const isManual = form.getValues(
+    `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
+  ) as boolean;
+  const isOpen = expandedSet.has(fieldItem.id);
+  const titleVal = watchedArray?.[index]?.title ?? "";
+  const totalVal = watchedArray?.[index]?.total ?? "";
+  const qtyVal = watchedArray?.[index]?.qty ?? "";
+  const isSectionHeader = titleVal.trimEnd().endsWith(":");
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <Collapsible
+        open={isOpen}
+        onOpenChange={() => toggleExpanded(fieldItem.id)}
+        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+      >
+        {/* Accordion header */}
+        <div className="flex items-center gap-1 px-3 py-2.5">
+          {/* Drag handle — sibling of CollapsibleTrigger, NOT nested inside it */}
+          <button
+            type="button"
+            {...listeners}
+            aria-label="Drag to reorder"
+            className="shrink-0 cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground transition-colors p-0.5"
+          >
+            <MenuDots weight="BoldDuotone" className="h-4 w-4" />
+          </button>
+
+          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+            <AltArrowDown
+              weight="BoldDuotone"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                isOpen && "rotate-180",
+              )}
+            />
+            <div className="flex-1 min-w-0">
+              <p
+                className={cn(
+                  "text-sm truncate",
+                  isSectionHeader
+                    ? "font-semibold text-foreground"
+                    : "font-medium text-foreground",
+                  !titleVal && "text-muted-foreground italic",
+                )}
+              >
+                {titleVal || "Item tanpa judul"}
+              </p>
+              {!isOpen && (totalVal || qtyVal) && (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {qtyVal ? `Qty ${qtyVal}` : ""}
+                  {qtyVal && totalVal ? " · " : ""}
+                  {totalVal ? `Rp ${totalVal}` : ""}
+                </p>
+              )}
+            </div>
+          </CollapsibleTrigger>
+
+          {/* Delete button — sibling of CollapsibleTrigger, NOT inside it */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              remove(index);
+            }}
+            disabled={fields.length === 1}
+            aria-label="Hapus item"
+            className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
+          >
+            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Accordion body */}
+        <CollapsibleContent>
+          <div className="px-3 pb-3 space-y-2 border-t border-border/60">
+            <FormField
+              control={form.control}
+              name={`${arrayName}.${index}.title` as FieldPath<QuotationFormValues>}
+              render={({ field }) => (
+                <FormItem className="pt-2">
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Judul / Nama Item
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value as string}
+                      placeholder="mis. Ballroom Facilities : atau Nasi Box"
+                      className="w-full"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-3 gap-2">
+              <FormField
+                control={form.control}
+                name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Qty
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.value as string}
+                        onChange={(e) => {
+                          field.onChange(e.target.value.replace(/\D/g, ""));
+                          recomputeRowTotal(index);
+                        }}
+                        placeholder="0"
+                        inputMode="numeric"
+                        className="w-full"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Harga
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.value as string}
+                        onChange={(e) => {
+                          field.onChange(formatNumericDisplay(e.target.value));
+                          recomputeRowTotal(index);
+                        }}
+                        placeholder="0"
+                        inputMode="numeric"
+                        className="w-full"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name={`${arrayName}.${index}.total` as FieldPath<QuotationFormValues>}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Total</span>
+                      {isManual && (
+                        <button
+                          type="button"
+                          onClick={() => revertRowTotal(index)}
+                          className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
+                          aria-label="Kembalikan ke otomatis"
+                        >
+                          <Refresh weight="BoldDuotone" className="h-3 w-3" />
+                          auto
+                        </button>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.value as string}
+                        onChange={(e) => {
+                          form.setValue(
+                            `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
+                            true,
+                          );
+                          field.onChange(formatNumericDisplay(e.target.value));
+                        }}
+                        placeholder="0"
+                        inputMode="numeric"
+                        className={cn(
+                          "w-full",
+                          isManual && "border-primary/50",
+                        )}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Description — rich text (TipTap) */}
+            <FormField
+              control={form.control}
+              name={`${arrayName}.${index}.description` as FieldPath<QuotationFormValues>}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Description{" "}
+                    <span className="font-normal">(opsional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <SimpleEditor
+                      value={field.value as string}
+                      onChange={field.onChange}
+                      placeholder="Deskripsi detail item..."
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
 function ItemListEditor({
   arrayName,
   fields,
   append,
   remove,
+  move,
   form,
   expandedSet,
   toggleExpanded,
   pendingExpandRef,
   watchedArray,
 }: ItemListEditorProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
   function recomputeRowTotal(index: number) {
     const item = form.getValues(`${arrayName}.${index}` as FieldPath<QuotationFormValues>);
     const typedItem = item as QuotationItemForm;
@@ -430,208 +705,45 @@ function ItemListEditor({
     recomputeRowTotal(index);
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = fields.findIndex((f) => f.id === active.id);
+    const toIndex = fields.findIndex((f) => f.id === over.id);
+    if (fromIndex !== -1 && toIndex !== -1) {
+      move(fromIndex, toIndex);
+    }
+  }
+
   return (
     <div className="space-y-2">
-      {fields.map((fieldItem, index) => {
-        const isManual = form.getValues(
-          `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
-        ) as boolean;
-        const isOpen = expandedSet.has(fieldItem.id);
-        const titleVal = watchedArray?.[index]?.title ?? "";
-        const totalVal = watchedArray?.[index]?.total ?? "";
-        const qtyVal = watchedArray?.[index]?.qty ?? "";
-        const isSectionHeader = titleVal.trimEnd().endsWith(":");
-        return (
-          <Collapsible
-            key={fieldItem.id}
-            open={isOpen}
-            onOpenChange={() => toggleExpanded(fieldItem.id)}
-            className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-          >
-            {/* Accordion header */}
-            <div className="flex items-center gap-1 px-3 py-2.5">
-              <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                <AltArrowDown
-                  weight="BoldDuotone"
-                  className={cn(
-                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                    isOpen && "rotate-180",
-                  )}
-                />
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={cn(
-                      "text-sm truncate",
-                      isSectionHeader
-                        ? "font-semibold text-foreground"
-                        : "font-medium text-foreground",
-                      !titleVal && "text-muted-foreground italic",
-                    )}
-                  >
-                    {titleVal || "Item tanpa judul"}
-                  </p>
-                  {!isOpen && (totalVal || qtyVal) && (
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                      {qtyVal ? `Qty ${qtyVal}` : ""}
-                      {qtyVal && totalVal ? " · " : ""}
-                      {totalVal ? `Rp ${totalVal}` : ""}
-                    </p>
-                  )}
-                </div>
-              </CollapsibleTrigger>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  remove(index);
-                }}
-                disabled={fields.length === 1}
-                aria-label="Hapus item"
-                className="shrink-0 h-7 w-7 text-destructive hover:bg-destructive/10"
-              >
-                <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            {/* Accordion body */}
-            <CollapsibleContent>
-              <div className="px-3 pb-3 space-y-2 border-t border-border/60">
-                <FormField
-                  control={form.control}
-                  name={`${arrayName}.${index}.title` as FieldPath<QuotationFormValues>}
-                  render={({ field }) => (
-                    <FormItem className="pt-2">
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Judul / Nama Item
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          value={field.value as string}
-                          placeholder="mis. Ballroom Facilities : atau Nasi Box"
-                          className="w-full"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-3 gap-2">
-                  <FormField
-                    control={form.control}
-                    name={`${arrayName}.${index}.qty` as FieldPath<QuotationFormValues>}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs text-muted-foreground">
-                          Qty
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            value={field.value as string}
-                            onChange={(e) => {
-                              field.onChange(e.target.value.replace(/\D/g, ""));
-                              recomputeRowTotal(index);
-                            }}
-                            placeholder="0"
-                            inputMode="numeric"
-                            className="w-full"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`${arrayName}.${index}.price` as FieldPath<QuotationFormValues>}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs text-muted-foreground">
-                          Harga
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            value={field.value as string}
-                            onChange={(e) => {
-                              field.onChange(formatNumericDisplay(e.target.value));
-                              recomputeRowTotal(index);
-                            }}
-                            placeholder="0"
-                            inputMode="numeric"
-                            className="w-full"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`${arrayName}.${index}.total` as FieldPath<QuotationFormValues>}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Total</span>
-                          {isManual && (
-                            <button
-                              type="button"
-                              onClick={() => revertRowTotal(index)}
-                              className="flex items-center gap-0.5 text-[10px] text-primary hover:underline cursor-pointer"
-                              aria-label="Kembalikan ke otomatis"
-                            >
-                              <Refresh weight="BoldDuotone" className="h-3 w-3" />
-                              auto
-                            </button>
-                          )}
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            value={field.value as string}
-                            onChange={(e) => {
-                              form.setValue(
-                                `${arrayName}.${index}.manualTotal` as FieldPath<QuotationFormValues>,
-                                true,
-                              );
-                              field.onChange(formatNumericDisplay(e.target.value));
-                            }}
-                            placeholder="0"
-                            inputMode="numeric"
-                            className={cn(
-                              "w-full",
-                              isManual && "border-primary/50",
-                            )}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Description — rich text (TipTap) */}
-                <FormField
-                  control={form.control}
-                  name={`${arrayName}.${index}.description` as FieldPath<QuotationFormValues>}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Description{" "}
-                        <span className="font-normal">(opsional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <SimpleEditor
-                          value={field.value as string}
-                          onChange={field.onChange}
-                          placeholder="Deskripsi detail item..."
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        );
-      })}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={fields.map((f) => f.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {fields.map((fieldItem, index) => (
+            <SortableItemRow
+              key={fieldItem.id}
+              fieldItem={fieldItem}
+              index={index}
+              arrayName={arrayName}
+              fields={fields}
+              remove={remove}
+              form={form}
+              expandedSet={expandedSet}
+              toggleExpanded={toggleExpanded}
+              watchedArray={watchedArray}
+              recomputeRowTotal={recomputeRowTotal}
+              revertRowTotal={revertRowTotal}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
 
       <Button
         type="button"
@@ -659,6 +771,10 @@ export function QuotationDrawer({
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  // ── Mutation hooks ───────────────────────────────────────────────────────
+  const createQuotation = useCreateQuotation();
+  const updateQuotation = useUpdateQuotation();
 
   // Expanded state untuk accordion items (step 2)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -764,7 +880,7 @@ export function QuotationDrawer({
     defaultValues: DEFAULT_VALUES,
   });
 
-  const { fields: itemFields, append: appendItem, remove: removeItem } = useFieldArray({
+  const { fields: itemFields, append: appendItem, remove: removeItem, move: moveItem } = useFieldArray({
     control: form.control,
     name: "items",
   });
@@ -809,6 +925,13 @@ export function QuotationDrawer({
     !watchedEventDate ||
     !watchedWeddingSession ||
     !watchedTime?.trim();
+
+  const watchedValidUntil = form.watch("validUntil");
+  // Step 2 requires the "Berlaku Sampai" date (only required field in step 2).
+  const isStep2Incomplete = !watchedValidUntil?.trim();
+  // Step 3 requires at least one term of payment, each with an amount > 0.
+  const isStep3Incomplete =
+    terms.length === 0 || terms.some((t) => !t.amount || t.amount <= 0);
 
   const isStep4Complete = !!signatureSales && !!signingLocation.trim();
 
@@ -922,15 +1045,30 @@ export function QuotationDrawer({
       const items: QuotationItemForm[] =
         editQuotation.items && editQuotation.items.length > 0
           ? editQuotation.items.map((it) => ({
-              title: it.description,
-              description: "",
+              title: it.description, // QuotationLineItem.description = DB title (see mapper)
+              description: it.richDescription ?? "", // TipTap rich HTML
               qty: it.qty > 0 ? String(it.qty) : "",
               price: it.price > 0 ? formatNumericDisplay(it.price) : "",
               total: it.total > 0 ? formatNumericDisplay(it.total) : "",
               manualTotal: !!it.manualTotal,
             }))
           : [{ ...EMPTY_ITEM }];
-      setTerms(makeDefaultTerms(editCategory));
+      // Restore terms from real DB data (termOfPayments on QuotationItem)
+      if (editQuotation.termOfPayments && editQuotation.termOfPayments.length > 0) {
+        setTerms(
+          editQuotation.termOfPayments.map((t, idx) => ({
+            name: t.name,
+            amount: t.amount,
+            dueDate: t.dueDate ? t.dueDate + "T00:00:00.000Z" : "",
+            sortOrder: idx,
+            paymentStatus: (t.paymentStatus as "unpaid" | "paid" | "partial") ?? "unpaid",
+          })),
+        );
+      } else {
+        setTerms(makeDefaultTerms(editCategory));
+      }
+      // Restore signature fields
+      if (editQuotation.signingLocation) setSigningLocation(editQuotation.signingLocation);
       form.reset({
         clientName: editQuotation.leadName,
         clientPhone: normalizePhone(editQuotation.leadPhone),
@@ -1126,9 +1264,13 @@ export function QuotationDrawer({
       const ok = await form.trigger(["validUntil"]);
       if (ok) setStep(3);
     } else if (step === 3) {
-      // Validasi minimal: ada minimal 1 term
+      // Validasi: minimal 1 term, dan setiap term wajib punya amount > 0.
       if (terms.length === 0) {
         toast.error("Minimal satu term of payment wajib diisi.");
+        return;
+      }
+      if (terms.some((t) => !t.amount || t.amount <= 0)) {
+        toast.error("Amount setiap term of payment wajib diisi.");
         return;
       }
       setStep(4);
@@ -1148,23 +1290,65 @@ export function QuotationDrawer({
     }
   }
 
-  function onSubmit(_values: QuotationFormValues) {
-    // Susun payload (termasuk items, terms, signature) — siap dipakai saat backend tersedia
-    const _payload = {
-      ..._values,
-      signingLocation,
-      signatureSales,
-      termOfPayments: terms
-        .filter((t) => t.dueDate)
-        .map((t) => ({
-          name: t.name,
-          amount: t.amount,
-          dueDate: t.dueDate,
-          sortOrder: t.sortOrder,
-          paymentStatus: t.paymentStatus,
-        })),
+  async function onSubmit(values: QuotationFormValues) {
+    // Build terms payload (filter terms with no dueDate is ok — dueDate is optional in schema)
+    const termOfPayments = terms.map((t, idx) => ({
+      name: t.name,
+      amount: t.amount,
+      dueDate: t.dueDate || null,
+      sortOrder: idx,
+      paymentStatus: t.paymentStatus,
+    }));
+
+    // Parse items — form stores qty/price/total as display strings ("1.000.000") → parse to int
+    const items = values.items.map((it, idx) => ({
+      title: it.title,
+      description: it.description || null,
+      qty: parseNumericInput(it.qty),
+      price: parseNumericInput(it.price),
+      total: parseNumericInput(it.total),
+      manualTotal: it.manualTotal,
+      sortOrder: idx,
+    }));
+
+    const discountNum = parseNumericInput(values.discount);
+
+    const payload = {
+      clientName: values.clientName,
+      clientPhone: values.clientPhone,
+      instansi: values.instansi || null,
+      salesId: values.salesId,
+      venueId: values.venueId,
+      venueName: values.venue || null,
+      eventTypeId: values.eventTypeId || null,
+      eventTypeName: values.eventTypeName || null,
+      category: (values.category || "WEDDINGS") as "WEDDINGS" | "MICE",
+      weddingSession: (values.weddingSession || null) as "morning" | "evening" | "fullday" | null,
+      eventDate: values.eventDate || null,
+      time: values.time || null,
+      details: values.details || null,
+      items,
+      discount: discountNum,
+      validUntil: values.validUntil,
+      notes: values.notes || null,
+      termOfPayments,
+      signingLocation: signingLocation || null,
+      signatureSales: signatureSales || null,
     };
-    void _payload; // mark as used, backend call belum diimplementasikan
+
+    let result: { success: boolean; error?: string };
+
+    if (isEdit && editQuotation) {
+      result = await updateQuotation.mutateAsync({ ...payload, id: editQuotation.id });
+    } else {
+      result = await createQuotation.mutateAsync(payload);
+    }
+
+    if (!result.success) {
+      toast.error(result.error ?? "Gagal menyimpan quotation.");
+      return;
+    }
+
     if (!isEdit) clearQuotationDraft();
     toast.success(
       isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
@@ -1742,6 +1926,7 @@ export function QuotationDrawer({
                     fields={itemFields}
                     append={appendItem}
                     remove={removeItem}
+                    move={moveItem}
                     form={form}
                     expandedSet={expandedItems}
                     toggleExpanded={toggleItem}
@@ -1998,10 +2183,18 @@ export function QuotationDrawer({
                                       ),
                                     );
                                   }}
-                                  placeholder="Amount"
+                                  placeholder="Amount *"
                                   inputMode="numeric"
-                                  className="bg-background"
+                                  className={cn(
+                                    "bg-background",
+                                    (!t.amount || t.amount <= 0) && "border-destructive/40",
+                                  )}
                                 />
+                                {(!t.amount || t.amount <= 0) && (
+                                  <p className="text-xs text-destructive mt-1">
+                                    Amount wajib diisi
+                                  </p>
+                                )}
                               </div>
                               <div className="sm:flex-1">
                                 <Popover>
@@ -2105,19 +2298,24 @@ export function QuotationDrawer({
                       !signatureSales ? "border-destructive/40" : "border-border",
                     )}
                   >
-                    <SignatureCanvas
-                      ref={sigSalesRef}
-                      penColor="black"
-                      canvasProps={{
-                        className: "w-full",
-                        style: { width: "100%", height: 200, touchAction: "none" },
-                      }}
-                      onEnd={() => {
-                        if (sigSalesRef.current) {
-                          setSignatureSales(sigSalesRef.current.toDataURL("image/png"));
-                        }
-                      }}
-                    />
+                    {/* Mount only when step 4 is active — a SignatureCanvas mounted
+                        inside a display:none container has 0 dimensions and never
+                        captures strokes. */}
+                    {step === 4 && (
+                      <SignatureCanvas
+                        ref={sigSalesRef}
+                        penColor="black"
+                        canvasProps={{
+                          className: "w-full",
+                          style: { width: "100%", height: 200, touchAction: "none" },
+                        }}
+                        onEnd={() => {
+                          if (sigSalesRef.current) {
+                            setSignatureSales(sigSalesRef.current.toDataURL("image/png"));
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                   <div className={cn("flex", "items-center", "justify-between", "mt-1.5")}>
                     {!signatureSales && (
@@ -2172,7 +2370,15 @@ export function QuotationDrawer({
             {step < 4 ? (
               <Button
                 onClick={handleNext}
-                disabled={step === 1 ? isStep1Incomplete : false}
+                disabled={
+                  step === 1
+                    ? isStep1Incomplete
+                    : step === 2
+                      ? isStep2Incomplete
+                      : step === 3
+                        ? isStep3Incomplete
+                        : false
+                }
                 className="flex-[60%] cursor-pointer"
               >
                 Lanjut

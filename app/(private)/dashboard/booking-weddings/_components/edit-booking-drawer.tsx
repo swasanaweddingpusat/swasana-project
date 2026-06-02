@@ -162,6 +162,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
   // Initialize state from booking
+  /* eslint-disable react-hooks/set-state-in-effect -- hydrating local form state from the booking prop on open */
   useEffect(() => {
     if (!open || !booking) return;
     setCurrentStep(1);
@@ -266,7 +267,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Recalc term dates when event date changes
   useEffect(() => {
     if (bookingDate) setTerms((prev) => recalcTermDates(prev, bookingDate));
-  }, [bookingDate]);  
+  }, [bookingDate]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Price helpers
   const getBasePrice = () => selectedPackagePrice;

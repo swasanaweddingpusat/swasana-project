@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import {
   Form,
   FormControl,
@@ -64,10 +65,12 @@ interface MiceBookingDrawerProps {
 
 interface MiceFormValues {
   clientName: string;
+  companyName: string;
   clientPhone: string;
   venueId: string;
   eventTypeId: string;
   eventDate: string;
+  time: string;
   estimatedPax: string;
   salesId: string;
   notes: string;
@@ -117,10 +120,12 @@ const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
 
 const DEFAULT_VALUES: MiceFormValues = {
   clientName: "",
+  companyName: "",
   clientPhone: "",
   venueId: "",
   eventTypeId: "",
   eventDate: "",
+  time: "",
   estimatedPax: "",
   salesId: "",
   notes: "",
@@ -317,12 +322,16 @@ export function MiceBookingDrawer({
     if (open) {
       if (booking) {
         // ── Edit mode: hydrate form from the existing booking ──
+        // Note: MiceBookingItem does NOT have `time` or `companyName` fields yet
+        // (backend columns pending). Both default to "" until schema is extended.
         form.reset({
           clientName: booking.customer.name,
+          companyName: "",
           clientPhone: booking.customer.phone,
           venueId: booking.venue.id,
           eventTypeId: "",
           eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().split("T")[0] : "",
+          time: "",
           estimatedPax: "",
           salesId: booking.sales?.id ?? "",
           notes: "",
@@ -332,6 +341,7 @@ export function MiceBookingDrawer({
         setSelectedCustomerId(booking.customer.id);
       } else if (prefillLead) {
         // ── Create mode, pre-filled from a lead ──
+        // BookingPrefillLead HAS `time` field; no `companyName` field available.
         const autoSalesId = currentUserIsSalesMice && user?.profileId
           ? user.profileId
           : (prefillLead.assignedTo?.id ?? "");
@@ -339,10 +349,12 @@ export function MiceBookingDrawer({
         form.reset({
           ...DEFAULT_VALUES,
           clientName: prefillLead.name,
+          companyName: "",
           clientPhone: phone.replace(/\D/g, ""),
           venueId: prefillLead.venue?.id ?? "",
           eventTypeId: prefillLead.eventType?.id ?? "",
           eventDate: prefillLead.eventDate ? new Date(prefillLead.eventDate).toISOString().split("T")[0] : "",
+          time: prefillLead.time ?? "",
           estimatedPax: prefillLead.estimatedPax != null ? String(prefillLead.estimatedPax) : "",
           salesId: autoSalesId,
           notes: prefillLead.notes ?? "",
@@ -491,10 +503,10 @@ export function MiceBookingDrawer({
                   {/* Informasi Client */}
                   <div className="space-y-3">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Client</p>
-                    {/* Nama Client — search lead atau customer terdaftar */}
-                    <FormField control={form.control} name="clientName" rules={{ required: "Nama client wajib diisi" }} render={({ field }) => (
+                    {/* Nama PIC — search lead atau customer terdaftar */}
+                    <FormField control={form.control} name="clientName" rules={{ required: "Nama PIC wajib diisi" }} render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nama Client / Perusahaan *</FormLabel>
+                        <FormLabel>Nama PIC *</FormLabel>
                         {selectedLeadId && (
                           <p className="text-xs text-[var(--brand-gold)]">Dari Lead — konversi otomatis saat booking dibuat</p>
                         )}
@@ -502,7 +514,7 @@ export function MiceBookingDrawer({
                           <FormControl>
                             <Input
                               {...field}
-                              placeholder="Cari lead / customer, atau ketik baru..."
+                              placeholder="Cari lead / customer, atau ketik nama PIC..."
                               autoComplete="off"
                               onChange={(e) => {
                                 field.onChange(e);
@@ -525,6 +537,8 @@ export function MiceBookingDrawer({
                                       className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
                                       onClick={() => {
                                         form.setValue("clientName", lead.name);
+                                        // LeadOption does not carry a company/instansi field — left empty
+                                        form.setValue("companyName", "");
                                         const phone = lead.contactNumbers?.[0]?.number ?? "";
                                         if (phone) form.setValue("clientPhone", phone.replace(/\D/g, ""));
                                         if (!currentUserIsSalesMice && lead.assignedTo?.id) form.setValue("salesId", lead.assignedTo.id);
@@ -549,6 +563,8 @@ export function MiceBookingDrawer({
                                       className="cursor-pointer px-3 py-2 text-sm hover:bg-accent transition-colors"
                                       onClick={() => {
                                         form.setValue("clientName", c.name);
+                                        // CustomerOption does not carry a company field — left empty
+                                        form.setValue("companyName", "");
                                         const phone = firstPhone(c.mobileNumber);
                                         if (phone) form.setValue("clientPhone", phone.replace(/\D/g, ""));
                                         setSelectedCustomerId(c.id);
@@ -565,6 +581,13 @@ export function MiceBookingDrawer({
                             </div>
                           )}
                         </div>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="companyName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nama Perusahaan / Instansi</FormLabel>
+                        <FormControl><Input {...field} placeholder="PT. Contoh Jaya (opsional)" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -651,6 +674,19 @@ export function MiceBookingDrawer({
                           </PopoverContent>
                         </Popover>
                         {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="time" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Waktu Acara</FormLabel>
+                        <FormControl>
+                          <TimeRangePicker
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Pilih rentang waktu acara..."
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />

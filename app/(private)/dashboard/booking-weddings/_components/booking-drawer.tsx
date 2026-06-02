@@ -92,12 +92,14 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
   // and revoke stay balanced — React StrictMode double-invokes effects, and a
   // render-phase URL would get revoked without being recreated, blanking the
   // preview.
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing object-URL preview from the file prop */
   useEffect(() => {
     if (!file.type.startsWith("image/")) { setUrl(null); return; }
     const objectUrl = URL.createObjectURL(file);
     setUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!url) return null;
   // eslint-disable-next-line @next/next/no-img-element

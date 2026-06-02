@@ -15,25 +15,51 @@ export interface HardcodedStep {
   roleName: string;
 }
 
-export const APPROVAL_FLOWS: Record<string, HardcodedStep[]> = {
-  package: [
-    { sortOrder: 1, approverType: "role", roleName: "manager" },
-    { sortOrder: 2, approverType: "role", roleName: "finance" },
-  ],
-  booking: [
-    { sortOrder: 1, approverType: "role", roleName: "manager" },
-    { sortOrder: 2, approverType: "role", roleName: "finance" },
-  ],
-  catering: [
-    { sortOrder: 1, approverType: "role", roleName: "finance" },
-    { sortOrder: 2, approverType: "role", roleName: "direktur-operational" },
-    { sortOrder: 3, approverType: "role", roleName: "operational" },
-  ],
-  decoration: [
-    { sortOrder: 1, approverType: "role", roleName: "finance" },
-    { sortOrder: 2, approverType: "role", roleName: "direktur-operational" },
-    { sortOrder: 3, approverType: "role", roleName: "operational" },
-  ],
+export interface ApprovalFlowDef {
+  /**
+   * When true, each step must be approved in stepOrder sequence (lower order first).
+   * When false (default), all role steps can be approved in any order — the record
+   * is marked approved only when ALL steps are done.
+   */
+  sequential?: boolean;
+  steps: HardcodedStep[];
+}
+
+export const APPROVAL_FLOWS: Record<string, ApprovalFlowDef> = {
+  package: {
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "manager" },
+      { sortOrder: 2, approverType: "role", roleName: "finance" },
+    ],
+  },
+  booking: {
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "manager" },
+      { sortOrder: 2, approverType: "role", roleName: "finance" },
+    ],
+  },
+  quotations: {
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "manager" },
+      { sortOrder: 2, approverType: "role", roleName: "finance" },
+    ],
+  },
+  catering: {
+    sequential: true,
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "finance" },
+      { sortOrder: 2, approverType: "role", roleName: "direktur-operational" },
+      { sortOrder: 3, approverType: "role", roleName: "operational" },
+    ],
+  },
+  decoration: {
+    sequential: true,
+    steps: [
+      { sortOrder: 1, approverType: "role", roleName: "finance" },
+      { sortOrder: 2, approverType: "role", roleName: "direktur-operational" },
+      { sortOrder: 3, approverType: "role", roleName: "operational" },
+    ],
+  },
 };
 
 export interface ResolvedStep {
@@ -51,9 +77,9 @@ export async function resolveApprovalSteps(
   module: string
 ): Promise<ResolvedStep[] | null> {
   const flowDef = APPROVAL_FLOWS[module];
-  if (!flowDef || flowDef.length === 0) return null;
+  if (!flowDef || flowDef.steps.length === 0) return null;
 
-  const roleNames = flowDef.map((s) => s.roleName);
+  const roleNames = flowDef.steps.map((s) => s.roleName);
   const roles = await db.role.findMany({
     where: { name: { in: roleNames } },
     select: { id: true, name: true },
@@ -62,7 +88,7 @@ export async function resolveApprovalSteps(
   const roleMap = new Map(roles.map((r) => [r.name, r.id]));
 
   const resolved: ResolvedStep[] = [];
-  for (const step of flowDef) {
+  for (const step of flowDef.steps) {
     const roleId = roleMap.get(step.roleName);
     if (!roleId) return null; // role missing in DB — fail safely
     resolved.push({
@@ -74,4 +100,12 @@ export async function resolveApprovalSteps(
   }
 
   return resolved;
+}
+
+/**
+ * Returns true if the given module's approval flow is sequential (strict order).
+ * Defaults to false (order-independent) when no flow is defined.
+ */
+export function isSequentialFlow(module: string): boolean {
+  return APPROVAL_FLOWS[module]?.sequential === true;
 }
