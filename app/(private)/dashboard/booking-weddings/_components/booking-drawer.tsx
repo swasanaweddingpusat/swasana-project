@@ -974,11 +974,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                             captionLayout="dropdown"
                             selected={field.value ? new Date(field.value) : undefined}
                             onSelect={(date) => { field.onChange(date ? date.toISOString() : ""); form.setValue("weddingSession", null); }}
-                            disabled={(d) => {
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              return d < today || getDateStatus(d) === "unavailable";
-                            }}
+                            disabled={(d) => getDateStatus(d) === "unavailable"}
                             fromYear={new Date().getFullYear() - 10}
                             toYear={new Date().getFullYear() + 5}
                             defaultMonth={field.value ? new Date(field.value) : new Date()}

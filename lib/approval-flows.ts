@@ -109,3 +109,17 @@ export async function resolveApprovalSteps(
 export function isSequentialFlow(module: string): boolean {
   return APPROVAL_FLOWS[module]?.sequential === true;
 }
+
+/**
+ * Converts a role slug (e.g. "direktur-operational") into a human-readable
+ * label (e.g. "Direktur Operational") for display in documents/PDFs.
+ * Returns "" for empty/null input.
+ */
+export function humanizeRoleName(slug: string | null | undefined): string {
+  if (!slug) return "";
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
