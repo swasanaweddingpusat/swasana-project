@@ -5,6 +5,7 @@ import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
+import { humanizeRoleName } from "@/lib/approval-flows";
 import path from "path";
 import fs from "fs/promises";
 
@@ -131,14 +132,15 @@ export async function POST(req: Request) {
       const steps = approvalRecord.steps;
       const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
       const latestRound = steps.slice(-roundSize);
-      const roleStepsWithSig = latestRound.filter((s) => s.approverType === "role" && s.signature).sort((a, b) => a.stepOrder - b.stepOrder);
-      const salesStep = roleStepsWithSig[0] ?? null;
-      const managerStep = roleStepsWithSig[1] ?? null;
+      const roleSteps = latestRound.filter((s) => s.approverType === "role").sort((a, b) => a.stepOrder - b.stepOrder);
       const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
       pdfBooking.signatures = {
-        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "", title: salesStep.approverRole?.name ?? undefined } } : {}),
-        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "", title: managerStep.approverRole?.name ?? undefined } } : {}),
-        ...(clientStep ? { client: { signature: clientStep.signature!, name: clientStep.decidedBy?.fullName ?? "" } } : {}),
+        ...(clientStep ? { client: { signature: clientStep.signature! } } : {}),
+        roles: roleSteps.map((step) => ({
+          ...(step.signature ? { signature: step.signature } : {}),
+          name: step.decidedBy?.fullName ?? "",
+          title: humanizeRoleName(step.approverRole?.name),
+        })),
       };
       emateraiData =
         approvalRecord.emateraiSn && approvalRecord.emateraiQrBase64
