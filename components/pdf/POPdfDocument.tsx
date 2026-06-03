@@ -21,7 +21,7 @@ export interface POPdfBooking {
   termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
-  signatures: { sales?: { signature: string; name: string }; manager?: { signature: string; name: string }; client?: { signature: string; name: string } } | null;
+  signatures: { sales?: { signature: string; name: string; title?: string }; manager?: { signature: string; name: string; title?: string }; client?: { signature: string; name: string; title?: string } } | null;
   createdAt?: Date;
   discountName?: string | null;
   discountAmount?: number;
@@ -663,9 +663,9 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                   ) : null}
                 </View>
                 <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
-                <Text style={s.signatureLabel}>Client</Text>
+                <Text style={s.signatureLabel}>{sigs?.client?.title ?? "Client"}</Text>
               </View>
-              {/* Event Specialist */}
+              {/* Sales */}
               <View style={{ flex: 1, alignItems: "center" }}>
                 <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
                   {sigs?.sales?.signature ? (
@@ -674,18 +674,18 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                   ) : null}
                 </View>
                 <Text style={s.signerName}>({sigs?.sales?.name ?? booking.sales?.fullName ?? ""})</Text>
-                <Text style={s.signatureLabel}>Event Specialist</Text>
+                <Text style={s.signatureLabel}>{sigs?.sales?.title ?? "Event Specialist"}</Text>
               </View>
-              {/* Head of Marketing */}
+              {/* Manager */}
               <View style={{ flex: 1, alignItems: "center" }}>
                 <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
                   {sigs?.manager?.signature ? (
                     // eslint-disable-next-line jsx-a11y/alt-text
-                    <Image src={sigs.manager.signature as string} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
+                    <Image src={sigs.manager.signature} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
                   ) : null}
                 </View>
-                <Text style={s.signerName}>({sigs?.manager?.name as string ?? ""})</Text>
-                <Text style={s.signatureLabel}>Head of Marketing</Text>
+                <Text style={s.signerName}>({sigs?.manager?.name ?? ""})</Text>
+                <Text style={s.signatureLabel}>{sigs?.manager?.title ?? "Head of Marketing"}</Text>
               </View>
             </View>
           </View>
