@@ -136,8 +136,8 @@ export async function POST(req: Request) {
       const managerStep = roleStepsWithSig[1] ?? null;
       const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
       pdfBooking.signatures = {
-        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "" } } : {}),
-        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),
+        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "", title: salesStep.approverRole?.name ?? undefined } } : {}),
+        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "", title: managerStep.approverRole?.name ?? undefined } } : {}),
         ...(clientStep ? { client: { signature: clientStep.signature!, name: clientStep.decidedBy?.fullName ?? "" } } : {}),
       };
       emateraiData =

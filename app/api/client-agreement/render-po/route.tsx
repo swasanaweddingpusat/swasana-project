@@ -93,7 +93,7 @@ export async function POST(req: Request) {
     let emateraiData: { sn: string; qrBase64: string } | null = null;
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: booking.id } },
-      include: { steps: { orderBy: { stepOrder: "asc" }, include: { decidedBy: { select: { fullName: true } } } } },
+      include: { steps: { orderBy: { stepOrder: "asc" }, include: { decidedBy: { select: { fullName: true } }, approverRole: { select: { name: true } } } } },
     });
     if (approvalRecord) {
       emateraiData =
@@ -108,8 +108,8 @@ export async function POST(req: Request) {
       const salesStep = roleStepsWithSig[0] ?? null;
       const managerStep = roleStepsWithSig[1] ?? null;
       pdfBooking.signatures = {
-        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "" } } : {}),
-        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "" } } : {}),
+        ...(salesStep ? { sales: { signature: salesStep.signature!, name: salesStep.decidedBy?.fullName ?? "", title: salesStep.approverRole?.name ?? undefined } } : {}),
+        ...(managerStep ? { manager: { signature: managerStep.signature!, name: managerStep.decidedBy?.fullName ?? "", title: managerStep.approverRole?.name ?? undefined } } : {}),
       };
     }
 
