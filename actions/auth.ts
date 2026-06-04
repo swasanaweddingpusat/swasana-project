@@ -34,19 +34,25 @@ export async function forgotPassword(formData: FormData) {
   const { email } = parsed.data;
 
   try {
-    const profile = await db.profile.findUnique({ where: { email } });
+    const profile = await db.profile.findUnique({ where: { email }, select: { id: true } });
 
     if (profile) {
+      // Fetch existing unused tokens, then invalidate + create new in one atomic transaction
+      const existingTokens = await db.passwordResetToken.findMany({
+        where: { userId: profile.id, usedAt: null },
+        select: { id: true },
+      });
+
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+      const now = new Date();
 
       await db.$transaction([
+        ...existingTokens.map((t) =>
+          db.passwordResetToken.update({ where: { id: t.id }, data: { usedAt: now } })
+        ),
         db.passwordResetToken.create({
-          data: {
-            userId: profile.id,
-            token,
-            expiresAt,
-          },
+          data: { userId: profile.id, token, expiresAt },
         }),
       ]);
 
@@ -134,7 +140,7 @@ export async function resetPassword(formData: FormData) {
       }),
     ]);
 
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("users", "max");
 
     await logAudit({
       userId: resetToken.userId,
@@ -176,9 +182,18 @@ export async function verifyEmail(token: string) {
 
     if (verificationToken.usedAt) {
       if (verificationToken.profile.mustChangePassword) {
-        const cryptoMod = await import("crypto");
-        const newToken = cryptoMod.randomBytes(32).toString("hex");
+        // Re-issue a password setup token for the case where user re-clicks the verify link.
+        // Invalidate stale reset tokens for this profile before creating the new one.
+        const staleTokens = await db.passwordResetToken.findMany({
+          where: { userId: verificationToken.profileId, usedAt: null },
+          select: { id: true },
+        });
+        const newToken = crypto.randomBytes(32).toString("hex");
+        const now = new Date();
         await db.$transaction([
+          ...staleTokens.map((t) =>
+            db.passwordResetToken.update({ where: { id: t.id }, data: { usedAt: now } })
+          ),
           db.passwordResetToken.create({
             data: {
               userId: verificationToken.profileId,
@@ -196,9 +211,15 @@ export async function verifyEmail(token: string) {
       return { success: false, error: "Token sudah kadaluarsa." };
     }
 
-    // Generate password setup token so user can set their password
-    const cryptoMod = await import("crypto");
-    const rawToken = cryptoMod.randomBytes(32).toString("hex");
+    // Invalidate stale reset tokens for this profile, then atomically mark email verified
+    // + create the password setup token in one transaction.
+    const staleResetTokens = await db.passwordResetToken.findMany({
+      where: { userId: verificationToken.profileId, usedAt: null },
+      select: { id: true },
+    });
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const now = new Date();
 
     await db.$transaction([
       db.profile.update({
@@ -207,8 +228,11 @@ export async function verifyEmail(token: string) {
       }),
       db.emailVerificationToken.update({
         where: { id: verificationToken.id },
-        data: { usedAt: new Date() },
+        data: { usedAt: now },
       }),
+      ...staleResetTokens.map((t) =>
+        db.passwordResetToken.update({ where: { id: t.id }, data: { usedAt: now } })
+      ),
       db.passwordResetToken.create({
         data: {
           userId: verificationToken.profileId,
