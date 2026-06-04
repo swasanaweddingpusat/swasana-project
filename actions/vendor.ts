@@ -15,10 +15,9 @@ import {
 // ─── Vendor Category ─────────────────────────────────────────────────────────
 
 export async function createVendorCategory(data: unknown) {
-  const permResult = await requirePermission({ module: "vendor", action: "create" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-cat-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "vendor", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-cat-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = createVendorCategorySchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -27,14 +26,14 @@ export async function createVendorCategory(data: unknown) {
     const [category] = await db.$transaction([db.vendorCategory.create({ data: parsed.data })]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "vendor_category.create",
       entityType: "vendor_category",
       entityId: category.id,
       description: `Created vendor category "${category.name}"`,
     });
 
-    revalidateTag("vendors", { expire: 0 });
+    revalidateTag("vendors", "max");
     return { success: true, data: category };
   } catch (e) {
     console.error("[createVendorCategory]", e);
@@ -43,10 +42,9 @@ export async function createVendorCategory(data: unknown) {
 }
 
 export async function updateVendorCategory(id: string, data: unknown) {
-  const permResult = await requirePermission({ module: "vendor", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-cat-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "vendor", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-cat-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updateVendorCategorySchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -55,14 +53,14 @@ export async function updateVendorCategory(id: string, data: unknown) {
     const [category] = await db.$transaction([db.vendorCategory.update({ where: { id }, data: parsed.data })]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "vendor_category.update",
       entityType: "vendor_category",
       entityId: id,
       description: `Updated vendor category "${category.name}"`,
     });
 
-    revalidateTag("vendors", { expire: 0 });
+    revalidateTag("vendors", "max");
     return { success: true, data: category };
   } catch (e) {
     console.error("[updateVendorCategory]", e);
@@ -71,23 +69,22 @@ export async function updateVendorCategory(id: string, data: unknown) {
 }
 
 export async function deleteVendorCategory(id: string) {
-  const permResult = await requirePermission({ module: "vendor", action: "delete" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-cat-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "vendor", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-cat-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const [category] = await db.$transaction([db.vendorCategory.delete({ where: { id } })]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "vendor_category.delete",
       entityType: "vendor_category",
       entityId: id,
       description: `Deleted vendor category "${category.name}"`,
     });
 
-    revalidateTag("vendors", { expire: 0 });
+    revalidateTag("vendors", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteVendorCategory]", e);
@@ -98,10 +95,9 @@ export async function deleteVendorCategory(id: string) {
 // ─── Vendor ──────────────────────────────────────────────────────────────────
 
 export async function createVendor(data: unknown) {
-  const permResult = await requirePermission({ module: "vendor", action: "create" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "vendor", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = createVendorSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -120,14 +116,14 @@ export async function createVendor(data: unknown) {
     })]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "vendor.create",
       entityType: "vendor",
       entityId: vendor.id,
       description: `Created vendor "${vendor.name}"`,
     });
 
-    revalidateTag("vendors", { expire: 0 });
+    revalidateTag("vendors", "max");
     return { success: true, data: vendor };
   } catch (e) {
     console.error("[createVendor]", e);
@@ -136,10 +132,9 @@ export async function createVendor(data: unknown) {
 }
 
 export async function updateVendor(id: string, data: unknown) {
-  const permResult = await requirePermission({ module: "vendor", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "vendor", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updateVendorSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -162,14 +157,14 @@ export async function updateVendor(id: string, data: unknown) {
     });
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "vendor.update",
       entityType: "vendor",
       entityId: id,
       description: `Updated vendor "${vendor?.name}"`,
     });
 
-    revalidateTag("vendors", { expire: 0 });
+    revalidateTag("vendors", "max");
     return { success: true, data: vendor };
   } catch (e) {
     console.error("[updateVendor]", e);
@@ -178,20 +173,24 @@ export async function updateVendor(id: string, data: unknown) {
 }
 
 export async function deleteVendor(id: string) {
-  const permResult = await requirePermission({ module: "vendor", action: "delete" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "vendor", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const [vendor] = await db.$transaction([db.vendor.delete({ where: { id } })]);
+  try {
+    const [vendor] = await db.$transaction([db.vendor.delete({ where: { id } })]);
 
-  await logAudit({
-    userId: session.user.id,
-    action: "vendor.delete",
-    entityType: "vendor",
-    entityId: id,
-    description: `Deleted vendor "${vendor.name}"`,
-  });
+    await logAudit({
+      userId: session!.user.id,
+      action: "vendor.delete",
+      entityType: "vendor",
+      entityId: id,
+      description: `Deleted vendor "${vendor.name}"`,
+    });
 
-  return { success: true };
+    return { success: true };
+  } catch (e) {
+    console.error("[deleteVendor]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
 }

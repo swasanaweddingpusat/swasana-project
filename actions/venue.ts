@@ -28,7 +28,7 @@ export async function createVenue(data: unknown) {
 
   try {
     const [venue] = await db.$transaction([db.venue.create({ data: parsed.data })]);
-    revalidateTag("venues", { expire: 0 });
+    revalidateTag("venues", "max");
     return { success: true, venue };
   } catch (e) {
     console.error("[createVenue]", e);
@@ -48,7 +48,7 @@ export async function updateVenue(data: unknown) {
 
   try {
     const [venue] = await db.$transaction([db.venue.update({ where: { id }, data: rest })]);
-    revalidateTag("venues", { expire: 0 });
+    revalidateTag("venues", "max");
     return { success: true, venue };
   } catch (e) {
     console.error("[updateVenue]", e);
@@ -63,7 +63,7 @@ export async function deleteVenue(id: string) {
 
   try {
     await db.$transaction([db.venue.update({ where: { id }, data: { isActive: false } })]);
-    revalidateTag("venues", { expire: 0 });
+    revalidateTag("venues", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteVenue]", e);

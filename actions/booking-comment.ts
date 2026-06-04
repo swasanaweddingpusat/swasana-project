@@ -54,7 +54,7 @@ export async function createBookingComment(data: {
       },
     })]);
 
-    revalidateTag(`booking-comments-${data.bookingId}`, { expire: 0 });
+    revalidateTag(`booking-comments-${data.bookingId}`, "max");
 
     // Send mention notifications (non-blocking)
     const authorProfileId = session!.user.profileId;
@@ -99,7 +99,7 @@ export async function editBookingComment(id: string, content: string) {
       data: { content: parsed.data.trim(), edited: true },
     })]);
 
-    revalidateTag(`booking-comments-${existing.bookingId}`, { expire: 0 });
+    revalidateTag(`booking-comments-${existing.bookingId}`, "max");
     return { success: true as const, comment };
   } catch (e) {
     console.error("[editBookingComment]", e);
@@ -128,7 +128,7 @@ export async function deleteBookingComment(id: string) {
       await Promise.all(atts.map((a) => deleteFromR2(a.path).catch((e) => console.error("[deleteBookingComment] R2:", e))));
     }
 
-    revalidateTag(`booking-comments-${existing.bookingId}`, { expire: 0 });
+    revalidateTag(`booking-comments-${existing.bookingId}`, "max");
     return { success: true as const };
   } catch (e) {
     console.error("[deleteBookingComment]", e);

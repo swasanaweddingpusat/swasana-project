@@ -80,7 +80,7 @@ export async function uploadBookingDocument(formData: FormData) {
       changes: { documentName: docName, fileCount: results.length },
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true, count: results.length };
   } catch (e) {
     console.error("[uploadBookingDocument]", e);
@@ -117,7 +117,7 @@ export async function deleteBookingDocument(docId: string) {
       changes: { documentName: doc.name },
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteBookingDocument]", e);
@@ -162,7 +162,7 @@ export async function deleteBookingDocuments(ids: string[]) {
       changes: { documentNames: docs.map((d: DocItem) => d.name), count: docs.length },
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true, count: docs.length };
   } catch (e) {
     console.error("[deleteBookingDocuments]", e);

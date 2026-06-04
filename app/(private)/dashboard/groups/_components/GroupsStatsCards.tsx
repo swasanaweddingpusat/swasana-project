@@ -86,56 +86,60 @@ export function GroupsStatsCards({
   const sisa = Math.max(0, totalTarget - totalSales);
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* ── Card 1: Summary (count-based, BUKAN angka uang) ── */}
-      <div className="rounded-2xl bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20 p-5 sm:p-6">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* ── Card 1: Summary + Piutang ── */}
+      <div className="rounded-2xl bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20 p-4 sm:p-5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
           Summary
         </p>
-        <div className="space-y-3.5">
+        <div className="space-y-2.5">
           <StatRow icon={UsersGroupRounded} label="Total Groups" value={totalGroups.toString()} />
           <div className="border-t border-stone-200/70" />
           <StatRow icon={CalendarMark} label="Booking Confirmed" value={totalConfirmed.toString()} />
         </div>
-      </div>
 
-      {/* ── Card 2: Piutang ── */}
-      <div className="rounded-2xl bg-gradient-to-br from-white via-red-50/30 to-orange-50/20 ring-1 ring-orange-200/30 shadow-md shadow-orange-100/10 p-5 sm:p-6">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">
-          Piutang
-        </p>
-        <div className="mb-3">
-          <p className="font-heading text-2xl sm:text-3xl font-bold text-foreground tabular-nums leading-tight">
-            {formatRp(totalPiutang)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {formatRpFull(totalPiutang)}
-          </p>
-        </div>
-        <div className="border-t border-stone-200/70 pt-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Bill weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-            <span>TOP belum bayar + paid tapi belum di-acknowledge Finance</span>
+        {/* ── Piutang section ── */}
+        <div className="mt-3 pt-3 border-t border-stone-200/70">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-orange-100/60 shrink-0">
+                <Bill weight="BoldDuotone" className="h-3.5 w-3.5 text-orange-700" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Piutang</p>
+                <p className="text-[10px] text-muted-foreground/70 leading-tight">
+                  TOP belum bayar + paid belum ack. Finance
+                </p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="font-heading text-base font-bold text-foreground tabular-nums leading-tight">
+                {formatRp(totalPiutang)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                {formatRpFull(totalPiutang)}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Card 3: Total Revenue (cash-based) ── */}
-      <div className="rounded-2xl bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20 p-5 sm:p-6">
-        <div className="flex items-start gap-5 sm:gap-6">
-          <AchievementDonut pct={realisasiPct} size="lg" />
+      {/* ── Card 2: Kas Diterima ── */}
+      <div className="rounded-2xl bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20 p-4 sm:p-5">
+        <div className="flex items-start gap-4">
+          <AchievementDonut pct={realisasiPct} size="md" />
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
               <TargetIcon weight="BoldDuotone" className="h-3 w-3" /> Kas Diterima
             </p>
-            <p className="font-heading text-xl sm:text-2xl font-bold text-foreground leading-tight tabular-nums mt-1 truncate">
+            <p className="font-heading text-lg sm:text-xl font-bold text-foreground leading-tight tabular-nums mt-0.5 truncate">
               {formatRpFull(totalRevenue)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-0.5">
               TOP paid &amp; di-acknowledge Finance · vs target {avgAchievement}%
             </p>
 
-            <div className="mt-4 pt-4 border-t border-stone-200/70 space-y-2">
+            <div className="mt-3 pt-3 border-t border-stone-200/70 space-y-1.5">
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Wallet weight="BoldDuotone" className="h-3 w-3" />
@@ -145,7 +149,7 @@ export function GroupsStatsCards({
                   {formatRp(totalSales)}
                 </span>
               </div>
-              <p className="text-[10px] text-muted-foreground/70 -mt-1">
+              <p className="text-[10px] text-muted-foreground/70 -mt-0.5">
                 Harga paket booking Confirmed (belum tentu kas masuk)
               </p>
               <div className="flex items-center justify-between gap-3">

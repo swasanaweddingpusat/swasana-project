@@ -32,7 +32,10 @@ export async function GET() {
   if (!roleId) return Response.json({ isAdmin: false, isGroupMember, permissions: {} });
 
   if (isAdmin) {
-    const allPermissions = await db.permission.findMany();
+    // Cap at 500 — permissions table is bounded (one row per module+action tuple).
+    // If total exceeds 500, the system has > 50 modules × 10 actions which is
+    // far beyond current scope. Raise the cap if that ever changes.
+    const allPermissions = await db.permission.findMany({ take: 500 });
     const matrix: PermissionMatrix = {};
     for (const p of allPermissions) {
       if (!matrix[p.module]) matrix[p.module] = {};

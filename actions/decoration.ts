@@ -11,45 +11,77 @@ import type { SettlementType } from "@prisma/client";
 import type { PORow } from "@/types/po-catering";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 
-type TxClient = Prisma.TransactionClient;
-
-async function syncSettlementRows(
-  tx: TxClient,
+/**
+ * Build array-form transaction ops for syncing settlement rows.
+ * Pre-fetches existing rows so no intermediate-result dependency exists.
+ * Returns Prisma array-form ops ready for db.$transaction([...]).
+ */
+async function buildSettlementOps(
   snapVendorItemId: string,
   bookingId: string,
   rows: PORow[],
   createdBy: string
-) {
-  const settlementRows = rows.filter((r) => r.type === "settlement" && r.grandTotal && r.grandTotal > 0 && !r.isIncoming);
-  const rowIds = settlementRows.map((r) => r.id);
+): Promise<Prisma.PrismaPromise<unknown>[]> {
+  const settlementRows = rows.filter(
+    (r) => r.type === "settlement" && r.grandTotal && r.grandTotal > 0 && !r.isIncoming
+  );
+  const incomingIds = new Set(settlementRows.map((r) => r.id));
 
-  await tx.bookingPaymentSettlement.deleteMany({
-    where: { snapVendorItemId, id: { notIn: rowIds }, status: { not: "completed" } },
+  // Pre-fetch existing IDs to determine create vs update
+  const existing = await db.bookingPaymentSettlement.findMany({
+    where: { snapVendorItemId },
+    select: { id: true, status: true },
   });
+  const existingIds = new Set(existing.map((e) => e.id));
 
-  for (const row of settlementRows) {
-    await tx.bookingPaymentSettlement.upsert({
-      where: { id: row.id },
-      create: {
-        id: row.id,
-        bookingId,
-        snapVendorItemId,
-        type: (row.settlementType ?? "refund") as SettlementType,
-        amount: row.grandTotal!,
-        paymentMethodId: row.settlementPaymentMethodId ?? null,
-        targetBookingId: row.targetBookingId ?? null,
-        notes: row.settlementNotes ?? row.description ?? null,
-        createdBy,
-      },
-      update: {
-        type: (row.settlementType ?? "refund") as SettlementType,
-        amount: row.grandTotal!,
-        paymentMethodId: row.settlementPaymentMethodId ?? null,
-        targetBookingId: row.targetBookingId ?? null,
-        notes: row.settlementNotes ?? row.description ?? null,
-      },
-    });
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+  // Delete rows removed by user (skip completed ones — they are locked)
+  const toDeleteIds = existing
+    .filter((e) => !incomingIds.has(e.id) && e.status !== "completed")
+    .map((e) => e.id);
+
+  if (toDeleteIds.length > 0) {
+    ops.push(
+      db.bookingPaymentSettlement.deleteMany({
+        where: { id: { in: toDeleteIds } },
+      })
+    );
   }
+
+  // Build create or update for each settlement row
+  for (const row of settlementRows) {
+    const settlementData = {
+      type: (row.settlementType ?? "refund") as SettlementType,
+      amount: row.grandTotal!,
+      paymentMethodId: row.settlementPaymentMethodId ?? null,
+      targetBookingId: row.targetBookingId ?? null,
+      notes: row.settlementNotes ?? row.description ?? null,
+    };
+
+    if (existingIds.has(row.id)) {
+      ops.push(
+        db.bookingPaymentSettlement.update({
+          where: { id: row.id },
+          data: settlementData,
+        })
+      );
+    } else {
+      ops.push(
+        db.bookingPaymentSettlement.create({
+          data: {
+            id: row.id,
+            bookingId,
+            snapVendorItemId,
+            createdBy,
+            ...settlementData,
+          },
+        })
+      );
+    }
+  }
+
+  return ops;
 }
 
 export async function savePODecorationData(
@@ -74,14 +106,21 @@ export async function savePODecorationData(
 
     const typed = poData as POCateringV2;
 
-    await db.$transaction(async (tx) => {
-      await tx.snapVendorItem.update({
+    // Pre-fetch settlement state outside transaction (no intermediate-result dependency)
+    const settlementOps = await buildSettlementOps(
+      snapVendorItemId,
+      item.bookingId,
+      typed.rows ?? [],
+      session!.user.id
+    );
+
+    await db.$transaction([
+      db.snapVendorItem.update({
         where: { id: snapVendorItemId },
         data: { paketData: JSON.parse(JSON.stringify(poData)) },
-      });
-
-      await syncSettlementRows(tx, snapVendorItemId, item.bookingId, typed.rows ?? [], session!.user.id);
-    });
+      }),
+      ...settlementOps,
+    ]);
 
     await logAudit({
       userId: session!.user.id,
@@ -91,7 +130,7 @@ export async function savePODecorationData(
       description: "Updated PO Decoration table data",
     });
 
-    revalidateTag("decorations", { expire: 0 });
+    revalidateTag("decorations", "max");
     return { success: true };
   } catch (e) {
     console.error("[savePODecorationData]", e);

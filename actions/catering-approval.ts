@@ -112,7 +112,7 @@ export async function approveCategoryPO(
       description: `Approved ${categoryType} PO step ${stepToApprove.stepOrder}`,
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch (e) {
     console.error("[approveCategoryPO]", e);

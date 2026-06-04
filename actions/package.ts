@@ -33,10 +33,9 @@ export async function getPackageCreatedBy(packageId: string): Promise<string | n
 export async function createPackage(data: unknown): Promise<
   { success: true; data: { id: string; packageName: string } } | { success: false; error: string }
 > {
-  const permResult = await requirePermission({ module: "package", action: "create" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-create:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = createPackageSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -50,7 +49,7 @@ export async function createPackage(data: unknown): Promise<
     const packageId = crypto.randomUUID();
     const recordId = crypto.randomUUID();
     const now = new Date();
-    const creatorRoleId = session.user.roleId;
+    const creatorRoleId = session!.user.roleId;
     const creatorStepIdx = steps
       ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
       : -1;
@@ -70,7 +69,7 @@ export async function createPackage(data: unknown): Promise<
                 module: "package",
                 entityId: packageId,
                 status: "pending",
-                createdById: session.user.profileId!,
+                createdById: session!.user.profileId!,
                 signature: signature ?? null,
               },
             }),
@@ -85,7 +84,7 @@ export async function createPackage(data: unknown): Promise<
                   approverRoleId: step.approverRoleId,
                   approverUserId: null,
                   status: shouldAutoApprove ? "approved" : "pending",
-                  decidedById: shouldAutoApprove ? session.user.profileId! : null,
+                  decidedById: shouldAutoApprove ? session!.user.profileId! : null,
                   decidedAt: shouldAutoApprove ? now : null,
                   signature: shouldAutoApprove ? (signature ?? null) : null,
                 },
@@ -110,7 +109,7 @@ export async function createPackage(data: unknown): Promise<
     await db.$transaction(ops);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "packages.create",
       entityType: "package",
       entityId: packageId,
@@ -128,10 +127,9 @@ export async function createPackage(data: unknown): Promise<
 export async function updatePackage(id: string, data: unknown): Promise<
   { success: true; data: { id: string } } | { success: false; error: string }
 > {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updatePackageSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
@@ -154,7 +152,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
   try {
     const recordId = existingApproval?.id ?? crypto.randomUUID();
     const now = new Date();
-    const creatorRoleId = session.user.roleId;
+    const creatorRoleId = session!.user.roleId;
     const creatorStepIdx = steps
       ? steps.findIndex((s) => s.approverType === "role" && s.approverRoleId === creatorRoleId)
       : -1;
@@ -174,7 +172,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
                   where: { id: existingApproval.id },
                   data: {
                     status: "pending",
-                    updatedById: session.user.profileId!,
+                    updatedById: session!.user.profileId!,
                     signature: signature ?? null,
                   },
                 })
@@ -184,7 +182,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
                     module: "package",
                     entityId: id,
                     status: "pending",
-                    createdById: session.user.profileId!,
+                    createdById: session!.user.profileId!,
                     signature: signature ?? null,
                   },
                 }),
@@ -199,7 +197,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
                   approverRoleId: step.approverRoleId,
                   approverUserId: null,
                   status: shouldAutoApprove ? "approved" : "pending",
-                  decidedById: shouldAutoApprove ? session.user.profileId! : null,
+                  decidedById: shouldAutoApprove ? session!.user.profileId! : null,
                   decidedAt: shouldAutoApprove ? now : null,
                   signature: shouldAutoApprove ? (signature ?? null) : null,
                 },
@@ -225,7 +223,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
 
     if (paxChanged) {
       await logAudit({
-        userId: session.user.id,
+        userId: session!.user.id,
         action: "package.approval_reset",
         entityType: "package",
         entityId: id,
@@ -234,7 +232,7 @@ export async function updatePackage(id: string, data: unknown): Promise<
     }
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "packages.update",
       entityType: "package",
       entityId: id,
@@ -252,16 +250,15 @@ export async function updatePackage(id: string, data: unknown): Promise<
 export async function deletePackage(id: string): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const permResult = await requirePermission({ module: "package", action: "delete" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const [pkg] = await db.$transaction([db.package.delete({ where: { id } })]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "packages.delete",
       entityType: "package",
       entityId: id,
@@ -279,16 +276,15 @@ export async function deletePackage(id: string): Promise<
 export async function deleteBulkPackages(ids: string[]): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const permResult = await requirePermission({ module: "package", action: "delete" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-bulk-delete:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session: sessionBulk, error: errorBulk } = await requirePermission({ module: "package", action: "delete" });
+  if (errorBulk) return { success: false, error: errorBulk };
+  if (!mutationLimiter.check(`pkg-bulk-delete:${sessionBulk!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     await db.$transaction([db.package.deleteMany({ where: { id: { in: ids } } })]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: sessionBulk!.user.id,
       action: "packages.bulk_delete",
       entityType: "package",
       entityId: ids.join(","),
@@ -309,10 +305,9 @@ export async function saveVendorItems(
   packageId: string,
   items: { categoryId?: string | null; categoryName: string; itemText: string }[]
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`vendor-items:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`vendor-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   for (const item of items) {
     const parsed = createVendorItemSchema.safeParse({ packageId, categoryName: item.categoryName, itemText: item.itemText });
@@ -343,10 +338,9 @@ export async function saveInternalItems(
   packageId: string,
   items: { itemName: string; itemDescription: string }[]
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`internal-items:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`internal-items:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   for (const item of items) {
     const parsed = createInternalItemSchema.safeParse({ packageId, ...item });
@@ -379,10 +373,9 @@ export async function savePackagePrices(
   margin: number,
   sellingPrice: number
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const permResult = await requirePermission({ module: "package", action: "set-harga" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-prices:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "set-harga" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-prices:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const pkg = await db.package.findUnique({
@@ -409,7 +402,7 @@ export async function savePackagePrices(
     ]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "package.set_harga",
       entityType: "package",
       entityId: packageId,
@@ -429,18 +422,17 @@ export async function savePackagePrices(
 export async function updatePackageTC(packageId: string, termAndCondition: string | null): Promise<
   { success: true } | { success: false; error: string }
 > {
-  try {
-    const permResult = await requirePermission({ module: "package", action: "term-&-condition" });
-    if (permResult.error) return { success: false, error: permResult.error };
-    const session = permResult.session!;
-    if (!mutationLimiter.check(`pkg-tc:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "term-&-condition" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-tc:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
+  try {
     await db.$transaction([
       db.package.update({ where: { id: packageId }, data: { termAndCondition } }),
     ]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "packages.update_tc",
       entityType: "package",
       entityId: packageId,
@@ -459,10 +451,9 @@ export async function updatePackageTC(packageId: string, termAndCondition: strin
 export async function togglePackageAvailable(id: string): Promise<
   { success: true; available: boolean } | { success: false; error: string }
 > {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-toggle:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-toggle:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const pkg = await db.package.findUnique({ where: { id }, select: { available: true } });
@@ -518,10 +509,9 @@ export async function togglePackageAvailable(id: string): Promise<
 export async function unverifyPackage(id: string): Promise<
   { success: true } | { success: false; error: string }
 > {
-  const permResult = await requirePermission({ module: "package", action: "set-status" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`pkg-unverify:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error } = await requirePermission({ module: "package", action: "set-status" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-unverify:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     const pkg = await db.package.findUnique({
@@ -538,7 +528,7 @@ export async function unverifyPackage(id: string): Promise<
     ]);
 
     await logAudit({
-      userId: session.user.id,
+      userId: session!.user.id,
       action: "package.unverify",
       entityType: "package",
       entityId: id,

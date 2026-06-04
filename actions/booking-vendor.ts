@@ -96,8 +96,8 @@ export async function saveBookingVendors(
       description: `Updated ${selections.filter((s) => s.vendorId).length} vendors`,
     });
 
-    revalidateTag("bookings", { expire: 0 });
-    revalidateTag("booking-vendors", { expire: 0 });
+    revalidateTag("bookings", "max");
+    revalidateTag("booking-vendors", "max");
     return { success: true };
   } catch (e) {
     console.error("[saveBookingVendors]", e);
@@ -128,7 +128,7 @@ export async function updateSnapBonus(id: string, data: { vendorId?: string; ven
         orderStatusId: data.orderStatusId ?? null,
       },
     })]);
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {
     console.error("[updateSnapBonus]", e);
@@ -160,7 +160,7 @@ export async function addSnapBonus(bookingId: string, data: { vendorId: string; 
       },
       include: { orderStatus: { select: { id: true, name: true } } },
     })]);
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true as const, item };
   } catch (e) {
     console.error("[addSnapBonus]", e);
@@ -182,7 +182,7 @@ export async function deleteSnapBonus(id: string) {
 
   try {
     await db.$transaction([db.snapBonus.delete({ where: { id } })]);
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true as const };
   } catch (e) {
     console.error("[deleteSnapBonus]", e);

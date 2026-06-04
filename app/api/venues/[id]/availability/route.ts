@@ -47,9 +47,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     for (const b of bookings) {
       const key = format(new Date(b.bookingDate), "yyyy-MM-dd");
       if (!availability[key]) continue;
-      if (b.weddingSession === "morning") availability[key].morning = false;
-      else if (b.weddingSession === "evening") availability[key].evening = false;
-      else if (b.weddingSession === "fullday") {
+      if (b.weddingSession === "morning") {
+        availability[key].morning = false;
+      } else if (b.weddingSession === "evening") {
+        availability[key].evening = false;
+      } else if (b.weddingSession === "fullday") {
+        availability[key].morning = false;
+        availability[key].evening = false;
+        availability[key].fullday = false;
+      } else {
+        // weddingSession is null — MICE bookings use eventTime without a session slot.
+        // A MICE booking occupies the entire venue for that date (no morning/evening split),
+        // so block all slots to prevent any other booking on the same day.
         availability[key].morning = false;
         availability[key].evening = false;
         availability[key].fullday = false;

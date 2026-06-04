@@ -17,14 +17,13 @@ import type { Prisma } from "@prisma/client";
 // ─── Create Lead ──────────────────────────────────────────────────────────────
 
 export async function createLead(data: CreateLeadInput) {
-  const permResult = await requirePermission({ module: "leads", action: "create" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error } = await requirePermission({ module: "leads", action: "create" });
+  if (error) return { success: false as const, error };
 
   const h = await headers();
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
 
-  if (!mutationLimiter.check(`create-lead:${session.user.id}`)) {
+  if (!mutationLimiter.check(`create-lead:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -76,14 +75,14 @@ export async function createLead(data: CreateLeadInput) {
           assignedToId: assignedToId || null,
           statusId,
           bitrixId: bitrixId || null,
-          createdById: session.user.profileId,
+          createdById: session!.user.profileId,
         },
         select: { id: true, name: true },
       }),
     ]);
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "lead.created",
       result: "success",
       entityType: "Lead",
@@ -103,14 +102,13 @@ export async function createLead(data: CreateLeadInput) {
 // ─── Update Lead ──────────────────────────────────────────────────────────────
 
 export async function updateLead(data: UpdateLeadInput) {
-  const permResult = await requirePermission({ module: "leads", action: "edit" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+  if (error) return { success: false as const, error };
 
   const h = await headers();
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
 
-  if (!mutationLimiter.check(`update-lead:${session.user.id}`)) {
+  if (!mutationLimiter.check(`update-lead:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -154,7 +152,7 @@ export async function updateLead(data: UpdateLeadInput) {
     ]);
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "lead.updated",
       result: "success",
       entityType: "Lead",
@@ -174,14 +172,13 @@ export async function updateLead(data: UpdateLeadInput) {
 // ─── Delete Lead ──────────────────────────────────────────────────────────────
 
 export async function deleteLead(id: string) {
-  const permResult = await requirePermission({ module: "leads", action: "delete" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error } = await requirePermission({ module: "leads", action: "delete" });
+  if (error) return { success: false as const, error };
 
   const h = await headers();
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
 
-  if (!mutationLimiter.check(`delete-lead:${session.user.id}`)) {
+  if (!mutationLimiter.check(`delete-lead:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -191,7 +188,7 @@ export async function deleteLead(id: string) {
     ]);
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "lead.deleted",
       result: "success",
       entityType: "Lead",
@@ -211,11 +208,10 @@ export async function deleteLead(id: string) {
 // ─── Update Lead Status (Kanban drag) ────────────────────────────────────────
 
 export async function updateLeadStatus(data: UpdateLeadStatusInput) {
-  const permResult = await requirePermission({ module: "leads", action: "edit" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+  if (error) return { success: false as const, error };
 
-  if (!mutationLimiter.check(`update-lead-status:${session.user.id}`)) {
+  if (!mutationLimiter.check(`update-lead-status:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -236,7 +232,7 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
     ]);
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "lead.status_changed",
       result: "success",
       entityType: "Lead",
@@ -256,11 +252,10 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
 // ─── Update Lead Assignee ────────────────────────────────────────────────────
 
 export async function updateLeadAssignee(leadId: string, assignedToId: string | null) {
-  const permResult = await requirePermission({ module: "leads", action: "edit" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+  if (error) return { success: false as const, error };
 
-  if (!mutationLimiter.check(`update-lead-assignee:${session.user.id}`)) {
+  if (!mutationLimiter.check(`update-lead-assignee:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -276,7 +271,7 @@ export async function updateLeadAssignee(leadId: string, assignedToId: string | 
     ]);
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "lead.assignee_changed",
       result: "success",
       entityType: "Lead",
@@ -297,11 +292,10 @@ export async function updateLeadAssignee(leadId: string, assignedToId: string | 
 // Called when lead reaches Deal status and admin clicks "Convert"
 
 export async function convertLead(leadId: string) {
-  const permResult = await requirePermission({ module: "leads", action: "edit" });
-  if (permResult.error) return { success: false as const, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error } = await requirePermission({ module: "leads", action: "edit" });
+  if (error) return { success: false as const, error };
 
-  if (!mutationLimiter.check(`convert-lead:${session.user.id}`)) {
+  if (!mutationLimiter.check(`convert-lead:${session!.user.id}`)) {
     return { success: false as const, ...rateLimitError() };
   }
 
@@ -351,7 +345,7 @@ export async function convertLead(leadId: string) {
     ]);
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "lead.converted",
       result: "success",
       entityType: "Lead",

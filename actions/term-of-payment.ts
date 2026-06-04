@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import type { Prisma } from "@prisma/client";
 
 interface TermUpdate {
   id: string;
@@ -51,8 +52,7 @@ export async function updateTermOfPayments(
     });
     const ackMap = new Map(existingTerms.map((t) => [t.id, t.ackStatus]));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ops: any[] = terms
+    const ops: Prisma.PrismaPromise<unknown>[] = terms
       .filter((t) => ackMap.get(t.id) !== "acknowledged")
       .map((t) =>
         db.termOfPayment.update({

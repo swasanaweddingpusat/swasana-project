@@ -14,10 +14,9 @@ const createCategorySchema = z.object({
 export async function createCategory(
   name: string,
 ): Promise<{ success: true; category: { id: string; name: string } } | { success: false; error: string }> {
-  const permResult = await requirePermission({ module: "package", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`create-category:${session.user.id}`)) {
+  const { session, error } = await requirePermission({ module: "package", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`create-category:${session!.user.id}`)) {
     return { success: false, ...rateLimitError() };
   }
 
@@ -40,7 +39,7 @@ export async function createCategory(
     });
 
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "category.created",
       entityType: "Category",
       entityId: category.id,
