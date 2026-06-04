@@ -27,6 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const bookings = await db.booking.findMany({
       where: {
         venueId: id,
+        recordStatus: "saved",
         bookingDate: { gte: start, lte: end },
         bookingStatus: { notIn: ["Canceled", "Lost"] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
@@ -42,18 +43,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       cur.setDate(cur.getDate() + 1);
     }
 
-    // Mark booked sessions
+    // Mark booked sessions.
+    // Weddings use morning / evening / fullday.
+    // MICE: if weddingSession is set (morning/evening) → block that session only (granular).
+    //       if weddingSession is null (legacy MICE without session) → block fullday (conservative fallback).
     for (const b of bookings) {
       const key = format(new Date(b.bookingDate), "yyyy-MM-dd");
       if (!availability[key]) continue;
-      if (b.weddingSession === "morning") availability[key].morning = false;
-      else if (b.weddingSession === "evening") availability[key].evening = false;
-      else if (b.weddingSession === "fullday") {
+      if (b.weddingSession === "morning") {
+        availability[key].morning = false;
+      } else if (b.weddingSession === "evening") {
+        availability[key].evening = false;
+      } else if (b.weddingSession === "fullday") {
+        availability[key].morning = false;
+        availability[key].evening = false;
+        availability[key].fullday = false;
+      } else {
+        // weddingSession is null — legacy MICE booking (no session recorded).
+        // Conservative fallback: block entire day so no new booking slips through
+        // on a date that has an untracked MICE session.
         availability[key].morning = false;
         availability[key].evening = false;
         availability[key].fullday = false;
       }
-      // If morning+evening both booked, fullday is also unavailable
+      // If both morning and evening are blocked, fullday is also unavailable.
       if (!availability[key].morning && !availability[key].evening) {
         availability[key].fullday = false;
       }

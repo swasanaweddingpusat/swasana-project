@@ -22,9 +22,19 @@ export async function GET(_request: Request) {
       ? Math.round(groups.reduce((s, g) => s + g.avgAchievement, 0) / groups.length)
       : 0;
   const totalConfirmed = groups.reduce((s, g) => s + g.confirmedCount, 0);
+  const totalPiutang = groups.reduce((s, g) => s + g.piutang, 0);
+  const totalRevenue = groups.reduce((s, g) => s + g.totalRevenue, 0);
 
   return Response.json({
-    summary: { totalGroups: groups.length, totalSales, totalTarget, avgAchievement, totalConfirmed },
+    summary: {
+      totalGroups: groups.length,
+      totalSales,
+      totalTarget,
+      avgAchievement,
+      totalConfirmed,
+      totalPiutang,
+      totalRevenue,
+    },
     groups,
   });
 }

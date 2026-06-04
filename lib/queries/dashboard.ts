@@ -37,6 +37,7 @@ async function getBookingStats(
 
   const bookings = await db.booking.findMany({
     where: {
+      recordStatus: "saved",
       bookingDate: { gte: startDate, lte: endDate },
       ...(salesIds ? { salesId: { in: salesIds } } : {}),
     },

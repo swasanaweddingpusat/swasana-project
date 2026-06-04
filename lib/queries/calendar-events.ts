@@ -10,6 +10,7 @@ export async function getCalendarEvents(year: number, month: number, profileId?:
   return db.booking.findMany({
     where: {
       ...where,
+      recordStatus: "saved",
       bookingDate: { gte: start, lt: end },
     },
     select: {
@@ -66,6 +67,7 @@ export async function getDashboardCalendarEvents(
   const bookings = await db.booking.findMany({
     where: {
       ...scope,
+      recordStatus: "saved",
       OR: [
         { bookingDate: { gte: start, lt: end } },
         { eventDate: { gte: start, lt: end } },

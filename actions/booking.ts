@@ -83,8 +83,11 @@ export async function createBooking(data: unknown) {
             name: leadRecord.name,
             mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers) as Prisma.InputJsonValue,
             email: leadRecord.email || "-@placeholder.com",
-            nikNumber: null,
+            cppNik: null,
+            cpwNik: null,
             ktpAddress: leadRecord.address ?? null,
+            cppAddress: leadRecord.address ?? null,
+            cpwAddress: null,
             bitrixId: leadRecord.bitrixId ?? null,
             sourceOfInformationId: leadRecord.sourceOfInformationId ?? null,
             type: "Other",
@@ -144,6 +147,7 @@ export async function createBooking(data: unknown) {
       const conflictingBooking = await db.booking.findFirst({
         where: {
           venueId: input.venueId,
+          recordStatus: "saved",
           bookingDate: bookingDateObj,
           bookingStatus: { notIn: ["Canceled", "Lost"] },
           OR: input.weddingSession === "fullday"
@@ -202,8 +206,11 @@ export async function createBooking(data: unknown) {
             name: leadRecord.name,
             mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers),
             email: leadRecord.email || "-@placeholder.com",
-            nikNumber: null as string | null,
+            cppNik: null as string | null,
+            cpwNik: null as string | null,
             ktpAddress: leadRecord.address ?? null,
+            cppAddress: leadRecord.address ?? null,
+            cpwAddress: null as string | null,
           }
         : {
             // Customer baru dari input manual (fallback path)
@@ -211,16 +218,22 @@ export async function createBooking(data: unknown) {
             name: input.customerName!,
             mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? ""),
             email: input.contactEmail || "-@placeholder.com",
-            nikNumber: input.contactNik || null,
-            ktpAddress: input.contactKtpAddress || null,
+            cppNik: input.contactNikCpp || null,
+            cpwNik: input.contactNikCpw || null,
+            ktpAddress: null as string | null,
+            cppAddress: input.contactCppAddress || null,
+            cpwAddress: input.contactCpwAddress || null,
           }
       : {
           id: existingCustomer!.id,
           name: existingCustomer!.name,
           mobileNumber: existingCustomer!.mobileNumber,
           email: existingCustomer!.email,
-          nikNumber: existingCustomer!.nikNumber,
+          cppNik: existingCustomer!.cppNik,
+          cpwNik: existingCustomer!.cpwNik,
           ktpAddress: existingCustomer!.ktpAddress,
+          cppAddress: existingCustomer!.cppAddress,
+          cpwAddress: existingCustomer!.cpwAddress,
         };
 
     const bookingId = crypto.randomUUID();
@@ -268,8 +281,11 @@ export async function createBooking(data: unknown) {
               name: leadRecord.name,
               mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers) as Prisma.InputJsonValue,
               email: leadRecord.email || "-@placeholder.com",
-              nikNumber: null,
+              cppNik: null,
+              cpwNik: null,
               ktpAddress: leadRecord.address ?? null,
+              cppAddress: leadRecord.address ?? null,
+              cpwAddress: null,
               bitrixId: leadRecord.bitrixId ?? null,
               sourceOfInformationId: leadRecord.sourceOfInformationId ?? null,
               type: "Other",
@@ -287,8 +303,11 @@ export async function createBooking(data: unknown) {
               name: input.customerName!,
               mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? "") as Prisma.InputJsonValue,
               email: input.contactEmail || "-@placeholder.com",
-              nikNumber: input.contactNik || null,
-              ktpAddress: input.contactKtpAddress || null,
+              cppNik: input.contactNikCpp || null,
+              cpwNik: input.contactNikCpw || null,
+              ktpAddress: null,
+              cppAddress: input.contactCppAddress || null,
+              cpwAddress: input.contactCpwAddress || null,
               bitrixId: input.contactBitrixId || null,
               type: "Other",
               memberStatus: "Non-Member",
@@ -301,8 +320,10 @@ export async function createBooking(data: unknown) {
       const updates: Record<string, unknown> = {};
       if (input.contactNumbers) updates.mobileNumber = parseContactNumbersToArray(input.contactNumbers) as Prisma.InputJsonValue;
       if (input.contactEmail) updates.email = input.contactEmail;
-      if (input.contactNik) updates.nikNumber = input.contactNik;
-      if (input.contactKtpAddress) updates.ktpAddress = input.contactKtpAddress;
+      if (input.contactNikCpp) updates.cppNik = input.contactNikCpp;
+      if (input.contactNikCpw) updates.cpwNik = input.contactNikCpw;
+      if (input.contactCppAddress !== undefined) updates.cppAddress = input.contactCppAddress || null;
+      if (input.contactCpwAddress !== undefined) updates.cpwAddress = input.contactCpwAddress || null;
       if (input.contactBitrixId) updates.bitrixId = input.contactBitrixId;
       if (Object.keys(updates).length > 0) {
         updates.updatedBy = session!.user.name ?? session!.user.email;
@@ -346,8 +367,11 @@ export async function createBooking(data: unknown) {
                 .map((e) => (e.name ? `${e.name}: ${e.number}` : e.number))
                 .join(", ")
             : String(customerData.mobileNumber ?? ""),
-          nikNumber: customerData.nikNumber,
+          cppNik: customerData.cppNik,
+          cpwNik: customerData.cpwNik,
           ktpAddress: customerData.ktpAddress,
+          cppAddress: customerData.cppAddress,
+          cpwAddress: customerData.cpwAddress,
         },
       }),
       db.snapVenue.create({
@@ -845,7 +869,7 @@ export async function editBooking(data: unknown) {
   const parsed = editBookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { id, customerName, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, ...rest } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmail, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, ...rest } = parsed.data;
 
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
@@ -867,6 +891,7 @@ export async function editBooking(data: unknown) {
         where: {
           id: { not: id },
           venueId: rest.venueId,
+          recordStatus: "saved",
           bookingDate: bookingDateObj,
           bookingStatus: { notIn: ["Canceled", "Lost"] },
           OR: rest.weddingSession === "fullday"
@@ -922,8 +947,11 @@ export async function editBooking(data: unknown) {
           // snapCustomer.mobileNumber persists as display string: "name: number, ..."
           mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
           email: contactEmail || "-@placeholder.com",
-          nikNumber: contactNik || null,
-          ktpAddress: contactKtpAddress || null,
+          cppNik: contactNikCpp || null,
+          cpwNik: contactNikCpw || null,
+          ktpAddress: null,
+          cppAddress: contactCppAddress || null,
+          cpwAddress: contactCpwAddress || null,
         },
       }),
       // Update actual customer — mobileNumber is a Json column (structured array)
@@ -933,8 +961,11 @@ export async function editBooking(data: unknown) {
           name: customerName,
           mobileNumber: parseContactNumbersToArray(contactNumbers ?? "") as Prisma.InputJsonValue,
           email: contactEmail || "-@placeholder.com",
-          nikNumber: contactNik || null,
-          ktpAddress: contactKtpAddress || null,
+          cppNik: contactNikCpp || null,
+          cpwNik: contactNikCpw || null,
+          ktpAddress: null,
+          cppAddress: contactCppAddress || null,
+          cpwAddress: contactCpwAddress || null,
           bitrixId: contactBitrixId || null,
           updatedBy: session!.user.name ?? session!.user.email,
         },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -177,6 +177,13 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
 
   const [bitrixId, setBitrixId] = useState("");
 
+  // When the drawer opens with an existing lead (edit mode), form.reset() sets
+  // venueId which triggers the availability effect — that effect would immediately
+  // clear weddingSession before the user has a chance to see it.  This flag is
+  // set to true during the reset call and cleared after one tick so the
+  // availability effect can distinguish "initial load" from "user changed venue".
+  const isResettingRef = useRef(false);
+
   const form = useForm<LeadFormValues>({
     defaultValues: DEFAULT_VALUES,
   });
@@ -231,7 +238,11 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       setAvailability({});
       return;
     }
-    form.setValue("weddingSession", "");
+    // Only clear the session when the user explicitly changes the venue, not
+    // when the form is being reset during drawer open (isResettingRef guards this).
+    if (!isResettingRef.current) {
+      form.setValue("weddingSession", "");
+    }
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const params = new URLSearchParams({ month });
@@ -266,6 +277,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     if (!open) return;
 
     if (editLead) {
+      isResettingRef.current = true;
       form.reset({
         name: editLead.name,
         email: editLead.email ?? "",
@@ -285,6 +297,11 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         budgetRange: editLead.budgetRange ?? "",
         notes: editLead.notes ?? "",
       });
+      // Defer clearing the flag so the availability effect that fires synchronously
+      // after venueId changes during reset can observe it before we clear.
+      setTimeout(() => {
+        isResettingRef.current = false;
+      }, 0);
       setContactNumbers(editLead.contactNumbers);
       setBitrixId(editLead.bitrixId ?? "");
     } else {
@@ -691,6 +708,37 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
+              {/* Event Type */}
+              <FormField
+                control={form.control}
+                name="eventTypeId"
+                render={({ field }) => {
+                  const filteredEventTypes = eventTypes.filter(
+                    (et) => et.category === watchedCategory,
+                  );
+                  return (
+                    <FormItem>
+                      <FormLabel>Event Type *</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Pilih event type..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredEventTypes.map((et) => (
+                            <SelectItem key={et.id} value={et.id}>
+                              {et.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
               {/* Tanggal Event */}
               <FormField
                 control={form.control}
@@ -702,15 +750,18 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                       <PopoverTrigger render={
                         <Button
                           variant="outline"
+                          disabled={!watchedVenueId}
                           className={cn(
                             "w-full justify-start text-left font-normal",
-                            !field.value && "text-muted-foreground",
+                            (!field.value || !watchedVenueId) && "text-muted-foreground",
                           )}
                         >
                           <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
                           {field.value
                             ? format(new Date(field.value + "T00:00:00"), "PPP")
-                            : "Pilih tanggal event"}
+                            : !watchedVenueId
+                              ? "Pilih venue dulu"
+                              : "Pilih tanggal event"}
                         </Button>
                       } />
                       <PopoverContent className="w-auto p-0" align="start">
@@ -759,37 +810,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                     <FormMessage />
                   </FormItem>
                 )}
-              />
-
-              {/* Event Type */}
-              <FormField
-                control={form.control}
-                name="eventTypeId"
-                render={({ field }) => {
-                  const filteredEventTypes = eventTypes.filter(
-                    (et) => et.category === watchedCategory,
-                  );
-                  return (
-                    <FormItem>
-                      <FormLabel>Event Type *</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih event type..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredEventTypes.map((et) => (
-                            <SelectItem key={et.id} value={et.id}>
-                              {et.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
               />
 
               {/* Session */}

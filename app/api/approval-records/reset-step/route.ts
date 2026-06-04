@@ -47,8 +47,8 @@ export async function POST(req: Request) {
       changes: { stepId, stepOrder: step.stepOrder, approverType: step.approverType },
     });
 
-    revalidateTag("approvals", { expire: 0 });
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("approvals", "max");
+    revalidateTag("bookings", "max");
 
     return Response.json({ success: true });
   } catch (e) {

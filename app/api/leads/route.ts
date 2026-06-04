@@ -17,6 +17,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const raw = {
     search: searchParams.get("search") ?? undefined,
+    scope: searchParams.get("scope") ?? undefined,
     statusId: searchParams.get("statusId") ?? undefined,
     venueId: searchParams.get("venueId") ?? undefined,
     eventTypeId: searchParams.get("eventTypeId") ?? undefined,
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
     estimatedPax,
     budgetRange,
     notes,
+    category,
     weddingSession,
     venueId,
     packageId,
@@ -95,6 +97,7 @@ export async function POST(req: Request) {
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
           notes: notes || null,
+          category,
           weddingSession,
           venueId: venueId || null,
           packageId: packageId || null,

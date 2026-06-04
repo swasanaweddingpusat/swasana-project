@@ -4,17 +4,25 @@ import { useState, useMemo } from "react";
 import { ARFilterBar } from "./_components/ar-filter-bar";
 import { ARTable } from "./_components/ar-table";
 import { ARDetailDrawer } from "./_components/ar-detail-drawer";
+import { EditBookingFinanceDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-finance-drawer";
 import { useAR } from "@/hooks/use-ar";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ARBooking, ARFilters } from "@/types/finance";
 
 const ROWS_PER_PAGE = 10;
 
 export default function AccountsReceivablePage() {
   const { data: arResult, isLoading } = useAR();
+  const { can } = usePermissions();
+  const qc = useQueryClient();
+  const canAck = can("finance-ar", "edit");
+  const canEditKeuangan = can("finance-ar", "edit") || can("booking", "edit");
   const bookings = useMemo(() => arResult?.data ?? [], [arResult?.data]);
   const [filters, setFilters] = useState<ARFilters>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [detailBooking, setDetailBooking] = useState<ARBooking | null>(null);
+  const [financeTarget, setFinanceTarget] = useState<{ id: string; customerName: string } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
   const venues = useMemo(() => {
@@ -67,9 +75,12 @@ export default function AccountsReceivablePage() {
         expandedRow={expandedRow}
         onToggleRow={(id) => setExpandedRow((prev) => (prev === id ? null : id))}
         onOpenDetail={(b) => setDetailBooking(b)}
+        onEditKeuangan={(b) => setFinanceTarget({ id: b.id, customerName: b.customerEvent })}
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
+        canAck={canAck}
+        canEditKeuangan={canEditKeuangan}
       />
 
       <ARDetailDrawer
@@ -77,6 +88,19 @@ export default function AccountsReceivablePage() {
         onClose={() => setDetailBooking(null)}
         booking={detailBooking}
       />
+
+      {financeTarget && (
+        <EditBookingFinanceDrawerById
+          isOpen={!!financeTarget}
+          onClose={() => {
+            setFinanceTarget(null);
+            qc.invalidateQueries({ queryKey: ["ar-bookings"] });
+          }}
+          bookingId={financeTarget.id}
+          customerName={financeTarget.customerName}
+          defaultTab="top"
+        />
+      )}
     </div>
   );
 }

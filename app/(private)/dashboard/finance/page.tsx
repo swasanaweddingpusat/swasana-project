@@ -1,78 +1,145 @@
 "use client";
 
 import { useState } from "react";
-import { UploadMinimalistic, Calendar, Filter } from "@solar-icons/react";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
+import {
+  DownloadMinimalistic,
+  CalendarDate,
+} from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
-import { StatCards } from "./_components/stat-cards";
-import { FinanceTabs } from "./_components/finance-tabs";
-import { RecentBookingsTable } from "./_components/recent-bookings-table";
-import { WeeklyActivity } from "./_components/weekly-activity";
-import { LeaderboardSales } from "./_components/leaderboard-sales";
-import type { FinanceStats, FinanceBooking, ActivityItem, SalesLeader, FinanceTabType } from "@/types/finance";
-import { cn } from "../../../../lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { KpiCards } from "./_components/KpiCards";
+import { CollectionTrendChart } from "./_components/CollectionTrendChart";
+import { AgingBreakdownChart } from "./_components/AgingBreakdownChart";
+import { InvoiceDueDateTable } from "./_components/InvoiceDueDateTable";
+import { ActionRequiredPanel } from "./_components/ActionRequiredPanel";
+import type { FinanceKpi } from "./_components/KpiCards";
 
-const MOCK_STATS: FinanceStats = {
-  pendingBookingProcess: 12,
-  pendingPOApproval: 5,
-  lateInvoiceOverdue: 3,
-  bookingsNeedSignature: 8,
+// ─── Dummy KPI data ───────────────────────────────────────────────────────────
+
+const MOCK_KPI: FinanceKpi = {
+  totalAR: 2_120_000_000,
+  sudahTertagih: 1_450_000_000,
+  outstanding: 670_000_000,
+  overdue: 180_000_000,
+  collectionRate: 68.4,
+  invoiceBelumTerbit: 4,
 };
 
-const MOCK_BOOKINGS: FinanceBooking[] = [
-  { id: "1", customerName: "Budi Santoso", customerPhone: "081234567890", bookingDate: "2026-04-10", bookingStatus: "Confirmed", paymentStatus: "Paid", paymentMethod: "Transfer BCA" },
-  { id: "2", customerName: "Siti Rahayu", customerPhone: "082345678901", bookingDate: "2026-04-12", bookingStatus: "Pending", paymentStatus: "Partial", paymentMethod: "Transfer BRI" },
-  { id: "3", customerName: "Ahmad Fauzi", customerPhone: "083456789012", bookingDate: "2026-04-15", bookingStatus: "New", paymentStatus: "Unpaid", paymentMethod: "-" },
-  { id: "4", customerName: "Dewi Lestari", customerPhone: "084567890123", bookingDate: "2026-04-18", bookingStatus: "Confirmed", paymentStatus: "Paid", paymentMethod: "Transfer Mandiri" },
-  { id: "5", customerName: "Rudi Hermawan", customerPhone: "085678901234", bookingDate: "2026-04-20", bookingStatus: "Uploaded", paymentStatus: "Partial", paymentMethod: "Cash" },
-];
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 
-const MOCK_ACTIVITIES: ActivityItem[] = [
-  { id: "1", icon: "inquiry", title: "New Inquiry", description: "Budi Santoso mengirim inquiry untuk tanggal 10 Mei 2026" },
-  { id: "2", icon: "meeting", title: "Meeting Scheduled", description: "Meeting dengan Siti Rahayu dijadwalkan 25 April 2026" },
-  { id: "3", icon: "confirmation", title: "Booking Confirmed", description: "Ahmad Fauzi mengkonfirmasi booking untuk 15 Juni 2026" },
-];
+function formatDateLabel(date: Date): string {
+  return format(date, "d MMM yyyy", { locale: idLocale });
+}
 
-const MOCK_LEADERS: SalesLeader[] = [
-  { id: "1", name: "Rina Marlina", totalSales: 450000000 },
-  { id: "2", name: "Doni Pratama", totalSales: 380000000 },
-  { id: "3", name: "Yuni Astuti", totalSales: 310000000 },
-  { id: "4", name: "Hendra Wijaya", totalSales: 275000000 },
-];
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FinancePage() {
-  const [activeTab, setActiveTab] = useState<FinanceTabType>("receivable");
+  const [dateFrom, setDateFrom] = useState<Date>(startOfMonth(new Date()));
+  const [dateTo, setDateTo] = useState<Date>(endOfMonth(new Date()));
+  const [fromOpen, setFromOpen] = useState(false);
+  const [toOpen, setToOpen] = useState(false);
 
   return (
-    <div className={cn('flex', 'flex-col', 'gap-6', 'py-6', 'px-2')}>
-      {/* Action Buttons */}
-      <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-3')}>
-        <Button size="sm">
-          <UploadMinimalistic weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Export CSV
-        </Button>
-        <Button variant="outline" size="sm">
-          <Calendar weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Apr 2026
-        </Button>
-        <Button variant="outline" size="sm">
-          <Filter weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2')} /> Filter
-        </Button>
+    <div className="flex flex-col gap-6 py-6 px-2">
+
+      {/* ── Section 1: Header ───────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-2xl font-heading font-bold text-foreground">
+            Finance Overview
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Ringkasan posisi keuangan & piutang usaha
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Date from */}
+          <Popover open={fromOpen} onOpenChange={setFromOpen}>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full gap-1.5 font-normal"
+                >
+                  <CalendarDate weight="BoldDuotone" className="h-4 w-4" />
+                  {formatDateLabel(dateFrom)}
+                </Button>
+              }
+            />
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={dateFrom}
+                onSelect={(d) => {
+                  if (d) {
+                    setDateFrom(d);
+                    setFromOpen(false);
+                  }
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+
+          <span className="text-xs text-muted-foreground">–</span>
+
+          {/* Date to */}
+          <Popover open={toOpen} onOpenChange={setToOpen}>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full gap-1.5 font-normal"
+                >
+                  <CalendarDate weight="BoldDuotone" className="h-4 w-4" />
+                  {formatDateLabel(dateTo)}
+                </Button>
+              }
+            />
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={dateTo}
+                onSelect={(d) => {
+                  if (d) {
+                    setDateTo(d);
+                    setToOpen(false);
+                  }
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+
+          {/* Export */}
+          <Button size="sm" className="rounded-full gap-1.5">
+            <DownloadMinimalistic weight="BoldDuotone" className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
       </div>
 
-      {/* Stat Cards */}
-      <StatCards stats={MOCK_STATS} loading={false} />
+      {/* ── Section 2: KPI Cards ─────────────────────────────────────────────── */}
+      <KpiCards kpi={MOCK_KPI} />
 
-      {/* Finance Tabs */}
-      <FinanceTabs activeTab={activeTab} onTabChange={setActiveTab} />
-
-      {/* Main Content */}
-      <div className={cn('flex', 'flex-col', 'md:flex-row', 'gap-6')}>
-        <div className={cn('grow', 'min-w-0')}>
-          <RecentBookingsTable bookings={MOCK_BOOKINGS} loading={false} />
-        </div>
-        <div className={cn('flex', 'flex-col', 'gap-6', 'md:w-96', 'shrink-0')}>
-          <WeeklyActivity activities={MOCK_ACTIVITIES} loading={false} />
-          <LeaderboardSales leaders={MOCK_LEADERS} loading={false} />
-        </div>
+      {/* ── Section 3: Charts ────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 lg:flex-row">
+        <CollectionTrendChart />
+        <AgingBreakdownChart />
       </div>
+
+      {/* ── Section 4: Table + Panel ─────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+        <InvoiceDueDateTable />
+        <ActionRequiredPanel />
+      </div>
+
     </div>
   );
 }

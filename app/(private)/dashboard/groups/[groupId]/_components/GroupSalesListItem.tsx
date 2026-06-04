@@ -2,6 +2,7 @@
 
 import { Crown, GraphUp, GraphDown, MenuDots, PenNewSquare, TrashBinTrash } from "@solar-icons/react";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,8 @@ import { cn } from "@/lib/utils";
 export interface SalesListMember {
   profileId: string;
   name: string;
+  email?: string | null;
+  roleName?: string | null;
   avatarUrl?: string;
   target: number;
   targetStartDate?: string | null;
@@ -67,27 +70,33 @@ export function GroupSalesListItem({
     >
       {/* Rank badge */}
       <div className="shrink-0 flex items-center justify-center w-6">
-        {isTop ? (
-          <Crown weight="BoldDuotone" className="h-4 w-4 text-foreground" />
-        ) : (
-          <span
-            className={cn(
-              "text-xs font-semibold w-5 h-5 rounded-full flex items-center justify-center",
-              member.rank <= 3
-                ? "bg-secondary text-foreground border border-border"
-                : "text-muted-foreground",
-            )}
-          >
-            {member.rank}
-          </span>
+        <span
+          className={cn(
+            "text-xs font-semibold w-5 h-5 rounded-full flex items-center justify-center",
+            member.rank <= 3
+              ? "bg-secondary text-foreground border border-border"
+              : "text-muted-foreground",
+          )}
+        >
+          {member.rank}
+        </span>
+      </div>
+
+      {/* Avatar with crown overlay for leader */}
+      <div className="relative shrink-0">
+        <ProfileAvatar name={member.name} src={member.avatarUrl} size="sm" />
+        {isTop && (
+          <Crown
+            weight="BoldDuotone"
+            className="absolute -top-2.5 left-1/2 -translate-x-1/2 h-3.5 w-3.5 text-[var(--brand-gold)] drop-shadow-sm"
+            aria-label="Leader"
+          />
         )}
       </div>
 
-      {/* Avatar */}
-      <ProfileAvatar name={member.name} src={member.avatarUrl} size="sm" />
-
       {/* Name + badges */}
       <div className="flex-1 min-w-0">
+        {/* Row 1: name + role badge + status chips */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span
             className={cn(
@@ -97,6 +106,11 @@ export function GroupSalesListItem({
           >
             {member.name}
           </span>
+          {member.roleName && (
+            <Badge variant="outline" className="text-[9px] h-4 px-1.5 py-0 shrink-0 font-medium">
+              {member.roleName}
+            </Badge>
+          )}
           {isTop && (
             <span className="text-[9px] font-semibold bg-foreground text-background px-1.5 py-0.5 rounded-full shrink-0">
               Top
@@ -109,7 +123,14 @@ export function GroupSalesListItem({
           )}
         </div>
 
-        {/* Achievement % + trend */}
+        {/* Row 2: email */}
+        {member.email && (
+          <p className="text-xs text-muted-foreground truncate mt-0.5 leading-tight">
+            {member.email}
+          </p>
+        )}
+
+        {/* Row 3: Achievement % + trend */}
         <div className="flex items-center gap-1 mt-0.5">
           <span
             className={cn(

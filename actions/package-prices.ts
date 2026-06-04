@@ -63,7 +63,7 @@ export async function updatePackagePrices(
       }),
       db.termOfPayment.findMany({
         where: { bookingId },
-        select: { id: true, name: true, amount: true, paymentStatus: true },
+        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true },
         orderBy: { sortOrder: "asc" },
       }),
     ]);

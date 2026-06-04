@@ -1,3 +1,4 @@
+import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import type { ARBooking, ARInvoiceStatus, ARPartialPayment, ARTermin, ARTerminStatus } from "@/types/finance";
 
@@ -21,16 +22,23 @@ function deriveBookingStatus(termins: ARTermin[]): ARTerminStatus {
 }
 
 export async function getARBookings(): Promise<{ data: ARBooking[]; total: number }> {
+  "use cache";
+  cacheTag("ar-bookings");
+  cacheLife("minutes");
+
   const now = new Date();
 
   const where = {
+    recordStatus: "saved" as const,
     bookingStatus: "Confirmed" as const,
     termOfPayments: { some: {} },
   };
 
+  // Hard cap: AR listing tidak boleh tak terbatas (AGENTS.md: findMany without pagination is forbidden)
   const bookings = await db.booking.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: 500,
     select: {
       id: true,
       poNumber: true,
@@ -51,6 +59,9 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
           paymentStatus: true,
           invoiceNumber: true,
           notes: true,
+          ackStatus: true,
+          acknowledgedAt: true,
+          acknowledgedBy: { select: { fullName: true, nickName: true } },
           partialPayments: {
             select: { id: true, amount: true, paidAt: true, notes: true },
             orderBy: { paidAt: "asc" },
@@ -98,6 +109,9 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         agingDays,
         catatan: t.notes ?? "",
         partialPayments,
+        ackStatus: (t.ackStatus ?? "pending") as "pending" | "acknowledged" | "rejected",
+        acknowledgedAt: t.acknowledgedAt ? t.acknowledgedAt.toISOString() : null,
+        acknowledgedByName: t.acknowledgedBy?.fullName ?? t.acknowledgedBy?.nickName ?? null,
       };
     });
 

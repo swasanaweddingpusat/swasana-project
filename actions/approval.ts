@@ -39,7 +39,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
     // For order-independent flows (booking, booking-mice, quotations, package),
     // manager and finance can approve in any order — record becomes "approved"
     // only when ALL role steps are done.
-    if (!isSuperAdmin && isSequentialFlow(step.record.module)) {
+    if (!isSuperAdmin && await isSequentialFlow(step.record.module)) {
       const blockedByPrior = allSteps.some(
         (s) => s.stepOrder < step.stepOrder && s.status !== "approved"
       );
@@ -66,7 +66,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
 
     const entityUpdate: Prisma.PrismaPromise<unknown>[] = allApprovedAfter && step.record.module === "package"
       ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } })]
-      : allApprovedAfter && step.record.module === "booking"
+      : allApprovedAfter && (step.record.module === "booking" || step.record.module === "booking-mice")
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } })]
         : [];
 
@@ -121,7 +121,7 @@ export async function rejectStep(stepId: string, notes: string) {
 
     const entityRejectUpdate: Prisma.PrismaPromise<unknown>[] = step.record.module === "package"
       ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "rejected" } })]
-      : step.record.module === "booking"
+      : (step.record.module === "booking" || step.record.module === "booking-mice")
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } })]
         : [];
 

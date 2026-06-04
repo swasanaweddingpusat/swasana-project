@@ -130,6 +130,8 @@ export function GroupDetailClient({
     return {
       profileId: m.userId,
       name: m.profile.fullName ?? m.userId,
+      email: m.profile.email ?? null,
+      roleName: m.profile.role?.name ?? null,
       avatarUrl: m.profile.avatarUrl ?? undefined,
       target: perf?.target ?? 0,
       targetStartDate: perf?.targetStartDate ?? null,

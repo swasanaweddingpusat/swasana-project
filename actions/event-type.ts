@@ -24,7 +24,7 @@ export async function createEventType(data: unknown) {
     const [item] = await db.$transaction([
       db.eventType.create({ data: { ...parsed.data, sortOrder: (maxSort._max.sortOrder ?? 0) + 1 } }),
     ]);
-    revalidateTag("event-types", { expire: 0 });
+    revalidateTag("event-types", "max");
     return { success: true, item };
   } catch (e) {
     console.error("[createEventType]", e);
@@ -44,7 +44,7 @@ export async function updateEventType(id: string, data: unknown) {
     const [item] = await db.$transaction([
       db.eventType.update({ where: { id }, data: parsed.data }),
     ]);
-    revalidateTag("event-types", { expire: 0 });
+    revalidateTag("event-types", "max");
     return { success: true, item };
   } catch (e) {
     console.error("[updateEventType]", e);
@@ -59,7 +59,7 @@ export async function deleteEventType(id: string) {
 
   try {
     await db.$transaction([db.eventType.delete({ where: { id } })]);
-    revalidateTag("event-types", { expire: 0 });
+    revalidateTag("event-types", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteEventType]", e);

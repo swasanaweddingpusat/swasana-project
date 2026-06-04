@@ -22,7 +22,8 @@ export async function createCustomer(data: unknown) {
       data: {
         ...rest,
         mobileNumber: mobileNumber as unknown as Prisma.InputJsonValue,
-        nikNumber: rest.nikNumber || null,
+        cppNik: rest.cppNik || null,
+        cpwNik: rest.cpwNik || null,
         updatedBy: session!.user.name ?? session!.user.email,
       },
     })]);
@@ -34,7 +35,7 @@ export async function createCustomer(data: unknown) {
       description: `Customer ${parsed.data.name} ditambahkan`,
       changes: { after: parsed.data },
     });
-    revalidateTag("customers", { expire: 0 });
+    revalidateTag("customers", "max");
     return { success: true, customer };
   } catch (e) {
     console.error("[createCustomer]", e);
@@ -58,7 +59,8 @@ export async function updateCustomer(data: unknown) {
       data: {
         ...rest,
         ...(mn !== undefined && { mobileNumber: mn as unknown as Prisma.InputJsonValue }),
-        nikNumber: rest.nikNumber || null,
+        cppNik: rest.cppNik || null,
+        cpwNik: rest.cpwNik || null,
         updatedBy: session!.user.name ?? session!.user.email,
       },
     })]);
@@ -70,7 +72,7 @@ export async function updateCustomer(data: unknown) {
       description: `Customer ${customer.id} diperbarui`,
       changes: { before: { id }, after: rest },
     });
-    revalidateTag("customers", { expire: 0 });
+    revalidateTag("customers", "max");
     return { success: true, customer };
   } catch (e) {
     console.error("[updateCustomer]", e);
@@ -92,7 +94,7 @@ export async function deleteBulkCustomers(ids: string[]) {
       entityId: ids.join(","),
       description: `Deleted ${ids.length} customers`,
     });
-    revalidateTag("customers", { expire: 0 });
+    revalidateTag("customers", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteBulkCustomers]", e);
@@ -114,7 +116,7 @@ export async function deleteCustomer(id: string) {
       entityId: id,
       description: `Customer ${id} dihapus`,
     });
-    revalidateTag("customers", { expire: 0 });
+    revalidateTag("customers", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteCustomer]", e);

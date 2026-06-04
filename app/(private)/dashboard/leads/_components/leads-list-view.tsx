@@ -32,8 +32,6 @@ import {
   CheckCircle,
   CloseCircle,
   MenuDots,
-  HeartShine,
-  Suitcase,
   Refresh,
 } from "@solar-icons/react";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -58,13 +56,7 @@ interface LeadsListViewProps {
   onMarkDeal: (lead: LeadItem) => void;
   onMarkLost: (lead: LeadItem) => void;
   onReset: (lead: LeadItem) => void;
-  onCreateBooking: (lead: LeadItem) => void;
   isLoading?: boolean;
-}
-
-/** Resolve the lead's booking category (eventType.category wins over lead.category). */
-function leadBookingCategory(lead: LeadItem): "WEDDINGS" | "MICE" {
-  return lead.eventType?.category ?? lead.category;
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -144,7 +136,6 @@ function MobileLeadCard({
   onMarkDeal,
   onMarkLost,
   onReset,
-  onCreateBooking,
 }: {
   lead: LeadItem;
   rowNumber: number;
@@ -154,7 +145,6 @@ function MobileLeadCard({
   onMarkDeal: (lead: LeadItem) => void;
   onMarkLost: (lead: LeadItem) => void;
   onReset: (lead: LeadItem) => void;
-  onCreateBooking: (lead: LeadItem) => void;
 }) {
   const firstContact = Array.isArray(lead.contactNumbers)
     ? (lead.contactNumbers[0] as { number?: string } | undefined)?.number ?? ""
@@ -263,15 +253,6 @@ function MobileLeadCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onCreateBooking(lead)}>
-                {leadBookingCategory(lead) === "MICE" ? (
-                  <Suitcase weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                ) : (
-                  <HeartShine weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                )}
-                {leadBookingCategory(lead) === "MICE" ? "Create Booking MICE" : "Create Booking Wedding"}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               {showFinalActions && (
                 <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
                   <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
@@ -323,7 +304,6 @@ export function LeadsListView({
   onMarkDeal,
   onMarkLost,
   onReset,
-  onCreateBooking,
   isLoading,
 }: LeadsListViewProps) {
   // ── Loading state ──
@@ -376,15 +356,14 @@ export function LeadsListView({
               onMarkDeal={onMarkDeal}
               onMarkLost={onMarkLost}
               onReset={onReset}
-              onCreateBooking={onCreateBooking}
             />
           );
         })}
       </div>
 
       {/* ── Desktop/Tablet: Table (sm+) ── */}
-      <div className="hidden sm:block overflow-x-auto">
-        <Table className="text-sm">
+      <div className="hidden sm:block w-full min-w-0">
+        <Table className="text-sm w-full">
           <TableHeader>
             <TableRow className="bg-muted/50">
               {/* No — hidden on mobile (already handled by block/hidden wrapper) */}
@@ -423,7 +402,7 @@ export function LeadsListView({
                   </TableCell>
 
                   {/* Nama — with HP + tanggal subtext for tablet (where date col is hidden) */}
-                  <TableCell className="px-4 font-medium max-w-45 truncate" title={lead.name}>
+                  <TableCell className="px-4 font-medium max-w-48 truncate" title={lead.name}>
                     <div className="truncate">{lead.name}</div>
                     {firstContact && (
                       <div className="text-xs text-muted-foreground">+{firstContact}</div>
@@ -525,15 +504,6 @@ export function LeadsListView({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => onCreateBooking(lead)}>
-                            {leadBookingCategory(lead) === "MICE" ? (
-                              <Suitcase weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                            ) : (
-                              <HeartShine weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                            )}
-                            {leadBookingCategory(lead) === "MICE" ? "Create Booking MICE" : "Create Booking Wedding"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
                           {!lead.status.isFinal && (
                             <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
                               <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />

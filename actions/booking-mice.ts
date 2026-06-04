@@ -195,7 +195,7 @@ export async function updateMiceBooking(
   const { id, ...input } = parsed.data;
 
   const existing = await db.booking.findFirst({
-    where: { id, category: "MICE" },
+    where: { id, category: "MICE", recordStatus: "saved" },
     select: { id: true, customerId: true },
   });
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
@@ -290,7 +290,7 @@ export async function deleteMiceBooking(
     return { success: false, ...rateLimitError() };
 
   const existing = await db.booking.findFirst({
-    where: { id, category: "MICE" },
+    where: { id, category: "MICE", recordStatus: "saved" },
     select: { id: true },
   });
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };
@@ -347,7 +347,7 @@ export async function markMiceLost(
   const input = parsed.data;
 
   const existing = await db.booking.findFirst({
-    where: { id: input.id, category: "MICE" },
+    where: { id: input.id, category: "MICE", recordStatus: "saved" },
     select: { id: true },
   });
   if (!existing) return { success: false, error: "Booking MICE tidak ditemukan." };

@@ -30,7 +30,7 @@ type OptionItem = { id: string; name: string };
 type CustomerFormValues = Omit<CustomerInput, "mobileNumber">;
 
 const DRAFT_KEY = "customer_drawer_draft";
-interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; email: string; nikNumber: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
+interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; email: string; cppNik: string; cpwNik: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
 function saveDraft(d: CustomerDraft) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ } }
 function loadDraft(): CustomerDraft | null { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
@@ -64,7 +64,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   const [mobileError, setMobileError] = useState<string | null>(null);
 
   const form = useForm<CustomerFormValues>({
-    defaultValues: { name: "", email: "", nikNumber: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
+    defaultValues: { name: "", email: "", cppNik: "", cpwNik: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
 
   const prevOpenRef = useRef(false);
@@ -84,7 +84,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         const draft = loadDraft();
         if (draft) {
           setMobileNumbers(draft.mobileNumbers ?? []);
-          form.reset({ name: draft.name, email: draft.email, nikNumber: draft.nikNumber, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
+          form.reset({ name: draft.name, email: draft.email, cppNik: draft.cppNik, cpwNik: draft.cpwNik, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
           return;
         }
       }
@@ -92,7 +92,8 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
       form.reset({
         name: editCustomer?.name ?? "",
         email: editCustomer?.email ?? "",
-        nikNumber: editCustomer?.nikNumber ?? "",
+        cppNik: editCustomer?.cppNik ?? "",
+        cpwNik: editCustomer?.cpwNik ?? "",
         ktpAddress: editCustomer?.ktpAddress ?? "",
         type: tv,
         club: editCustomer?.club ?? "",
@@ -120,7 +121,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   useEffect(() => {
     if (!open || editCustomer) return;
     const values = form.getValues();
-    saveDraft({ name: values.name, mobileNumbers, email: values.email, nikNumber: values.nikNumber ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
+    saveDraft({ name: values.name, mobileNumbers, email: values.email, cppNik: values.cppNik ?? "", cpwNik: values.cpwNik ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
   }); // intentionally no deps
 
   async function handleAddSourceOfInfo(name: string) {
@@ -246,9 +247,15 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <Input {...field} placeholder="nama@email.com" />
                 </FormControl><FormMessage /></FormItem>
               )} />
-              <FormField control={form.control} name="nikNumber" render={({ field }) => (
-                <FormItem><FormLabel>NIK (16 digit)</FormLabel><FormControl>
+              <FormField control={form.control} name="cppNik" render={({ field }) => (
+                <FormItem><FormLabel>NIK CPP (16 digit)</FormLabel><FormControl>
                   <Input {...field} placeholder="3275010101010001" inputMode="numeric" maxLength={16}
+                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 16))} />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="cpwNik" render={({ field }) => (
+                <FormItem><FormLabel>NIK CPW (16 digit)</FormLabel><FormControl>
+                  <Input {...field} placeholder="3275010101010002" inputMode="numeric" maxLength={16}
                     onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 16))} />
                 </FormControl><FormMessage /></FormItem>
               )} />

@@ -63,7 +63,7 @@ export async function createSettlement(input: {
       description: `Created ${input.type} settlement of Rp${input.amount.toLocaleString("id-ID")}`,
     });
 
-    revalidateTag("settlements", { expire: 0 });
+    revalidateTag("settlements", "max");
     return { success: true, data: { id: settlement[0].id } };
   } catch (e) {
     console.error("[createSettlement]", e);
@@ -110,7 +110,7 @@ export async function updateSettlementStatus(
       description: `Settlement status updated to ${status}`,
     });
 
-    revalidateTag("settlements", { expire: 0 });
+    revalidateTag("settlements", "max");
     return { success: true };
   } catch (e) {
     console.error("[updateSettlementStatus]", e);
@@ -152,7 +152,7 @@ export async function deleteSettlement(
       description: "Settlement deleted",
     });
 
-    revalidateTag("settlements", { expire: 0 });
+    revalidateTag("settlements", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteSettlement]", e);

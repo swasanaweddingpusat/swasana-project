@@ -21,7 +21,7 @@ export async function createBrand(data: unknown) {
 
   try {
     const [brand] = await db.$transaction([db.brand.create({ data: { name: parsed.data.name, code: parsed.data.code.toUpperCase() } })]);
-    revalidateTag("brands", { expire: 0 });
+    revalidateTag("brands", "max");
     return { success: true, brand };
   } catch (e) {
     console.error("[createBrand]", e);
@@ -42,7 +42,7 @@ export async function updateBrand(data: unknown) {
       where: { id: parsed.data.id },
       data: { name: parsed.data.name, code: parsed.data.code.toUpperCase() },
     })]);
-    revalidateTag("brands", { expire: 0 });
+    revalidateTag("brands", "max");
     return { success: true, brand };
   } catch (e) {
     console.error("[updateBrand]", e);
@@ -57,7 +57,7 @@ export async function deleteBrand(id: string) {
 
   try {
     await db.$transaction([db.brand.delete({ where: { id } })]);
-    revalidateTag("brands", { expire: 0 });
+    revalidateTag("brands", "max");
     return { success: true };
   } catch (e) {
     console.error("[deleteBrand]", e);

@@ -94,8 +94,11 @@ export async function POST(req: Request) {
       snapCustomer: {
         name: BLANK,
         mobileNumber: BLANK,
-        nikNumber: BLANK,
-        ktpAddress: BLANK,
+        cppNik: BLANK,
+        cpwNik: BLANK,
+        ktpAddress: null,
+        cppAddress: BLANK,
+        cpwAddress: BLANK,
       },
 
       // ── Venue — from live DB ────────────────────────────────────────────────

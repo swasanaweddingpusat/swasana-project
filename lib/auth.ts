@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { loginSchema } from "@/lib/validations/auth";
+import { authLimiter } from "@/lib/rate-limit";
 
 // Dummy hash ensures bcrypt always runs — timing-attack defense
 const DUMMY_HASH = "$2b$12$aaaaaaaaaaaaaaaaaaaaaOaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -54,6 +55,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
+
+        // In-memory rate limit by email (fast pre-check, resets on cold start)
+        // DB-based lockout below is the persistent guard across restarts.
+        // Intentionally NOT differentiating error messages — return null generically.
+        if (!authLimiter.check(`login:${email}`)) return null;
 
         // Check account lockout via ActivityLog (no Redis needed)
         if (await isAccountLocked(email)) {

@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import type { Prisma } from "@prisma/client";
 
 interface TermUpdate {
   id: string;
@@ -43,19 +44,28 @@ export async function updateTermOfPayments(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ops: any[] = terms.map((t) =>
-      db.termOfPayment.update({
-        where: { id: t.id },
-        data: {
-          name: t.name,
-          amount: t.amount,
-          dueDate: new Date(t.dueDate),
-          paymentStatus: t.paymentStatus,
-          notes: t.notes ?? null,
-        },
-      })
-    );
+    // Fetch current ackStatus for all terms being updated so we can skip
+    // those already acknowledged (same protection as paid — they are locked).
+    const existingTerms = await db.termOfPayment.findMany({
+      where: { id: { in: terms.map((t) => t.id) } },
+      select: { id: true, ackStatus: true },
+    });
+    const ackMap = new Map(existingTerms.map((t) => [t.id, t.ackStatus]));
+
+    const ops: Prisma.PrismaPromise<unknown>[] = terms
+      .filter((t) => ackMap.get(t.id) !== "acknowledged")
+      .map((t) =>
+        db.termOfPayment.update({
+          where: { id: t.id },
+          data: {
+            name: t.name,
+            amount: t.amount,
+            dueDate: new Date(t.dueDate),
+            paymentStatus: t.paymentStatus,
+            notes: t.notes ?? null,
+          },
+        })
+      );
 
     // Add new terms
     if (newTerms && newTerms.length > 0) {
@@ -90,7 +100,7 @@ export async function updateTermOfPayments(
       description: `Updated ${terms.length} term(s)${newTerms?.length ? `, added ${newTerms.length} new term(s)` : ""}${discount ? ", updated discount" : ""}`,
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch (e) {
     console.error("[updateTermOfPayments]", e);
@@ -130,7 +140,7 @@ export async function addTermOfPayment(bookingId: string, data: { name: string; 
       description: `Added term: ${data.name}`,
     });
 
-    revalidateTag("bookings", { expire: 0 });
+    revalidateTag("bookings", "max");
     return { success: true };
   } catch (e) {
     console.error("[addTermOfPayment]", e);

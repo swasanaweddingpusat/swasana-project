@@ -1,10 +1,12 @@
 /**
- * Hardcoded approval flow definitions.
+ * Approval flow definitions — DB-driven with hardcoded fallback.
  *
- * Replaces the DB-driven ApprovalFlow / ApprovalFlowStep tables.
- * Package and Booking both require: Manager (step 1) → Finance (step 2).
+ * Primary source: ApprovalFlowConfig + ApprovalFlowStep rows in DB.
+ * Fallback (safety net): APPROVAL_FLOWS constant below — used when DB rows
+ * don't exist yet or a role is missing. This ensures booking/package/quotation
+ * approvals continue to work even before the Settings UI seeds data.
  *
- * Steps are resolved to actual Role rows at runtime via resolveApprovalSteps().
+ * resolveApprovalSteps() tries DB first, falls back to constants.
  */
 
 import { db } from "@/lib/db";
@@ -25,6 +27,7 @@ export interface ApprovalFlowDef {
   steps: HardcodedStep[];
 }
 
+/** Hardcoded fallback — kept exactly in sync with original behavior */
 export const APPROVAL_FLOWS: Record<string, ApprovalFlowDef> = {
   package: {
     steps: [
@@ -70,12 +73,41 @@ export interface ResolvedStep {
 }
 
 /**
- * Resolves role names to role IDs from DB.
- * Returns null if module has no hardcoded flow or any role is not found.
+ * Resolves approval steps for a given module.
+ *
+ * Strategy:
+ * 1. Try DB (ApprovalFlowConfig + ApprovalFlowStep).
+ * 2. If DB has no rows for this module, fall back to APPROVAL_FLOWS constant.
+ * 3. Returns null if neither DB nor fallback has a valid flow.
  */
 export async function resolveApprovalSteps(
   module: string
 ): Promise<ResolvedStep[] | null> {
+  // ── 1. Try DB-driven flow ───────────────────────────────────────────────────
+  const dbFlow = await db.approvalFlowConfig.findUnique({
+    where: { module },
+    select: {
+      steps: {
+        orderBy: { stepOrder: "asc" },
+        select: {
+          stepOrder: true,
+          approverRoleId: true,
+          approverRole: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  if (dbFlow && dbFlow.steps.length > 0) {
+    return dbFlow.steps.map((s) => ({
+      sortOrder: s.stepOrder,
+      approverType: "role" as const,
+      approverRoleId: s.approverRoleId,
+      roleName: s.approverRole.name,
+    }));
+  }
+
+  // ── 2. Fallback to hardcoded constant ───────────────────────────────────────
   const flowDef = APPROVAL_FLOWS[module];
   if (!flowDef || flowDef.steps.length === 0) return null;
 
@@ -104,9 +136,17 @@ export async function resolveApprovalSteps(
 
 /**
  * Returns true if the given module's approval flow is sequential (strict order).
- * Defaults to false (order-independent) when no flow is defined.
+ * Checks DB first, falls back to hardcoded constant, defaults to false.
  */
-export function isSequentialFlow(module: string): boolean {
+export async function isSequentialFlow(module: string): Promise<boolean> {
+  const dbFlow = await db.approvalFlowConfig.findUnique({
+    where: { module },
+    select: { sequential: true },
+  });
+
+  if (dbFlow !== null) return dbFlow.sequential;
+
+  // Fallback to hardcoded constant
   return APPROVAL_FLOWS[module]?.sequential === true;
 }
 

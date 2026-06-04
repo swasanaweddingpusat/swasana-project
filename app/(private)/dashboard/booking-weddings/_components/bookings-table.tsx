@@ -24,8 +24,7 @@ import { generateAgreementToken } from "@/actions/client-agreement";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
-import { EditTopDrawer } from "./edit-top-drawer";
-import { EditPackagePricesDrawer } from "./edit-package-prices-drawer";
+import { EditBookingFinanceDrawer } from "./edit-finance-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
@@ -168,8 +167,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
-  const [pkgPricesTarget, setPkgPricesTarget] = useState<BookingListItem | null>(null);
+  const [financeTarget, setFinanceTarget] = useState<{ booking: BookingListItem; tab: "top" | "takeout" } | null>(null);
 
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
@@ -355,13 +353,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setFinanceTarget({ booking, tab: "top" })}>
               <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit TOP
             </DropdownMenuItem>
             {can("booking", "edit") &&
               booking.snapPackageCategoryPrices &&
               booking.snapPackageCategoryPrices.length > 0 && (
-              <DropdownMenuItem className="cursor-pointer" onClick={() => setPkgPricesTarget(booking)}>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => setFinanceTarget({ booking, tab: "takeout" })}>
                 <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Set Harga
               </DropdownMenuItem>
             )}
@@ -1081,41 +1079,44 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       )}
 
 
-      {/* Edit TOP Drawer */}
-      {topTarget && (
-        <EditTopDrawer
-          isOpen={!!topTarget}
-          onClose={() => { setTopTarget(null); refetch(); }}
-          bookingId={topTarget.id}
-          customerName={topTarget.snapCustomer?.name ?? ""}
-          initialTerms={(topTarget.termOfPayments ?? []).map((t) => ({
-            id: t.id, name: t.name, amount: Number(t.amount),
-            dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder,
+      {/* Edit Keuangan Booking — unified finance drawer */}
+      {financeTarget && (
+        <EditBookingFinanceDrawer
+          isOpen={!!financeTarget}
+          onClose={() => { setFinanceTarget(null); refetch(); }}
+          bookingId={financeTarget.booking.id}
+          customerName={financeTarget.booking.snapCustomer?.name ?? ""}
+          initialTerms={(financeTarget.booking.termOfPayments ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            amount: Number(t.amount),
+            dueDate: new Date(t.dueDate).toISOString(),
+            sortOrder: t.sortOrder,
             paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
-            paymentEvidence: t.paymentEvidence ?? null, notes: t.notes,
-            partialPayments: "partialPayments" in t ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments : undefined,
+            ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
+            paymentEvidence: t.paymentEvidence ?? null,
+            notes: t.notes,
+            partialPayments: "partialPayments" in t
+              ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments
+              : undefined,
           }))}
-          packagePrice={Number(topTarget.snapPackagePricing?.price ?? 0)}
-          discountName={topTarget.discountName ?? null}
-          discountAmount={topTarget.discountAmount ?? 0}
-        />
-      )}
-
-      {pkgPricesTarget && (
-        <EditPackagePricesDrawer
-          isOpen={!!pkgPricesTarget}
-          onClose={() => setPkgPricesTarget(null)}
-          bookingId={pkgPricesTarget.id}
-          customerName={pkgPricesTarget.snapCustomer?.name ?? ""}
-          initialCategories={(pkgPricesTarget.snapPackageCategoryPrices ?? []).map((c) => ({
-            id: c.id,
-            categoryName: c.categoryName,
-            basePrice: Number(c.basePrice),
-            sortOrder: c.sortOrder,
-            isShow: c.isShow,
-            isTakeout: c.isTakeout,
-          }))}
-          margin={pkgPricesTarget.snapPackagePricing?.margin ?? 0}
+          packagePrice={Number(financeTarget.booking.snapPackagePricing?.price ?? 0)}
+          discountName={financeTarget.booking.discountName ?? null}
+          discountAmount={financeTarget.booking.discountAmount ?? 0}
+          initialCategories={
+            (financeTarget.booking.snapPackageCategoryPrices ?? []).length > 0
+              ? (financeTarget.booking.snapPackageCategoryPrices ?? []).map((c) => ({
+                  id: c.id,
+                  categoryName: c.categoryName,
+                  basePrice: Number(c.basePrice),
+                  sortOrder: c.sortOrder,
+                  isShow: c.isShow,
+                  isTakeout: c.isTakeout,
+                }))
+              : null
+          }
+          margin={financeTarget.booking.snapPackagePricing?.margin ?? 0}
+          defaultTab={financeTarget.tab}
         />
       )}
 

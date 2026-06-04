@@ -60,7 +60,7 @@ function toLocalISO(date: Date): string {
   return `${y}-${m}-${d}T00:00:00.000Z`;
 }
 
-function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
+function recalcTermDates(terms: TermRow[], eventDate: string, force = false): TermRow[] {
   if (!eventDate || terms.length === 0) return terms;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -69,10 +69,14 @@ function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
   const totalMs = event.getTime() - now.getTime();
   if (totalMs <= 0) return terms;
   const n = terms.length;
-  return terms.map((t, i) => ({
-    ...t,
-    dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
-  }));
+  return terms.map((t, i) => {
+    // Skip terms that already have a dueDate set by the user, unless forced.
+    if (!force && t.dueDate) return t;
+    return {
+      ...t,
+      dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
+    };
+  });
 }
 
 const LBL = "text-sm font-medium text-foreground";
@@ -87,8 +91,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [contactNumbers, setContactNumbers] = useState<MobileNumberEntry[]>([]);
   const [contactInput, setContactInput] = useState({ name: "", number: "" });
   const [contactEmail, setContactEmail] = useState("");
-  const [contactNik, setContactNik] = useState("");
-  const [contactKtpAddress, setContactKtpAddress] = useState("");
+  const [contactNikCpp, setContactNikCpp] = useState("");
+  const [contactNikCpw, setContactNikCpw] = useState("");
+  const [contactCppAddress, setContactCppAddress] = useState("");
+  const [contactCpwAddress, setContactCpwAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [venueId, setVenueId] = useState("");
   const [packageId, setPackageId] = useState("");
@@ -108,6 +114,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [terms, setTerms] = useState<TermRow[]>([]);
+  // Track whether price changed between step 2 and step 3 to decide if
+  // allocatePrice should overwrite manual edits when re-entering step 3.
+  const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
 
   // Step 4 state (Signature)
   const [signingLocation, setSigningLocation] = useState("");
@@ -202,7 +211,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setTakeoutPrices({});
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
-    setTerms(bTerms.length > 0 ? bTerms : [{ name: "Booking Fee", amount: 0, dueDate: toLocalISO(new Date()), sortOrder: 0 }]);
+    const defaultTerms: TermRow[] = [
+      { name: "Booking Fee", amount: 5_000_000, dueDate: toLocalISO(new Date()), sortOrder: 0 },
+      { name: "DP", amount: 10_000_000, dueDate: "", sortOrder: 1 },
+    ];
+    setTerms(bTerms.length > 0 ? bTerms : defaultTerms);
+    setLastAllocatedPrice(0);
     // Package price from snapshot
     setSelectedPackagePrice(Number(booking.snapPackagePricing?.price ?? 0));
   }, [open, booking]);
@@ -211,8 +225,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   useEffect(() => {
     if (!detail) return;
     setContactEmail(detail.snapCustomer?.email ?? "");
-    setContactNik(detail.snapCustomer?.nikNumber ?? "");
-    setContactKtpAddress(detail.snapCustomer?.ktpAddress ?? "");
+    setContactNikCpp(detail.snapCustomer?.cppNik ?? "");
+    setContactNikCpw(detail.snapCustomer?.cpwNik ?? "");
+    setContactCppAddress(detail.snapCustomer?.cppAddress ?? "");
+    setContactCpwAddress(detail.snapCustomer?.cpwAddress ?? "");
     setContactBitrixId(detail.customer?.bitrixId ?? "");
     if (detail.snapBonuses?.length && bonuses.length === 0) {
       setBonuses(detail.snapBonuses.map((b: Record<string, unknown>) => ({ vendorId: b.vendorId as string, vendorCategoryId: b.vendorCategoryId as string, vendorName: b.vendorName as string, description: (b.description as string) ?? "", qty: Number(b.qty) || 1, nominal: Number(b.nominal) || 0 })));
@@ -314,7 +330,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (currentStep === 2 && !isStep2Complete) { toast.error("Minimal satu kategori harus tetap included."); return; }
     if (currentStep === 2) {
       setSelectedPackagePrice(step2Price);
-      allocatePrice(step2Price, specialBonusAmount);
+      // Only re-distribute amounts when the effective price has actually changed
+      // since the last allocation. This prevents overwriting manual edits the user
+      // made in step 3 when they go back to step 2 and return without changing anything.
+      if (step2Price !== lastAllocatedPrice) {
+        allocatePrice(step2Price, specialBonusAmount);
+        setLastAllocatedPrice(step2Price);
+      }
     }
     if (currentStep === 3) {
       const dpTerm = terms.find((t) => t.name.trim().toUpperCase() === "DP");
@@ -344,7 +366,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       weddingSession: (weddingSession as "morning" | "evening" | "fullday") || null,
       weddingType: weddingType || null,
       signingLocation: signingLocation || null,
-      customerName, contactNumbers: JSON.stringify(contactNumbers), contactEmail, contactNik, contactKtpAddress, contactBitrixId,
+      customerName, contactNumbers: JSON.stringify(contactNumbers), contactEmail, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       // Only include TOP + signature + categoryToggles if significant change (steps 2-4 were shown)
       ...(hasSignificantChange ? {
@@ -400,8 +422,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
               <div><label className={LBL}>Sumber Informasi</label><SearchableSelect options={sources} value={sourceOfInformationId} onChange={setSourceOfInformationId} placeholder="Pilih sumber informasi" searchPlaceholder="Cari sumber..." emptyText="Tidak ada data" /></div>
               <div><label className={LBL}>Email</label><Input className="mt-1" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Email" /></div>
-              <div><label className={LBL}>NIK Number</label><Input className="mt-1" value={contactNik} onChange={(e) => setContactNik(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} placeholder="NIK" /></div>
-              <div><label className={LBL}>Alamat (sesuai KTP)</label><Textarea className="mt-1" rows={3} value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} placeholder="Alamat KTP" /></div>
+              <div><label className={LBL}>NIK CPP</label><Input className="mt-1" value={contactNikCpp} onChange={(e) => setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} placeholder="NIK CPP" /></div>
+              <div><label className={LBL}>Alamat CPP</label><Textarea className="mt-1" rows={3} value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} placeholder="Alamat CPP" /></div>
+              <div><label className={LBL}>NIK CPW</label><Input className="mt-1" value={contactNikCpw} onChange={(e) => setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} placeholder="NIK CPW" /></div>
+              <div><label className={LBL}>Alamat CPW</label><Textarea className="mt-1" rows={3} value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} placeholder="Alamat CPW" /></div>
               <div><label className={LBL}>Bitrix ID</label><Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" /></div>
 
               {/* Venue */}
@@ -410,7 +434,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               {/* Package */}
               <div>
                 <label className={LBL}>Pilih Paket *</label>
-                <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} · ${p.pax} PAX` }))} value={packageId} onChange={(id) => { setPackageId(id); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} · ${p.pax} PAX` }))} value={packageId} onChange={(id) => { setPackageId(id); setCategoryToggles({}); setTakeoutPrices({}); setLastAllocatedPrice(0); const pkg = packages.find((x) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); } }} placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"} disabled={!venueId} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                 {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
               </div>
 
@@ -420,7 +444,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Popover>
                   <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => {
+                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 10} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => {
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       // Allow the existing booking date even if it is in the past,
@@ -584,7 +608,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                         <div className="sm:flex-1">
                           <Popover>
                             <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}</Button>} />
-                            <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={t.dueDate ? new Date(t.dueDate) : undefined} onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))} /></PopoverContent>
+                            <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={t.dueDate ? new Date(t.dueDate) : undefined} onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 10} /></PopoverContent>
                           </Popover>
                         </div>
                       </div>

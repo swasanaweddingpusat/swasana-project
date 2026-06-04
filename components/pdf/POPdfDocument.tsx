@@ -9,7 +9,7 @@ export interface POPdfBooking {
   weddingSession: string | null;
   weddingType: string | null;
   signingLocation: string | null;
-  snapCustomer: { name: string; mobileNumber: string; nikNumber?: string | null; ktpAddress?: string | null } | null;
+  snapCustomer: { name: string; mobileNumber: string; cppNik?: string | null; cpwNik?: string | null; ktpAddress?: string | null; cppAddress?: string | null; cpwAddress?: string | null } | null;
   snapVenue: { venueName: string; address?: string | null; description?: string | null; brandName?: string | null; brandCode?: string | null } | null;
   snapPackage: { packageName: string; notes?: string | null } | null;
   snapPackagePricing: { packageName: string; pax: number; price: number } | null;
@@ -538,8 +538,10 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                     return raw;
                   })()}
                 </Text>
-                <Text style={{ fontSize: 9 }}>No.KTP : {booking.snapCustomer?.nikNumber ?? "_____________________"}</Text>
-                <Text style={{ fontSize: 9 }}>Alamat : {booking.snapCustomer?.ktpAddress ?? "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>No.KTP CPP : {booking.snapCustomer?.cppNik ?? "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>Alamat CPP : {booking.snapCustomer?.cppAddress ?? "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>No.KTP CPW : {booking.snapCustomer?.cpwNik ?? "_____________________"}</Text>
+                <Text style={{ fontSize: 9 }}>Alamat CPW : {booking.snapCustomer?.cpwAddress ?? "_____________________"}</Text>
               </View>
               <View style={{ flexDirection: "column", gap: 4 }}>
                 <Text style={{ fontSize: 9 }}>Acara : {(() => { const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" }; return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception"; })()}</Text>

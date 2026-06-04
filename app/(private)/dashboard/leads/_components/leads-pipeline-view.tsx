@@ -10,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, CloseCircle, HeartShine, Suitcase } from "@solar-icons/react";
+import { CheckCircle, CloseCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 import type { LeadStatusItem } from "@/lib/queries/leads";
@@ -27,7 +27,6 @@ interface LeadsPipelineViewProps {
   onEdit: (lead: LeadItem) => void;
   onMarkDeal: (lead: LeadItem) => void;
   onMarkLost: (lead: LeadItem) => void;
-  onCreateBooking: (lead: LeadItem) => void;
   isLoading?: boolean;
 }
 
@@ -38,7 +37,6 @@ export function LeadsPipelineView({
   onEdit,
   onMarkDeal,
   onMarkLost,
-  onCreateBooking,
   isLoading,
 }: LeadsPipelineViewProps) {
   if (isLoading) {
@@ -226,21 +224,6 @@ export function LeadsPipelineView({
                                           Lost
                                         </Button>
                                       </div>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="w-full h-7 text-[10px] px-2 hover:bg-accent"
-                                        onClick={(e) => { e.stopPropagation(); onCreateBooking(lead); }}
-                                        aria-label={`Buat booking untuk ${lead.name}`}
-                                      >
-                                        {(lead.eventType?.category ?? lead.category) === "MICE" ? (
-                                          <Suitcase weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 mr-1 shrink-0" />
-                                        ) : (
-                                          <HeartShine weight="BoldDuotone" aria-hidden="true" className="h-3 w-3 mr-1 shrink-0" />
-                                        )}
-                                        {(lead.eventType?.category ?? lead.category) === "MICE" ? "Create Booking MICE" : "Create Booking Wedding"}
-                                      </Button>
                                     </div>
                                   )}
                                 </div>

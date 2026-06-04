@@ -145,7 +145,15 @@ export async function getGroupDetail(groupId: string) {
       members: {
         select: {
           userId: true,
-          profile: { select: { id: true, fullName: true, avatarUrl: true } },
+          profile: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              avatarUrl: true,
+              role: { select: { name: true } },
+            },
+          },
         },
         orderBy: { sortOrder: "asc" },
       },
@@ -177,6 +185,7 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
       const [bookingRevenues, target] = await Promise.all([
         db.booking.findMany({
           where: {
+            recordStatus: "saved",
             salesId: profileId,
             bookingStatus: { not: BookingStatus.Canceled },
             ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
@@ -269,14 +278,24 @@ export async function getGroupsWithPerformance(
   // ── Query 2: all relevant bookings in one shot ───────────────────────────────
   const allBookings = await db.booking.findMany({
     where: {
+      recordStatus: "saved",
       salesId: { in: allSalesIds },
       bookingStatus: { not: BookingStatus.Canceled },
       ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
     },
     select: {
+      id: true,
       salesId: true,
       bookingStatus: true,
       snapPackagePricing: { select: { price: true } },
+      termOfPayments: {
+        select: {
+          amount: true,
+          paymentStatus: true,
+          ackStatus: true,
+          partialPayments: { select: { amount: true } },
+        },
+      },
     },
     take: 10000,
   });
@@ -296,15 +315,61 @@ export async function getGroupsWithPerformance(
   });
 
   // ── In-memory aggregation ────────────────────────────────────────────────────
+
+  // Helper: compute piutang (outstanding) and totalRevenue for a booking's TOPs
+  function computeTopFinancials(tops: typeof allBookings[number]["termOfPayments"]): {
+    piutang: number;
+    totalRevenue: number;
+  } {
+    let piutang = 0;
+    let totalRevenue = 0;
+
+    for (const top of tops) {
+      const amount = Number(top.amount);
+      const paidSoFar = top.partialPayments.reduce((s, p) => s + Number(p.amount), 0);
+
+      if (top.paymentStatus === "refund") {
+        // Refund = uang dikembalikan ke customer. Bukan piutang, bukan revenue.
+        // Di-exclude dari kedua sisi agar konsisten dengan ar.ts yang memperlakukan
+        // refund sebagai "settled" (deriveTerminStatus: refund → "paid").
+        continue;
+      }
+
+      if (top.paymentStatus === "paid" && top.ackStatus === "acknowledged") {
+        // Cash-based revenue: fully paid + acknowledged
+        totalRevenue += amount;
+      } else if (top.paymentStatus === "paid" && top.ackStatus !== "acknowledged") {
+        // Paid but not yet acked → still piutang (waiting finance confirmation)
+        piutang += amount;
+      } else if (top.paymentStatus === "partial") {
+        // Partial: remaining outstanding amount
+        piutang += Math.max(0, amount - paidSoFar);
+      } else if (top.paymentStatus === "unpaid") {
+        // Unpaid: full amount is piutang
+        piutang += amount;
+      }
+    }
+
+    return { piutang, totalRevenue };
+  }
+
   // Group bookings by salesId
   const bookingsBySalesId = new Map<
     string,
-    { bookingStatus: BookingStatus; price: number }[]
+    {
+      bookingStatus: BookingStatus;
+      price: number;
+      tops: typeof allBookings[number]["termOfPayments"];
+    }[]
   >();
   for (const b of allBookings) {
     if (!b.salesId) continue;
     const list = bookingsBySalesId.get(b.salesId) ?? [];
-    list.push({ bookingStatus: b.bookingStatus, price: b.snapPackagePricing?.price ?? 0 });
+    list.push({
+      bookingStatus: b.bookingStatus,
+      price: b.snapPackagePricing?.price ?? 0,
+      tops: b.termOfPayments,
+    });
     bookingsBySalesId.set(b.salesId, list);
   }
 
@@ -323,6 +388,8 @@ export async function getGroupsWithPerformance(
     let confirmedCount = 0;
     let totalAchievement = 0;
     let memberCount = 0;
+    let piutang = 0;
+    let totalRevenue = 0;
 
     for (const member of g.members) {
       const bookings = bookingsBySalesId.get(member.userId) ?? [];
@@ -336,13 +403,28 @@ export async function getGroupsWithPerformance(
       confirmedCount += confirmed.length;
       totalAchievement += achievement;
       memberCount += 1;
+
+      // Finance metrics: only Confirmed bookings (recordStatus=saved already filtered)
+      for (const booking of confirmed) {
+        const fin = computeTopFinancials(booking.tops);
+        piutang += fin.piutang;
+        totalRevenue += fin.totalRevenue;
+      }
     }
 
     const avgAchievement = memberCount > 0 ? Math.round(totalAchievement / memberCount) : 0;
 
     // Spread g without members (keep shape: id, name, description, leaderId, leader, _count)
     const { members: _members, ...groupBase } = g;
-    return { ...groupBase, revenue, target, avgAchievement, confirmedCount };
+    return {
+      ...groupBase,
+      revenue,
+      target,
+      avgAchievement,
+      confirmedCount,
+      piutang,
+      totalRevenue,
+    };
   });
 }
 
@@ -354,7 +436,7 @@ export async function getSalesBookings(salesId: string, take = 100, skip = 0) {
   cacheLife("minutes");
 
   return db.booking.findMany({
-    where: { salesId },
+    where: { salesId, recordStatus: "saved" },
     select: {
       id: true,
       bookingStatus: true,

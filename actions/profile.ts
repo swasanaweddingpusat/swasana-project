@@ -52,7 +52,7 @@ export async function updateMyProfile(data: unknown) {
       }),
     ]);
 
-    revalidateTag("profiles", { expire: 0 });
+    revalidateTag("profiles", "max");
     return { success: true };
   } catch (e) {
     console.error("[updateMyProfile]", e);

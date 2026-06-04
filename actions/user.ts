@@ -19,13 +19,12 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
 // ─── Invite User ──────────────────────────────────────────────────────────────
 
 export async function inviteUser(formData: FormData) {
-  const permResult = await requirePermission({ module: "settings-users", action: "create" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
+  const { session, error: permError } = await requirePermission({ module: "settings-users", action: "create" });
+  if (permError) return { success: false, error: permError };
 
   const h = await headers();
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
-  if (!mutationLimiter.check(`invite:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`invite:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const raw = {
     email: formData.get("email") as string,
@@ -43,12 +42,6 @@ export async function inviteUser(formData: FormData) {
   const { email, fullName, roleId, managerId, dataScope } = parsed.data;
 
   try {
-    // Check if user already exists
-    const existing = await db.user.findUnique({ where: { email } });
-    if (existing) {
-      return { success: false, error: "Email sudah terdaftar." };
-    }
-
     // Temp password — never sent plain text. User sets own password via token link.
     const tempPassword = crypto.randomBytes(8).toString("hex");
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
@@ -56,33 +49,35 @@ export async function inviteUser(formData: FormData) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
 
-    const { profile } = await db.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: { email, name: fullName, password: hashedPassword },
-      });
-
-      const p = await tx.profile.create({
-        data: {
-          userId: user.id,
-          email,
-          fullName,
-          roleId,
-          managerId: managerId ?? null,
-          dataScope,
-          isEmailVerified: false,
-          mustChangePassword: true,
-          invitedAt: new Date(),
+    // Nested create is atomic on Neon HTTP adapter — avoids callback transaction form.
+    // Unique constraint on user.email acts as the race-condition guard; P2002 is caught below.
+    const user = await db.user.create({
+      data: {
+        email,
+        name: fullName,
+        password: hashedPassword,
+        profile: {
+          create: {
+            email,
+            fullName,
+            roleId,
+            managerId: managerId ?? null,
+            dataScope,
+            isEmailVerified: false,
+            mustChangePassword: true,
+            invitedAt: new Date(),
+            emailVerificationTokens: {
+              create: { token, expiresAt },
+            },
+          },
         },
-      });
-
-      await tx.emailVerificationToken.create({
-        data: { profileId: p.id, token, expiresAt },
-      });
-
-      return { profile: p };
+      },
+      select: { id: true, profile: { select: { id: true } } },
     });
 
-    // Send invitation email — OUTSIDE the DB write so a mail failure doesn't roll back user creation
+    const profileId = user.profile!.id;
+
+    // Send invitation email — outside DB write so mail failure doesn't roll back user creation
     const baseUrl = await getBaseUrl();
     const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
 
@@ -93,22 +88,29 @@ export async function inviteUser(formData: FormData) {
       html: invitationEmailHtml({ fullName, verificationLink }),
     });
 
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("users", "max");
 
-    const h = await headers();
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "user.invited",
       entityType: "profile",
-      entityId: profile.id,
+      entityId: profileId,
       description: `Pengguna ${email} diundang`,
       changes: { after: { email, fullName, roleId, dataScope } },
       ipAddress: ip,
-      userAgent: h.get("user-agent") ?? undefined,
+      userAgent: (await headers()).get("user-agent") ?? undefined,
     });
 
     return { success: true, message: "Undangan berhasil dikirim." };
   } catch (error) {
+    // P2002 = unique constraint violation — email already exists (catches race condition)
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code: string }).code === "P2002"
+    ) {
+      return { success: false, error: "Email sudah terdaftar." };
+    }
     console.error("[inviteUser] Error:", error);
     return { success: false, error: "Terjadi kesalahan saat mengundang pengguna." };
   }
@@ -117,10 +119,9 @@ export async function inviteUser(formData: FormData) {
 // ─── Update User ──────────────────────────────────────────────────────────────
 
 export async function updateUser(data: Record<string, unknown>) {
-  const permResult = await requirePermission({ module: "settings-users", action: "edit" });
-  if (permResult.error) return { success: false, error: permResult.error };
-  const session = permResult.session!;
-  if (!mutationLimiter.check(`user-update:${session.user.id}`)) return { success: false, ...rateLimitError() };
+  const { session, error: permError } = await requirePermission({ module: "settings-users", action: "edit" });
+  if (permError) return { success: false, error: permError };
+  if (!mutationLimiter.check(`user-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
   const parsed = updateUserSchema.safeParse(data);
   if (!parsed.success) {
@@ -167,11 +168,11 @@ export async function updateUser(data: Record<string, unknown>) {
         : []),
     ]);
 
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "user.updated",
       entityType: "profile",
       entityId: userId,
@@ -213,7 +214,7 @@ export async function deleteUser(userId: string) {
       db.user.delete({ where: { id: profile.userId } }),
     ]);
 
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
@@ -251,26 +252,24 @@ export async function resendInvitation(userId: string) {
       return { success: false, error: "Email pengguna sudah diverifikasi." };
     }
 
-    // Invalidate existing tokens (updateMany not supported in Neon HTTP)
+    // Fetch active tokens, then invalidate them + create new token in one atomic transaction
     const existingTokens = await db.emailVerificationToken.findMany({
       where: { profileId: userId, usedAt: null },
       select: { id: true },
     });
-    for (const t of existingTokens) {
-      await db.emailVerificationToken.update({ where: { id: t.id }, data: { usedAt: new Date() } });
-    }
 
-    // Create new token
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
+    const now = new Date();
 
-    await db.emailVerificationToken.create({
-      data: {
-        profileId: userId,
-        token,
-        expiresAt,
-      },
-    });
+    await db.$transaction([
+      ...existingTokens.map((t) =>
+        db.emailVerificationToken.update({ where: { id: t.id }, data: { usedAt: now } })
+      ),
+      db.emailVerificationToken.create({
+        data: { profileId: userId, token, expiresAt },
+      }),
+    ]);
 
     // Send invitation email
     const baseUrl = await getBaseUrl();
@@ -345,7 +344,7 @@ export async function bulkUpdateUsers(data: {
       description: `Bulk updated ${userIds.length} users`,
     });
 
-    revalidateTag("users", { expire: 0 });
+    revalidateTag("users", "max");
     return { success: true, updated: userIds.length };
   } catch {
     return { success: false, error: "Gagal mengupdate users." };

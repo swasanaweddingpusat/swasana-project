@@ -18,7 +18,7 @@ export async function createEducationLevel(name: string, order: number) {
 
   try {
     const [item] = await db.$transaction([db.educationLevel.create({ data: { name: parsed.data.trim(), order } })]);
-    revalidateTag("education-levels", { expire: 0 });
+    revalidateTag("education-levels", "max");
     return { success: true as const, item };
   } catch (e) {
     console.error("[createEducationLevel]", e);
@@ -36,7 +36,7 @@ export async function updateEducationLevel(id: string, name: string, order: numb
 
   try {
     const [item] = await db.$transaction([db.educationLevel.update({ where: { id }, data: { name: parsed.data.trim(), order } })]);
-    revalidateTag("education-levels", { expire: 0 });
+    revalidateTag("education-levels", "max");
     return { success: true as const, item };
   } catch (e) {
     console.error("[updateEducationLevel]", e);
@@ -51,7 +51,7 @@ export async function deleteEducationLevel(id: string) {
 
   try {
     await db.$transaction([db.educationLevel.delete({ where: { id } })]);
-    revalidateTag("education-levels", { expire: 0 });
+    revalidateTag("education-levels", "max");
     return { success: true as const };
   } catch (e) {
     console.error("[deleteEducationLevel]", e);

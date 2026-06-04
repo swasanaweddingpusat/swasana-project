@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function LeadsPage() {
   return (
-    <div className="flex flex-col mb-6 px-2">
+    <div className="flex flex-col gap-4">
       <LeadsTable />
     </div>
   );
