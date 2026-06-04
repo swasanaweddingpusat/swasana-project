@@ -23,6 +23,8 @@ export interface CheckSlotResult {
   success: boolean;
   available?: boolean;
   conflictReason?: string;
+  /** Structured reason for unavailability — preferred over substring-matching conflictReason. */
+  unavailableReason?: "missing_session" | "conflict" | "missing_venue" | "missing_date";
   error?: string;
 }
 
@@ -65,6 +67,7 @@ export async function checkSlotAvailability(data: unknown): Promise<CheckSlotRes
       return {
         success: true,
         available: false,
+        unavailableReason: "missing_session" as const,
         conflictReason:
           category === "MICE"
             ? "Session acara MICE belum diisi pada lead (pagi/malam). Lengkapi data lead sebelum tandai Deal."
@@ -101,6 +104,7 @@ export async function checkSlotAvailability(data: unknown): Promise<CheckSlotRes
       return {
         success: true,
         available: false,
+        unavailableReason: "conflict" as const,
         conflictReason:
           "Tanggal & session ini sudah ada yang booking di venue tersebut.",
       };

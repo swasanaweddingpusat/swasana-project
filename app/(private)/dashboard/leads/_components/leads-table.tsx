@@ -62,16 +62,23 @@ export function LeadsTable() {
   const [miceInitialDraftId, setMiceInitialDraftId] = useState<string | null>(null);
 
   const pageSize = 20;
-  const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useLeads({
-    search: search.trim() || undefined,
-    scope,
-    // statusId filter only relevant in active scope
-    statusId: scope === "active" && statusFilter !== "all" ? statusFilter : undefined,
-    venueId: venueFilter !== "all" ? venueFilter : undefined,
-    eventTypeId: eventTypeFilter !== "all" ? eventTypeFilter : undefined,
-    page: currentPage,
-    pageSize,
-  });
+
+  // Stable filter object via useMemo — avoids new object reference on every render,
+  // which would cause TanStack Query to treat it as a new queryKey and refetch unnecessarily.
+  const leadsFilter = useMemo(
+    () => ({
+      search: search.trim() || undefined,
+      scope,
+      statusId: scope === "active" && statusFilter !== "all" ? statusFilter : undefined,
+      venueId: venueFilter !== "all" ? venueFilter : undefined,
+      eventTypeId: eventTypeFilter !== "all" ? eventTypeFilter : undefined,
+      page: currentPage,
+      pageSize,
+    }),
+    [search, scope, statusFilter, venueFilter, eventTypeFilter, currentPage, pageSize],
+  );
+
+  const { data: leadsData, isLoading: leadsLoading, refetch: refetchLeads } = useLeads(leadsFilter);
 
   const { data: statuses = [] } = useLeadStatuses();
   const { mutateAsync: updateStatus } = useUpdateLeadStatus();
@@ -130,13 +137,28 @@ export function LeadsTable() {
   }
 
   // Find the system Deal and Lost status IDs from the loaded statuses list.
-  // Deal has isFinal=true & isSystem=true, Lost has isFinal=true & isSystem=false.
+  // Deal: isFinal=true & isSystem=true (system-managed, set at seed time).
+  // Lost: prefer name match "lost" first (most explicit), then fallback to
+  //       isFinal=true & isSystem=false. Assumption: there is exactly one custom
+  //       final status and it represents "Lost". If multiple custom final statuses
+  //       exist in the future, a dedicated isLost flag on LeadStatus should be added.
   const dealStatus = statuses.find((s) => s.isFinal && s.isSystem);
-  const lostStatus = statuses.find((s) => s.isFinal && !s.isSystem);
+  const lostStatus =
+    statuses.find((s) => s.name.toLowerCase() === "lost") ??
+    statuses.find((s) => s.isFinal && !s.isSystem);
 
   // Open confirmation modal; the actual mutation runs on confirm.
   function handleMarkDeal(lead: LeadItem) {
-    if (lead.status.isFinal) { toast.info("Lead sudah berstatus final."); return; }
+    // Block if already final — except when status is Deal (isSystem=true) but
+    // the booking was deleted (convertedToBookingId = null). In that case, allow
+    // re-deal so the user can recreate the draft without getting stuck.
+    if (lead.status.isFinal) {
+      const isDealWithoutBooking = lead.status.isSystem && !lead.convertedToBooking?.id;
+      if (!isDealWithoutBooking) {
+        toast.info("Lead sudah berstatus final.");
+        return;
+      }
+    }
     setDealTarget(lead);
   }
 
@@ -148,10 +170,23 @@ export function LeadsTable() {
   async function handleConfirmDeal() {
     if (!dealTarget) return;
     if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
-    setIsMarkingStatus(true);
 
     const lead = dealTarget;
     const category = lead.eventType?.category ?? lead.category;
+
+    // Guard: venue dan tanggal wajib ada sebelum buat draft booking
+    if (!lead.venue?.id || !lead.eventDate) {
+      toast.error("Lengkapi data lead (venue & tanggal event) dulu sebelum tandai Deal.");
+      return;
+    }
+
+    // Guard: wedding wajib punya session
+    if (category !== "MICE" && !lead.weddingSession) {
+      toast.error("Lengkapi data lead (session nikah: pagi/malam/fullday) dulu sebelum tandai Deal.");
+      return;
+    }
+
+    setIsMarkingStatus(true);
 
     // Check if lead already has a booking — reopen existing draft instead of creating duplicate
     if (lead.convertedToBooking?.id) {
@@ -354,11 +389,13 @@ export function LeadsTable() {
     void refetchLeads().finally(() => setIsManualRefresh(false));
   }
 
+  // statusCounts is used only for the status filter dropdown (name + color).
+  // Omit per-page count: leads is a 20-item slice so per-status counts would be
+  // inaccurate. A server-side aggregate would be needed for accurate counts.
   const statusCounts = statuses.map((s) => ({
     id: s.id,
     name: s.name,
     color: s.color,
-    count: leads.filter((l) => l.status.id === s.id).length,
   }));
 
   return (

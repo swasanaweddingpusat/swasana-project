@@ -79,7 +79,8 @@ export function DealConfirmModal({
         return;
       }
       if (!result.available) {
-        if (result.conflictReason?.includes("Session")) {
+        // Use structured unavailableReason field — avoids fragile substring matching
+        if (result.unavailableReason === "missing_session") {
           setCheckState({ status: "missing_data", message: result.conflictReason ?? "Session belum diisi." });
         } else {
           setCheckState({ status: "conflict", reason: result.conflictReason ?? "Slot tidak tersedia." });

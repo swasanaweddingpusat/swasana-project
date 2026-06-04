@@ -36,7 +36,6 @@ interface StatusCount {
   id: string;
   name: string;
   color: string;
-  count: number;
 }
 
 interface LeadsFiltersProps {
