@@ -43,10 +43,16 @@ import { useEventTypes } from "@/hooks/use-event-types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   useSalesMice,
-  useCreateMiceBooking,
   useUpdateMiceBooking,
 } from "@/hooks/use-mice-bookings";
+import {
+  useCreateDraftMiceBooking,
+  useUpdateMiceDraftStep2,
+  useUpdateMiceDraftStep3,
+  useFinalizeDraftMiceBooking,
+} from "@/hooks/use-mice-booking-draft";
 import { createMiceBookingSchema } from "@/lib/validations/booking-mice";
+import { createMiceDraftStep1Schema } from "@/lib/validations/booking-mice-draft";
 import type { MiceBookingItem } from "./types";
 import type { BookingPrefillLead } from "@/types/lead";
 import { cn } from "@/lib/utils";
@@ -59,6 +65,11 @@ interface MiceBookingDrawerProps {
   booking: MiceBookingItem | null;
   /** When provided (create mode), the drawer opens pre-filled from this lead. */
   prefillLead?: BookingPrefillLead | null;
+  /**
+   * When provided (Deal flow), the drawer resumes this existing draft instead of
+   * creating a new one on Step 1 "Lanjut". Skips draft creation on continue.
+   */
+  initialDraftId?: string | null;
   /** Called after a successful create/update. */
   onSuccess?: () => void;
 }
@@ -157,11 +168,15 @@ export function MiceBookingDrawer({
   onOpenChange,
   booking,
   prefillLead,
+  initialDraftId,
   onSuccess,
 }: MiceBookingDrawerProps) {
   const isEdit = !!booking;
   const form = useForm<MiceFormValues>({ defaultValues: DEFAULT_VALUES });
   const signatureRef = useRef<string | null>(null);
+
+  // Draft state (create mode only)
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
@@ -227,9 +242,12 @@ export function MiceBookingDrawer({
   const { user } = useCurrentUser();
   const { data: salesMice = [] } = useSalesMice(open);
 
-  const { mutateAsync: createMiceBooking, isPending: isCreating } = useCreateMiceBooking();
+  const { mutateAsync: createMiceDraft, isPending: isCreatingDraft } = useCreateDraftMiceBooking();
+  const { mutateAsync: updateMiceStep2, isPending: isUpdatingStep2 } = useUpdateMiceDraftStep2();
+  const { mutateAsync: updateMiceStep3, isPending: isUpdatingStep3 } = useUpdateMiceDraftStep3();
+  const { mutateAsync: finalizeMiceDraft, isPending: isFinalizing } = useFinalizeDraftMiceBooking();
   const { mutateAsync: updateMiceBooking, isPending: isUpdating } = useUpdateMiceBooking();
-  const isPending = isCreating || isUpdating;
+  const isPending = isCreatingDraft || isUpdatingStep2 || isUpdatingStep3 || isFinalizing || isUpdating;
 
   const venueOptions = useMemo<SearchableSelectOption[]>(
     () => venues.map((v) => ({ id: v.id, name: v.name })),
@@ -370,6 +388,7 @@ export function MiceBookingDrawer({
         setSelectedCustomerId("");
       }
       setCurrentStep(1);
+      setDraftId(initialDraftId ?? null);
       setClientSearch("");
       setSelectedLeadId(!booking && prefillLead ? prefillLead.leadId : "");
       setClientDropdownOpen(false);
@@ -396,7 +415,65 @@ export function MiceBookingDrawer({
         "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate",
       ]);
       if (!ok) return;
+
+      // Create draft on Step 1 continue (skip if initialDraftId already injected)
+      if (!isEdit && !draftId) {
+        const values = form.getValues();
+        const resolvedSalesId = currentUserIsSalesMice
+          ? (user?.profileId ?? values.salesId)
+          : values.salesId;
+
+        const draftData = {
+          bookingDate: values.eventDate || new Date().toISOString().split("T")[0],
+          venueId: values.venueId,
+          eventTypeId: values.eventTypeId,
+          salesId: resolvedSalesId || null,
+          miceSession: null,
+          eventTime: values.time || null,
+          estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
+          notes: values.notes || null,
+          customerId: selectedLeadId ? null : (selectedCustomerId || null),
+          leadId: selectedLeadId || null,
+          clientName: values.clientName,
+          clientPhone: values.clientPhone,
+          companyName: values.companyName || null,
+        };
+
+        const parsed = createMiceDraftStep1Schema.safeParse(draftData);
+        if (!parsed.success) {
+          toast.error(parsed.error.issues[0].message);
+          return;
+        }
+
+        const result = await createMiceDraft(draftData);
+        if (!result.success || !result.draftId) {
+          toast.error(result.error ?? "Gagal membuat draft booking MICE.");
+          return;
+        }
+        setDraftId(result.draftId);
+      }
     }
+
+    if (currentStep === 2 && !isEdit && draftId) {
+      // Save terms to draft on Step 2 continue
+      const result = await updateMiceStep2({
+        draftId,
+        data: {
+          termOfPayments: terms.filter((t) => t.dueDate).map((t, i) => ({
+            name: t.name,
+            amount: t.amount,
+            dueDate: t.dueDate,
+            sortOrder: i,
+            paymentStatus: t.paymentStatus,
+          })),
+        },
+      });
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menyimpan term of payment.");
+        return;
+      }
+    }
+
     setCurrentStep((s) => Math.min(s + 1, 3));
   }
 
@@ -431,51 +508,80 @@ export function MiceBookingDrawer({
   // ─── Submit ───────────────────────────────────────────────────────────────
 
   async function onSubmit(values: MiceFormValues): Promise<void> {
-    const resolvedSalesId = currentUserIsSalesMice
-      ? ((user?.profileId ?? values.salesId) || undefined)
-      : values.salesId || undefined;
-
-    const payload = {
-      customerId: selectedLeadId ? null : (selectedCustomerId || null),
-      leadId: selectedLeadId || null,
-      clientName: values.clientName,
-      clientPhone: values.clientPhone,
-      venueId: values.venueId,
-      eventTypeId: values.eventTypeId,
-      eventDate: values.eventDate,
-      // bookingDate is auto-set to today — never collected from user input
-      bookingDate: new Date().toISOString().split("T")[0],
-      estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
-      salesId: resolvedSalesId ?? null,
-      salesSignature: signatureRef.current ?? null,
-      signingLocation: signingLocation.trim() || null,
-      terms: terms.filter((t) => t.dueDate).map((t, i) => ({
-        name: t.name,
-        amount: t.amount,
-        dueDate: t.dueDate,
-        sortOrder: i,
-        paymentStatus: t.paymentStatus,
-      })),
-      notes: values.notes || undefined,
-      quotationId: null,
-      sourceOfInformationId: null,
-    };
-
-    const parsed = createMiceBookingSchema.safeParse(payload);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0].message);
-      return;
-    }
-
     if (isEdit && booking) {
+      // ── Edit mode: direct update (existing behavior) ──
+      const resolvedSalesId = currentUserIsSalesMice
+        ? ((user?.profileId ?? values.salesId) || undefined)
+        : values.salesId || undefined;
+
+      const payload = {
+        customerId: selectedLeadId ? null : (selectedCustomerId || null),
+        leadId: selectedLeadId || null,
+        clientName: values.clientName,
+        clientPhone: values.clientPhone,
+        venueId: values.venueId,
+        eventTypeId: values.eventTypeId,
+        eventDate: values.eventDate,
+        bookingDate: new Date().toISOString().split("T")[0],
+        estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
+        salesId: resolvedSalesId ?? null,
+        salesSignature: signatureRef.current ?? null,
+        signingLocation: signingLocation.trim() || null,
+        terms: terms.filter((t) => t.dueDate).map((t, i) => ({
+          name: t.name,
+          amount: t.amount,
+          dueDate: t.dueDate,
+          sortOrder: i,
+          paymentStatus: t.paymentStatus,
+        })),
+        notes: values.notes || undefined,
+        quotationId: null,
+        sourceOfInformationId: null,
+      };
+
+      const parsed = createMiceBookingSchema.safeParse(payload);
+      if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
+
       const result = await updateMiceBooking({ ...parsed.data, id: booking.id });
       if (!result.success) { toast.error(result.error ?? "Gagal menyimpan booking."); return; }
       toast.success("Booking MICE berhasil diperbarui.");
-    } else {
-      const result = await createMiceBooking(parsed.data);
-      if (!result.success) { toast.error(result.error ?? "Gagal menyimpan booking."); return; }
-      toast.success("Booking MICE berhasil disimpan.");
+      onSuccess?.();
+      onOpenChange(false);
+      return;
     }
+
+    // ── Create mode: finalize draft ──
+    if (!draftId) {
+      toast.error("Draft tidak ditemukan. Coba mulai dari awal.");
+      return;
+    }
+
+    // Step 3: save signature/location then finalize
+    const step3Result = await updateMiceStep3({
+      draftId,
+      data: {
+        signingLocation: signingLocation.trim() || null,
+        signatureSales: signatureRef.current ?? null,
+      },
+    });
+    if (!step3Result.success) {
+      toast.error(step3Result.error ?? "Gagal menyimpan tanda tangan.");
+      return;
+    }
+
+    const finalizeResult = await finalizeMiceDraft({
+      draftId,
+      signingLocation: signingLocation.trim() || null,
+      signatureSales: signatureRef.current ?? null,
+      leadId: selectedLeadId || null,
+    });
+
+    if (!finalizeResult.success) {
+      toast.error(finalizeResult.error ?? "Gagal menyimpan booking MICE.");
+      return;
+    }
+
+    toast.success("Booking MICE berhasil disimpan.");
     onSuccess?.();
     onOpenChange(false);
   }
