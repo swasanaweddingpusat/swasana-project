@@ -7,6 +7,7 @@ import { HeaderActionProvider } from "@/components/providers/header-action-provi
 import { BookingDrawerProvider } from "@/components/providers/booking-drawer-provider";
 import { LeadDrawerProvider } from "@/components/providers/lead-drawer-provider";
 import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
+import { MiceBookingDrawerProvider } from "@/components/providers/mice-booking-drawer-provider";
 import { MobileBottomNav } from "./_components/mobile-bottom-nav/MobileBottomNav";
 
 export default function DashboardLayout({
@@ -18,26 +19,28 @@ export default function DashboardLayout({
     <SidebarProvider>
       <HeaderActionProvider>
         <BookingDrawerProvider>
-          <QuotationDrawerProvider>
-            <LeadDrawerProvider>
-              <Suspense fallback={null}>
-                <SwasanaSidebar />
-              </Suspense>
-              <SidebarInset>
-                <Suspense>
-                  <Header />
-                </Suspense>
-                <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-6 lg:p-6">
-                  <Suspense>
-                    <AuthGate>{children}</AuthGate>
-                  </Suspense>
-                </main>
+          <MiceBookingDrawerProvider>
+            <QuotationDrawerProvider>
+              <LeadDrawerProvider>
                 <Suspense fallback={null}>
-                  <MobileBottomNav />
+                  <SwasanaSidebar />
                 </Suspense>
-              </SidebarInset>
-            </LeadDrawerProvider>
-          </QuotationDrawerProvider>
+                <SidebarInset>
+                  <Suspense>
+                    <Header />
+                  </Suspense>
+                  <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-6 lg:p-6">
+                    <Suspense>
+                      <AuthGate>{children}</AuthGate>
+                    </Suspense>
+                  </main>
+                  <Suspense fallback={null}>
+                    <MobileBottomNav />
+                  </Suspense>
+                </SidebarInset>
+              </LeadDrawerProvider>
+            </QuotationDrawerProvider>
+          </MiceBookingDrawerProvider>
         </BookingDrawerProvider>
       </HeaderActionProvider>
     </SidebarProvider>
