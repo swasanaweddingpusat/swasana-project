@@ -72,6 +72,7 @@ export async function getTopSalesByRecentBooking(
   // Cap at 500 rows to bound memory; deduplication done in-memory.
   const candidateBookings = await db.booking.findMany({
     where: {
+      recordStatus: "saved",
       bookingDate: { gte: startDate, lte: endDate },
       ...(allowedProfileIds ? { salesId: { in: allowedProfileIds } } : {}),
     },
@@ -87,6 +88,7 @@ export async function getTopSalesByRecentBooking(
   const [allBookings, profiles, targets] = await Promise.all([
     db.booking.findMany({
       where: {
+        recordStatus: "saved",
         salesId: { in: candidateSalesIds },
         bookingDate: { gte: startDate, lte: endDate },
         bookingStatus: { not: BookingStatus.Canceled },

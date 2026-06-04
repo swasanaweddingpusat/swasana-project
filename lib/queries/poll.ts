@@ -32,7 +32,9 @@ export async function getPollData(
   dataScope: DataScope,
 ): Promise<PollData> {
   const salesIds = await getScopedSalesIds(profileId, dataScope);
-  const bookingWhere = salesIds ? { salesId: { in: salesIds } } : {};
+  const bookingWhere = salesIds
+    ? { recordStatus: "saved" as const, salesId: { in: salesIds } }
+    : { recordStatus: "saved" as const };
 
   const [latestBooking, latestComment, notifCount] = await Promise.all([
     db.booking.findFirst({

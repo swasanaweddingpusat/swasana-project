@@ -11,7 +11,7 @@ const bookingListInclude = {
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
   clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
-  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, paymentEvidence: true, notes: true, partialPayments: { orderBy: { paidAt: "asc" as const }, select: { id: true, amount: true, paidAt: true, evidence: true, notes: true } } } },
+  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true, partialPayments: { orderBy: { paidAt: "asc" as const }, select: { id: true, amount: true, paidAt: true, evidence: true, notes: true } } } },
   snapPackageCategoryPrices: {
     select: {
       id: true,
@@ -85,7 +85,7 @@ export async function getBookings(
   const searchFilter = buildSearchFilter(options?.search);
   const venueFilter: Prisma.BookingWhereInput = options?.venueId ? { venueId: options.venueId } : {};
   const categoryFilter: Prisma.BookingWhereInput = options?.category ? { category: options.category } : {};
-  const where: Prisma.BookingWhereInput = { ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter };
+  const where: Prisma.BookingWhereInput = { recordStatus: "saved", ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
@@ -208,6 +208,7 @@ export async function getMiceBookings(
   const q = options?.search?.trim();
   const where: Prisma.BookingWhereInput = {
     category: "MICE",
+    recordStatus: "saved",
     ...(options?.status && options.status !== "all"
       ? { bookingStatus: options.status as BookingStatus }
       : {}),
@@ -242,7 +243,7 @@ export type MiceBookingRow = MiceBookingsResult["data"][number];
 
 export async function getMiceBookingById(id: string) {
   return db.booking.findFirst({
-    where: { id, category: "MICE" },
+    where: { id, category: "MICE", recordStatus: "saved" },
     include: {
       customer: true,
       venue: { select: { id: true, name: true } },

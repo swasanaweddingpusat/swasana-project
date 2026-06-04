@@ -27,6 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const bookings = await db.booking.findMany({
       where: {
         venueId: id,
+        recordStatus: "saved",
         bookingDate: { gte: start, lte: end },
         bookingStatus: { notIn: ["Canceled", "Lost"] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
