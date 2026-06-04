@@ -12,6 +12,7 @@ export interface TermSnap {
   name: string;
   amount: number;
   paymentStatus: string;
+  ackStatus?: string | null;
 }
 
 export interface AdjustedTerm {
@@ -59,8 +60,11 @@ export function adjustTermsForPriceReduction(
   const reduction = oldPrice - newPrice;
   if (reduction <= 0) return { adjustedTerms: [], refundTerm: null };
 
+  // Terms that are paid OR acknowledged by finance are immutable — skip from reduction pool
   const unpaidTerms = terms.filter(
-    (t) => t.paymentStatus === "unpaid" || t.paymentStatus === "partial",
+    (t) =>
+      (t.paymentStatus === "unpaid" || t.paymentStatus === "partial") &&
+      t.ackStatus !== "acknowledged",
   );
   const totalUnpaid = unpaidTerms.reduce((s, t) => s + t.amount, 0);
 
