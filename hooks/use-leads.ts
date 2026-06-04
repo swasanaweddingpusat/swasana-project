@@ -2,11 +2,12 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createLead, updateLead, deleteLead, updateLeadStatus } from "@/actions/lead";
-import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput } from "@/lib/validations/lead";
+import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput, LeadScope } from "@/lib/validations/lead";
 import type { LeadsResult, LeadStatusItem } from "@/lib/queries/leads";
 
 interface LeadFilter {
   search?: string;
+  scope?: LeadScope;
   statusId?: string;
   venueId?: string;
   eventTypeId?: string;
@@ -18,6 +19,7 @@ interface LeadFilter {
 async function fetchLeads(filter: LeadFilter = {}): Promise<LeadsResult> {
   const params = new URLSearchParams();
   if (filter.search) params.set("search", filter.search);
+  if (filter.scope) params.set("scope", filter.scope);
   if (filter.statusId) params.set("statusId", filter.statusId);
   if (filter.venueId) params.set("venueId", filter.venueId);
   if (filter.eventTypeId) params.set("eventTypeId", filter.eventTypeId);

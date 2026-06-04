@@ -54,16 +54,28 @@ export async function getLeads(filter: LeadFilterInput) {
   cacheTag("leads");
   cacheLife("seconds");
 
-  const { search, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
+  const { search, scope, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
+
+  // Scope filter: active = isFinal:false, deal = isFinal&&isSystem, lost = isFinal&&!isSystem
+  let scopeWhere: Prisma.LeadWhereInput = {};
+  if (scope === "active") {
+    scopeWhere = { status: { isFinal: false } };
+  } else if (scope === "deal") {
+    scopeWhere = { status: { isFinal: true, isSystem: true } };
+  } else if (scope === "lost") {
+    scopeWhere = { status: { isFinal: true, isSystem: false } };
+  }
 
   const where: Prisma.LeadWhereInput = {
+    ...scopeWhere,
     ...(search?.trim() && {
       OR: [
         { name: { contains: search.trim(), mode: "insensitive" } },
         { email: { contains: search.trim(), mode: "insensitive" } },
       ],
     }),
-    ...(statusId && { statusId }),
+    // statusId filter only applies in active scope (deal/lost scope already constrains by flag)
+    ...(statusId && scope === "active" && { statusId }),
     ...(venueId && { venueId }),
     ...(eventTypeId && { eventTypeId }),
     ...(assignedToId && { assignedToId }),

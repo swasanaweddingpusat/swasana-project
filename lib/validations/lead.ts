@@ -46,6 +46,7 @@ export const updateLeadSchema = createLeadSchema.partial().extend({
 
 export const leadFilterSchema = z.object({
   search: z.string().optional(),
+  scope: z.enum(["active", "deal", "lost"]).default("active"),
   statusId: z.string().optional(),
   venueId: z.string().optional(),
   eventTypeId: z.string().optional(),
@@ -77,6 +78,8 @@ export const updateLeadStatusSchema2 = createLeadStatusSchema.partial().extend({
 });
 
 // ─── Inferred Types ───────────────────────────────────────────────────────────
+
+export type LeadScope = "active" | "deal" | "lost";
 
 export type CreateLeadInput = z.infer<typeof createLeadSchema>;
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
