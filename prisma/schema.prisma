@@ -142,6 +142,7 @@ model Profile {
   leadsCreated             Lead[]
   leadsAssigned            Lead[]          @relation("LeadAssignee")
   quotations               Quotation[]
+  termOfPaymentsAcknowledged TermOfPayment[] @relation("TOPAcknowledger")
 
   @@index([roleId])
   @@index([managerId])
@@ -159,6 +160,7 @@ model Role {
   profiles            Profile[]
   rolePermissions     RolePermission[]
   approvalRecordSteps ApprovalRecordStep[] @relation("ApprovalRecordStepRole")
+  approvalFlowSteps   ApprovalFlowStep[]
 
   @@map("roles")
 }
@@ -452,8 +454,11 @@ model Customer {
   name         String
   mobileNumber Json      @default("[]")
   email        String
-  nikNumber    String?
+  cppNik       String?
+  cpwNik       String?
   ktpAddress   String?
+  cppAddress   String?
+  cpwAddress   String?
   type         String
   club         String?
   memberStatus String    @default("Non-Member")
@@ -523,13 +528,15 @@ enum DataScope {
 }
 
 model Booking {
-  id                    String          @id @default(uuid())
+  id                    String               @id @default(uuid())
   bookingDate           DateTime
-  bookingStatus         BookingStatus   @default(Pending)
-  paymentStatus         String          @default("")
-  category              EventCategory   @default(WEDDINGS)
+  bookingStatus         BookingStatus        @default(Pending)
+  recordStatus          BookingRecordStatus  @default(saved)
+  paymentStatus         String               @default("")
+  category              EventCategory        @default(WEDDINGS)
   weddingSession        WeddingSession?
   weddingType           String?
+  eventTime             String?
   poNumber              String?
   eventDate             DateTime?
   quotationId           String?
@@ -537,9 +544,9 @@ model Booking {
   rejectionNotes        String?
   lostReason            String?
   signingLocation       String?
-  withMaterai           Boolean         @default(false)
+  withMaterai           Boolean              @default(false)
   discountName          String?
-  discountAmount        Int             @default(0)
+  discountAmount        Int                  @default(0)
   salesId               String
   managerId             String?
   customerId            String
@@ -547,8 +554,8 @@ model Booking {
   packageId             String?
   paymentMethodId       String?
   sourceOfInformationId String?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
   sales               Profile              @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
@@ -590,6 +597,7 @@ model Booking {
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
   @@index([bookingStatus])
+  @@index([recordStatus])
   @@index([bookingDate])
   @@index([category])
   @@index([eventDate])
@@ -637,8 +645,11 @@ model SnapCustomer {
   name         String
   email        String
   mobileNumber String
-  nikNumber    String?
+  cppNik       String?
+  cpwNik       String?
   ktpAddress   String?
+  cppAddress   String?
+  cpwAddress   String?
   createdAt    DateTime @default(now())
   booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -794,13 +805,19 @@ model TermOfPayment {
   invoiceNumber   String?
   notes           String?
   sortOrder       Int                 @default(0)
+  // Acknowledgment fields — set when Finance acks a paid TOP
+  ackStatus       String              @default("pending") // "pending" | "acknowledged" | "rejected"
+  acknowledgedAt  DateTime?
+  acknowledgedById String?            // FK to profiles.id
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   partialPayments  PartialPayment[]
+  acknowledgedBy   Profile?            @relation("TOPAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
 
   @@unique([invoiceNumber])
   @@index([bookingId])
+  @@index([acknowledgedById])
   @@map("term_of_payments")
 }
 
@@ -906,6 +923,11 @@ model BookingPaymentSettlement {
 
 // ─── Booking Enums ───────────────────────────────────────────────────────────
 
+enum BookingRecordStatus {
+  draft
+  saved
+}
+
 enum BookingStatus {
   Pending
   Uploaded
@@ -980,6 +1002,37 @@ model ClientAgreement {
 
   @@index([token])
   @@map("client_agreements")
+}
+
+// ─── Approval Flow Config (DB-driven, replaces hardcoded lib/approval-flows.ts) ─
+
+model ApprovalFlowConfig {
+  id         String             @id @default(uuid())
+  module     String             @unique // "booking", "package", "quotations", "catering", "decoration", "payment"
+  label      String?            // human-readable display name
+  sequential Boolean            @default(false)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  steps      ApprovalFlowStep[]
+
+  @@map("approval_flow_configs")
+}
+
+model ApprovalFlowStep {
+  id             String             @id @default(uuid())
+  flowId         String
+  stepOrder      Int
+  approverRoleId String
+  label          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  flow           ApprovalFlowConfig @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  approverRole   Role               @relation(fields: [approverRoleId], references: [id], onDelete: Restrict)
+
+  @@unique([flowId, stepOrder])
+  @@index([flowId])
+  @@index([approverRoleId])
+  @@map("approval_flow_steps")
 }
 
 // ─── Approval Records ──────────────────────────────────────────────────────
