@@ -66,7 +66,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
 
     const entityUpdate: Prisma.PrismaPromise<unknown>[] = allApprovedAfter && step.record.module === "package"
       ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "approved" } })]
-      : allApprovedAfter && step.record.module === "booking"
+      : allApprovedAfter && (step.record.module === "booking" || step.record.module === "booking-mice")
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Confirmed" } })]
         : [];
 
@@ -121,7 +121,7 @@ export async function rejectStep(stepId: string, notes: string) {
 
     const entityRejectUpdate: Prisma.PrismaPromise<unknown>[] = step.record.module === "package"
       ? [db.package.update({ where: { id: step.record.entityId }, data: { approvalStatus: "rejected" } })]
-      : step.record.module === "booking"
+      : (step.record.module === "booking" || step.record.module === "booking-mice")
         ? [db.booking.update({ where: { id: step.record.entityId }, data: { bookingStatus: "Rejected" } })]
         : [];
 

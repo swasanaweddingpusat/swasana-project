@@ -126,24 +126,28 @@ export function GroupsStatsCards({
           <AchievementDonut pct={realisasiPct} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
-              <TargetIcon weight="BoldDuotone" className="h-3 w-3" /> Total Revenue
+              <TargetIcon weight="BoldDuotone" className="h-3 w-3" /> Kas Diterima
             </p>
             <p className="font-heading text-xl sm:text-2xl font-bold text-foreground leading-tight tabular-nums mt-1 truncate">
               {formatRpFull(totalRevenue)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              TOP paid + acknowledged · vs target {avgAchievement}%
+              TOP paid &amp; di-acknowledge Finance · vs target {avgAchievement}%
             </p>
 
             <div className="mt-4 pt-4 border-t border-stone-200/70 space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Wallet weight="BoldDuotone" className="h-3 w-3" /> Kontrak (Confirmed)
+                  <Wallet weight="BoldDuotone" className="h-3 w-3" />
+                  <span>Nilai Kontrak</span>
                 </span>
                 <span className="text-sm font-semibold text-amber-800 tabular-nums truncate">
                   {formatRp(totalSales)}
                 </span>
               </div>
+              <p className="text-[10px] text-muted-foreground/70 -mt-1">
+                Harga paket booking Confirmed (belum tentu kas masuk)
+              </p>
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Dollar weight="BoldDuotone" className="h-3 w-3" /> Target

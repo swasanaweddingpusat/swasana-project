@@ -4,7 +4,6 @@ import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission, isSuperAdmin } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { logAudit } from "@/lib/audit";
 import { resolveApprovalSteps } from "@/lib/approval-flows";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -70,7 +69,12 @@ export async function acknowledgePayment(
     const now = new Date();
     const profileId = session!.user.profileId;
 
-    // 4. Find or create ApprovalRecord, then approve + ack in one transaction
+    // 4. Build atomic ops array — find-or-create ApprovalRecord + approve + ack in one batch.
+    //
+    // Neon HTTP adapter supports the array form of db.$transaction([...]) only.
+    // We resolve the existing record ID outside, then compose all writes into a
+    // single atomic array so there is no window where TOP.ackStatus can be updated
+    // without a matching ApprovalRecord/Step, or vice-versa.
     const existingRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "payment", entityId: topId } },
       select: { id: true },
@@ -79,6 +83,7 @@ export async function acknowledgePayment(
     const ops: Prisma.PrismaPromise<unknown>[] = [];
 
     if (existingRecord) {
+      // Record exists: approve all pending steps + mark record approved
       ops.push(
         db.approvalRecordStep.updateMany({
           where: { recordId: existingRecord.id, status: "pending" },
@@ -90,56 +95,65 @@ export async function acknowledgePayment(
         })
       );
     } else {
-      // Create record with steps — nested create is outside transaction but we immediately
-      // include TOP update in same atomic batch. If the create fails, TOP won't be updated.
-      // Using two-step approach: create record first, then batch the rest.
-      const newRecord = await db.approvalRecord.create({
-        data: {
-          module: "payment",
-          entityId: topId,
-          status: "approved",
-          createdById: profileId,
-          updatedById: profileId,
-          steps: {
-            create: steps.map((s) => ({
-              stepOrder: s.sortOrder,
-              approverType: "role",
-              approverRoleId: s.approverRoleId,
-              status: "approved",
-              decidedById: profileId,
-              decidedAt: now,
-            })),
+      // No existing record: create record + steps atomically using createMany
+      // pattern that is compatible with Neon HTTP array-form transaction.
+      // We use upsert so a concurrent call hitting the unique constraint on
+      // module+entityId is handled gracefully instead of throwing.
+      ops.push(
+        db.approvalRecord.upsert({
+          where: { module_entityId: { module: "payment", entityId: topId } },
+          create: {
+            module: "payment",
+            entityId: topId,
+            status: "approved",
+            createdById: profileId,
+            updatedById: profileId,
+            steps: {
+              create: steps.map((s) => ({
+                stepOrder: s.sortOrder,
+                approverType: "role",
+                approverRoleId: s.approverRoleId,
+                status: "approved",
+                decidedById: profileId,
+                decidedAt: now,
+              })),
+            },
           },
-        },
-        select: { id: true },
-      });
-
-      // Verify record was created — if this was already created concurrently,
-      // the unique constraint on module+entityId will have caught it above.
-      // The newRecord.id is valid at this point.
-      void newRecord; // used for side effect (creation), ack proceeds below
+          update: {
+            // Already exists from concurrent call: mark approved
+            status: "approved",
+            updatedById: profileId,
+            steps: {
+              updateMany: {
+                where: { status: "pending" },
+                data: { status: "approved", decidedById: profileId, decidedAt: now },
+              },
+            },
+          },
+        })
+      );
     }
 
-    // Always update TOP ackStatus in the transaction
+    // TOP ackStatus update — always included in the same atomic batch
     ops.push(
       db.termOfPayment.update({
         where: { id: topId },
         data: { ackStatus: "acknowledged", acknowledgedAt: now, acknowledgedById: profileId },
+      }),
+      db.activityLog.create({
+        data: {
+          userId: profileId,
+          action: "payment.acknowledged",
+          entityType: "term_of_payment",
+          entityId: topId,
+          description: `TOP ${topId} acknowledged oleh ${session!.user.name ?? "Finance"}`,
+          changes: { topId, ackStatus: "acknowledged" } as never,
+          result: "success",
+        },
       })
     );
 
-    if (ops.length > 0) {
-      await db.$transaction(ops);
-    }
-
-    await logAudit({
-      userId: profileId,
-      action: "payment.acknowledged",
-      entityType: "term_of_payment",
-      entityId: topId,
-      description: `TOP ${topId} acknowledged oleh ${session!.user.name ?? "Finance"}`,
-      changes: { topId, ackStatus: "acknowledged" },
-    });
+    await db.$transaction(ops);
 
     revalidateTag("ar-bookings", "max");
     revalidateTag("groups", "max");

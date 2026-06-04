@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
-  Route,
   AddSquare,
   TrashBinTrash,
   ArrowDown,
@@ -31,15 +30,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { updateApprovalFlow } from "@/actions/approvalFlow";
 import type { ApprovalFlowsResult } from "@/lib/queries/approvalFlow";
+
+const ROWS_PER_PAGE = 10;
 
 interface Props {
   flows: ApprovalFlowsResult;
@@ -80,6 +76,13 @@ export function ApprovalFlowSettings({ flows, roles }: Props): React.ReactElemen
   const [dialogError, setDialogError] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [, startTransition] = useTransition();
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(drafts.length / ROWS_PER_PAGE));
+  const paginatedDrafts = drafts.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE
+  );
 
   const activeDraft = drafts.find((d) => d.module === editingModule) ?? null;
 
@@ -191,79 +194,154 @@ export function ApprovalFlowSettings({ flows, roles }: Props): React.ReactElemen
 
   return (
     <div className="space-y-4">
-      {/* Section Header */}
-      <div className="flex items-start gap-3">
-        <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-primary/10 shrink-0">
-          <Route weight="BoldDuotone" className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Approval Flow</h2>
-          <p className="text-sm text-muted-foreground">
-            Konfigurasi langkah dan role approver untuk setiap modul.
-          </p>
-        </div>
-      </div>
-
       {/* Table Card */}
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-56">
-                Modul
-              </TableHead>
-              <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-28">
-                Sequential
-              </TableHead>
-              <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Steps
-              </TableHead>
-              <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-24 text-right">
-                Aksi
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {drafts.map((draft) => (
-              <TableRow key={draft.module}>
-                {/* Modul */}
-                <TableCell className="px-5 py-3.5">
-                  <p className="text-sm font-medium text-foreground leading-tight">
-                    {draft.label}
-                  </p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                    {draft.module}
-                  </p>
-                </TableCell>
+        {/* Desktop table — hidden on mobile */}
+        <div className="hidden sm:block">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-56">
+                  Modul
+                </TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-28">
+                  Sequential
+                </TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Steps
+                </TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-24 text-right">
+                  Aksi
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedDrafts.map((draft) => (
+                <TableRow key={draft.module}>
+                  {/* Modul */}
+                  <TableCell className="px-5 py-3.5">
+                    <p className="text-sm font-medium text-foreground leading-tight">
+                      {draft.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                      {draft.module}
+                    </p>
+                  </TableCell>
 
-                {/* Sequential Badge */}
-                <TableCell className="px-4 py-3.5">
+                  {/* Sequential Badge */}
+                  <TableCell className="px-4 py-3.5">
+                    {draft.sequential ? (
+                      <Badge
+                        variant="secondary"
+                        className="bg-primary/10 text-primary border-primary/20 rounded-full text-xs font-medium"
+                      >
+                        ON
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground rounded-full text-xs font-medium"
+                      >
+                        OFF
+                      </Badge>
+                    )}
+                  </TableCell>
+
+                  {/* Steps chips */}
+                  <TableCell className="px-4 py-3.5">
+                    {draft.steps.length === 0 ? (
+                      <span className="text-xs text-muted-foreground italic">
+                        Belum ada step
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {draft.steps.map((step, idx) => {
+                          const roleName =
+                            roles.find((r) => r.id === step.approverRoleId)?.name ??
+                            step.approverRoleId;
+                          return (
+                            <div key={step.key} className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground">
+                                <span className="flex items-center justify-center h-3.5 w-3.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">
+                                  {step.stepOrder}
+                                </span>
+                                {roleName}
+                              </span>
+                              {idx < draft.steps.length - 1 && (
+                                <span className="text-muted-foreground text-xs select-none">
+                                  →
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </TableCell>
+
+                  {/* Aksi */}
+                  <TableCell className="px-4 py-3.5 text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full gap-1.5 h-8 px-3 text-xs"
+                      onClick={() => openEditor(draft.module)}
+                    >
+                      <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile card list — visible only on mobile */}
+        <div className="block sm:hidden p-4 space-y-3">
+          {paginatedDrafts.map((draft, idx) => {
+            const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
+            return (
+              <div
+                key={draft.module}
+                className="rounded-xl border border-border bg-background p-4 space-y-3"
+              >
+                {/* Row 1: number + module name */}
+                <div className="flex items-start justify-between gap-2 min-w-0">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground leading-tight truncate">
+                      {rowNumber}. {draft.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                      {draft.module}
+                    </p>
+                  </div>
                   {draft.sequential ? (
                     <Badge
                       variant="secondary"
-                      className="bg-primary/10 text-primary border-primary/20 rounded-full text-xs font-medium"
+                      className="bg-primary/10 text-primary border-primary/20 rounded-full text-xs font-medium shrink-0"
                     >
-                      ON
+                      Sequential
                     </Badge>
                   ) : (
                     <Badge
                       variant="outline"
-                      className="text-muted-foreground rounded-full text-xs font-medium"
+                      className="text-muted-foreground rounded-full text-xs font-medium shrink-0"
                     >
-                      OFF
+                      Parallel
                     </Badge>
                   )}
-                </TableCell>
+                </div>
 
-                {/* Steps chips */}
-                <TableCell className="px-4 py-3.5">
+                {/* Row 2: steps chips */}
+                <div>
                   {draft.steps.length === 0 ? (
                     <span className="text-xs text-muted-foreground italic">
                       Belum ada step
                     </span>
                   ) : (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {draft.steps.map((step, idx) => {
+                      {draft.steps.map((step, stepIdx) => {
                         const roleName =
                           roles.find((r) => r.id === step.approverRoleId)?.name ??
                           step.approverRoleId;
@@ -275,7 +353,7 @@ export function ApprovalFlowSettings({ flows, roles }: Props): React.ReactElemen
                               </span>
                               {roleName}
                             </span>
-                            {idx < draft.steps.length - 1 && (
+                            {stepIdx < draft.steps.length - 1 && (
                               <span className="text-muted-foreground text-xs select-none">
                                 →
                               </span>
@@ -285,24 +363,34 @@ export function ApprovalFlowSettings({ flows, roles }: Props): React.ReactElemen
                       })}
                     </div>
                   )}
-                </TableCell>
+                </div>
 
-                {/* Aksi */}
-                <TableCell className="px-4 py-3.5 text-right">
+                {/* Row 3: action button */}
+                <div className="pt-1 border-t border-border">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="rounded-full gap-1.5 h-8 px-3 text-xs"
+                    className="w-full rounded-xl gap-1.5 h-9 text-xs"
                     onClick={() => openEditor(draft.module)}
                   >
                     <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5" />
-                    Edit
+                    Edit Approval Flow
                   </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <PaginationBar
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            label="Navigasi halaman approval flow"
+          />
+        )}
       </div>
 
       {/* Edit Dialog */}
@@ -361,23 +449,16 @@ export function ApprovalFlowSettings({ flows, roles }: Props): React.ReactElemen
                       </span>
 
                       <div className="flex-1 min-w-0">
-                        <Select
+                        <SearchableSelect
+                          options={roles}
                           value={step.approverRoleId}
-                          onValueChange={(val) =>
+                          onChange={(val) =>
                             updateStep(activeDraft.module, idx, "approverRoleId", val)
                           }
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Pilih role..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {roles.map((r) => (
-                              <SelectItem key={r.id} value={r.id}>
-                                {r.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder="Pilih role..."
+                          searchPlaceholder="Cari role..."
+                          emptyText="Role tidak ditemukan"
+                        />
                       </div>
 
                       <div className="flex items-center gap-0.5 shrink-0">

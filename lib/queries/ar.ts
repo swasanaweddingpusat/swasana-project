@@ -1,3 +1,4 @@
+import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import type { ARBooking, ARInvoiceStatus, ARPartialPayment, ARTermin, ARTerminStatus } from "@/types/finance";
 
@@ -21,6 +22,10 @@ function deriveBookingStatus(termins: ARTermin[]): ARTerminStatus {
 }
 
 export async function getARBookings(): Promise<{ data: ARBooking[]; total: number }> {
+  "use cache";
+  cacheTag("ar-bookings");
+  cacheLife("minutes");
+
   const now = new Date();
 
   const where = {
@@ -29,9 +34,11 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
     termOfPayments: { some: {} },
   };
 
+  // Hard cap: AR listing tidak boleh tak terbatas (AGENTS.md: findMany without pagination is forbidden)
   const bookings = await db.booking.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: 500,
     select: {
       id: true,
       poNumber: true,

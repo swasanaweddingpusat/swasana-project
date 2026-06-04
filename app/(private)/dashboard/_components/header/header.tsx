@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Book, UserPlus, CalendarAdd, Buildings, AltArrowDown } from "@solar-icons/react";
+import { Book, UserPlus, CalendarAdd, Buildings, DocumentAdd, AltArrowDown } from "@solar-icons/react";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
@@ -11,6 +11,7 @@ import { useHeaderAction } from "@/components/providers/header-action-provider";
 import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useMiceBookingDrawer } from "@/components/providers/mice-booking-drawer-provider";
+import { useQuotationDrawer } from "@/components/providers/quotation-drawer-provider";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
   DropdownMenu,
@@ -29,13 +30,15 @@ export function Header() {
   const { openLeadDrawer } = useLeadDrawer();
   const { openBookingDrawer } = useBookingDrawer();
   const { openMiceBookingDrawer } = useMiceBookingDrawer();
+  const { openQuotationDrawer } = useQuotationDrawer();
   const { can, isLoading: permLoading } = usePermissions();
   usePoll();
 
   const canCreateLead = can("leads", "create");
   const canCreateWedding = can("booking", "create");
   const canCreateMice = can("booking-mice", "create");
-  const hasAnyCreatePermission = canCreateLead || canCreateWedding || canCreateMice;
+  const canCreateQuotation = can("quotations", "create");
+  const hasAnyCreatePermission = canCreateLead || canCreateWedding || canCreateMice || canCreateQuotation;
 
   return (
     <header className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-4")}>
@@ -109,6 +112,20 @@ export function Header() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium leading-none">Booking MICE</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">Meeting, insentif, konferensi</p>
+                  </div>
+                </DropdownMenuItem>
+              )}
+              {canCreateQuotation && (
+                <DropdownMenuItem
+                  className="gap-3 py-2.5 cursor-pointer"
+                  onClick={() => openQuotationDrawer()}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <DocumentAdd weight="BoldDuotone" className="h-4 w-4 text-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-none">Tambah Quotation</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Buat penawaran harga untuk klien</p>
                   </div>
                 </DropdownMenuItem>
               )}

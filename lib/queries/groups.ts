@@ -328,6 +328,13 @@ export async function getGroupsWithPerformance(
       const amount = Number(top.amount);
       const paidSoFar = top.partialPayments.reduce((s, p) => s + Number(p.amount), 0);
 
+      if (top.paymentStatus === "refund") {
+        // Refund = uang dikembalikan ke customer. Bukan piutang, bukan revenue.
+        // Di-exclude dari kedua sisi agar konsisten dengan ar.ts yang memperlakukan
+        // refund sebagai "settled" (deriveTerminStatus: refund → "paid").
+        continue;
+      }
+
       if (top.paymentStatus === "paid" && top.ackStatus === "acknowledged") {
         // Cash-based revenue: fully paid + acknowledged
         totalRevenue += amount;
@@ -337,8 +344,8 @@ export async function getGroupsWithPerformance(
       } else if (top.paymentStatus === "partial") {
         // Partial: remaining outstanding amount
         piutang += Math.max(0, amount - paidSoFar);
-      } else if (top.paymentStatus === "unpaid" || top.paymentStatus === "refund") {
-        // Unpaid or refund: full amount is piutang
+      } else if (top.paymentStatus === "unpaid") {
+        // Unpaid: full amount is piutang
         piutang += amount;
       }
     }

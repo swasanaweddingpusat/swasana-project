@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
   AltArrowLeft,
@@ -459,14 +460,16 @@ function BookingRow({
               <Eye weight="BoldDuotone" className="size-4" />
             </button>
             <button
-              className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-              title="Payment"
+              disabled
+              className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+              title="Segera hadir"
             >
               <Card weight="BoldDuotone" className="size-4" />
             </button>
             <button
-              className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-              title="Reminder"
+              disabled
+              className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+              title="Segera hadir"
             >
               <Bell weight="BoldDuotone" className="size-4" />
             </button>
@@ -592,6 +595,7 @@ function AckButton({ topId }: { topId: string }) {
   const [isPending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   function handleAck() {
     setErr(null);
@@ -599,6 +603,10 @@ function AckButton({ topId }: { topId: string }) {
       const result = await acknowledgePayment(topId);
       if (result.success) {
         setDone(true);
+        // Invalidate supaya TanStack Query refetch data AR terbaru.
+        // revalidateTag("ar-bookings","max") di server action sudah invalidate
+        // Next.js cache; ini invalidate TanStack Query client cache juga.
+        void qc.invalidateQueries({ queryKey: ["ar-bookings"] });
       } else {
         setErr(result.error);
       }
@@ -649,14 +657,16 @@ function TerminActions({ termin, canAck }: { termin: ARTermin; canAck: boolean }
     return (
       <div className="flex items-center gap-0.5">
         <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Detail"
+          disabled
+          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+          title="Segera hadir"
         >
           <Eye weight="BoldDuotone" className="size-4" />
         </button>
         <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Download"
+          disabled
+          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+          title="Segera hadir"
         >
           <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
         </button>
@@ -669,14 +679,16 @@ function TerminActions({ termin, canAck }: { termin: ARTermin; canAck: boolean }
     return (
       <div className="flex items-center gap-0.5">
         <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Payment"
+          disabled
+          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+          title="Segera hadir"
         >
           <Card weight="BoldDuotone" className="size-4" />
         </button>
         <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Reminder"
+          disabled
+          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+          title="Segera hadir"
         >
           <Bell weight="BoldDuotone" className="size-4" />
         </button>
@@ -688,14 +700,16 @@ function TerminActions({ termin, canAck }: { termin: ARTermin; canAck: boolean }
     return (
       <div className="flex items-center gap-0.5">
         <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Create Invoice"
+          disabled
+          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+          title="Segera hadir"
         >
           <FileSend weight="BoldDuotone" className="size-4" />
         </button>
         <button
-          className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-          title="Reminder"
+          disabled
+          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+          title="Segera hadir"
         >
           <Bell weight="BoldDuotone" className="size-4" />
         </button>
@@ -706,8 +720,9 @@ function TerminActions({ termin, canAck }: { termin: ARTermin; canAck: boolean }
   return (
     <div className="flex items-center gap-0.5">
       <button
-        className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-        title="Payment"
+        disabled
+        className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
+        title="Segera hadir"
       >
         <Card weight="BoldDuotone" className="size-4" />
       </button>
