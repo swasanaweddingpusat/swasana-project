@@ -1035,7 +1035,11 @@ function SetHargaContent({
 
   const visibleCategories = initialCategories.filter((c) => c.isShow);
   const currentPrice = calcDisplayPrice(initialCategories, toggles, margin);
-  const hasIncluded = initialCategories.some((c) => !toggles[c.id]);
+  // Guard: at least one *visible* category must remain included (not takeout).
+  // Using initialCategories.some((c) => !toggles[c.id]) was wrong — hidden
+  // categories have no toggle entry so toggles[hiddenId] === undefined (falsy),
+  // making some() always return true regardless of visible category state.
+  const hasIncluded = initialCategories.filter((c) => c.isShow).some((c) => !toggles[c.id]);
 
   const handleSave = async () => {
     if (!hasIncluded) {

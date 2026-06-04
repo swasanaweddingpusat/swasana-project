@@ -537,6 +537,7 @@ model Booking {
   weddingSession        WeddingSession?
   weddingType           String?
   eventTime             String?
+  notes                 String?
   poNumber              String?
   eventDate             DateTime?
   quotationId           String?

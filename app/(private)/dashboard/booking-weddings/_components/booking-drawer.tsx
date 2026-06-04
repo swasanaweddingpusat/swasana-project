@@ -30,6 +30,7 @@ import {
   useCreateDraftBooking,
   useUpdateDraftStep2,
   useUpdateDraftStep3,
+  useUpdateDraftStep4,
   useFinalizeDraftBooking,
 } from "@/hooks/use-booking-draft";
 import { useSalesUsers } from "@/hooks/use-sales-users";
@@ -201,12 +202,15 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const createDraftMut = useCreateDraftBooking();
   const updateStep2Mut = useUpdateDraftStep2();
   const updateStep3Mut = useUpdateDraftStep3();
+  const updateStep4Mut = useUpdateDraftStep4();
   const finalizeMut = useFinalizeDraftBooking();
   const qc = useQueryClient();
 
   // DB draft ID — set after Step 1 "Continue" (or injected via initialDraftId from Deal flow)
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
+  // Guard against double-click creating two drafts before the first mutateAsync resolves.
+  const isCreatingDraftRef = useRef(false);
   const { users: salesUsers } = useSalesUsers();
   const { user } = useCurrentUser();
 
@@ -389,10 +393,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       setShowResumePrompt(false);
 
       // Deal flow: initialDraftId injected — resume that draft, no resume prompt.
+      // Prefill step 1 fields from lead so they're populated when user navigates
+      // back, then jump to step 2 (draft already created by handleConfirmDeal).
       if (initialDraftId) {
         resetToClean();
         setDraftId(initialDraftId);
-        // Prefill form from lead if provided alongside the draft
+        // Always prefill step 1 form from lead so data is visible if user goes back
         if (prefillLead) {
           setCustomerName(prefillLead.name);
           setSelectedLeadId(prefillLead.leadId);
@@ -418,6 +424,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
           if (prefillLead.eventDate) form.setValue("bookingDate", new Date(prefillLead.eventDate).toISOString());
         }
+        // Jump to step 2 — draft already persisted by Deal flow in leads-table
+        setCurrentStep(2);
         return;
       }
 
@@ -616,13 +624,23 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         contactCppAddress,
         contactCpwAddress,
         contactBitrixId: isBitrixSource ? contactBitrixId : "",
+        // Time & note are step 1 fields that must be persisted to DB immediately.
+        eventTime: time || null,
+        notes: noteDateEvent || null,
         specialBonusName: specialBonusName || null,
         specialBonusAmount: specialBonusAmount || null,
       };
 
-      // If we already have a draftId (resumed draft), skip re-creation
-      if (!draftId) {
-        const result = await createDraftMut.mutateAsync(step1Payload);
+      // If we already have a draftId (resumed draft), skip re-creation.
+      // isCreatingDraftRef guards against double-click triggering two creates
+      // before the first mutateAsync resolves (the button isPending state catches
+      // subsequent clicks once re-render fires, but the very first simultaneous
+      // click may slip through the synchronous guard).
+      if (!draftId && !isCreatingDraftRef.current) {
+        isCreatingDraftRef.current = true;
+        const result = await createDraftMut.mutateAsync(step1Payload).finally(() => {
+          isCreatingDraftRef.current = false;
+        });
         if (!result.success) { toast.error(result.error ?? "Gagal membuat draft."); return; }
         setDraftId(result.draftId ?? null);
       }
@@ -713,6 +731,21 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   async function onSubmit(values: BookingInput) {
     // If we have a draftId, use finalize flow
     if (draftId) {
+      // Persist step 4 data (signingLocation + signatureSales) to draft first.
+      // This ensures the data survives if finalize fails and user resumes later.
+      const step4SaveResult = await updateStep4Mut.mutateAsync({
+        draftId,
+        data: {
+          signingLocation: signingLocation || null,
+          signatureSales: signatureSales || null,
+          withMaterai: values.withMaterai ?? false,
+        },
+      });
+      if (!step4SaveResult.success) {
+        toast.error(step4SaveResult.error ?? "Gagal menyimpan tanda tangan.");
+        return;
+      }
+
       const finalizePayload = {
         draftId,
         signingLocation: signingLocation || null,
@@ -815,6 +848,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     createDraftMut.isPending ||
     updateStep2Mut.isPending ||
     updateStep3Mut.isPending ||
+    updateStep4Mut.isPending ||
     finalizeMut.isPending ||
     createMut.isPending;
 
@@ -862,14 +896,42 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                 onClick={() => {
                   setDraftId(unfinishedDraft.id);
                   setShowResumePrompt(false);
-                  // Pre-fill venue from draft data so packages load
+                  // Prefill step 1 form from draft so user can navigate back and see data.
+                  // Fields available from unfinishedDraft query (step-1 fields persisted to DB).
                   if (unfinishedDraft.venueId) {
                     setSelectedVenueId(unfinishedDraft.venueId);
                     form.setValue("venueId", unfinishedDraft.venueId);
                   }
+                  if (unfinishedDraft.packageId) {
+                    form.setValue("packageId", unfinishedDraft.packageId);
+                    setSelectedPackageId(unfinishedDraft.packageId);
+                  }
+                  if (unfinishedDraft.weddingSession) {
+                    form.setValue("weddingSession", unfinishedDraft.weddingSession as "morning" | "evening" | "fullday");
+                  }
+                  if (unfinishedDraft.weddingType) {
+                    form.setValue("weddingType", unfinishedDraft.weddingType);
+                  }
+                  if (unfinishedDraft.sourceOfInformationId) {
+                    form.setValue("sourceOfInformationId", unfinishedDraft.sourceOfInformationId);
+                  }
+                  if (unfinishedDraft.eventTime) {
+                    setTime(unfinishedDraft.eventTime);
+                  }
+                  if (unfinishedDraft.notes) {
+                    setNoteDateEvent(unfinishedDraft.notes);
+                  }
+                  // customerName — available from unfinishedDraft.customerName
+                  if (unfinishedDraft.customerName) {
+                    setCustomerName(unfinishedDraft.customerName);
+                  }
+                  // Note: contactNumbers, email, NIK, address, bitrixId, salesId are NOT returned
+                  // by getUserUnfinishedDraft (not in snapshot). These fields will be blank
+                  // when navigating back to step 1. Known limitation — full step1 prefill
+                  // would require a dedicated getBookingDraftDetail query.
                   // Jump to step 2 (step 1 data already persisted in DB)
                   setCurrentStep(2);
-                  toast.info("Draft dilanjutkan dari Step 2. Silakan lengkapi data.");
+                  toast.info("Draft dilanjutkan. Data step 1 sebagian telah diprefill.");
                 }}
               >
                 Lanjutkan
@@ -1209,7 +1271,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             onSelect={(date) => { field.onChange(date ? date.toISOString() : ""); form.setValue("weddingSession", null); }}
                             disabled={(d) => getDateStatus(d) === "unavailable"}
                             fromYear={new Date().getFullYear() - 10}
-                            toYear={new Date().getFullYear() + 5}
+                            toYear={new Date().getFullYear() + 10}
                             defaultMonth={field.value ? new Date(field.value) : new Date()}
                             onMonthChange={setVisibleMonth}
                             modifiers={{

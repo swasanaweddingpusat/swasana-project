@@ -29,6 +29,10 @@ export const createDraftStep1Schema = z.object({
   contactCpwAddress: z.string().optional().default(""),
   contactBitrixId: z.string().optional().default(""),
 
+  // Time and note for the event date (step 1 UI fields)
+  eventTime: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+
   // Step 1 also collects discount/bonus name (optional at this stage)
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),

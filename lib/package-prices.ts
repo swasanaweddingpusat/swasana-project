@@ -69,11 +69,21 @@ export function adjustTermsForPriceReduction(
   const totalUnpaid = unpaidTerms.reduce((s, t) => s + t.amount, 0);
 
   if (totalUnpaid >= reduction) {
-    // Case 1: proportional reduction
+    // Case 1: proportional reduction — distribute across unpaid terms, then
+    // absorb the rounding remainder into the last term so the total stays exact.
     const adjustedTerms: AdjustedTerm[] = unpaidTerms.map((t) => ({
       id: t.id,
       newAmount: t.amount - Math.round((reduction * t.amount) / totalUnpaid),
     }));
+    // Fix rounding drift: the sum of individual rounds may differ from `reduction`
+    // by a few rupiah. Absorb the remainder into the last term.
+    const totalReduced = unpaidTerms.reduce((s, t) => s + t.amount, 0) -
+      adjustedTerms.reduce((s, t) => s + t.newAmount, 0);
+    const remainder = reduction - totalReduced;
+    if (remainder !== 0 && adjustedTerms.length > 0) {
+      const last = adjustedTerms[adjustedTerms.length - 1];
+      last.newAmount = Math.max(0, last.newAmount - remainder);
+    }
     return { adjustedTerms, refundTerm: null };
   } else {
     // Case 2: zero out all unpaid + create refund term

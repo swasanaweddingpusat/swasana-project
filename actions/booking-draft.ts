@@ -40,6 +40,14 @@ export interface UnfinishedDraft {
   customerName: string | null;
   venueId: string;
   venueName: string | null;
+  // Step 1 fields — used to prefill form on resume
+  packageId: string | null;
+  salesId: string | null;
+  weddingSession: string | null;
+  weddingType: string | null;
+  eventTime: string | null;
+  notes: string | null;
+  sourceOfInformationId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -221,6 +229,8 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           sourceOfInformationId: input.sourceOfInformationId ?? null,
           weddingSession: input.weddingSession ?? null,
           weddingType: input.weddingType ?? null,
+          eventTime: input.eventTime ?? null,
+          notes: input.notes ?? null,
           discountName: input.specialBonusName ?? null,
           discountAmount: input.specialBonusAmount ?? 0,
         },
@@ -492,7 +502,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
     const poSeq = await getNextSequence(`po-${year}`);
     const dd = now.getDate().toString().padStart(2, "0");
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
-    const eventTypeCode = draft.weddingType ?? "MICE";
+    const eventTypeCode = draft.weddingType ?? (draft.category === "WEDDINGS" ? "WDG" : "MICE");
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${eventTypeCode}/${dd}-${mm}-${year}`;
 
     const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
@@ -848,6 +858,13 @@ export async function getUserUnfinishedDraft(
       category: true,
       customerId: true,
       venueId: true,
+      packageId: true,
+      salesId: true,
+      weddingSession: true,
+      weddingType: true,
+      eventTime: true,
+      notes: true,
+      sourceOfInformationId: true,
       createdAt: true,
       updatedAt: true,
       customer: { select: { name: true } },
@@ -863,6 +880,13 @@ export async function getUserUnfinishedDraft(
     customerName: draft.customer?.name ?? null,
     venueId: draft.venueId,
     venueName: draft.venue?.name ?? null,
+    packageId: draft.packageId ?? null,
+    salesId: draft.salesId ?? null,
+    weddingSession: draft.weddingSession ?? null,
+    weddingType: draft.weddingType ?? null,
+    eventTime: draft.eventTime ?? null,
+    notes: draft.notes ?? null,
+    sourceOfInformationId: draft.sourceOfInformationId ?? null,
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,
   };

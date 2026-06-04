@@ -60,7 +60,7 @@ function toLocalISO(date: Date): string {
   return `${y}-${m}-${d}T00:00:00.000Z`;
 }
 
-function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
+function recalcTermDates(terms: TermRow[], eventDate: string, force = false): TermRow[] {
   if (!eventDate || terms.length === 0) return terms;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -69,10 +69,14 @@ function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
   const totalMs = event.getTime() - now.getTime();
   if (totalMs <= 0) return terms;
   const n = terms.length;
-  return terms.map((t, i) => ({
-    ...t,
-    dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
-  }));
+  return terms.map((t, i) => {
+    // Skip terms that already have a dueDate set by the user, unless forced.
+    if (!force && t.dueDate) return t;
+    return {
+      ...t,
+      dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
+    };
+  });
 }
 
 const LBL = "text-sm font-medium text-foreground";
@@ -440,7 +444,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Popover>
                   <PopoverTrigger render={<Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}</Button>} />
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 5} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => {
+                    <Calendar mode="single" captionLayout="dropdown" selected={bookingDate ? new Date(bookingDate) : undefined} onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 10} defaultMonth={bookingDate ? new Date(bookingDate) : new Date()} onMonthChange={setVisibleMonth} disabled={(d) => {
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       // Allow the existing booking date even if it is in the past,
