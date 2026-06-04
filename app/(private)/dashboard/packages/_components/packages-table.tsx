@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useVenues } from "@/hooks/use-venues";
 import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable, useUnverifyPackage } from "@/hooks/use-packages";
-import type { PackageQueryItem, PackagesQueryResult } from "@/lib/queries/packages";
+import type { PackageQueryItem } from "@/lib/queries/packages";
 import { fetchPackages } from "@/services/package-service";
 import { toast } from "sonner";
 import { DrawerPackage } from "./drawer-package";

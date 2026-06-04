@@ -89,7 +89,7 @@ export async function getAllApprovalFlows(): Promise<ApprovalFlowWithSteps[]> {
       label: defaultLabel,
       sequential: fallback?.sequential ?? false,
       steps:
-        fallback?.steps.map((s, idx) => ({
+        fallback?.steps.map((s) => ({
           id: null,
           stepOrder: s.sortOrder,
           approverRoleId: "", // resolved at runtime

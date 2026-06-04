@@ -42,57 +42,6 @@ function buildPageRange(current: number, total: number): (number | "...")[] {
   return result;
 }
 
-function SkeletonTableBody({ rows = ROWS_PER_PAGE }: { rows?: number }) {
-  return (
-    <TableBody>
-      {Array.from({ length: rows }).map((_, i) => (
-        <TableRow key={i}>
-          <TableCell><Skeleton className="h-4 w-5" /></TableCell>
-          <TableCell>
-            <div className="space-y-1.5">
-              <Skeleton className="h-4 rounded" style={{ width: `${55 + (i % 5) * 9}%` }} />
-              <Skeleton className="h-3 w-32 rounded sm:hidden" />
-            </div>
-          </TableCell>
-          <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-28 rounded" /></TableCell>
-          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24 rounded" /></TableCell>
-          <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-36 rounded" /></TableCell>
-          <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-          <TableCell>
-            <div className="flex items-center gap-1 justify-end">
-              <Skeleton className="h-7 w-7 rounded-md" />
-              <Skeleton className="h-7 w-7 rounded-md" />
-            </div>
-          </TableCell>
-        </TableRow>
-      ))}
-    </TableBody>
-  );
-}
-
-function SkeletonMobileCards({ rows = ROWS_PER_PAGE }: { rows?: number }) {
-  return (
-    <div className="block sm:hidden p-4 space-y-3">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <Skeleton className="h-4 rounded" style={{ width: `${120 + (i % 4) * 20}px` }} />
-            <Skeleton className="h-5 w-20 rounded-full shrink-0" />
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Skeleton className="h-3 w-24 rounded" />
-            <Skeleton className="h-3 w-16 rounded" />
-          </div>
-          <div className="flex items-center gap-1 pt-1 border-t border-border">
-            <Skeleton className="h-9 flex-1 rounded-lg" />
-            <Skeleton className="h-9 flex-1 rounded-lg" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function SkeletonTable() {
   return (
     <Card>

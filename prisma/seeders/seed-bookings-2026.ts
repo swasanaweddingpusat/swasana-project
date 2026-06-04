@@ -36,7 +36,7 @@ async function main(): Promise<void> {
     where: { email: "admin@swasana.com" },
     select: { id: true },
   });
-  const adminProfile = adminUser
+  const _adminProfile = adminUser
     ? await prisma.profile.findUnique({ where: { userId: adminUser.id } })
     : null;
 

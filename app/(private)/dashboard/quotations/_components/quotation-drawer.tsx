@@ -983,7 +983,7 @@ export function QuotationDrawer({
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [watchedVenueId, visibleMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedVenueId, visibleMonth]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
@@ -1243,7 +1243,7 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!watchedEventDate) return;
     setTerms((prev) => recalcTermDates(prev, watchedEventDate + "T00:00:00.000Z"));
-  }, [watchedEventDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedEventDate]);
 
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
