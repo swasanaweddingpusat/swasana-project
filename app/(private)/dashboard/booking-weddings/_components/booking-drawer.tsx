@@ -21,7 +21,17 @@ import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah } from "@/lib/utils";
+import {
+  idbClearAllEvidence,
+} from "@/lib/idbDraftStore";
 import { useCreateBooking } from "@/hooks/use-bookings";
+import {
+  useUnfinishedDraft,
+  useCreateDraftBooking,
+  useUpdateDraftStep2,
+  useUpdateDraftStep3,
+  useFinalizeDraftBooking,
+} from "@/hooks/use-booking-draft";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { BookingInput } from "@/lib/validations/booking";
@@ -47,10 +57,15 @@ interface BookingDrawerProps {
   onSuccess?: () => void;
   /** When provided, the drawer opens pre-filled from this lead (skips draft). */
   prefillLead?: BookingPrefillLead | null;
+  /**
+   * When provided (Deal flow), the drawer resumes this existing draft instead of
+   * creating a new one on Step 1 "Continue". Skips the resume prompt entirely.
+   */
+  initialDraftId?: string | null;
 }
 
 type Option = { id: string; name: string };
-interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; nikNumber: string | null; ktpAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
+interface CustomerOption { id: string; name: string; mobileNumber: string; email: string; cppNik: string | null; cpwNik: string | null; cppAddress: string | null; cpwAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
 interface LeadOption { id: string; name: string; email: string | null; contactNumbers: Array<{ label?: string; name?: string; number: string }>; address: string | null; sourceOfInformation: { id: string; name: string } | null; bitrixId: string | null; convertedToCustomerId: string | null; assignedTo: { id: string; fullName: string | null } | null }
 interface CategoryPriceEntry {
   id: string;
@@ -137,7 +152,12 @@ function makeDefaultTerms(): TermRow[] {
   ];
 }
 
-function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
+/**
+ * Recalculates due dates for terms that have an empty dueDate.
+ * Terms that already have a dueDate (manually set by user) are left untouched.
+ * Pass `force = true` to overwrite all dates (e.g. explicit "reset dates" action).
+ */
+function recalcTermDates(terms: TermRow[], eventDate: string, force = false): TermRow[] {
   if (!eventDate || terms.length === 0) return terms;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -146,46 +166,21 @@ function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
   const totalMs = event.getTime() - now.getTime();
   if (totalMs <= 0) return terms;
   const n = terms.length;
-  return terms.map((t, i) => ({
-    ...t,
-    dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
-  }));
+  return terms.map((t, i) => {
+    // Skip terms that already have a date set by the user, unless forced.
+    if (!force && t.dueDate) return t;
+    return {
+      ...t,
+      dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
+    };
+  });
 }
 
-const DRAFT_KEY = "booking_draft";
-
-interface BookingDraft {
-  currentStep: number;
-  customerName: string;
-  selectedLeadId: string;
-  contactNumbers: MobileNumberEntry[];
-  contactEmail: string;
-  contactNik: string;
-  contactKtpAddress: string;
-  contactBitrixId: string;
-  noteDateEvent: string;
-  signingLocation: string;
-  specialBonusName: string;
-  specialBonusAmount: number;
-  selectedVenueId: string;
-  selectedPackageId: string;
-  selectedPackagePrice: number;
-  bonuses: BonusRow[];
-  terms: TermRow[];
-  formValues: Record<string, unknown>;
-  takeoutPrices?: Record<string, number>;
-  categoryToggles?: Record<string, boolean>;
-  time?: string;
-}
-
-function saveDraft(d: BookingDraft) {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ }
-}
-function loadDraft(): BookingDraft | null {
-  try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
-function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+function clearLocalDraftArtifacts() {
+  // Clean up any residual localStorage draft keys from the old system
+  try { localStorage.removeItem("booking_draft"); } catch { /* noop */ }
+  // Fire-and-forget — IndexedDB cleanup is async but non-critical.
+  void idbClearAllEvidence();
 }
 
 /** Map a lead's wedding eventType.name back to the drawer's weddingType code. */
@@ -200,9 +195,18 @@ function mapEventTypeNameToWeddingType(name: string | null | undefined): string 
   return null;
 }
 
-export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: BookingDrawerProps) {
+export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, initialDraftId }: BookingDrawerProps) {
+  // Keep legacy createBooking for backwards compat (used as final fallback if draft flow fails)
   const createMut = useCreateBooking();
+  const createDraftMut = useCreateDraftBooking();
+  const updateStep2Mut = useUpdateDraftStep2();
+  const updateStep3Mut = useUpdateDraftStep3();
+  const finalizeMut = useFinalizeDraftBooking();
   const qc = useQueryClient();
+
+  // DB draft ID — set after Step 1 "Continue" (or injected via initialDraftId from Deal flow)
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
   const { users: salesUsers } = useSalesUsers();
   const { user } = useCurrentUser();
 
@@ -210,6 +214,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
   // roles, and s.id === profileId. If the logged-in user is in that list, lock
   // the sales field to themselves; admin/manager picks freely.
   const currentUserIsSales = !!user && salesUsers.some((s) => s.id === user.profileId);
+
+  // Check for unfinished DB draft on open (only when not coming from prefillLead)
+  const { data: unfinishedDraft } = useUnfinishedDraft(
+    open && !prefillLead ? (user?.profileId ?? null) : null,
+    "WEDDINGS",
+  );
 
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
@@ -223,8 +233,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
   const [contactInput, setContactInput] = useState({ name: "", number: "" });
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
-  const [contactNik, setContactNik] = useState("");
-  const [contactKtpAddress, setContactKtpAddress] = useState("");
+  const [contactNikCpp, setContactNikCpp] = useState("");
+  const [contactNikCpw, setContactNikCpw] = useState("");
+  const [contactCppAddress, setContactCppAddress] = useState("");
+  const [contactCpwAddress, setContactCpwAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [time, setTime] = useState("");
@@ -274,6 +286,15 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
 
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
+  // originalPackagePrice tracks the full selling price of the selected package
+  // before any takeout deductions. Used as the sticky base for step2 takeout calc
+  // so toggling takeout categories on/off always subtracts from the true original,
+  // not from a previously-reduced selectedPackagePrice.
+  const [originalPackagePrice, setOriginalPackagePrice] = useState(0);
+  // Tracks the price used in the most recent allocatePrice call so we can skip
+  // re-allocation when the user visits step 2 again without changing anything.
+  // This preserves manual amount edits made in step 3.
+  const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({}); // categoryName -> isTakeout
   const [takeoutPrices, setTakeoutPrices] = useState<Record<string, number>>({}); // categoryName -> editable takeout nominal
 
@@ -346,18 +367,63 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
     },
   });
 
+  // Helper: reset all form state to clean slate
+  function resetToClean() {
+    form.reset();
+    setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
+    setBonuses([]); setTerms(makeDefaultTerms());
+    setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
+    setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
+    setContactNumbers([]); setContactEmail(""); setContactNikCpp(""); setContactNikCpw("");
+    setContactCppAddress(""); setContactCpwAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
+    setTakeoutPrices({}); setCategoryToggles({}); setTime("");
+    setDraftId(null);
+    sigSalesRef.current?.clear();
+    // Migrate any leftover localStorage draft artifacts
+    clearLocalDraftArtifacts();
+  }
+
   useEffect(() => {
     if (open) {
       setBonusPickerOpen(false);
-      // Prefill from a lead takes precedence over any saved draft.
-      if (prefillLead) {
-        form.reset();
-        setBonuses([]); setTerms(makeDefaultTerms());
-        setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
-        setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
-        setTakeoutPrices({}); setCategoryToggles({});
-        setSelectedPackageId(""); setSelectedPackagePrice(0);
+      setShowResumePrompt(false);
 
+      // Deal flow: initialDraftId injected — resume that draft, no resume prompt.
+      if (initialDraftId) {
+        resetToClean();
+        setDraftId(initialDraftId);
+        // Prefill form from lead if provided alongside the draft
+        if (prefillLead) {
+          setCustomerName(prefillLead.name);
+          setSelectedLeadId(prefillLead.leadId);
+          form.setValue("customerId", "");
+          const mappedNumbers = (prefillLead.contactNumbers ?? [])
+            .map((e) => ({ name: e.label ?? "", number: e.number }))
+            .filter((e) => e.number);
+          setContactNumbers(mappedNumbers);
+          setContactEmail(prefillLead.email ?? "");
+          setContactNikCpp("");
+          setContactNikCpw("");
+          setContactCppAddress(prefillLead.address ?? "");
+          setContactCpwAddress("");
+          setContactBitrixId(prefillLead.bitrixId ?? "");
+          setNoteDateEvent(prefillLead.notes ?? "");
+          setTime(prefillLead.time ?? "");
+          if (prefillLead.sourceOfInformation?.id) form.setValue("sourceOfInformationId", prefillLead.sourceOfInformation.id);
+          if (prefillLead.assignedTo?.id) form.setValue("salesId", prefillLead.assignedTo.id);
+          if (prefillLead.venue?.id) { form.setValue("venueId", prefillLead.venue.id); setSelectedVenueId(prefillLead.venue.id); }
+          else setSelectedVenueId("");
+          if (prefillLead.package?.id) { form.setValue("packageId", prefillLead.package.id); setSelectedPackageId(prefillLead.package.id); }
+          if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
+          if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
+          if (prefillLead.eventDate) form.setValue("bookingDate", new Date(prefillLead.eventDate).toISOString());
+        }
+        return;
+      }
+
+      // Prefill from a lead takes precedence over draft resume.
+      if (prefillLead) {
+        resetToClean();
         setCustomerName(prefillLead.name);
         setSelectedLeadId(prefillLead.leadId);
         form.setValue("customerId", "");
@@ -366,8 +432,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
           .filter((e) => e.number);
         setContactNumbers(mappedNumbers);
         setContactEmail(prefillLead.email ?? "");
-        setContactNik("");
-        setContactKtpAddress(prefillLead.address ?? "");
+        setContactNikCpp("");
+        setContactNikCpw("");
+        setContactCppAddress(prefillLead.address ?? "");
+        setContactCpwAddress("");
         setContactBitrixId(prefillLead.bitrixId ?? "");
         setNoteDateEvent(prefillLead.notes ?? "");
         setTime(prefillLead.time ?? "");
@@ -381,66 +449,22 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
         if (prefillLead.eventDate) form.setValue("bookingDate", new Date(prefillLead.eventDate).toISOString());
         return;
       }
-      const draft = loadDraft();
-      if (draft) {
-        setCurrentStep(draft.currentStep);
-        setCustomerName(draft.customerName);
-        setSelectedLeadId(draft.selectedLeadId ?? "");
-        setContactNumbers(draft.contactNumbers);
-        setContactEmail(draft.contactEmail);
-        setContactNik(draft.contactNik);
-        setContactKtpAddress(draft.contactKtpAddress);
-        setContactBitrixId(draft.contactBitrixId ?? "");
-        setNoteDateEvent(draft.noteDateEvent);
-        setSigningLocation(draft.signingLocation);
-        setSpecialBonusName(draft.specialBonusName);
-        setSpecialBonusAmount(draft.specialBonusAmount);
-        setSelectedVenueId(draft.selectedVenueId);
-        setSelectedPackageId(draft.selectedPackageId);
-        setSelectedPackagePrice(draft.selectedPackagePrice);
-        setBonuses(draft.bonuses);
-        setTerms(draft.terms.some((t) => t.dueDate) ? draft.terms : makeDefaultTerms());
-        if (draft.takeoutPrices) setTakeoutPrices(draft.takeoutPrices);
-        if (draft.categoryToggles) setCategoryToggles(draft.categoryToggles);
-        if (draft.time) setTime(draft.time);
-        form.reset(draft.formValues as BookingInput);
-      } else {
-        form.reset();
-        setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0);
-        setBonuses([]); setTerms(makeDefaultTerms());
-        setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
-        setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
-        setContactNumbers([]); setContactEmail(""); setContactNik(""); setContactKtpAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
-        setTakeoutPrices({});
-        setCategoryToggles({});
-        setTime("");
-        sigSalesRef.current?.clear();
-      }
+
+      // Clean slate — resume prompt will show separately via useEffect on unfinishedDraft
+      resetToClean();
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save draft (debounced). Skipped when opened pre-filled from a lead —
-  // that flow is a one-off and must not clobber the shared global create draft.
-  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Show resume prompt when unfinished draft is found after drawer opens
+  // (skip if initialDraftId is already injected — that IS the draft to use)
   useEffect(() => {
-    if (!open || prefillLead) return;
-    if (draftTimer.current) clearTimeout(draftTimer.current);
-    draftTimer.current = setTimeout(() => {
-      // Strip File payment evidence before persisting — File can't survive JSON
-      // serialization and would restore as a broken {} (truthy but unusable).
-      const draftTerms = terms.map((t) =>
-        t.paymentEvidence instanceof File ? { ...t, paymentEvidence: null } : t,
-      );
-      saveDraft({
-        currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik,
-        contactKtpAddress,
-        contactBitrixId, noteDateEvent, signingLocation, specialBonusName,
-        specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice,
-        bonuses, terms: draftTerms, formValues: form.getValues(), takeoutPrices, categoryToggles, time,
-      });
-    }, 500);
-    return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, currentStep, customerName, selectedLeadId, contactNumbers, contactEmail, contactNik, contactKtpAddress, contactBitrixId, noteDateEvent, signingLocation, specialBonusName, specialBonusAmount, selectedVenueId, selectedPackageId, selectedPackagePrice, bonuses, terms, takeoutPrices, categoryToggles, time]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (open && !prefillLead && !initialDraftId && unfinishedDraft && !draftId) {
+      setShowResumePrompt(true);
+    }
+  }, [open, prefillLead, initialDraftId, unfinishedDraft, draftId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Note: localStorage auto-save draft removed — DB-backed draft is created on Step 1 "Continue".
+  // Draft ID is tracked in `draftId` state and updated per step.
 
   const getBasePrice = () => selectedPackagePrice;
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
@@ -486,23 +510,27 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
 
   const allCategoryPrices = selectedVariantData?.categoryPrices ?? [];
   const visibleCategories = allCategoryPrices.filter((c) => c.isShow);
-  const hiddenCategoriesBase = allCategoryPrices
-    .filter((c) => !c.isShow)
-    .reduce((sum, c) => sum + c.basePrice, 0);
   const margin = selectedVariantData?.margin ?? 0;
 
-  const step2Price = (() => {
-    const hasTakeout = visibleCategories.some((c) => categoryToggles[c.categoryName]);
-    if (!hasTakeout && selectedVariantData?.sellingPrice && selectedVariantData.sellingPrice > 0) {
+  const baseSellingPrice = (() => {
+    if (selectedVariantData?.sellingPrice && selectedVariantData.sellingPrice > 0) {
       return selectedVariantData.sellingPrice;
     }
-    const visibleBase = visibleCategories.reduce(
-      (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
-      0,
-    );
-    const base = visibleBase + hiddenCategoriesBase;
-    return base + Math.round(base * (margin / 100));
+    const allBase = allCategoryPrices.reduce((sum, c) => sum + c.basePrice, 0);
+    return allBase + Math.round(allBase * (margin / 100));
   })();
+
+  const totalTakeoutNominal = visibleCategories
+    .filter((c) => categoryToggles[c.categoryName])
+    .reduce((sum, c) => sum + (takeoutPrices[c.categoryName] ?? c.basePrice), 0);
+
+  // step2Price uses originalPackagePrice as the invariant base — always the full
+  // selling price of the selected package before any takeout. This guarantees that
+  // toggling categories on/off always subtracts from the same origin, so the
+  // arithmetic is a simple subtraction regardless of how many times step 2 is
+  // visited. selectedPackagePrice will be updated to step2Price only when the user
+  // explicitly advances to step 3, making it "sticky" from that point.
+  const step2Price = Math.max(0, (originalPackagePrice || selectedPackagePrice) - totalTakeoutNominal);
 
   const isStep2Complete =
     visibleCategories.length === 0 ||
@@ -532,7 +560,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
     if (pkg) {
       const p = getPackagePrice(pkg);
       setSelectedPackagePrice(p);
+      setOriginalPackagePrice(p);
       allocatePrice(p, specialBonusAmount);
+      setLastAllocatedPrice(p);
     }
   }, [packages, selectedPackageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -556,7 +586,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
     }
   }, [open, currentUserIsSales, user?.profileId, wSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep === 1 && !isStep1Complete) {
       if (!wSalesId) { toast.error("Sales PIC wajib dipilih."); return; }
       if (!wSourceOfInformationId) { toast.error("Sumber informasi wajib diisi."); return; }
@@ -564,15 +594,74 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
       toast.error("Lengkapi field yang wajib diisi terlebih dahulu.");
       return;
     }
+
+    // Step 1 → 2: Create DB draft
+    if (currentStep === 1) {
+      const step1Payload = {
+        bookingDate: form.getValues("bookingDate"),
+        category: "WEDDINGS" as const,
+        venueId: form.getValues("venueId"),
+        packageId: form.getValues("packageId") || null,
+        salesId: form.getValues("salesId") || null,
+        sourceOfInformationId: form.getValues("sourceOfInformationId") || null,
+        weddingSession: form.getValues("weddingSession") || null,
+        weddingType: form.getValues("weddingType") || null,
+        customerId: form.getValues("customerId") || null,
+        leadId: selectedLeadId || null,
+        customerName: customerName || undefined,
+        contactNumbers: JSON.stringify(contactNumbers),
+        contactEmail,
+        contactNikCpp,
+        contactNikCpw,
+        contactCppAddress,
+        contactCpwAddress,
+        contactBitrixId: isBitrixSource ? contactBitrixId : "",
+        specialBonusName: specialBonusName || null,
+        specialBonusAmount: specialBonusAmount || null,
+      };
+
+      // If we already have a draftId (resumed draft), skip re-creation
+      if (!draftId) {
+        const result = await createDraftMut.mutateAsync(step1Payload);
+        if (!result.success) { toast.error(result.error ?? "Gagal membuat draft."); return; }
+        setDraftId(result.draftId ?? null);
+      }
+
+      setCurrentStep(2);
+      return;
+    }
+
     if (currentStep === 2 && !isStep2Complete) {
       toast.error("Minimal satu kategori harus tetap included.");
       return;
     }
-    // When advancing from Step 2 to Step 3, sync price with takeout selection
+
+    // Step 2 → 3: Save package/takeout data to draft
     if (currentStep === 2) {
       setSelectedPackagePrice(step2Price);
-      allocatePrice(step2Price, specialBonusAmount);
+      if (step2Price !== lastAllocatedPrice) {
+        allocatePrice(step2Price, specialBonusAmount);
+        setLastAllocatedPrice(step2Price);
+      }
+
+      if (draftId) {
+        const step2Payload = {
+          packageId: form.getValues("packageId") || null,
+          specialBonusName: specialBonusName || null,
+          specialBonusAmount: specialBonusAmount || null,
+          categoryToggles: allCategoryPrices.map((c) => ({
+            categoryName: c.categoryName,
+            isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
+          })),
+        };
+        const result = await updateStep2Mut.mutateAsync({ draftId, data: step2Payload });
+        if (!result.success) { toast.error(result.error ?? "Gagal menyimpan data paket."); return; }
+      }
+
+      setCurrentStep(3);
+      return;
     }
+
     if (currentStep === 3) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
@@ -588,7 +677,29 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
         toast.error(`Total term (Rp${fmtRp(getTotalTerms())}) tidak sama dengan harga setelah discount (Rp${fmtRp(getPriceAfterDiscount())}). Selisih: Rp${fmtRp(Math.abs(diff))}`);
         return;
       }
+
+      // Save term of payments to draft
+      if (draftId) {
+        const step3Payload = {
+          paymentMethodId: form.getValues("paymentMethodId") || null,
+          specialBonusName: specialBonusName || null,
+          specialBonusAmount: specialBonusAmount || null,
+          termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({
+            name: t.name,
+            amount: t.amount,
+            dueDate: t.dueDate,
+            sortOrder: t.sortOrder,
+            paymentStatus: t.paymentStatus,
+          })),
+        };
+        const result = await updateStep3Mut.mutateAsync({ draftId, data: step3Payload });
+        if (!result.success) { toast.error(result.error ?? "Gagal menyimpan term of payment."); return; }
+      }
+
+      setCurrentStep(4);
+      return;
     }
+
     if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
   };
 
@@ -600,14 +711,67 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
   };
 
   async function onSubmit(values: BookingInput) {
+    // If we have a draftId, use finalize flow
+    if (draftId) {
+      const finalizePayload = {
+        draftId,
+        signingLocation: signingLocation || null,
+        signatureSales: signatureSales || null,
+        withMaterai: values.withMaterai ?? false,
+        leadId: selectedLeadId || null,
+        bonuses: bonuses.map((b) => ({
+          vendorId: b.vendorId,
+          vendorCategoryId: b.vendorCategoryId,
+          vendorName: b.vendorName,
+          description: b.description || null,
+          qty: b.qty,
+          nominal: b.nominal,
+        })),
+        categoryToggles: allCategoryPrices.map((c) => ({
+          categoryName: c.categoryName,
+          basePrice: c.basePrice,
+          sortOrder: c.sortOrder,
+          isShow: c.isShow,
+          isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
+        })),
+      };
+
+      const result = await finalizeMut.mutateAsync(finalizePayload);
+      if (!result.success) { toast.error(result.error ?? "Gagal memfinalisasi booking."); return; }
+
+      // Upload payment evidence per term
+      const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
+      if (termsWithEvidence.length > 0 && result.termIds?.length) {
+        await Promise.allSettled(
+          termsWithEvidence.map((t) => {
+            const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
+            if (!termId || !t.paymentEvidence) return Promise.resolve();
+            const fd = new FormData();
+            fd.append("termId", termId);
+            fd.append("file", t.paymentEvidence);
+            return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+          })
+        );
+      }
+
+      clearLocalDraftArtifacts();
+      toast.success("Booking berhasil dibuat.");
+      onSuccess?.();
+      onOpenChange(false);
+      return;
+    }
+
+    // Fallback: no draftId (shouldn't happen in normal flow, but kept as safety net)
     const payload: BookingInput = {
       ...values,
       customerId: values.customerId || "",
       customerName: customerName || "",
       contactNumbers: JSON.stringify(contactNumbers),
       contactEmail,
-      contactNik,
-      contactKtpAddress,
+      contactNikCpp,
+      contactNikCpw,
+      contactCppAddress,
+      contactCpwAddress,
       contactBitrixId: isBitrixSource ? contactBitrixId : "",
       specialBonusName: specialBonusName || null,
       specialBonusAmount: specialBonusAmount || null,
@@ -627,9 +791,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
 
-    // Upload payment evidence per term jika ada.
-    // Guard `instanceof File`: a restored draft turns File → {} (JSON can't
-    // serialize File), which is truthy but not uploadable.
     const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
     if (termsWithEvidence.length > 0 && result.termIds?.length) {
       await Promise.allSettled(
@@ -644,23 +805,80 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
       );
     }
 
-    if (!prefillLead) clearDraft();
+    clearLocalDraftArtifacts();
     toast.success("Booking berhasil dibuat.");
     onSuccess?.();
     onOpenChange(false);
   }
+
+  const isDraftMutating =
+    createDraftMut.isPending ||
+    updateStep2Mut.isPending ||
+    updateStep3Mut.isPending ||
+    finalizeMut.isPending ||
+    createMut.isPending;
 
   const isContinueDisabled =
     (currentStep === 1 && !isStep1Complete) ||
     (currentStep === 2 && !isStep2Complete) ||
     (currentStep === 3 && !isStep3Complete) ||
     (currentStep === 4 && !isStep4Complete) ||
-    createMut.isPending;
+    isDraftMutating;
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
       <div className={cn('flex', 'flex-col', 'justify-between', 'h-full')}>
-        <div className={cn('flex-1', 'overflow-y-auto', 'px-2')}>
+
+        {/* ─── Resume Draft Prompt ─── */}
+        {showResumePrompt && unfinishedDraft && (
+          <div className="mx-2 mt-4 mb-2 rounded-2xl border bg-card shadow-sm p-5 space-y-3">
+            <p className="text-sm font-semibold text-foreground">Lanjutkan draft sebelumnya?</p>
+            <p className="text-xs text-muted-foreground">
+              Kamu punya draft booking untuk{" "}
+              <span className="font-medium text-foreground">
+                {unfinishedDraft.customerName ?? "Customer Unknown"}
+              </span>{" "}
+              di{" "}
+              <span className="font-medium text-foreground">
+                {unfinishedDraft.venueName ?? "Venue Unknown"}
+              </span>{" "}
+              yang belum selesai.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  setShowResumePrompt(false);
+                  // Start fresh — old draft stays in DB and will be cleaned up by cron
+                }}
+              >
+                Mulai Baru
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  setDraftId(unfinishedDraft.id);
+                  setShowResumePrompt(false);
+                  // Pre-fill venue from draft data so packages load
+                  if (unfinishedDraft.venueId) {
+                    setSelectedVenueId(unfinishedDraft.venueId);
+                    form.setValue("venueId", unfinishedDraft.venueId);
+                  }
+                  // Jump to step 2 (step 1 data already persisted in DB)
+                  setCurrentStep(2);
+                  toast.info("Draft dilanjutkan dari Step 2. Silakan lengkapi data.");
+                }}
+              >
+                Lanjutkan
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className={cn('flex-1', 'overflow-y-auto', 'px-2', showResumePrompt ? 'hidden' : '')}>
           <Form {...form}>
             <form className="space-y-4">
               {/* ─── Step 1: Data Booking ─── */}
@@ -708,7 +926,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                                       setContactNumbers(mapped);
                                     }
                                     if (lead.email) setContactEmail(lead.email);
-                                    if (lead.address) setContactKtpAddress(lead.address);
+                                    setContactCppAddress(lead.address ?? "");
+                                    setContactCpwAddress("");
                                     if (lead.bitrixId) setContactBitrixId(lead.bitrixId);
                                     if (lead.sourceOfInformation?.id) form.setValue("sourceOfInformationId", lead.sourceOfInformation.id);
                                     // Sales — autofill dari sales lead. Skip kalau user login adalah
@@ -742,8 +961,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                                       setContactNumbers(entries);
                                     }
                                     if (c.email) setContactEmail(c.email);
-                                    if (c.nikNumber) setContactNik(c.nikNumber);
-                                    if (c.ktpAddress) setContactKtpAddress(c.ktpAddress);
+                                    if (c.cppNik) setContactNikCpp(c.cppNik);
+                                    if (c.cpwNik) setContactNikCpw(c.cpwNik);
+                                    setContactCppAddress(c.cppAddress ?? "");
+                                    setContactCpwAddress(c.cpwAddress ?? "");
                                     if (c.bitrixId) setContactBitrixId(c.bitrixId);
                                     if (c.sourceOfInformationId) form.setValue("sourceOfInformationId", c.sourceOfInformationId);
                                     setCustomerDropdownOpen(false);
@@ -902,23 +1123,35 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                     <Input placeholder="e.g. nama@email.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className="mt-1" />
                   </div>
 
-                  {/* NIK */}
+                  {/* NIK CPP */}
                   <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK Number</FormLabel>
-                    <Input placeholder="e.g. 3275010101010001" value={contactNik} onChange={(e) => setContactNik(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPP</FormLabel>
+                    <Input placeholder="e.g. 3275010101010001" value={contactNikCpp} onChange={(e) => setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
                   </div>
 
-                  {/* Alamat KTP */}
+                  {/* Alamat CPP */}
                   <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat (sesuai KTP)</FormLabel>
-                    <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactKtpAddress} onChange={(e) => setContactKtpAddress(e.target.value)} rows={3} className="mt-1" />
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPP</FormLabel>
+                    <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} rows={3} className="mt-1" />
+                  </div>
+
+                  {/* NIK CPW */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPW</FormLabel>
+                    <Input placeholder="e.g. 3275010101010002" value={contactNikCpw} onChange={(e) => setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
+                  </div>
+
+                  {/* Alamat CPW */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPW</FormLabel>
+                    <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} rows={3} className="mt-1" />
                   </div>
 
                   {/* Venue */}
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Venue *</FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -927,7 +1160,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket *</FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); allocatePrice(p, specialBonusAmount); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
                       <FormMessage />
                     </FormItem>
@@ -1101,6 +1334,22 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
               {/* ─── Step 2: Package Prices ─── */}
               {currentStep === 2 && (
                 <div className="space-y-4">
+                  {/* Sticky price summary — second sticky (footer is first) */}
+                  <div className="sticky top-0 z-10 bg-background pb-2">
+                    <div className={cn('rounded-2xl', 'border', 'bg-card', 'shadow-sm', 'p-4')}>
+                      <p className="text-xs text-muted-foreground mb-1">Harga setelah takeout</p>
+                      <p className={cn('text-xl', 'font-semibold', 'font-heading', 'text-foreground')}>
+                        Rp{fmtRp(step2Price)}
+                      </p>
+                      {totalTakeoutNominal > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <span className="line-through">Rp{fmtRp(baseSellingPrice)}</span>
+                          <span className="ml-2 text-destructive font-medium">-Rp{fmtRp(totalTakeoutNominal)}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <p className={cn('text-sm', 'font-medium', 'text-foreground')}>Kategori Harga Package</p>
                     <p className="text-xs text-muted-foreground mt-1 mb-3">
@@ -1119,7 +1368,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                       return (
                         <div
                           key={cat.categoryName}
-                          className={cn('rounded-lg', 'border', 'p-3', isTakeout && 'border-destructive/30 bg-destructive/5')}
+                          className={cn('rounded-xl', 'border', 'p-3', isTakeout && 'border-destructive/30 bg-destructive/5')}
                         >
                           <div className={cn('flex', 'items-center', 'justify-between')}>
                             <div>
@@ -1168,13 +1417,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                       );
                     })}
                   </div>
-                  {/* Price summary */}
-                  <div className={cn('rounded-lg', 'bg-muted/30', 'p-3', 'space-y-1')}>
-                    <div className={cn('flex', 'justify-between', 'text-sm')}>
-                      <span className="text-muted-foreground">Harga setelah takeout</span>
-                      <span className="font-semibold">Rp{fmtRp(step2Price)}</span>
-                    </div>
-                  </div>
                 </div>
               )}
               {/* ─── Step 3: Term of Payments ─── */}
@@ -1197,7 +1439,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                     <Input
                       placeholder="IDR. 0"
                       value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
-                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
+                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); setLastAllocatedPrice(getBasePrice()); }}
                       inputMode="numeric"
                       className="rounded-none"
                     />
@@ -1305,7 +1547,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                                       </span>
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {PAYMENT_STATUS.map((s) => (
+                                      {PAYMENT_STATUS.filter((s) => s !== "partial").map((s) => (
                                         <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
                                       ))}
                                     </SelectContent>
@@ -1337,8 +1579,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
                                           captionLayout="dropdown"
                                           selected={t.dueDate ? new Date(t.dueDate) : undefined}
                                           onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
-                                          disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-                                          fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                                          fromYear={new Date().getFullYear() - 10}
+                                          toYear={new Date().getFullYear() + 10}
                                         />
                                       </PopoverContent>
                                     </Popover>
@@ -1456,13 +1698,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
             </form>
           </Form>
         </div>
-        {/* Footer */}
-        <div className={cn('bg-background', 'sticky', 'bottom-0', 'z-10')}>
+        {/* Footer — hidden when showing resume prompt */}
+        <div className={cn('bg-background', 'sticky', 'bottom-0', 'z-10', showResumePrompt ? 'hidden' : '')}>
           <div className={cn('flex', 'py-4', 'gap-2')}>
             <Button
               variant="outline"
               onClick={currentStep === 1 ? () => onOpenChange(false) : handlePrevious}
-              disabled={createMut.isPending}
+              disabled={isDraftMutating}
               className="flex-[40%] cursor-pointer"
             >
               {currentStep === 1 ? "Cancel" : "Previous"}
@@ -1472,7 +1714,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead }: Bo
               disabled={isContinueDisabled}
               className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
             >
-              {currentStep < totalSteps ? "Continue" : createMut.isPending ? "Creating..." : "Create New Booking"}
+              {currentStep < totalSteps
+                ? (isDraftMutating ? "Menyimpan..." : "Continue")
+                : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
             </Button>
           </div>
         </div>
