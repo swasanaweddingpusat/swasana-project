@@ -6,6 +6,8 @@ export interface GroupsPerformanceSummary {
   totalTarget: number;
   avgAchievement: number;
   totalConfirmed: number;
+  totalPiutang: number;
+  totalRevenue: number;
 }
 
 export interface GroupsPerformanceResponse {

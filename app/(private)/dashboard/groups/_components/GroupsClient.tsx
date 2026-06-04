@@ -37,6 +37,8 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete, eli
       ? Math.round(initialGroups.reduce((s, g) => s + g.avgAchievement, 0) / initialGroups.length)
       : 0,
     totalConfirmed: initialGroups.reduce((s, g) => s + g.confirmedCount, 0),
+    totalPiutang: initialGroups.reduce((s, g) => s + (g.piutang ?? 0), 0),
+    totalRevenue: initialGroups.reduce((s, g) => s + (g.totalRevenue ?? 0), 0),
   };
 
   function handleConfirmDelete() {

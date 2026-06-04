@@ -1,4 +1,11 @@
-import { UsersGroupRounded, Dollar, CalendarMark, Wallet, Target as TargetIcon } from "@solar-icons/react";
+import {
+  UsersGroupRounded,
+  CalendarMark,
+  Wallet,
+  Target as TargetIcon,
+  Bill,
+  Dollar,
+} from "@solar-icons/react";
 
 interface Props {
   totalGroups: number;
@@ -6,6 +13,8 @@ interface Props {
   totalTarget: number;
   avgAchievement: number;
   totalConfirmed: number;
+  totalPiutang: number;
+  totalRevenue: number;
 }
 
 function formatRp(n: number) {
@@ -70,52 +79,81 @@ export function GroupsStatsCards({
   totalTarget,
   avgAchievement,
   totalConfirmed,
+  totalPiutang,
+  totalRevenue,
 }: Props) {
   const realisasiPct = totalTarget > 0 ? Math.round((totalSales / totalTarget) * 100) : 0;
   const sisa = Math.max(0, totalTarget - totalSales);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* ── Card 1: Groups Overview ── */}
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* ── Card 1: Summary (count-based, BUKAN angka uang) ── */}
       <div className="rounded-2xl bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20 p-5 sm:p-6">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">
-          Ringkasan Groups
+          Summary
         </p>
         <div className="space-y-3.5">
           <StatRow icon={UsersGroupRounded} label="Total Groups" value={totalGroups.toString()} />
-          <div className="border-t border-stone-200/70" />
-          <StatRow icon={Dollar} label="Total Revenue" value={formatRp(totalSales)} />
           <div className="border-t border-stone-200/70" />
           <StatRow icon={CalendarMark} label="Booking Confirmed" value={totalConfirmed.toString()} />
         </div>
       </div>
 
-      {/* ── Card 2: Total Target + Realisasi ── */}
+      {/* ── Card 2: Piutang ── */}
+      <div className="rounded-2xl bg-gradient-to-br from-white via-red-50/30 to-orange-50/20 ring-1 ring-orange-200/30 shadow-md shadow-orange-100/10 p-5 sm:p-6">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">
+          Piutang
+        </p>
+        <div className="mb-3">
+          <p className="font-heading text-2xl sm:text-3xl font-bold text-foreground tabular-nums leading-tight">
+            {formatRp(totalPiutang)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {formatRpFull(totalPiutang)}
+          </p>
+        </div>
+        <div className="border-t border-stone-200/70 pt-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Bill weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+            <span>TOP belum bayar + paid tapi belum di-acknowledge Finance</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Card 3: Total Revenue (cash-based) ── */}
       <div className="rounded-2xl bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20 p-5 sm:p-6">
         <div className="flex items-start gap-5 sm:gap-6">
           <AchievementDonut pct={realisasiPct} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
-              <TargetIcon weight="BoldDuotone" className="h-3 w-3" /> Total Target
+              <TargetIcon weight="BoldDuotone" className="h-3 w-3" /> Total Revenue
             </p>
-            <p className="text-xl sm:text-2xl font-bold text-foreground leading-tight tabular-nums mt-1 truncate">
-              {formatRpFull(totalTarget)}
+            <p className="font-heading text-xl sm:text-2xl font-bold text-foreground leading-tight tabular-nums mt-1 truncate">
+              {formatRpFull(totalRevenue)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Avg achievement {avgAchievement}% across all groups
+              TOP paid + acknowledged · vs target {avgAchievement}%
             </p>
 
             <div className="mt-4 pt-4 border-t border-stone-200/70 space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Wallet weight="BoldDuotone" className="h-3 w-3" /> Terealisasi
+                  <Wallet weight="BoldDuotone" className="h-3 w-3" /> Kontrak (Confirmed)
                 </span>
                 <span className="text-sm font-semibold text-amber-800 tabular-nums truncate">
                   {formatRp(totalSales)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-muted-foreground">Sisa</span>
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Dollar weight="BoldDuotone" className="h-3 w-3" /> Target
+                </span>
+                <span className="text-sm font-semibold text-foreground tabular-nums truncate">
+                  {formatRp(totalTarget)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">Sisa Target</span>
                 <span className="text-sm font-semibold text-foreground tabular-nums truncate">
                   {formatRp(sisa)}
                 </span>
