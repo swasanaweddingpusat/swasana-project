@@ -24,6 +24,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -81,6 +82,7 @@ interface MiceFormValues {
   venueId: string;
   eventTypeId: string;
   eventDate: string;
+  miceSession: "morning" | "evening" | "";
   time: string;
   estimatedPax: string;
   salesId: string;
@@ -136,6 +138,7 @@ const DEFAULT_VALUES: MiceFormValues = {
   venueId: "",
   eventTypeId: "",
   eventDate: "",
+  miceSession: "",
   time: "",
   estimatedPax: "",
   salesId: "",
@@ -284,7 +287,7 @@ export function MiceBookingDrawer({
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [watchedVenueId, visibleMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedVenueId, visibleMonth]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
@@ -335,7 +338,6 @@ export function MiceBookingDrawer({
   // this is the standard drawer/modal initialization pattern (hydrate form when
   // it opens). The rule fires because computed values are derived from the
   // `booking` prop; the pattern itself is correct and won't cause cascades.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open) {
       if (booking) {
@@ -399,7 +401,6 @@ export function MiceBookingDrawer({
       signatureRef.current = null;
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (open && !booking && currentUserIsSalesMice && user?.profileId) {
@@ -428,7 +429,7 @@ export function MiceBookingDrawer({
           venueId: values.venueId,
           eventTypeId: values.eventTypeId,
           salesId: resolvedSalesId || null,
-          miceSession: null,
+          miceSession: (values.miceSession || null) as "morning" | "evening" | null,
           eventTime: values.time || null,
           estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
           notes: values.notes || null,
@@ -780,6 +781,29 @@ export function MiceBookingDrawer({
                           </PopoverContent>
                         </Popover>
                         {availLoading && <p className="text-xs text-muted-foreground mt-1">Mengecek ketersediaan...</p>}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="miceSession" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sesi Event (Pagi / Malam)</FormLabel>
+                        <Select
+                          value={field.value}
+                          onValueChange={(v) => field.onChange(v as "morning" | "evening" | "")}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Pilih sesi event..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="morning">Pagi (Morning)</SelectItem>
+                            <SelectItem value="evening">Malam (Evening)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Sesi menentukan slot venue — pagi dan malam bisa diisi event berbeda.
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )} />
