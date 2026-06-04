@@ -36,6 +36,13 @@ type CheckState =
   | { status: "available" }
   | { status: "error"; message: string };
 
+// Subset of CheckState that comes back from the async slot check.
+type AsyncResult =
+  | { status: "missing_data"; message: string }
+  | { status: "conflict"; reason: string }
+  | { status: "available" }
+  | { status: "error"; message: string };
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function DealConfirmModal({
@@ -44,27 +51,17 @@ export function DealConfirmModal({
   onConfirm,
   onClose,
 }: DealConfirmModalProps) {
-  const [checkState, setCheckState] = useState<CheckState>({ status: "idle" });
+  // Async availability result, keyed by the lead it belongs to. Set ONLY inside
+  // the fetch callback — never synchronously in the effect body — so the
+  // `set-state-in-effect` rule stays satisfied. The "checking"/"missing_data"
+  // states are derived during render instead of being stored.
+  const [result, setResult] = useState<{ leadId: string; state: AsyncResult } | null>(null);
 
-  // Run availability check whenever modal opens with a lead
   useEffect(() => {
-    if (!lead) {
-      setCheckState({ status: "idle" });
-      return;
-    }
+    if (!lead || !lead.venue?.id || !lead.eventDate) return;
 
-    // Validate required lead data before calling server action
-    if (!lead.venue?.id || !lead.eventDate) {
-      setCheckState({
-        status: "missing_data",
-        message:
-          "Data lead belum lengkap. Venue dan tanggal event wajib diisi sebelum menandai Deal.",
-      });
-      return;
-    }
-
-    setCheckState({ status: "checking" });
-
+    let cancelled = false;
+    const leadId = lead.id;
     const category = lead.eventType?.category ?? lead.category;
     const session = lead.weddingSession ?? null;
 
@@ -73,23 +70,42 @@ export function DealConfirmModal({
       eventDate: new Date(lead.eventDate).toISOString().split("T")[0],
       session,
       category,
-    }).then((result) => {
-      if (!result.success) {
-        setCheckState({ status: "error", message: result.error ?? "Gagal memeriksa ketersediaan." });
-        return;
-      }
-      if (!result.available) {
+    }).then((res) => {
+      if (cancelled) return;
+      if (!res.success) {
+        setResult({ leadId, state: { status: "error", message: res.error ?? "Gagal memeriksa ketersediaan." } });
+      } else if (!res.available) {
         // Use structured unavailableReason field — avoids fragile substring matching
-        if (result.unavailableReason === "missing_session") {
-          setCheckState({ status: "missing_data", message: result.conflictReason ?? "Session belum diisi." });
+        if (res.unavailableReason === "missing_session") {
+          setResult({ leadId, state: { status: "missing_data", message: res.conflictReason ?? "Session belum diisi." } });
         } else {
-          setCheckState({ status: "conflict", reason: result.conflictReason ?? "Slot tidak tersedia." });
+          setResult({ leadId, state: { status: "conflict", reason: res.conflictReason ?? "Slot tidak tersedia." } });
         }
-        return;
+      } else {
+        setResult({ leadId, state: { status: "available" } });
       }
-      setCheckState({ status: "available" });
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [lead]);
+
+  // Derive the display state from props + the async result (no setState in render).
+  let checkState: CheckState;
+  if (!lead) {
+    checkState = { status: "idle" };
+  } else if (!lead.venue?.id || !lead.eventDate) {
+    checkState = {
+      status: "missing_data",
+      message:
+        "Data lead belum lengkap. Venue dan tanggal event wajib diisi sebelum menandai Deal.",
+    };
+  } else if (result && result.leadId === lead.id) {
+    checkState = result.state;
+  } else {
+    checkState = { status: "checking" };
+  }
 
   const isOpen = !!lead;
 
