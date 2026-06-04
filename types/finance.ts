@@ -49,6 +49,8 @@ export interface ARPartialPayment {
   notes: string | null;
 }
 
+export type ARTerminAckStatus = "pending" | "acknowledged" | "rejected";
+
 export interface ARTermin {
   id: string;
   name: string;
@@ -61,6 +63,10 @@ export interface ARTermin {
   agingDays: number | null;
   catatan: string;
   partialPayments: ARPartialPayment[];
+  // Acknowledgment fields
+  ackStatus: ARTerminAckStatus;
+  acknowledgedAt: string | null;
+  acknowledgedByName: string | null;
 }
 
 export interface ARBooking {

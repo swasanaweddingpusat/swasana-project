@@ -75,6 +75,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola akses dan undangan user",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/approval-flow": {
+    title: "Approval Flow",
+    subtitle: "Konfigurasi step dan role approver per modul",
+    parent: "/dashboard/settings",
+  },
 
   // ─── Packages ──────────────────────────────────────────────────────────────
   "/dashboard/packages": {

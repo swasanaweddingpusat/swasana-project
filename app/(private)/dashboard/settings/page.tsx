@@ -14,6 +14,7 @@ import {
   Diploma,
   CalendarMark,
   UserRounded,
+  Route,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -51,6 +52,13 @@ const GROUPS: SettingGroup[] = [
         description: "Kelola role dan permission.",
         icon: ShieldCheck,
         href: "/dashboard/settings/roles",
+        module: "settings-role-permission",
+      },
+      {
+        title: "Approval Flow",
+        description: "Konfigurasi step dan role approver untuk setiap modul approval.",
+        icon: Route,
+        href: "/dashboard/settings/approval-flow",
         module: "settings-role-permission",
       },
       {
@@ -125,7 +133,7 @@ export default async function SettingsHubPage() {
     "settings-role-permission", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
-    "customers",
+    "customers", "settings-role-permission",
   ]);
 
   const session = await auth();

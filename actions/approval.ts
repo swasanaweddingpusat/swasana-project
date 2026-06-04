@@ -39,7 +39,7 @@ export async function approveStep(stepId: string, signature?: string | null) {
     // For order-independent flows (booking, booking-mice, quotations, package),
     // manager and finance can approve in any order — record becomes "approved"
     // only when ALL role steps are done.
-    if (!isSuperAdmin && isSequentialFlow(step.record.module)) {
+    if (!isSuperAdmin && await isSequentialFlow(step.record.module)) {
       const blockedByPrior = allSteps.some(
         (s) => s.stepOrder < step.stepOrder && s.status !== "approved"
       );
