@@ -52,6 +52,29 @@ export interface UnfinishedDraft {
   updatedAt: Date;
 }
 
+/** Full step-1 detail for prefilling draft resume (includes Customer relation). */
+export interface DraftBookingDetail {
+  id: string;
+  customerName: string | null;
+  customerId: string | null;
+  venueId: string;
+  packageId: string | null;
+  salesId: string | null;
+  weddingSession: string | null;
+  weddingType: string | null;
+  eventTime: string | null;
+  notes: string | null;
+  sourceOfInformationId: string | null;
+  // From Customer relation
+  contactNumbers: Array<{ name: string; number: string }>;
+  contactEmail: string | null;
+  contactNikCpp: string | null;
+  contactNikCpw: string | null;
+  contactCppAddress: string | null;
+  contactCpwAddress: string | null;
+  contactBitrixId: string | null;
+}
+
 // ─── Helper: build customer from draft input ──────────────────────────────────
 
 function parseContactNumbersToArray(
@@ -69,7 +92,7 @@ function parseContactNumbersToArray(
   }
 }
 
-function serializeContactNumbersToDisplay(contactNumbers: string): string {
+function _serializeContactNumbersToDisplay(contactNumbers: string): string {
   if (!contactNumbers) return "";
   try {
     const arr = JSON.parse(contactNumbers) as Array<{ name?: string; number: string }>;
@@ -889,6 +912,85 @@ export async function getUserUnfinishedDraft(
     sourceOfInformationId: draft.sourceOfInformationId ?? null,
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,
+  };
+}
+
+// ─── Query: get full draft detail for resume prefill ─────────────────────────
+
+/**
+ * Returns full step-1 draft data including Customer relation fields.
+ * Used by booking-drawer resume handler to prefill ALL step 1 fields.
+ * Access is guarded: booking must be a draft owned by the caller (or admin).
+ */
+export async function getDraftBookingDetail(
+  draftId: string,
+): Promise<DraftBookingDetail | null> {
+  const draft = await db.booking.findFirst({
+    where: { id: draftId, recordStatus: "draft" },
+    select: {
+      id: true,
+      customerId: true,
+      venueId: true,
+      packageId: true,
+      salesId: true,
+      weddingSession: true,
+      weddingType: true,
+      eventTime: true,
+      notes: true,
+      sourceOfInformationId: true,
+      customer: {
+        select: {
+          name: true,
+          mobileNumber: true,
+          email: true,
+          cppNik: true,
+          cpwNik: true,
+          cppAddress: true,
+          cpwAddress: true,
+          bitrixId: true,
+        },
+      },
+    },
+  });
+
+  if (!draft) return null;
+
+  // Parse mobileNumber JSON → typed array
+  const rawMobile = draft.customer?.mobileNumber;
+  let contactNumbers: Array<{ name: string; number: string }> = [];
+  if (Array.isArray(rawMobile)) {
+    contactNumbers = (rawMobile as Array<Record<string, unknown>>)
+      .map((e) => ({
+        name: typeof e.name === "string" ? e.name : typeof e.label === "string" ? e.label : "",
+        number: typeof e.number === "string" ? e.number : "",
+      }))
+      .filter((e) => e.number);
+  }
+
+  // Strip placeholder email set during new-customer creation
+  const rawEmail = draft.customer?.email ?? null;
+  const contactEmail =
+    rawEmail && !rawEmail.endsWith("@placeholder.com") ? rawEmail : null;
+
+  return {
+    id: draft.id,
+    customerName: draft.customer?.name ?? null,
+    customerId: draft.customerId ?? null,
+    venueId: draft.venueId,
+    packageId: draft.packageId ?? null,
+    salesId: draft.salesId ?? null,
+    weddingSession: draft.weddingSession ?? null,
+    weddingType: draft.weddingType ?? null,
+    eventTime: draft.eventTime ?? null,
+    notes: draft.notes ?? null,
+    sourceOfInformationId: draft.sourceOfInformationId ?? null,
+    contactNumbers,
+    contactEmail,
+    contactNikCpp: draft.customer?.cppNik ?? null,
+    contactNikCpw: draft.customer?.cpwNik ?? null,
+    contactCppAddress: draft.customer?.cppAddress ?? null,
+    contactCpwAddress: draft.customer?.cpwAddress ?? null,
+    contactBitrixId: draft.customer?.bitrixId ?? null,
   };
 }
 

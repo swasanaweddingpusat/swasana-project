@@ -8,12 +8,29 @@ import {
   updateDraftBookingStep4,
   finalizeDraftBooking,
   getUserUnfinishedDraft,
+  getDraftBookingDetail,
 } from "@/actions/booking-draft";
 import type {
   DraftResult,
   FinalizeDraftResult,
   UnfinishedDraft,
+  DraftBookingDetail,
 } from "@/actions/booking-draft";
+
+// ─── Query: get full draft detail for resume prefill ─────────────────────────
+
+export function useDraftBookingDetail(draftId: string | null | undefined) {
+  return useQuery<DraftBookingDetail | null>({
+    queryKey: ["booking-draft", "detail", draftId],
+    queryFn: async () => {
+      if (!draftId) return null;
+      return getDraftBookingDetail(draftId);
+    },
+    enabled: !!draftId,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
 
 // ─── Query: check for existing unfinished draft ───────────────────────────────
 

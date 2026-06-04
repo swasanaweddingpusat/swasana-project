@@ -27,6 +27,7 @@ import {
 import { useCreateBooking } from "@/hooks/use-bookings";
 import {
   useUnfinishedDraft,
+  useDraftBookingDetail,
   useCreateDraftBooking,
   useUpdateDraftStep2,
   useUpdateDraftStep3,
@@ -225,6 +226,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     "WEDDINGS",
   );
 
+  // Full draft detail — fetched when user clicks "Lanjutkan" on resume prompt.
+  // pendingResumeDraftId drives the query; once data arrives we prefill & clear.
+  const [pendingResumeDraftId, setPendingResumeDraftId] = useState<string | null>(null);
+  const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
+
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
 
@@ -382,6 +388,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setContactCppAddress(""); setContactCpwAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
     setTakeoutPrices({}); setCategoryToggles({}); setTime("");
     setDraftId(null);
+    setPendingResumeDraftId(null);
     sigSalesRef.current?.clear();
     // Migrate any leftover localStorage draft artifacts
     clearLocalDraftArtifacts();
@@ -469,7 +476,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (open && !prefillLead && !initialDraftId && unfinishedDraft && !draftId) {
       setShowResumePrompt(true);
     }
-  }, [open, prefillLead, initialDraftId, unfinishedDraft, draftId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, prefillLead, initialDraftId, unfinishedDraft, draftId]);
 
   // Note: localStorage auto-save draft removed — DB-backed draft is created on Step 1 "Continue".
   // Draft ID is tracked in `draftId` state and updated per step.
@@ -584,7 +591,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (autoTime) {
       setTime(autoTime);
     }
-  }, [wWeddingSession, wWeddingType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wWeddingSession, wWeddingType]);
 
   // Force-assign the sales field to the logged-in sales user (covers salesUsers
   // loading after the open/draft reset, and re-applies if it gets cleared).
@@ -593,6 +600,74 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       form.setValue("salesId", user.profileId);
     }
   }, [open, currentUserIsSales, user?.profileId, wSalesId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When resumeDraftDetail arrives (user clicked "Lanjutkan"), prefill ALL step 1
+  // fields from the draft's stored data + its Customer relation, then advance to step 2.
+  useEffect(() => {
+    if (!resumeDraftDetail || !pendingResumeDraftId) return;
+
+    // Set draft ID so subsequent steps update the correct draft
+    setDraftId(resumeDraftDetail.id);
+
+    // Prefill step 1 form fields
+    if (resumeDraftDetail.venueId) {
+      setSelectedVenueId(resumeDraftDetail.venueId);
+      form.setValue("venueId", resumeDraftDetail.venueId);
+    }
+    if (resumeDraftDetail.packageId) {
+      form.setValue("packageId", resumeDraftDetail.packageId);
+      setSelectedPackageId(resumeDraftDetail.packageId);
+    }
+    if (resumeDraftDetail.weddingSession) {
+      form.setValue("weddingSession", resumeDraftDetail.weddingSession as "morning" | "evening" | "fullday");
+    }
+    if (resumeDraftDetail.weddingType) {
+      form.setValue("weddingType", resumeDraftDetail.weddingType);
+    }
+    if (resumeDraftDetail.sourceOfInformationId) {
+      form.setValue("sourceOfInformationId", resumeDraftDetail.sourceOfInformationId);
+    }
+    // Sales: only prefill if current user is not a locked sales user
+    if (!currentUserIsSales && resumeDraftDetail.salesId) {
+      form.setValue("salesId", resumeDraftDetail.salesId);
+    }
+    if (resumeDraftDetail.eventTime) {
+      setTime(resumeDraftDetail.eventTime);
+    }
+    if (resumeDraftDetail.notes) {
+      setNoteDateEvent(resumeDraftDetail.notes);
+    }
+    if (resumeDraftDetail.customerName) {
+      setCustomerName(resumeDraftDetail.customerName);
+    }
+    // Customer contact fields from Customer relation
+    if (resumeDraftDetail.contactNumbers.length > 0) {
+      setContactNumbers(resumeDraftDetail.contactNumbers);
+    }
+    if (resumeDraftDetail.contactEmail) {
+      setContactEmail(resumeDraftDetail.contactEmail);
+    }
+    if (resumeDraftDetail.contactNikCpp) {
+      setContactNikCpp(resumeDraftDetail.contactNikCpp);
+    }
+    if (resumeDraftDetail.contactNikCpw) {
+      setContactNikCpw(resumeDraftDetail.contactNikCpw);
+    }
+    if (resumeDraftDetail.contactCppAddress) {
+      setContactCppAddress(resumeDraftDetail.contactCppAddress);
+    }
+    if (resumeDraftDetail.contactCpwAddress) {
+      setContactCpwAddress(resumeDraftDetail.contactCpwAddress);
+    }
+    if (resumeDraftDetail.contactBitrixId) {
+      setContactBitrixId(resumeDraftDetail.contactBitrixId);
+    }
+
+    // Clear pending flag so this effect doesn't run again on unrelated re-renders
+    setPendingResumeDraftId(null);
+    setCurrentStep(2);
+    toast.info("Draft dilanjutkan. Semua data step 1 telah dipulihkan.");
+  }, [resumeDraftDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = async () => {
     if (currentStep === 1 && !isStep1Complete) {
@@ -894,44 +969,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                 type="button"
                 className="flex-1 rounded-xl"
                 onClick={() => {
-                  setDraftId(unfinishedDraft.id);
                   setShowResumePrompt(false);
-                  // Prefill step 1 form from draft so user can navigate back and see data.
-                  // Fields available from unfinishedDraft query (step-1 fields persisted to DB).
-                  if (unfinishedDraft.venueId) {
-                    setSelectedVenueId(unfinishedDraft.venueId);
-                    form.setValue("venueId", unfinishedDraft.venueId);
-                  }
-                  if (unfinishedDraft.packageId) {
-                    form.setValue("packageId", unfinishedDraft.packageId);
-                    setSelectedPackageId(unfinishedDraft.packageId);
-                  }
-                  if (unfinishedDraft.weddingSession) {
-                    form.setValue("weddingSession", unfinishedDraft.weddingSession as "morning" | "evening" | "fullday");
-                  }
-                  if (unfinishedDraft.weddingType) {
-                    form.setValue("weddingType", unfinishedDraft.weddingType);
-                  }
-                  if (unfinishedDraft.sourceOfInformationId) {
-                    form.setValue("sourceOfInformationId", unfinishedDraft.sourceOfInformationId);
-                  }
-                  if (unfinishedDraft.eventTime) {
-                    setTime(unfinishedDraft.eventTime);
-                  }
-                  if (unfinishedDraft.notes) {
-                    setNoteDateEvent(unfinishedDraft.notes);
-                  }
-                  // customerName — available from unfinishedDraft.customerName
-                  if (unfinishedDraft.customerName) {
-                    setCustomerName(unfinishedDraft.customerName);
-                  }
-                  // Note: contactNumbers, email, NIK, address, bitrixId, salesId are NOT returned
-                  // by getUserUnfinishedDraft (not in snapshot). These fields will be blank
-                  // when navigating back to step 1. Known limitation — full step1 prefill
-                  // would require a dedicated getBookingDraftDetail query.
-                  // Jump to step 2 (step 1 data already persisted in DB)
-                  setCurrentStep(2);
-                  toast.info("Draft dilanjutkan. Data step 1 sebagian telah diprefill.");
+                  // Trigger full detail fetch via getDraftBookingDetail server action.
+                  // useEffect on resumeDraftDetail will prefill ALL step 1 fields
+                  // (including contactNumbers, email, NIK, address, bitrixId from Customer relation)
+                  // once the query resolves, then advance to step 2.
+                  setPendingResumeDraftId(unfinishedDraft.id);
+                  toast.info("Memuat data draft...");
                 }}
               >
                 Lanjutkan
