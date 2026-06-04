@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import {
   AltArrowLeft,
@@ -15,6 +16,7 @@ import {
   DownloadMinimalistic,
   FileSend,
   ClipboardCheck,
+  Wallet,
 } from "@solar-icons/react";
 import {
   Table,
@@ -26,11 +28,13 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { acknowledgePayment } from "@/actions/payment-ack";
 import type {
   ARBooking,
   ARTermin,
   ARInvoiceStatus,
   ARTerminStatus,
+  ARTerminAckStatus,
 } from "@/types/finance";
 
 interface ARTableProps {
@@ -39,9 +43,12 @@ interface ARTableProps {
   expandedRow: string | null;
   onToggleRow: (id: string) => void;
   onOpenDetail: (booking: ARBooking) => void;
+  onEditKeuangan?: (booking: ARBooking) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  canAck?: boolean; // finance-ar:edit permission
+  canEditKeuangan?: boolean; // booking:edit OR finance-ar:edit
 }
 
 function fmtRp(n: number): string {
@@ -146,6 +153,33 @@ function getInvoiceBadge(status: ARInvoiceStatus): BadgeConfig {
   return map[status] ?? map.unissued;
 }
 
+function getAckBadge(status: ARTerminAckStatus): BadgeConfig {
+  const map: Record<ARTerminAckStatus, BadgeConfig> = {
+    acknowledged: {
+      label: "Acknowledged",
+      bg: "bg-primary",
+      border: "border-primary",
+      text: "text-primary-foreground",
+      Icon: CheckCircle,
+    },
+    pending: {
+      label: "Pending Ack",
+      bg: "bg-secondary",
+      border: "border-border",
+      text: "text-muted-foreground",
+      Icon: MinusCircle,
+    },
+    rejected: {
+      label: "Rejected",
+      bg: "bg-destructive/10",
+      border: "border-destructive/20",
+      text: "text-destructive",
+      Icon: Forbidden,
+    },
+  };
+  return map[status] ?? map.pending;
+}
+
 function StatusBadge({ config }: { config: BadgeConfig }) {
   const { label, bg, border, text, Icon } = config;
   return (
@@ -188,9 +222,12 @@ export function ARTable({
   expandedRow,
   onToggleRow,
   onOpenDetail,
+  onEditKeuangan,
   currentPage,
   totalPages,
   onPageChange,
+  canAck = false,
+  canEditKeuangan = false,
 }: ARTableProps) {
   if (loading) {
     return (
@@ -278,6 +315,9 @@ export function ARTable({
                   isExpanded={expandedRow === booking.id}
                   onToggle={() => onToggleRow(booking.id)}
                   onDetail={() => onOpenDetail(booking)}
+                  onEditKeuangan={onEditKeuangan ? () => onEditKeuangan(booking) : undefined}
+                  canAck={canAck}
+                  canEditKeuangan={canEditKeuangan}
                 />
               ))
             )}
@@ -351,11 +391,17 @@ function BookingRow({
   isExpanded,
   onToggle,
   onDetail,
+  onEditKeuangan,
+  canAck,
+  canEditKeuangan,
 }: {
   booking: ARBooking;
   isExpanded: boolean;
   onToggle: () => void;
   onDetail: () => void;
+  onEditKeuangan?: () => void;
+  canAck: boolean;
+  canEditKeuangan: boolean;
 }) {
   const terminBadge = getTerminBadge(booking.statusTermin);
 
@@ -424,6 +470,15 @@ function BookingRow({
             >
               <Bell weight="BoldDuotone" className="size-4" />
             </button>
+            {canEditKeuangan && onEditKeuangan && (
+              <button
+                className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+                onClick={onEditKeuangan}
+                title="Edit Keuangan"
+              >
+                <Wallet weight="BoldDuotone" className="size-4" />
+              </button>
+            )}
           </div>
         </TableCell>
       </TableRow>
@@ -456,6 +511,9 @@ function BookingRow({
                     <TableHead className="h-11 w-28.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
                       Aging (days)
                     </TableHead>
+                    <TableHead className="h-11 w-36 px-6 py-3 text-xs font-semibold text-muted-foreground">
+                      Piutang Ack
+                    </TableHead>
                     <TableHead className="h-11 w-30 px-6 py-3 text-xs font-semibold text-muted-foreground">
                       Note
                     </TableHead>
@@ -466,7 +524,7 @@ function BookingRow({
                 </TableHeader>
                 <TableBody>
                   {booking.termins.map((termin) => (
-                    <TerminRow key={termin.id} termin={termin} />
+                    <TerminRow key={termin.id} termin={termin} canAck={canAck} />
                   ))}
                 </TableBody>
               </Table>
@@ -480,9 +538,10 @@ function BookingRow({
 
 /* ─── Termin Row (child) ───────────────────────────────────────────────────── */
 
-function TerminRow({ termin }: { termin: ARTermin }) {
+function TerminRow({ termin, canAck }: { termin: ARTermin; canAck: boolean }) {
   const terminBadge = getTerminBadge(termin.status);
   const invoiceBadge = getInvoiceBadge(termin.statusInvoice);
+  const ackBadge = getAckBadge(termin.ackStatus);
 
   return (
     <TableRow className="h-18 bg-background hover:bg-secondary/30">
@@ -507,19 +566,85 @@ function TerminRow({ termin }: { termin: ARTermin }) {
       <TableCell className="px-6 py-4 text-sm text-foreground">
         {termin.agingDays != null ? `+${termin.agingDays}` : "-"}
       </TableCell>
+      <TableCell className="px-6 py-4">
+        <div className="space-y-0.5">
+          <StatusBadge config={ackBadge} />
+          {termin.acknowledgedAt && termin.acknowledgedByName && (
+            <p className="text-xs text-muted-foreground">
+              {termin.acknowledgedByName} · {fmtDate(termin.acknowledgedAt)}
+            </p>
+          )}
+        </div>
+      </TableCell>
       <TableCell className="px-6 py-4 text-sm text-foreground max-w-30 truncate">
         {termin.catatan || "-"}
       </TableCell>
       <TableCell className="p-4">
-        <TerminActions termin={termin} />
+        <TerminActions termin={termin} canAck={canAck} />
       </TableCell>
     </TableRow>
   );
 }
 
+/* ─── Ack Button ────────────────────────────────────────────────────────────── */
+
+function AckButton({ topId }: { topId: string }) {
+  const [isPending, startTransition] = useTransition();
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function handleAck() {
+    setErr(null);
+    startTransition(async () => {
+      const result = await acknowledgePayment(topId);
+      if (result.success) {
+        setDone(true);
+      } else {
+        setErr(result.error);
+      }
+    });
+  }
+
+  if (done) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
+        <CheckCircle weight="BoldDuotone" className="size-3.5" />
+        Acked
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        onClick={handleAck}
+        disabled={isPending}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors",
+          isPending
+            ? "cursor-not-allowed text-muted-foreground"
+            : "cursor-pointer hover:bg-primary hover:text-primary-foreground hover:border-primary text-foreground"
+        )}
+        title="Acknowledge payment"
+      >
+        {isPending ? (
+          <Refresh weight="BoldDuotone" className="size-3.5 animate-spin" />
+        ) : (
+          <CheckCircle weight="BoldDuotone" className="size-3.5" />
+        )}
+        Ack
+      </button>
+      {err && <p className="text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
 /* ─── Termin Actions (context-aware) ───────────────────────────────────────── */
 
-function TerminActions({ termin }: { termin: ARTermin }) {
+function TerminActions({ termin, canAck }: { termin: ARTermin; canAck: boolean }) {
+  // Show Ack button when TOP is paid but not yet acknowledged (Finance can ack)
+  const showAck = canAck && termin.status === "paid" && termin.ackStatus !== "acknowledged";
+
   if (termin.status === "paid") {
     return (
       <div className="flex items-center gap-0.5">
@@ -527,7 +652,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
           title="Detail"
         >
-          <Eye className="size-4" />
+          <Eye weight="BoldDuotone" className="size-4" />
         </button>
         <button
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
@@ -535,6 +660,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
         >
           <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
         </button>
+        {showAck && <AckButton topId={termin.id} />}
       </div>
     );
   }
@@ -552,7 +678,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
           title="Reminder"
         >
-          <Bell className="size-4" />
+          <Bell weight="BoldDuotone" className="size-4" />
         </button>
       </div>
     );
@@ -571,7 +697,7 @@ function TerminActions({ termin }: { termin: ARTermin }) {
           className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
           title="Reminder"
         >
-          <Bell className="size-4" />
+          <Bell weight="BoldDuotone" className="size-4" />
         </button>
       </div>
     );
