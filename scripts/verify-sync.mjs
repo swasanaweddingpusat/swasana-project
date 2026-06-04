@@ -70,25 +70,25 @@ async function main() {
 
     // sales-mice role + super-admin flag
     const salesMice = await tgt`SELECT 1 FROM roles WHERE name = 'sales-mice'`;
-    salesMice.length ? ok("role sales-mice present") : fail("role sales-mice MISSING");
+    if (salesMice.length) ok("role sales-mice present"); else fail("role sales-mice MISSING");
     const sa = await tgt`SELECT "isSystemRole" FROM roles WHERE name = 'super-admin'`;
-    sa[0]?.isSystemRole === true ? ok("super-admin isSystemRole=true") : fail("super-admin isSystemRole NOT true");
+    if (sa[0]?.isSystemRole === true) ok("super-admin isSystemRole=true"); else fail("super-admin isSystemRole NOT true");
 
     // FK orphan checks on target
     const [{ c: orphanPkg }] = await tgt`
       SELECT COUNT(*)::int c FROM package_category_prices p
       WHERE NOT EXISTS (SELECT 1 FROM packages k WHERE k.id = p."packageId")`;
-    orphanPkg === 0 ? ok("no orphan package_category_prices.packageId") : fail(`orphan pcp.packageId=${orphanPkg}`);
+    if (orphanPkg === 0) ok("no orphan package_category_prices.packageId"); else fail(`orphan pcp.packageId=${orphanPkg}`);
 
     const [{ c: orphanCat }] = await tgt`
       SELECT COUNT(*)::int c FROM package_category_prices p
       WHERE p."categoryId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM categories c WHERE c.id = p."categoryId")`;
-    orphanCat === 0 ? ok("no orphan package_category_prices.categoryId") : fail(`orphan pcp.categoryId=${orphanCat}`);
+    if (orphanCat === 0) ok("no orphan package_category_prices.categoryId"); else fail(`orphan pcp.categoryId=${orphanCat}`);
 
     const [{ c: orphanVenue }] = await tgt`
       SELECT COUNT(*)::int c FROM packages p
       WHERE p."venueId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM venues v WHERE v.id = p."venueId")`;
-    orphanVenue === 0 ? ok("no orphan packages.venueId") : fail(`orphan packages.venueId=${orphanVenue}`);
+    if (orphanVenue === 0) ok("no orphan packages.venueId"); else fail(`orphan packages.venueId=${orphanVenue}`);
 
     // categoryId NULL comparison (informational)
     const [{ c: dNull }] = await dev`SELECT COUNT(*)::int c FROM package_category_prices WHERE "categoryId" IS NULL`;
@@ -98,7 +98,7 @@ async function main() {
     // packages schema parity (camelCase cols present)
     const camel = await tgt`SELECT column_name FROM information_schema.columns
       WHERE table_schema='public' AND table_name='packages' AND column_name IN ('sellingPrice','termAndCondition')`;
-    camel.length === 2 ? ok("packages has sellingPrice/termAndCondition") : fail("packages missing camelCase cols");
+    if (camel.length === 2) ok("packages has sellingPrice/termAndCondition"); else fail("packages missing camelCase cols");
 
     console.log("\n" + (pass ? "✅ ALL CHECKS PASSED" : "❌ SOME CHECKS FAILED"));
     process.exit(pass ? 0 : 1);
