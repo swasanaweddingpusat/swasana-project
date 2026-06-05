@@ -69,6 +69,9 @@ export const SETTINGS_MODULES = [
   "settings-role-permission",
   "settings-source-of-information",
   "settings-lead-status",
+  "settings-maintenance-category",
+  "settings-maintenance-priority",
+  "settings-maintenance-status",
   "customers",
 ] as const;
 
