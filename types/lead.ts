@@ -51,6 +51,7 @@ export type LeadListItem = {
   category: "WEDDINGS" | "MICE";
   weddingSession: WeddingSession | null;
   bitrixId: string | null;
+  instansi: string | null;
   status: Pick<LeadStatusRow, "id" | "name" | "color" | "isFinal" | "isSystem">;
   venue: { id: string; name: string } | null;
   package: { id: string; packageName: string } | null;

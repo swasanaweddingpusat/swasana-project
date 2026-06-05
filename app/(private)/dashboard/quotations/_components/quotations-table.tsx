@@ -41,7 +41,13 @@ import {
   Eye,
   TrashBinTrash,
   Refresh,
+  Filter,
 } from "@solar-icons/react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useQuotations, useDeleteQuotation } from "@/hooks/use-quotations";
 import type { QuotationListRow } from "@/lib/queries/quotations";
@@ -392,27 +398,93 @@ export function QuotationsTable() {
     count: 0, // server doesn't return per-status counts in list query
   }));
 
+  const hasActiveFilter = statusFilter !== "all";
+
+  const FilterPopoverContent = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground">Filter</p>
+        {hasActiveFilter && (
+          <button
+            type="button"
+            onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Status</label>
+        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter status quotation">
+            <SelectValue placeholder="Semua Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Status</SelectItem>
+            {statusCounts.map((s) => (
+              <SelectItem key={s.status} value={s.status}>
+                <span className="flex items-center gap-2">
+                  <StatusDot className={s.dotClass} />
+                  {s.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+
+  const FilterTriggerIcon = (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className={cn("shrink-0 relative", hasActiveFilter && "border-primary/50")}
+      aria-label="Filter quotation"
+    >
+      <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+      {hasActiveFilter && (
+        <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+          1
+        </span>
+      )}
+    </Button>
+  );
+
   return (
     <>
       <Card>
         <CardContent className="p-0">
-          {/* Header */}
-          <div className="flex flex-col gap-3 px-4 sm:px-6 pb-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
-            <div className="flex items-center gap-3">
-              <h2 className="text-base font-bold text-foreground">
-                List Quotations
-              </h2>
-              <span className="text-sm font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full">
+          {/* ════════════════════════════════════════════════════════════════
+              MOBILE TOOLBAR  (visible < sm)
+              Row 1: [count badge] ──── [filter icon] [refresh icon] [add button]
+              Row 2: [search full-width]
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="flex flex-col gap-2 px-4 pb-3 border-b sm:hidden">
+            {/* Row 1 */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
                 {isLoading ? "..." : total}
-                {" quotations"}
               </span>
+              <div className="flex-1" />
+              {/* Filter popover */}
+              <Popover>
+                <PopoverTrigger render={FilterTriggerIcon} />
+                <PopoverContent align="end" className="w-64 p-3">
+                  {FilterPopoverContent}
+                </PopoverContent>
+              </Popover>
+              {/* Refresh */}
               <Button
-                variant="ghost"
+                type="button"
+                variant="outline"
                 size="icon"
                 onClick={() => refetch()}
                 disabled={isFetching}
                 aria-label="Refresh daftar quotation"
-                className="h-8 w-8 shrink-0"
+                className="shrink-0"
               >
                 <Refresh
                   weight="BoldDuotone"
@@ -420,60 +492,107 @@ export function QuotationsTable() {
                   className={cn("h-4 w-4", isFetching && "animate-spin")}
                 />
               </Button>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-              {/* Status filter */}
-              <Select
-                value={statusFilter}
-                onValueChange={handleStatusFilterChange}
-              >
-                <SelectTrigger
-                  className="h-9 w-full sm:w-40 text-sm"
-                  aria-label="Filter status quotation"
-                >
-                  <SelectValue placeholder="Semua Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    Semua Status
-                  </SelectItem>
-                  {statusCounts.map((s) => (
-                    <SelectItem key={s.status} value={s.status}>
-                      <span className="flex items-center gap-2">
-                        <StatusDot className={s.dotClass} />
-                        {s.label} ({s.count})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Search */}
-              <div className="relative">
-                <Magnifer
-                  weight="BoldDuotone"
-                  aria-hidden="true"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-                />
-                <Input
-                  type="search"
-                  aria-label="Cari quotation"
-                  placeholder="Cari quotation..."
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="h-9 pl-9 w-full sm:w-52"
-                />
-              </div>
-
-              {/* Add button */}
-              <Button className="h-9" onClick={handleAdd}>
-                <AddCircle weight="BoldDuotone" className="h-4 w-4" aria-hidden="true" />
-                Tambah Quotation
+              {/* Add */}
+              <Button size="icon" onClick={handleAdd} className="shrink-0" aria-label="Tambah quotation">
+                <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
               </Button>
             </div>
+            {/* Row 2: Search full-width */}
+            <div className="relative w-full">
+              <Magnifer
+                weight="BoldDuotone"
+                aria-hidden="true"
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              />
+              <Input
+                type="search"
+                aria-label="Cari quotation"
+                placeholder="Cari quotation..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                className="pl-9 w-full"
+              />
+            </div>
+          </div>
+
+          {/* ════════════════════════════════════════════════════════════════
+              DESKTOP TOOLBAR  (visible sm+)
+              Single row: [count] | [refresh] [filter] [search] →→ [add]
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="hidden sm:flex items-center gap-2 px-6 pb-3 border-b">
+            {/* Count badge */}
+            <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full shrink-0">
+              {isLoading ? "..." : total} quotations
+            </span>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-border shrink-0 mx-1" aria-hidden="true" />
+
+            {/* Refresh */}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              aria-label="Refresh daftar quotation"
+              title="Muat ulang"
+              className="shrink-0"
+            >
+              <Refresh
+                weight="BoldDuotone"
+                aria-hidden="true"
+                className={cn("h-4 w-4", isFetching && "animate-spin")}
+              />
+            </Button>
+
+            {/* Filter popover */}
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn("h-9 gap-1.5 shrink-0", hasActiveFilter && "border-primary/50")}
+                    aria-label="Filter quotation"
+                  >
+                    <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                    Filter
+                    {hasActiveFilter && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                        1
+                      </span>
+                    )}
+                  </Button>
+                }
+              />
+              <PopoverContent align="end" className="w-64 p-3">
+                {FilterPopoverContent}
+              </PopoverContent>
+            </Popover>
+
+            {/* Search */}
+            <div className="relative">
+              <Magnifer
+                weight="BoldDuotone"
+                aria-hidden="true"
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              />
+              <Input
+                type="search"
+                aria-label="Cari quotation"
+                placeholder="Cari quotation..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                className="pl-9 w-48"
+              />
+            </div>
+
+            {/* Add — pushed to far right */}
+            <Button onClick={handleAdd} className="ml-auto shrink-0">
+              <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+              Tambah Quotation
+            </Button>
           </div>
 
           {/* Loading / Error / Empty — shared state for both layouts */}

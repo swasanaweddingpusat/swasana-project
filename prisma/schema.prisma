@@ -1170,6 +1170,7 @@ model Lead {
   weddingSession  WeddingSession?
 
   bitrixId       String?
+  instansi       String?
 
   // FK relations
   venueId               String?

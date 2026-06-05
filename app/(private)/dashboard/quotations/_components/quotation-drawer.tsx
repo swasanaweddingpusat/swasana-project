@@ -59,7 +59,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   getWeddingTimeRange,
@@ -775,6 +774,7 @@ export function QuotationDrawer({
   // ── Mutation hooks ───────────────────────────────────────────────────────
   const createQuotation = useCreateQuotation();
   const updateQuotation = useUpdateQuotation();
+  const isPending = createQuotation.isPending || updateQuotation.isPending;
 
   // Expanded state untuk accordion items (step 2)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -1650,25 +1650,24 @@ export function QuotationDrawer({
                       render={({ field }) => (
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>Tipe Booking *</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={(v) => {
-                              field.onChange(v);
-                              // Reset event type saat category berubah
-                              form.setValue("eventTypeId", "");
-                              form.setValue("eventTypeName", "");
-                            }}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Pilih tipe booking..." />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="WEDDINGS">Wedding</SelectItem>
-                              <SelectItem value="MICE">MICE</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <SearchableSelect
+                              options={[
+                                { id: "WEDDINGS", name: "Wedding" },
+                                { id: "MICE", name: "MICE" },
+                              ]}
+                              value={field.value}
+                              onChange={(v) => {
+                                field.onChange(v);
+                                // Reset event type saat category berubah
+                                form.setValue("eventTypeId", "");
+                                form.setValue("eventTypeName", "");
+                              }}
+                              placeholder="Pilih tipe booking..."
+                              searchPlaceholder="Cari tipe booking..."
+                              emptyText="Tidak ada opsi"
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1815,40 +1814,23 @@ export function QuotationDrawer({
                         return (
                           <FormItem className="w-full">
                             <FormLabel className={LABEL_CLASS}>Session *</FormLabel>
-                            <Select
-                              value={field.value}
-                              onValueChange={(v) =>
-                                field.onChange(v as WeddingSession)
-                              }
-                              disabled={!watchedVenueId || !watchedEventDate}
-                            >
-                              <FormControl>
-                                <SelectTrigger
-                                  className={cn(
-                                    "w-full",
-                                    (!watchedVenueId || !watchedEventDate) &&
-                                      "opacity-60",
-                                  )}
-                                >
-                                  <SelectValue
-                                    placeholder={
-                                      !watchedVenueId
-                                        ? "Pilih venue dulu"
-                                        : !watchedEventDate
-                                          ? "Pilih tanggal dulu"
-                                          : "Pilih session..."
-                                    }
-                                  />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {sessions.map((s) => (
-                                  <SelectItem key={s} value={s}>
-                                    {SESSION_LABELS[s]}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <FormControl>
+                              <SearchableSelect
+                                options={sessions.map((s) => ({ id: s, name: SESSION_LABELS[s] }))}
+                                value={field.value}
+                                onChange={(v) => field.onChange(v as WeddingSession)}
+                                placeholder={
+                                  !watchedVenueId
+                                    ? "Pilih venue dulu"
+                                    : !watchedEventDate
+                                      ? "Pilih tanggal dulu"
+                                      : "Pilih session..."
+                                }
+                                searchPlaceholder="Cari session..."
+                                emptyText="Tidak ada session tersedia"
+                                disabled={!watchedVenueId || !watchedEventDate}
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         );
@@ -2387,10 +2369,10 @@ export function QuotationDrawer({
             ) : (
               <Button
                 onClick={form.handleSubmit(onSubmit)}
-                disabled={!isStep4Complete}
+                disabled={!isStep4Complete || isPending}
                 className="flex-[60%] cursor-pointer"
               >
-                {isEdit ? "Simpan" : "Tambah"}
+                {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}
               </Button>
             )}
           </div>

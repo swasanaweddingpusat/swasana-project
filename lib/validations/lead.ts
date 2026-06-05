@@ -14,7 +14,7 @@ export const contactNumberSchema = z.object({
 
 // ─── Lead Schemas ─────────────────────────────────────────────────────────────
 
-export const createLeadSchema = z.object({
+const baseLeadSchema = z.object({
   name: z.string().trim().min(1, "Nama wajib diisi").max(200),
   contactNumbers: z
     .array(contactNumberSchema)
@@ -27,22 +27,38 @@ export const createLeadSchema = z.object({
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(2000).optional(),
+  instansi: z.string().trim().max(200).optional(),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
-  venueId: z.string().min(1, "Venue wajib dipilih"),
+  venueId: z.string().optional(),
   packageId: z.string().optional().nullable(),
   eventTypeId: z.string().min(1, "Event type wajib dipilih"),
   sourceOfInformationId: z.string().min(1, "Sumber informasi wajib dipilih"),
   assignedToId: z.string().min(1, "Assign ke sales wajib dipilih"),
   statusId: z.string().min(1, "Status wajib dipilih"),
-  weddingSession: z.enum(["morning", "evening", "fullday"], {
-    error: "Session wajib dipilih",
-  }),
+  weddingSession: z.enum(["morning", "evening", "fullday"]).optional(),
   bitrixId: z.string().trim().max(100).optional().nullable(),
 });
 
-export const updateLeadSchema = createLeadSchema.partial().extend({
-  id: z.string().min(1),
-});
+// Weddings require a session; MICE does not.
+const requireWeddingSession = (
+  data: { category?: "WEDDINGS" | "MICE"; weddingSession?: "morning" | "evening" | "fullday" },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.category === "WEDDINGS" && !data.weddingSession) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["weddingSession"],
+      message: "Session wajib dipilih untuk wedding",
+    });
+  }
+};
+
+export const createLeadSchema = baseLeadSchema.superRefine(requireWeddingSession);
+
+export const updateLeadSchema = baseLeadSchema
+  .partial()
+  .extend({ id: z.string().min(1) })
+  .superRefine(requireWeddingSession);
 
 export const leadFilterSchema = z.object({
   search: z.string().optional(),

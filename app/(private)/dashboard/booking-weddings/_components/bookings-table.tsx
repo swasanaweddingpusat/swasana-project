@@ -10,10 +10,18 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle, UsersGroupRounded } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
 const RefreshCw = Refresh;
 const RotateCcw = Refresh;
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useTransferBookingManager } from "@/hooks/use-bookings";
 import { useManagers } from "@/hooks/use-managers";
@@ -409,47 +417,175 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     setDeleteTarget(null);
   }
 
+  const hasVenueFilter = venueFilter !== "" && venueFilter !== "all";
+
+  const VenueFilterPopoverContent = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground">Filter</p>
+        {hasVenueFilter && (
+          <button
+            type="button"
+            onClick={() => { setVenueFilter(""); setCurrentPage(1); }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Venue</label>
+        <Select
+          value={venueFilter || "all"}
+          onValueChange={(val) => { setVenueFilter(val === "all" ? "" : val); setCurrentPage(1); }}
+        >
+          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter venue booking">
+            <SelectValue placeholder="Semua Venue" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Venue</SelectItem>
+            {venues.map((v) => (
+              <SelectItem key={v.id} value={v.id}>
+                {v.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <Card>
         <CardContent className="p-0">
-          {/* Header */}
-          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'justify-between', 'px-4', 'sm:px-6', 'pb-4', 'gap-3')}>
-            <div className={cn('flex', 'items-center', 'gap-3')}>
-              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Wedding Bookings</h2>
-              <span className={cn('text-foreground', 'text-sm', 'rounded-full', 'border', 'border-border', 'bg-muted', 'px-3', 'py-1')}>
-                {totalBookings} Bookings
+          {/* ════════════════════════════════════════════════════════════════
+              MOBILE TOOLBAR  (visible < sm)
+              Row 1: [count badge] ──── [filter icon] [refresh icon] [add button]
+              Row 2: [search full-width]
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="flex flex-col gap-2 px-4 pb-3 border-b sm:hidden">
+            {/* Row 1 */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
+                {totalBookings}
               </span>
-              <Button variant="ghost" size="sm" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'hidden', 'sm:flex', 'items-center', 'gap-1.5')}>
-                <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground", isFetching && "animate-spin")} />
-                <span className="text-xs">Refresh</span>
-              </Button>
-            </div>
-            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'gap-2')}>
-              <div className={cn('relative', 'w-full', 'sm:flex-1')}>
-                <Search weight="BoldDuotone" className={cn('absolute', 'left-3', 'top-1/2', '-translate-y-1/2', 'h-4', 'w-4', 'text-muted-foreground')} />
-                <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className={cn('pl-9', 'w-full', 'sm:w-55')} />
-              </div>
-              <div className={cn('flex', 'items-center', 'gap-2')}>
-                <SearchableSelect
-                  options={[{ id: "", name: "Semua Venue" }, ...venues.map((v) => ({ id: v.id, name: v.name }))]}
-                  value={venueFilter}
-                  onChange={(val) => { setVenueFilter(val); setCurrentPage(1); }}
-                  placeholder="Filter venue..."
-                  searchPlaceholder="Cari venue..."
-                  className="w-full sm:w-48"
+              <div className="flex-1" />
+              {/* Filter popover */}
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className={cn("shrink-0 relative", hasVenueFilter && "border-primary/50")}
+                      aria-label="Filter booking"
+                    >
+                      <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                      {hasVenueFilter && (
+                        <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                          1
+                        </span>
+                      )}
+                    </Button>
+                  }
                 />
-                <Button variant="ghost" size="icon" onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }} disabled={isFetching} className={cn('cursor-pointer', 'sm:hidden', 'shrink-0')}>
-                  <RefreshCw weight="BoldDuotone" className={cn("h-4 w-4 text-muted-foreground", isFetching && "animate-spin")} />
+                <PopoverContent align="end" className="w-72 p-3">
+                  {VenueFilterPopoverContent}
+                </PopoverContent>
+              </Popover>
+              {/* Refresh */}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+                disabled={isFetching}
+                aria-label="Muat ulang data booking"
+                className="shrink-0"
+              >
+                <Refresh weight="BoldDuotone" aria-hidden="true" className={cn("h-4 w-4", isFetching && "animate-spin")} />
+              </Button>
+              {/* Add */}
+              {can("booking", "create") && (
+                <Button size="icon" onClick={() => openBookingDrawer()} className="shrink-0" aria-label="Tambah booking">
+                  <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                 </Button>
-                {can("booking", "create") && (
-                  <Button onClick={() => openBookingDrawer()} className={cn('cursor-pointer', 'shrink-0')}>
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                    <span className={cn('hidden', 'sm:inline', 'ml-1')}>Tambah Booking</span>
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
+            {/* Row 2: Search full-width */}
+            <div className="relative w-full">
+              <Search weight="BoldDuotone" aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 w-full" />
+            </div>
+          </div>
+
+          {/* ════════════════════════════════════════════════════════════════
+              DESKTOP TOOLBAR  (visible sm+)
+              Single row: [count] | [refresh] [filter] [search] →→ [add]
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="hidden sm:flex items-center gap-2 px-6 pb-3 border-b">
+            {/* Count badge */}
+            <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full shrink-0">
+              {totalBookings} Bookings
+            </span>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-border shrink-0 mx-1" aria-hidden="true" />
+
+            {/* Refresh */}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+              disabled={isFetching}
+              aria-label="Muat ulang data booking"
+              title="Muat ulang"
+              className="shrink-0"
+            >
+              <Refresh weight="BoldDuotone" aria-hidden="true" className={cn("h-4 w-4", isFetching && "animate-spin")} />
+            </Button>
+
+            {/* Filter popover */}
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn("h-9 gap-1.5 shrink-0", hasVenueFilter && "border-primary/50")}
+                    aria-label="Filter booking"
+                  >
+                    <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                    Filter
+                    {hasVenueFilter && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                        1
+                      </span>
+                    )}
+                  </Button>
+                }
+              />
+              <PopoverContent align="end" className="w-72 p-3">
+                {VenueFilterPopoverContent}
+              </PopoverContent>
+            </Popover>
+
+            {/* Search */}
+            <div className="relative">
+              <Search weight="BoldDuotone" aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Cari booking..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 w-52" />
+            </div>
+
+            {/* Add — pushed to far right */}
+            {can("booking", "create") && (
+              <Button onClick={() => openBookingDrawer()} className="ml-auto shrink-0 cursor-pointer">
+                <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                Tambah Booking
+              </Button>
+            )}
           </div>
 
           {/* Table */}

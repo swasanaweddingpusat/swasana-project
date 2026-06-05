@@ -6,9 +6,12 @@ import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 
+const EVENT_CATEGORIES = ["WEDDINGS", "MICE"] as const;
+
 const eventTypeSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi").max(100),
   code: z.string().min(1, "Kode wajib diisi").max(10).transform((v) => v.trim().toUpperCase()),
+  category: z.enum(EVENT_CATEGORIES, { error: "Kategori wajib dipilih" }),
 });
 
 export async function createEventType(data: unknown) {

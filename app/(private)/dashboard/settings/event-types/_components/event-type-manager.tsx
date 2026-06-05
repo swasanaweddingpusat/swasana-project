@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AddCircle, PenNewSquare, TrashBinTrash, Refresh } from "@solar-icons/react";
@@ -15,6 +16,29 @@ import { createEventType, updateEventType, deleteEventType } from "@/actions/eve
 import { usePermissions } from "@/hooks/use-permissions";
 import type { EventTypesResult, EventTypeItem } from "@/lib/queries/event-types";
 import { cn } from "@/lib/utils";
+
+type EventCategory = "WEDDINGS" | "MICE";
+
+const CATEGORY_LABEL: Record<EventCategory, string> = {
+  WEDDINGS: "Wedding",
+  MICE: "MICE",
+};
+
+function CategoryBadge({ category }: { category: EventCategory }): React.JSX.Element {
+  const isMice = category === "MICE";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        isMice
+          ? "bg-secondary text-secondary-foreground"
+          : "bg-primary/10 text-primary"
+      )}
+    >
+      {CATEGORY_LABEL[category]}
+    </span>
+  );
+}
 
 interface Props {
   initialData: EventTypesResult;
@@ -29,6 +53,7 @@ export function EventTypeManager({ initialData }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [formName, setFormName] = useState("");
   const [formCode, setFormCode] = useState("");
+  const [formCategory, setFormCategory] = useState<EventCategory>("WEDDINGS");
   const [editingItem, setEditingItem] = useState<EventTypeItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<EventTypeItem | null>(null);
@@ -65,6 +90,7 @@ export function EventTypeManager({ initialData }: Props) {
     setEditingItem(null);
     setFormName("");
     setFormCode("");
+    setFormCategory("WEDDINGS");
     setFormOpen(true);
   }
 
@@ -72,13 +98,14 @@ export function EventTypeManager({ initialData }: Props) {
     setEditingItem(item);
     setFormName(item.name);
     setFormCode(item.code);
+    setFormCategory(item.category as EventCategory);
     setFormOpen(true);
   }
 
   async function handleSave() {
     if (!formName.trim() || !formCode.trim()) return;
     setSaving(true);
-    const payload = { name: formName.trim(), code: formCode.trim() };
+    const payload = { name: formName.trim(), code: formCode.trim(), category: formCategory };
     const result = editingItem
       ? await updateEventType(editingItem.id, payload)
       : await createEventType(payload);
@@ -87,7 +114,7 @@ export function EventTypeManager({ initialData }: Props) {
     if (!result.success) { toast.error(result.error); return; }
 
     if (editingItem) {
-      setItems((prev) => prev.map((i) => i.id === editingItem.id ? { ...i, name: payload.name, code: payload.code.toUpperCase() } : i));
+      setItems((prev) => prev.map((i) => i.id === editingItem.id ? { ...i, name: payload.name, code: payload.code.toUpperCase(), category: payload.category } : i));
       toast.success("Berhasil diperbarui.");
     } else {
       const newItem = result.item as EventTypeItem;
@@ -143,13 +170,14 @@ export function EventTypeManager({ initialData }: Props) {
                 paginatedItems.map((item, idx) => (
                   <Card key={item.id} className="rounded-lg border bg-card shadow-none">
                     <CardContent className="px-3 py-2.5 flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex items-center gap-2">
+                      <div className="min-w-0 flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium text-foreground truncate">
                           {(currentPage - 1) * ROWS_PER_PAGE + idx + 1}. {item.name}
                         </p>
                         <span className={cn("inline-flex", "items-center", "rounded-md", "bg-secondary", "px-2", "py-0.5", "text-xs", "font-mono", "font-medium", "shrink-0")}>
                           {item.code}
                         </span>
+                        <CategoryBadge category={item.category as EventCategory} />
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {(can("settings-event-types", "edit") || isAdmin) && (
@@ -177,13 +205,14 @@ export function EventTypeManager({ initialData }: Props) {
                     <TableHead className={cn("w-12", "px-4", "sm:px-6")}>#</TableHead>
                     <TableHead>Nama</TableHead>
                     <TableHead className="w-28">Kode PO</TableHead>
+                    <TableHead className="w-32">Kategori</TableHead>
                     <TableHead className="w-24 text-right pr-6">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className={cn("text-center", "py-8", "text-muted-foreground")}>
+                      <TableCell colSpan={5} className={cn("text-center", "py-8", "text-muted-foreground")}>
                         Belum ada data.
                       </TableCell>
                     </TableRow>
@@ -198,6 +227,9 @@ export function EventTypeManager({ initialData }: Props) {
                           <span className={cn("inline-flex", "items-center", "rounded-md", "bg-secondary", "px-2", "py-0.5", "text-xs", "font-mono", "font-medium")}>
                             {item.code}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          <CategoryBadge category={item.category as EventCategory} />
                         </TableCell>
                         <TableCell>
                           <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
@@ -254,6 +286,18 @@ export function EventTypeManager({ initialData }: Props) {
                 className="font-mono uppercase"
               />
               <p className={cn("text-xs", "text-muted-foreground")}>Kode ini akan dipakai di nomor PO.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Kategori</Label>
+              <Select value={formCategory} onValueChange={(v) => setFormCategory(v as EventCategory)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="WEDDINGS">Wedding</SelectItem>
+                  <SelectItem value="MICE">MICE</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className={cn("flex", "gap-3")}>
               <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className={cn("flex-1", "cursor-pointer")}>

@@ -49,7 +49,7 @@ export function Drawer({
   childrenClassName,
 }: DrawerProps) {
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose?.(); }}>
+    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose?.(); }} disablePointerDismissal>
       <SheetContent
         className={cn(
           `flex py-6 px-5 flex-col gap-6`,

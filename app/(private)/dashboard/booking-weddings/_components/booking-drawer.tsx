@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
@@ -197,6 +197,22 @@ function mapEventTypeNameToWeddingType(name: string | null | undefined): string 
   return null;
 }
 
+// ─── localStorage helpers for wedding draft pointer ──────────────────────────
+
+const WEDDING_DRAFT_LS_KEY = "swasana_wedding_draft_id";
+
+function readWeddingDraftFromStorage(): string | null {
+  try { return localStorage.getItem(WEDDING_DRAFT_LS_KEY); } catch { return null; }
+}
+function saveWeddingDraftToStorage(id: string) {
+  try { localStorage.setItem(WEDDING_DRAFT_LS_KEY, id); } catch { /* noop */ }
+}
+function clearWeddingDraftFromStorage() {
+  try { localStorage.removeItem(WEDDING_DRAFT_LS_KEY); } catch { /* noop */ }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, initialDraftId }: BookingDrawerProps) {
   // Keep legacy createBooking for backwards compat (used as final fallback if draft flow fails)
   const createMut = useCreateBooking();
@@ -212,6 +228,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   // Guard against double-click creating two drafts before the first mutateAsync resolves.
   const isCreatingDraftRef = useRef(false);
+
+  // ── Optimistic save state ──
+  // Tracks whether a background save (step 2/3) is in-flight or has failed.
+  // While hasPendingWriteError is true the Continue/Submit button is blocked.
+  const [hasPendingWriteError, setHasPendingWriteError] = useState(false);
+  const [pendingWriteErrorMsg, setPendingWriteErrorMsg] = useState<string | null>(null);
+  // Holds the retry thunk for the last failed background save — calling it re-fires the save.
+  const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
   const { user } = useCurrentUser();
 
@@ -389,8 +413,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setTakeoutPrices({}); setCategoryToggles({}); setTime("");
     setDraftId(null);
     setPendingResumeDraftId(null);
+    setHasPendingWriteError(false);
+    setPendingWriteErrorMsg(null);
+    retryWriteRef.current = null;
     sigSalesRef.current?.clear();
-    // Migrate any leftover localStorage draft artifacts
+    // Clear any leftover localStorage draft pointer
+    clearWeddingDraftFromStorage();
+    // Migrate any residual old-system localStorage artifacts
     clearLocalDraftArtifacts();
   }
 
@@ -398,6 +427,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (open) {
       setBonusPickerOpen(false);
       setShowResumePrompt(false);
+      setHasPendingWriteError(false);
+      setPendingWriteErrorMsg(null);
+      retryWriteRef.current = null;
 
       // Deal flow: initialDraftId injected — resume that draft, no resume prompt.
       // Prefill step 1 fields from lead so they're populated when user navigates
@@ -405,6 +437,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       if (initialDraftId) {
         resetToClean();
         setDraftId(initialDraftId);
+        saveWeddingDraftToStorage(initialDraftId);
         // Always prefill step 1 form from lead so data is visible if user goes back
         if (prefillLead) {
           setCustomerName(prefillLead.name);
@@ -465,18 +498,34 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
-      // Clean slate — resume prompt will show separately via useEffect on unfinishedDraft
+      // Clean slate — check localStorage for a draft pointer from a previous session.
+      // If found, it means the user had an active draft and refreshed the page.
+      // We don't prefill form fields from localStorage (data stays in DB); we just
+      // restore the draftId pointer so the resume prompt can offer to continue it.
+      // The regular DB-based resume prompt (useUnfinishedDraft) will still fire and
+      // is the authoritative source of truth — localStorage merely prevents the prompt
+      // from disappearing when draftId is already set in state.
       resetToClean();
+      const storedDraftId = readWeddingDraftFromStorage();
+      if (storedDraftId) {
+        // Set the draftId immediately so we skip re-creation on step 1 "Continue".
+        // The resume prompt (showResumePrompt) will show via the unfinishedDraft effect.
+        setDraftId(storedDraftId);
+      }
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show resume prompt when unfinished draft is found after drawer opens
-  // (skip if initialDraftId is already injected — that IS the draft to use)
+  // Show resume prompt when unfinished draft is found after drawer opens.
+  // Also shows when localStorage restored a draftId (page refresh scenario) —
+  // in that case draftId is already set but we still want to let the user choose
+  // to continue or discard.
+  // Skip if initialDraftId was injected by the Deal flow (that IS the draft to use
+  // and the user already confirmed it from the Deal modal).
   useEffect(() => {
-    if (open && !prefillLead && !initialDraftId && unfinishedDraft && !draftId) {
+    if (open && !prefillLead && !initialDraftId && unfinishedDraft) {
       setShowResumePrompt(true);
     }
-  }, [open, prefillLead, initialDraftId, unfinishedDraft, draftId]);
+  }, [open, prefillLead, initialDraftId, unfinishedDraft]);
 
   // Note: localStorage auto-save draft removed — DB-backed draft is created on Step 1 "Continue".
   // Draft ID is tracked in `draftId` state and updated per step.
@@ -669,7 +718,59 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     toast.info("Draft dilanjutkan. Semua data step 1 telah dipulihkan.");
   }, [resumeDraftDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Background save helper with 1 automatic retry ────────────────────────
+  async function backgroundSave(
+    saveFn: () => Promise<{ success: boolean; error?: string }>,
+    errorLabel: string,
+  ): Promise<void> {
+    const attempt = async () => {
+      const result = await saveFn();
+      if (!result.success) throw new Error(result.error ?? errorLabel);
+    };
+
+    try {
+      await attempt();
+      // Save succeeded — clear any previously recorded error
+      setHasPendingWriteError(false);
+      setPendingWriteErrorMsg(null);
+      retryWriteRef.current = null;
+    } catch {
+      // First failure → retry once automatically
+      try {
+        await attempt();
+        setHasPendingWriteError(false);
+        setPendingWriteErrorMsg(null);
+        retryWriteRef.current = null;
+      } catch (err2) {
+        // Both attempts failed — surface error and block continue
+        const msg = err2 instanceof Error ? err2.message : errorLabel;
+        setHasPendingWriteError(true);
+        setPendingWriteErrorMsg(msg);
+        // Store retry thunk so the user can re-trigger by clicking Continue again
+        retryWriteRef.current = async () => {
+          try {
+            await attempt();
+            setHasPendingWriteError(false);
+            setPendingWriteErrorMsg(null);
+            retryWriteRef.current = null;
+          } catch (err3) {
+            const retryMsg = err3 instanceof Error ? err3.message : errorLabel;
+            setPendingWriteErrorMsg(retryMsg);
+          }
+        };
+        toast.error(`Gagal menyimpan: ${msg}. Perbaiki koneksi dan coba Continue lagi.`);
+      }
+    }
+  }
+
   const handleNext = async () => {
+    // If a prior background save failed, clicking Continue fires the retry instead
+    // of advancing. This ensures the blocked step resolves before we move on.
+    if (hasPendingWriteError && retryWriteRef.current) {
+      await retryWriteRef.current();
+      return;
+    }
+
     if (currentStep === 1 && !isStep1Complete) {
       if (!wSalesId) { toast.error("Sales PIC wajib dipilih."); return; }
       if (!wSourceOfInformationId) { toast.error("Sumber informasi wajib diisi."); return; }
@@ -678,9 +779,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // Step 1 → 2: Create DB draft
+    // Step 1 → 2: Create DB draft (await — draftId doesn't exist yet)
     if (currentStep === 1) {
+      // Generate client-side draftId for idempotency. If we already have one
+      // (resumed draft OR localStorage-restored pointer), reuse it.
+      const pendingDraftId = draftId ?? crypto.randomUUID();
+
       const step1Payload = {
+        id: pendingDraftId,
         bookingDate: form.getValues("bookingDate"),
         category: "WEDDINGS" as const,
         venueId: form.getValues("venueId"),
@@ -699,25 +805,24 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         contactCppAddress,
         contactCpwAddress,
         contactBitrixId: isBitrixSource ? contactBitrixId : "",
-        // Time & note are step 1 fields that must be persisted to DB immediately.
         eventTime: time || null,
         notes: noteDateEvent || null,
         specialBonusName: specialBonusName || null,
         specialBonusAmount: specialBonusAmount || null,
       };
 
-      // If we already have a draftId (resumed draft), skip re-creation.
       // isCreatingDraftRef guards against double-click triggering two creates
-      // before the first mutateAsync resolves (the button isPending state catches
-      // subsequent clicks once re-render fires, but the very first simultaneous
-      // click may slip through the synchronous guard).
-      if (!draftId && !isCreatingDraftRef.current) {
+      // before the first mutateAsync resolves.
+      if (!isCreatingDraftRef.current) {
         isCreatingDraftRef.current = true;
         const result = await createDraftMut.mutateAsync(step1Payload).finally(() => {
           isCreatingDraftRef.current = false;
         });
         if (!result.success) { toast.error(result.error ?? "Gagal membuat draft."); return; }
-        setDraftId(result.draftId ?? null);
+        const confirmedDraftId = result.draftId ?? pendingDraftId;
+        setDraftId(confirmedDraftId);
+        // Persist the draftId to localStorage so a page refresh can recover it
+        saveWeddingDraftToStorage(confirmedDraftId);
       }
 
       setCurrentStep(2);
@@ -729,13 +834,16 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // Step 2 → 3: Save package/takeout data to draft
+    // Step 2 → 3: Optimistic advance, save package/takeout data in background
     if (currentStep === 2) {
       setSelectedPackagePrice(step2Price);
       if (step2Price !== lastAllocatedPrice) {
         allocatePrice(step2Price, specialBonusAmount);
         setLastAllocatedPrice(step2Price);
       }
+
+      // Advance immediately (optimistic)
+      setCurrentStep(3);
 
       if (draftId) {
         const step2Payload = {
@@ -747,11 +855,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
           })),
         };
-        const result = await updateStep2Mut.mutateAsync({ draftId, data: step2Payload });
-        if (!result.success) { toast.error(result.error ?? "Gagal menyimpan data paket."); return; }
+        const capturedDraftId = draftId;
+        void backgroundSave(
+          () => updateStep2Mut.mutateAsync({ draftId: capturedDraftId, data: step2Payload }),
+          "Gagal menyimpan data paket",
+        );
       }
 
-      setCurrentStep(3);
       return;
     }
 
@@ -771,7 +881,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
-      // Save term of payments to draft
+      // Advance immediately (optimistic)
+      setCurrentStep(4);
+
+      // Save term of payments in background
       if (draftId) {
         const step3Payload = {
           paymentMethodId: form.getValues("paymentMethodId") || null,
@@ -785,11 +898,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             paymentStatus: t.paymentStatus,
           })),
         };
-        const result = await updateStep3Mut.mutateAsync({ draftId, data: step3Payload });
-        if (!result.success) { toast.error(result.error ?? "Gagal menyimpan term of payment."); return; }
+        const capturedDraftId = draftId;
+        void backgroundSave(
+          () => updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload }),
+          "Gagal menyimpan term of payment",
+        );
       }
 
-      setCurrentStep(4);
       return;
     }
 
@@ -863,6 +978,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       }
 
       clearLocalDraftArtifacts();
+      clearWeddingDraftFromStorage();
       toast.success("Booking berhasil dibuat.");
       onSuccess?.();
       onOpenChange(false);
@@ -914,6 +1030,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     }
 
     clearLocalDraftArtifacts();
+    clearWeddingDraftFromStorage();
     toast.success("Booking berhasil dibuat.");
     onSuccess?.();
     onOpenChange(false);
@@ -927,12 +1044,18 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     finalizeMut.isPending ||
     createMut.isPending;
 
+  // Continue is disabled if:
+  // - The current step's required fields aren't complete (step 1/2/3/4 completeness checks)
+  // - A mutation is in-flight (step 1 is await, finalize is await)
+  // - hasPendingWriteError: a background save failed and hasn't been retried successfully.
+  //   When this flag is set, clicking Continue fires the retry instead of advancing.
   const isContinueDisabled =
     (currentStep === 1 && !isStep1Complete) ||
     (currentStep === 2 && !isStep2Complete) ||
     (currentStep === 3 && !isStep3Complete) ||
     (currentStep === 4 && !isStep4Complete) ||
-    isDraftMutating;
+    (currentStep === 1 && isDraftMutating) ||
+    (currentStep === 4 && isDraftMutating);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -960,7 +1083,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                 className="flex-1 rounded-xl"
                 onClick={() => {
                   setShowResumePrompt(false);
-                  // Start fresh — old draft stays in DB and will be cleaned up by cron
+                  // Clear localStorage pointer and draftId so a new draft is created
+                  clearWeddingDraftFromStorage();
+                  setDraftId(null);
+                  // Old draft stays in DB and will be cleaned up by cron
                 }}
               >
                 Mulai Baru
@@ -970,6 +1096,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                 className="flex-1 rounded-xl"
                 onClick={() => {
                   setShowResumePrompt(false);
+                  // Persist the draft pointer to localStorage so a page refresh keeps it
+                  saveWeddingDraftToStorage(unfinishedDraft.id);
+                  setDraftId(unfinishedDraft.id);
                   // Trigger full detail fetch via getDraftBookingDetail server action.
                   // useEffect on resumeDraftDetail will prefill ALL step 1 fields
                   // (including contactNumbers, email, NIK, address, bitrixId from Customer relation)
@@ -1276,16 +1405,22 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="weddingType" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Type *</FormLabel>
-                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="R">Resepsi</SelectItem>
-                          <SelectItem value="AR">Akad & Resepsi</SelectItem>
-                          <SelectItem value="TR">Teapai & Resepsi</SelectItem>
-                          <SelectItem value="PR">Pemberkatan Resepsi</SelectItem>
-                          <SelectItem value="VO">Venue Only</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={[
+                            { id: "R", name: "Resepsi" },
+                            { id: "AR", name: "Akad & Resepsi" },
+                            { id: "TR", name: "Teapai & Resepsi" },
+                            { id: "PR", name: "Pemberkatan Resepsi" },
+                            { id: "VO", name: "Venue Only" },
+                          ]}
+                          value={field.value ?? ""}
+                          onChange={(v) => field.onChange(v || null)}
+                          placeholder="Pilih type"
+                          searchPlaceholder="Cari event type..."
+                          emptyText="Tidak ada event type"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -1337,23 +1472,28 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   )} />
 
                   {/* Event Session */}
-                  <FormField control={form.control} name="weddingSession" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Session *</FormLabel>
-                      <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {(() => {
-                            const dateStr = wBookingDate ? format(new Date(wBookingDate), "yyyy-MM-dd") : null;
-                            const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
-                            const labels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
-                            return sessions.map((s) => <SelectItem key={s} value={s}>{labels[s]}</SelectItem>);
-                          })()}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                  <FormField control={form.control} name="weddingSession" render={({ field }) => {
+                    const dateStr = wBookingDate ? format(new Date(wBookingDate), "yyyy-MM-dd") : null;
+                    const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
+                    const SESSION_LABELS: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
+                    return (
+                      <FormItem>
+                        <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Session *</FormLabel>
+                        <FormControl>
+                          <SearchableSelect
+                            options={sessions.map((s) => ({ id: s, name: SESSION_LABELS[s] }))}
+                            value={field.value ?? ""}
+                            onChange={(v) => field.onChange(v || null)}
+                            placeholder={!wBookingDate ? "Pilih tanggal dulu" : "Pilih session"}
+                            searchPlaceholder="Cari session..."
+                            emptyText="Tidak ada session tersedia"
+                            disabled={!wBookingDate}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }} />
 
                   {/* Time */}
                   <div className="flex flex-col gap-1">
@@ -1806,6 +1946,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         </div>
         {/* Footer — hidden when showing resume prompt */}
         <div className={cn('bg-background', 'sticky', 'bottom-0', 'z-10', showResumePrompt ? 'hidden' : '')}>
+          {/* Background-save error banner — shown when a step save failed after retry */}
+          {hasPendingWriteError && pendingWriteErrorMsg && (
+            <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+              <span className="font-semibold">Simpan gagal:</span> {pendingWriteErrorMsg}
+              {" "}Perbaiki koneksi lalu klik <span className="font-semibold">Coba Lagi</span>.
+            </div>
+          )}
           <div className={cn('flex', 'py-4', 'gap-2')}>
             <Button
               variant="outline"
@@ -1820,9 +1967,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
               disabled={isContinueDisabled}
               className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
             >
-              {currentStep < totalSteps
-                ? (isDraftMutating ? "Menyimpan..." : "Continue")
-                : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
+              {hasPendingWriteError
+                ? "Coba Lagi"
+                : currentStep < totalSteps
+                  ? (isDraftMutating ? "Menyimpan..." : "Continue")
+                  : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
             </Button>
           </div>
         </div>
