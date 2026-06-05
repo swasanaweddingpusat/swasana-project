@@ -54,6 +54,7 @@ interface LeadDrawerProps {
 
 interface LeadFormValues {
   name: string;
+  instansi: string;
   email: string;
   address: string;
   category: "WEDDINGS" | "MICE";
@@ -96,6 +97,7 @@ function mapCodeToWeddingEventType(code: string): WeddingEventType | "" {
 
 const DEFAULT_VALUES: LeadFormValues = {
   name: "",
+  instansi: "",
   email: "",
   address: "",
   category: "WEDDINGS",
@@ -220,11 +222,10 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     !watchedCategory ||
     !watchedEventTypeId ||
     !watchedAssignedToId ||
-    !watchedVenueId ||
     !watchedSourceId ||
     !watchedEventDate ||
-    !watchedWeddingSession ||
     !watchedTime?.trim() ||
+    (isWeddings && !watchedWeddingSession) ||
     (isBitrixSource && !bitrixId.trim());
 
   // ── Venue availability ───────────────────────────────────────────────────────
@@ -280,6 +281,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       isResettingRef.current = true;
       form.reset({
         name: editLead.name,
+        instansi: editLead.instansi ?? "",
         email: editLead.email ?? "",
         address: editLead.address ?? "",
         category: editLead.category ?? "WEDDINGS",
@@ -388,17 +390,18 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
 
     const payload: CreateLeadInput = {
       name: values.name,
+      instansi: values.instansi || undefined,
       contactNumbers,
       email: values.email || undefined,
       address: values.address || undefined,
       eventDate: values.eventDate,
       time: values.time || undefined,
-      weddingSession: values.weddingSession as "morning" | "evening" | "fullday",
+      weddingSession: (values.weddingSession as "morning" | "evening" | "fullday") || undefined,
       estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
       budgetRange: values.budgetRange || undefined,
       notes: values.notes || undefined,
       category: values.category,
-      venueId: values.venueId,
+      venueId: values.venueId || undefined,
       eventTypeId: values.eventTypeId,
       sourceOfInformationId: values.sourceOfInformationId,
       assignedToId: values.assignedToId,
@@ -406,8 +409,8 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       bitrixId: isBitrixSource ? bitrixId || null : null,
     };
 
-    // Edit mode: use partial schema (updateLeadSchema) so fields like
-    // weddingSession that may be null on old leads don't block the update.
+    // Edit mode uses the partial schema so untouched optional fields don't
+    // block the update; weddings still require a session via superRefine.
     const schema = isEdit ? updateLeadSchema : createLeadSchema;
     const editPayload = isEdit ? { ...payload, id: editLead!.id } : payload;
     const validated = schema.safeParse(editPayload);
@@ -448,15 +451,30 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         <div className="flex-1 overflow-y-auto">
           <Form {...form}>
             <form className="space-y-4 pb-2">
-              {/* Nama */}
+              {/* Nama PIC */}
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nama Lengkap *</FormLabel>
+                    <FormLabel>Nama PIC *</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. Budi & Sari" />
+                      <Input {...field} placeholder="e.g. Budi Santoso" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Instansi */}
+              <FormField
+                control={form.control}
+                name="instansi"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Instansi</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="e.g. PT Maju Bersama (opsional)" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -504,7 +522,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                       <Input
                         value={contactInput.name}
                         onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))}
-                        placeholder="cpw, cpp, ortu, ..."
+                        placeholder="e.g. Budi (opsional)"
                         className="h-8 text-xs"
                       />
                       <div className="flex items-center rounded-md border border-input bg-background overflow-hidden">
@@ -656,24 +674,17 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 name="venueId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Venue *</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih venue..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {venues.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            {v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Venue</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={venues.map((v) => ({ id: v.id, name: v.name }))}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Pilih venue..."
+                        searchPlaceholder="Cari venue..."
+                        emptyText="Venue tidak ditemukan"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -686,23 +697,24 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipe Booking *</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={(v) => {
-                        field.onChange(v);
-                        form.setValue("eventTypeId", "");
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih tipe booking..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="WEDDINGS">Wedding</SelectItem>
-                        <SelectItem value="MICE">MICE</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        options={[
+                          { id: "WEDDINGS", name: "Wedding" },
+                          { id: "MICE", name: "MICE" },
+                        ]}
+                        value={field.value}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          form.setValue("eventTypeId", "");
+                          // MICE has no session concept — clear any stale value.
+                          if (v === "MICE") form.setValue("weddingSession", "");
+                        }}
+                        placeholder="Pilih tipe booking..."
+                        searchPlaceholder="Cari tipe booking..."
+                        emptyText="Tidak ada opsi"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -719,20 +731,17 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   return (
                     <FormItem>
                       <FormLabel>Event Type *</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih event type..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredEventTypes.map((et) => (
-                            <SelectItem key={et.id} value={et.id}>
-                              {et.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={filteredEventTypes.map((et) => ({ id: et.id, name: et.name }))}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Pilih event type..."
+                          searchPlaceholder="Cari event type..."
+                          emptyText="Tidak ada event type"
+                          disabled={filteredEventTypes.length === 0}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   );
@@ -750,18 +759,15 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                       <PopoverTrigger render={
                         <Button
                           variant="outline"
-                          disabled={!watchedVenueId}
                           className={cn(
                             "w-full justify-start text-left font-normal",
-                            (!field.value || !watchedVenueId) && "text-muted-foreground",
+                            !field.value && "text-muted-foreground",
                           )}
                         >
                           <CalendarSolarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
                           {field.value
                             ? format(new Date(field.value + "T00:00:00"), "PPP")
-                            : !watchedVenueId
-                              ? "Pilih venue dulu"
-                              : "Pilih tanggal event"}
+                            : "Pilih tanggal event"}
                         </Button>
                       } />
                       <PopoverContent className="w-auto p-0" align="start">
@@ -812,7 +818,8 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
-              {/* Session */}
+              {/* Session — weddings only */}
+              {isWeddings && (
               <FormField
                 control={form.control}
                 name="weddingSession"
@@ -822,29 +829,23 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   return (
                     <FormItem>
                       <FormLabel>Session *</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={!watchedVenueId || !watchedEventDate}
-                      >
-                        <FormControl>
-                          <SelectTrigger className={cn("w-full", (!watchedVenueId || !watchedEventDate) && "opacity-60")}>
-                            <SelectValue placeholder={!watchedVenueId ? "Pilih venue dulu" : !watchedEventDate ? "Pilih tanggal dulu" : "Pilih session..."} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {sessions.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {SESSION_LABELS[s]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={sessions.map((s) => ({ id: s, name: SESSION_LABELS[s] }))}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder={!watchedEventDate ? "Pilih tanggal dulu" : "Pilih session..."}
+                          searchPlaceholder="Cari session..."
+                          emptyText="Tidak ada session tersedia"
+                          disabled={!watchedEventDate}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   );
                 }}
               />
+              )}
 
               {/* Time */}
               <FormField
