@@ -17,6 +17,7 @@ const leadSelect = {
   category: true,
   weddingSession: true,
   bitrixId: true,
+  instansi: true,
   convertedAt: true,
   createdAt: true,
   updatedAt: true,

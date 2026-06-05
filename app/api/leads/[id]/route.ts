@@ -61,6 +61,7 @@ export async function PATCH(
         where: { id },
         data: {
           ...(fields.name !== undefined && { name: fields.name }),
+          ...(fields.instansi !== undefined && { instansi: fields.instansi || null }),
           ...(fields.contactNumbers !== undefined && { contactNumbers: fields.contactNumbers }),
           ...(fields.email !== undefined && { email: fields.email || null }),
           ...(fields.address !== undefined && { address: fields.address || null }),

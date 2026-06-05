@@ -64,6 +64,7 @@ export async function POST(req: Request) {
 
   const {
     name,
+    instansi,
     contactNumbers,
     email,
     address,
@@ -89,6 +90,7 @@ export async function POST(req: Request) {
       db.lead.create({
         data: {
           name,
+          instansi: instansi || null,
           contactNumbers,
           email: email || null,
           address: address || null,
@@ -98,7 +100,7 @@ export async function POST(req: Request) {
           budgetRange: budgetRange || null,
           notes: notes || null,
           category,
-          weddingSession,
+          weddingSession: weddingSession ?? null,
           venueId: venueId || null,
           packageId: packageId || null,
           eventTypeId: eventTypeId || null,
