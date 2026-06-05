@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,13 +14,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CloseCircle, UploadMinimalistic } from "@solar-icons/react";
 import { useVenues } from "@/hooks/use-venues";
 import { useMaintenanceCategories } from "@/hooks/useMaintenanceCategories";
 import { useMaintenancePriorities } from "@/hooks/useMaintenancePriorities";
 import { useMaintenanceStatuses } from "@/hooks/useMaintenanceStatuses";
-import { useCreateMaintenance, useUpdateMaintenance } from "@/hooks/useMaintenance";
+import { useCreateMaintenance, useUpdateMaintenance, useInvalidateMaintenance } from "@/hooks/useMaintenance";
 import { useUsers } from "@/hooks/use-users";
 import type { MaintenanceTicketItem } from "@/lib/queries/maintenance";
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+async function uploadMaintenanceImage(ticketId: string, file: File): Promise<{ id: string; url: string; fileName: string }> {
+  const fd = new FormData();
+  fd.set("ticketId", ticketId);
+  fd.set("file", file);
+  const res = await fetch("/api/maintenance/upload", { method: "POST", body: fd });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? "Gagal upload gambar");
+  }
+  return res.json() as Promise<{ id: string; url: string; fileName: string }>;
+}
+
+async function deleteMaintenanceImage(imageId: string): Promise<void> {
+  const res = await fetch(`/api/maintenance/upload?imageId=${imageId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? "Gagal menghapus gambar");
+  }
+}
 
 interface TicketDrawerProps {
   open: boolean;
@@ -60,6 +83,10 @@ export function TicketDrawer({
 }: TicketDrawerProps) {
   const isEdit = !!editItem;
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<{ id: string; url: string; fileName: string }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: venues = [] } = useVenues();
   const { data: statuses = [] } = useMaintenanceStatuses();
@@ -70,10 +97,12 @@ export function TicketDrawer({
 
   const { mutateAsync: createMutation, isPending: isCreating } = useCreateMaintenance();
   const { mutateAsync: updateMutation, isPending: isUpdating } = useUpdateMaintenance();
-  const isPending = isCreating || isUpdating;
+  const invalidateMaintenance = useInvalidateMaintenance();
+  const isPending = isCreating || isUpdating || isUploading;
 
   useEffect(() => {
     if (!open) return;
+    setSelectedFiles([]);
     if (editItem) {
       setForm({
         venueId: editItem.venue.id,
@@ -85,13 +114,49 @@ export function TicketDrawer({
         isAudit: editItem.isAudit,
         description: editItem.description,
       });
+      setExistingImages(editItem.images.map((img) => ({ id: img.id, url: img.url, fileName: img.fileName })));
     } else {
       setForm(DEFAULT_FORM);
+      setExistingImages([]);
     }
   }, [open, editItem]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const valid: File[] = [];
+    for (const f of files) {
+      if (!ALLOWED_IMAGE_TYPES.includes(f.type)) {
+        toast.error(`${f.name}: Tipe file tidak didukung. Gunakan JPEG, PNG, WebP, atau GIF.`);
+        continue;
+      }
+      if (f.size > MAX_IMAGE_SIZE) {
+        toast.error(`${f.name}: Ukuran file maksimal 5MB.`);
+        continue;
+      }
+      valid.push(f);
+    }
+    setSelectedFiles((prev) => [...prev, ...valid]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function removeSelectedFile(index: number) {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleRemoveExistingImage(imageId: string) {
+    try {
+      await deleteMaintenanceImage(imageId);
+      setExistingImages((prev) => prev.filter((img) => img.id !== imageId));
+      toast.success("Foto berhasil dihapus.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menghapus foto.");
+    }
   }
 
   async function handleSubmit() {
@@ -117,13 +182,35 @@ export function TicketDrawer({
     };
 
     try {
+      let ticketId: string;
       if (isEdit && editItem) {
         await updateMutation({ id: editItem.id, ...payload });
+        ticketId = editItem.id;
         toast.success("Ticket berhasil diperbarui.");
       } else {
-        await createMutation(payload);
+        const created = await createMutation(payload);
+        ticketId = created.id;
         toast.success("Ticket berhasil dibuat.");
       }
+
+      if (selectedFiles.length > 0) {
+        setIsUploading(true);
+        let uploadedCount = 0;
+        for (const file of selectedFiles) {
+          try {
+            await uploadMaintenanceImage(ticketId, file);
+            uploadedCount++;
+          } catch {
+            toast.error(`Gagal upload: ${file.name}`);
+          }
+        }
+        if (uploadedCount > 0) {
+          toast.success(`${uploadedCount} foto berhasil diupload.`);
+        }
+        setIsUploading(false);
+      }
+
+      await invalidateMaintenance();
       onSuccess();
       onOpenChange(false);
     } catch (err) {
@@ -274,28 +361,74 @@ export function TicketDrawer({
             />
           </div>
 
-          {/* Image upload hint — images attached after ticket creation */}
-          {isEdit && editItem && editItem.images.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Foto Terlampir</Label>
-              <div className="flex flex-wrap gap-2">
-                {editItem.images.map((img) => (
-                  <img
-                    key={img.id}
-                    src={img.url}
-                    alt={img.fileName}
-                    className="h-16 w-16 rounded-lg object-cover border"
-                  />
+          {/* Image Upload */}
+          <div className="space-y-1.5">
+            <Label>Foto</Label>
+
+            {/* Existing images (edit mode) */}
+            {existingImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {existingImages.map((img) => (
+                  <div key={img.id} className="relative group">
+                    <img
+                      src={img.url}
+                      alt={img.fileName}
+                      className="h-16 w-16 rounded-lg object-cover border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { void handleRemoveExistingImage(img.id); }}
+                      className="absolute -top-1.5 -right-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <CloseCircle weight="Bold" className="h-5 w-5 text-destructive bg-background rounded-full" />
+                    </button>
+                  </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {!isEdit && (
-            <p className="text-xs text-muted-foreground">
-              Foto dapat dilampirkan setelah ticket dibuat.
-            </p>
-          )}
+            {/* Selected new files preview */}
+            {selectedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {selectedFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="relative group">
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="h-16 w-16 rounded-lg object-cover border border-dashed border-primary/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedFile(idx)}
+                      className="absolute -top-1.5 -right-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <CloseCircle weight="Bold" className="h-5 w-5 text-destructive bg-background rounded-full" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload area */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 p-4 transition-colors cursor-pointer"
+            >
+              <UploadMinimalistic weight="BoldDuotone" className="h-6 w-6 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">
+                Klik untuk pilih foto (JPEG, PNG, WebP, GIF — maks 5MB)
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </div>
         </div>
 
         <div className="sticky bottom-0 bg-background pt-4">

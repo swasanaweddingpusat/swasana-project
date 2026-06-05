@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { useMaintenance, useDeleteMaintenance } from "@/hooks/useMaintenance";
+import { useMaintenance, useDeleteMaintenance, useInvalidateMaintenance } from "@/hooks/useMaintenance";
 import type { MaintenanceTicketItem } from "@/lib/queries/maintenance";
 import { PreventiveFilters } from "./PreventiveFilters";
 import { PreventiveTable } from "./PreventiveTable";
@@ -53,6 +53,7 @@ export function PreventiveMaintenanceTab() {
 
   const { mutateAsync: deleteMutation, isPending: isDeleting } =
     useDeleteMaintenance();
+  const invalidateMaintenance = useInvalidateMaintenance();
 
   const items = data?.items ?? [];
   const totalPages = data?.totalPages ?? 1;
@@ -111,6 +112,7 @@ export function PreventiveMaintenanceTab() {
     if (!deleteTarget) return;
     try {
       await deleteMutation(deleteTarget.id);
+      await invalidateMaintenance();
       toast.success("Jadwal preventive berhasil dihapus.");
       setDeleteTarget(null);
     } catch (err) {

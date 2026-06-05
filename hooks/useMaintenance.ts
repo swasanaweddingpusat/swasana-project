@@ -78,20 +78,21 @@ async function deleteMaintenanceTicket(id: string): Promise<void> {
 }
 
 export function useCreateMaintenance() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: createMaintenanceTicket,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["maintenance"] }),
   });
 }
 
 export function useUpdateMaintenance() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
       updateMaintenanceTicket(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["maintenance"] }),
   });
+}
+
+export function useInvalidateMaintenance(): () => Promise<void> {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: ["maintenance"] });
 }
 
 export function useDeleteMaintenance() {

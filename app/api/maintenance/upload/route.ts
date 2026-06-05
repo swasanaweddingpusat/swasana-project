@@ -3,7 +3,7 @@ import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
-import { uploadToR2 } from "@/lib/r2";
+import { uploadToR2, deleteFromR2, extractKeyFromUrl } from "@/lib/r2";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
@@ -85,4 +85,53 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Gagal mengunggah gambar." }, { status: 500 });
   }
+}
+
+// ─── DELETE /api/maintenance/upload?imageId=xxx ──────────────────────────────
+
+export async function DELETE(req: Request) {
+  const { session, response } = await requirePermissionForRoute({
+    module: "maintenance",
+    action: "delete",
+  });
+  if (response) return response;
+  if (!mutationLimiter.check(`maintenance-del-img:${session.user.id}`)) return rateLimitResponse();
+
+  const { searchParams } = new URL(req.url);
+  const imageId = searchParams.get("imageId");
+
+  if (!imageId) {
+    return Response.json({ error: "imageId wajib diisi." }, { status: 400 });
+  }
+
+  const image = await db.maintenanceImage.findUnique({
+    where: { id: imageId },
+    select: { id: true, url: true },
+  });
+  if (!image) {
+    return Response.json({ error: "Gambar tidak ditemukan." }, { status: 404 });
+  }
+
+  try {
+    const r2Key = extractKeyFromUrl(image.url);
+    await deleteFromR2(r2Key);
+  } catch {
+    // R2 deletion is best-effort
+  }
+
+  await db.$transaction([
+    db.maintenanceImage.delete({ where: { id: imageId } }),
+  ]);
+
+  await logAudit({
+    userId: session.user.id,
+    action: "maintenance.image_deleted",
+    result: "success",
+    entityType: "MaintenanceImage",
+    entityId: imageId,
+  });
+
+  revalidateTag("maintenance", "max");
+
+  return Response.json({ success: true });
 }

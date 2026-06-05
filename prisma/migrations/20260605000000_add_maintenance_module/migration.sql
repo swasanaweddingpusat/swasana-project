@@ -78,7 +78,7 @@ ALTER TABLE "maintenance_tickets" ADD CONSTRAINT "maintenance_tickets_priorityId
 ALTER TABLE "maintenance_tickets" ADD CONSTRAINT "maintenance_tickets_statusId_fkey" FOREIGN KEY ("statusId") REFERENCES "maintenance_statuses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "maintenance_tickets" ADD CONSTRAINT "maintenance_tickets_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "profiles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "maintenance_tickets" ADD CONSTRAINT "maintenance_tickets_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "profiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "maintenance_tickets" ADD CONSTRAINT "maintenance_images_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "maintenance_tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "maintenance_images" ADD CONSTRAINT "maintenance_images_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "maintenance_tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Seed maintenance categories
 INSERT INTO "maintenance_categories" ("id", "name", "createdAt") VALUES

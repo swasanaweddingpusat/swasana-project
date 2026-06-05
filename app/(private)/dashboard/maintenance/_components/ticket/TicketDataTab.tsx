@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { useMaintenance, useDeleteMaintenance } from "@/hooks/useMaintenance";
+import { useMaintenance, useDeleteMaintenance, useInvalidateMaintenance } from "@/hooks/useMaintenance";
 import type { MaintenanceTicketItem } from "@/lib/queries/maintenance";
 import { TicketFilters } from "./TicketFilters";
 import { TicketTable } from "./TicketTable";
@@ -56,6 +56,7 @@ export function TicketDataTab() {
 
   const { mutateAsync: deleteMutation, isPending: isDeleting } =
     useDeleteMaintenance();
+  const invalidateMaintenance = useInvalidateMaintenance();
 
   const items = data?.items ?? [];
   const totalPages = data?.totalPages ?? 1;
@@ -114,6 +115,7 @@ export function TicketDataTab() {
     if (!deleteTarget) return;
     try {
       await deleteMutation(deleteTarget.id);
+      await invalidateMaintenance();
       toast.success("Ticket berhasil dihapus.");
       setDeleteTarget(null);
     } catch (err) {
