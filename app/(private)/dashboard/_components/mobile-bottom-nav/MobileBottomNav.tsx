@@ -153,9 +153,14 @@ export function MobileBottomNav(): React.JSX.Element | null {
     booking: openBookingDrawer,
   };
 
-  /** Open the create drawer for `key`; redirect to `href` once a record is saved. */
-  const openCreateDrawer = (key: DrawerKey, href: string): void => {
-    drawerOpeners[key]({ onSuccess: () => router.push(href) });
+  /**
+   * Open the create drawer for `key`.
+   * When off the item's page, register an onSuccess redirect so the user lands
+   * on the list after saving. When already on the page, skip the redirect —
+   * the list will refresh automatically via TanStack Query invalidation.
+   */
+  const openCreateDrawer = (key: DrawerKey, href: string, alreadyOnPage = false): void => {
+    drawerOpeners[key](alreadyOnPage ? undefined : { onSuccess: () => router.push(href) });
   };
 
   const isActive = (href: string): boolean => {
@@ -227,13 +232,15 @@ export function MobileBottomNav(): React.JSX.Element | null {
 
             const active = isActive(item.href!);
 
-            // Create-drawer items, while off-page → open drawer instead of navigating.
-            if (item.drawerKey && !active) {
+            // Items with a create drawer always open the drawer on tap.
+            // Off-page → drawer registers onSuccess redirect to the list page.
+            // On-page  → drawer opens without redirect (list refreshes via query invalidation).
+            if (item.drawerKey) {
               return (
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => openCreateDrawer(item.drawerKey!, item.href!)}
+                  onClick={() => openCreateDrawer(item.drawerKey!, item.href!, active)}
                   className={navItemClass(active)}
                 >
                   <NavItemBody Icon={item.Icon} label={item.label} active={active} />
@@ -272,10 +279,11 @@ export function MobileBottomNav(): React.JSX.Element | null {
                   type="button"
                   onClick={() => {
                     setBookingSheetOpen(false);
-                    if (active) return;
                     if (item.drawerKey) {
-                      openCreateDrawer(item.drawerKey, item.href);
-                    } else {
+                      // Always open the create drawer regardless of which page is active.
+                      // On-page tap skips the onSuccess redirect; off-page tap includes it.
+                      openCreateDrawer(item.drawerKey, item.href, active);
+                    } else if (!active) {
                       router.push(item.href);
                     }
                   }}
