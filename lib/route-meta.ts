@@ -157,6 +157,27 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola purchase order vendor per booking",
   },
 
+  // ─── Maintenance ───────────────────────────────────────────────────────────
+  "/dashboard/maintenance": {
+    title: "Maintenance",
+    subtitle: "Kelola ticket dan jadwal pemeliharaan",
+  },
+  "/dashboard/settings/maintenance-category": {
+    title: "Maintenance Category",
+    subtitle: "Kelola kategori maintenance",
+    parent: "/dashboard/settings",
+  },
+  "/dashboard/settings/maintenance-priority": {
+    title: "Maintenance Priority",
+    subtitle: "Kelola prioritas maintenance",
+    parent: "/dashboard/settings",
+  },
+  "/dashboard/settings/maintenance-status": {
+    title: "Maintenance Status",
+    subtitle: "Kelola status maintenance",
+    parent: "/dashboard/settings",
+  },
+
   // ─── Tutorial ─────────────────────────────────────────────────────────────
   "/dashboard/tutorial": {
     title: "Tutorial",

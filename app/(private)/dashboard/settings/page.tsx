@@ -15,6 +15,7 @@ import {
   CalendarMark,
   UserRounded,
   Route,
+  Sledgehammer,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -125,6 +126,33 @@ const GROUPS: SettingGroup[] = [
       },
     ],
   },
+  {
+    title: "Maintenance",
+    description: "Pengaturan data master untuk modul maintenance.",
+    items: [
+      {
+        title: "Maintenance Category",
+        description: "Kelola kategori maintenance (Jaringan, Listrik, dll).",
+        icon: Sledgehammer,
+        href: "/dashboard/settings/maintenance-category",
+        module: "settings-maintenance-category",
+      },
+      {
+        title: "Maintenance Priority",
+        description: "Kelola prioritas dan estimasi deadline.",
+        icon: Sledgehammer,
+        href: "/dashboard/settings/maintenance-priority",
+        module: "settings-maintenance-priority",
+      },
+      {
+        title: "Maintenance Status",
+        description: "Kelola status ticket maintenance.",
+        icon: Sledgehammer,
+        href: "/dashboard/settings/maintenance-status",
+        module: "settings-maintenance-status",
+      },
+    ],
+  },
 ];
 
 export default async function SettingsHubPage() {
@@ -134,6 +162,9 @@ export default async function SettingsHubPage() {
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
     "customers", "settings-role-permission",
+    "settings-maintenance-category",
+    "settings-maintenance-priority",
+    "settings-maintenance-status",
   ]);
 
   const session = await auth();

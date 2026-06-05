@@ -31,6 +31,7 @@ import {
   Volume,
   Bill,
   DocumentAdd,
+  Wrench,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -162,6 +163,12 @@ export const navItems: NavItem[] = [
         ],
       },
     ],
+  },
+  {
+    name: "Maintenance",
+    href: "/dashboard/maintenance",
+    icon: Wrench,
+    permission: { module: "maintenance", action: "view" },
   },
   {
     name: "Package",
