@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function QuotationsPage() {
   return (
-    <div className="flex flex-col mb-6 px-2">
+    <div className="flex flex-col gap-4">
       <QuotationsTable />
     </div>
   );

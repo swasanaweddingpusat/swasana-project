@@ -42,7 +42,14 @@ import {
   FileText,
   TrashBinTrash,
   DangerTriangle,
+  Refresh,
+  Filter,
 } from "@solar-icons/react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { usePoll } from "@/hooks/use-poll";
 import {
@@ -124,7 +131,7 @@ export function MiceTable() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useMiceBookings({
+  const { data, isLoading, isFetching, refetch } = useMiceBookings({
     page: currentPage,
     pageSize: ROWS_PER_PAGE,
     search: debouncedSearch.trim() || undefined,
@@ -167,72 +174,211 @@ export function MiceTable() {
     }
   }
 
+  const hasStatusFilter = statusFilter !== "all";
+
+  const StatusFilterPopoverContent = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground">Filter</p>
+        {hasStatusFilter && (
+          <button
+            type="button"
+            onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Status</label>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => { setStatusFilter(v as MiceBookingStatus | "all"); setCurrentPage(1); }}
+        >
+          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter status booking MICE">
+            <SelectValue placeholder="Semua Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Status</SelectItem>
+            {ALL_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                <span className="flex items-center gap-2">
+                  <StatusDot status={s} />
+                  {s}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+
   return (
     <Card>
       <CardContent className="p-0">
-        {/* Header + Filters */}
-        <div className="flex flex-col gap-3 px-4 sm:px-6 pb-4 border-b sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-bold text-foreground">MICE Bookings</h2>
-            <span className="text-foreground text-sm rounded-full border border-border bg-muted px-3 py-1">
-              {total} Bookings
+        {/* ════════════════════════════════════════════════════════════════
+            MOBILE TOOLBAR  (visible < sm)
+            Row 1: [count badge] ──── [filter icon] [refresh icon] [add button]
+            Row 2: [search full-width]
+        ════════════════════════════════════════════════════════════════ */}
+        <div className="flex flex-col gap-2 px-4 pb-3 border-b sm:hidden">
+          {/* Row 1 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
+              {total}
             </span>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => {
-                setStatusFilter(v as MiceBookingStatus | "all");
-                setCurrentPage(1);
-              }}
+            <div className="flex-1" />
+            {/* Filter popover */}
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className={cn("shrink-0 relative", hasStatusFilter && "border-primary/50")}
+                    aria-label="Filter booking MICE"
+                  >
+                    <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                    {hasStatusFilter && (
+                      <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
+                        1
+                      </span>
+                    )}
+                  </Button>
+                }
+              />
+              <PopoverContent align="end" className="w-64 p-3">
+                {StatusFilterPopoverContent}
+              </PopoverContent>
+            </Popover>
+            {/* Refresh */}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              aria-label="Muat ulang data booking MICE"
+              className="shrink-0"
             >
-              <SelectTrigger
-                className="h-9 w-full sm:w-38 text-sm"
-                aria-label="Filter status booking MICE"
-              >
-                <SelectValue placeholder="Semua Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {ALL_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    <span className="flex items-center gap-2">
-                      <StatusDot status={s} />
-                      {s}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="relative">
-              <Magnifer
+              <Refresh
                 weight="BoldDuotone"
                 aria-hidden="true"
-                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                className={cn("h-4 w-4", isFetching && "animate-spin")}
               />
-              <Input
-                type="search"
-                aria-label="Cari booking MICE"
-                placeholder="Cari booking MICE..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                }}
-                className="pl-9 w-full sm:w-52"
-              />
-            </div>
-
+            </Button>
+            {/* Add */}
             <Button
-              onClick={() => {
-                setSelectedBooking(null);
-                setDrawerOpen(true);
-              }}
+              size="icon"
+              onClick={() => { setSelectedBooking(null); setDrawerOpen(true); }}
+              className="shrink-0"
+              aria-label="Tambah booking MICE"
             >
               <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-              Tambah Booking
             </Button>
           </div>
+          {/* Row 2: Search full-width */}
+          <div className="relative w-full">
+            <Magnifer
+              weight="BoldDuotone"
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              aria-label="Cari booking MICE"
+              placeholder="Cari booking MICE..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 w-full"
+            />
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════════════════════════════
+            DESKTOP TOOLBAR  (visible sm+)
+            Single row: [count] | [refresh] [filter] [search] →→ [add]
+        ════════════════════════════════════════════════════════════════ */}
+        <div className="hidden sm:flex items-center gap-2 px-6 pb-3 border-b">
+          {/* Count badge */}
+          <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full shrink-0">
+            {total} Bookings
+          </span>
+
+          {/* Divider */}
+          <div className="w-px h-5 bg-border shrink-0 mx-1" aria-hidden="true" />
+
+          {/* Refresh */}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            aria-label="Muat ulang data booking MICE"
+            title="Muat ulang"
+            className="shrink-0"
+          >
+            <Refresh
+              weight="BoldDuotone"
+              aria-hidden="true"
+              className={cn("h-4 w-4", isFetching && "animate-spin")}
+            />
+          </Button>
+
+          {/* Filter popover */}
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn("h-9 gap-1.5 shrink-0", hasStatusFilter && "border-primary/50")}
+                  aria-label="Filter booking MICE"
+                >
+                  <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                  Filter
+                  {hasStatusFilter && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                      1
+                    </span>
+                  )}
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64 p-3">
+              {StatusFilterPopoverContent}
+            </PopoverContent>
+          </Popover>
+
+          {/* Search */}
+          <div className="relative">
+            <Magnifer
+              weight="BoldDuotone"
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              aria-label="Cari booking MICE"
+              placeholder="Cari booking MICE..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 w-48"
+            />
+          </div>
+
+          {/* Add — pushed to far right */}
+          <Button
+            onClick={() => { setSelectedBooking(null); setDrawerOpen(true); }}
+            className="ml-auto shrink-0"
+          >
+            <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+            Tambah Booking
+          </Button>
         </div>
 
         {/* Loading state */}
