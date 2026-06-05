@@ -147,6 +147,20 @@ const DEFAULT_VALUES: MiceFormValues = {
 
 const TOTAL_STEPS = 3;
 
+// ─── localStorage helpers for MICE draft pointer ─────────────────────────────
+
+const MICE_DRAFT_LS_KEY = "swasana_mice_draft_id";
+
+function readMiceDraftFromStorage(): string | null {
+  try { return localStorage.getItem(MICE_DRAFT_LS_KEY); } catch { return null; }
+}
+function saveMiceDraftToStorage(id: string) {
+  try { localStorage.setItem(MICE_DRAFT_LS_KEY, id); } catch { /* noop */ }
+}
+function clearMiceDraftFromStorage() {
+  try { localStorage.removeItem(MICE_DRAFT_LS_KEY); } catch { /* noop */ }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseRpToNumber(formatted: string): number {
@@ -180,6 +194,11 @@ export function MiceBookingDrawer({
 
   // Draft state (create mode only)
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+
+  // ── Optimistic save state ──
+  const [hasPendingWriteError, setHasPendingWriteError] = useState(false);
+  const [pendingWriteErrorMsg, setPendingWriteErrorMsg] = useState<string | null>(null);
+  const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
@@ -334,6 +353,47 @@ export function MiceBookingDrawer({
     ];
   }, [booking]);
 
+  // ── Background save helper with 1 automatic retry ────────────────────────
+  async function backgroundSave(
+    saveFn: () => Promise<{ success: boolean; error?: string }>,
+    errorLabel: string,
+  ): Promise<void> {
+    const attempt = async () => {
+      const result = await saveFn();
+      if (!result.success) throw new Error(result.error ?? errorLabel);
+    };
+
+    try {
+      await attempt();
+      setHasPendingWriteError(false);
+      setPendingWriteErrorMsg(null);
+      retryWriteRef.current = null;
+    } catch {
+      try {
+        await attempt();
+        setHasPendingWriteError(false);
+        setPendingWriteErrorMsg(null);
+        retryWriteRef.current = null;
+      } catch (err2) {
+        const msg = err2 instanceof Error ? err2.message : errorLabel;
+        setHasPendingWriteError(true);
+        setPendingWriteErrorMsg(msg);
+        retryWriteRef.current = async () => {
+          try {
+            await attempt();
+            setHasPendingWriteError(false);
+            setPendingWriteErrorMsg(null);
+            retryWriteRef.current = null;
+          } catch (err3) {
+            const retryMsg = err3 instanceof Error ? err3.message : errorLabel;
+            setPendingWriteErrorMsg(retryMsg);
+          }
+        };
+        toast.error(`Gagal menyimpan: ${msg}. Perbaiki koneksi dan coba Lanjut lagi.`);
+      }
+    }
+  }
+
   // Reset on open/close. Calling setState inside an effect is intentional here —
   // this is the standard drawer/modal initialization pattern (hydrate form when
   // it opens). The rule fires because computed values are derived from the
@@ -390,13 +450,20 @@ export function MiceBookingDrawer({
         setSelectedCustomerId("");
       }
       setCurrentStep(1);
-      setDraftId(initialDraftId ?? null);
+      // Restore draft pointer: prefer injected initialDraftId (Deal flow), then
+      // localStorage (page-refresh recovery), then null (fresh start).
+      const restoredDraftId = initialDraftId ?? (!booking && !prefillLead ? readMiceDraftFromStorage() : null);
+      setDraftId(restoredDraftId);
+      if (initialDraftId) saveMiceDraftToStorage(initialDraftId);
       setClientSearch("");
       setSelectedLeadId(!booking && prefillLead ? prefillLead.leadId : "");
       setClientDropdownOpen(false);
       setAvailability({});
       setVisibleMonth(new Date());
       setEventDatePopoverOpen(false);
+      setHasPendingWriteError(false);
+      setPendingWriteErrorMsg(null);
+      retryWriteRef.current = null;
     } else {
       signatureRef.current = null;
     }
@@ -411,20 +478,29 @@ export function MiceBookingDrawer({
   // ─── Navigation ───────────────────────────────────────────────────────────
 
   async function handleNext() {
+    // If a prior background save failed, clicking Lanjut fires the retry
+    if (hasPendingWriteError && retryWriteRef.current) {
+      await retryWriteRef.current();
+      return;
+    }
+
     if (currentStep === 1) {
       const ok = await form.trigger([
         "clientName", "clientPhone", "venueId", "eventTypeId", "eventDate",
       ]);
       if (!ok) return;
 
-      // Create draft on Step 1 continue (skip if initialDraftId already injected)
-      if (!isEdit && !draftId) {
+      // Create draft on Step 1 continue (await — draftId doesn't exist yet)
+      if (!isEdit) {
+        // Generate client-side draftId for idempotency; reuse if already set
+        const pendingDraftId = draftId ?? crypto.randomUUID();
         const values = form.getValues();
         const resolvedSalesId = currentUserIsSalesMice
           ? (user?.profileId ?? values.salesId)
           : values.salesId;
 
         const draftData = {
+          id: pendingDraftId,
           bookingDate: values.eventDate || new Date().toISOString().split("T")[0],
           venueId: values.venueId,
           eventTypeId: values.eventTypeId,
@@ -451,28 +527,33 @@ export function MiceBookingDrawer({
           toast.error(result.error ?? "Gagal membuat draft booking MICE.");
           return;
         }
-        setDraftId(result.draftId);
+        const confirmedDraftId = result.draftId;
+        setDraftId(confirmedDraftId);
+        saveMiceDraftToStorage(confirmedDraftId);
       }
     }
 
     if (currentStep === 2 && !isEdit && draftId) {
-      // Save terms to draft on Step 2 continue
-      const result = await updateMiceStep2({
-        draftId,
-        data: {
-          termOfPayments: terms.filter((t) => t.dueDate).map((t, i) => ({
-            name: t.name,
-            amount: t.amount,
-            dueDate: t.dueDate,
-            sortOrder: i,
-            paymentStatus: t.paymentStatus,
-          })),
-        },
-      });
-      if (!result.success) {
-        toast.error(result.error ?? "Gagal menyimpan term of payment.");
-        return;
-      }
+      // Advance immediately (optimistic), save terms in background
+      setCurrentStep(3);
+
+      const capturedDraftId = draftId;
+      void backgroundSave(
+        () => updateMiceStep2({
+          draftId: capturedDraftId,
+          data: {
+            termOfPayments: terms.filter((t) => t.dueDate).map((t, i) => ({
+              name: t.name,
+              amount: t.amount,
+              dueDate: t.dueDate,
+              sortOrder: i,
+              paymentStatus: t.paymentStatus,
+            })),
+          },
+        }),
+        "Gagal menyimpan term of payment",
+      );
+      return;
     }
 
     setCurrentStep((s) => Math.min(s + 1, 3));
@@ -582,6 +663,7 @@ export function MiceBookingDrawer({
       return;
     }
 
+    clearMiceDraftFromStorage();
     toast.success("Booking MICE berhasil disimpan.");
     onSuccess?.();
     onOpenChange(false);
@@ -787,20 +869,19 @@ export function MiceBookingDrawer({
                     <FormField control={form.control} name="miceSession" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Sesi Event (Pagi / Malam)</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={(v) => field.onChange(v as "morning" | "evening" | "")}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Pilih sesi event..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="morning">Pagi (Morning)</SelectItem>
-                            <SelectItem value="evening">Malam (Evening)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SearchableSelect
+                            options={[
+                              { id: "morning", name: "Pagi (Morning)" },
+                              { id: "evening", name: "Malam (Evening)" },
+                            ]}
+                            value={field.value}
+                            onChange={(v) => field.onChange(v as "morning" | "evening" | "")}
+                            placeholder="Pilih sesi event..."
+                            searchPlaceholder="Cari sesi..."
+                            emptyText="Tidak ada opsi"
+                          />
+                        </FormControl>
                         <p className="text-xs text-muted-foreground mt-1">
                           Sesi menentukan slot venue — pagi dan malam bisa diisi event berbeda.
                         </p>
@@ -1038,6 +1119,13 @@ export function MiceBookingDrawer({
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-background pt-4">
+          {/* Background-save error banner */}
+          {hasPendingWriteError && pendingWriteErrorMsg && (
+            <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+              <span className="font-semibold">Simpan gagal:</span> {pendingWriteErrorMsg}
+              {" "}Perbaiki koneksi lalu klik <span className="font-semibold">Coba Lagi</span>.
+            </div>
+          )}
           <div className="flex gap-2">
             {currentStep > 1 ? (
               <Button type="button" variant="outline" onClick={handleBack} className="flex-1" disabled={isPending}>
@@ -1050,8 +1138,8 @@ export function MiceBookingDrawer({
             )}
 
             {currentStep < 3 ? (
-              <Button type="button" onClick={handleNext} className="flex-1">
-                Lanjut
+              <Button type="button" onClick={handleNext} className="flex-1" disabled={isPending && !hasPendingWriteError}>
+                {hasPendingWriteError ? "Coba Lagi" : "Lanjut"}
               </Button>
             ) : (
               <Button type="button" onClick={() => { void form.handleSubmit(onSubmit)(); }} className="flex-1" disabled={isPending}>

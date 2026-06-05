@@ -234,7 +234,21 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
 
     const salesId = input.salesId ?? session!.user.profileId!;
     const managerId = await resolveManagerId(salesId);
-    const draftId = crypto.randomUUID();
+    // Use client-provided id for idempotency; fall back to server-generated uuid.
+    const draftId = input.id ?? crypto.randomUUID();
+
+    // Idempotency: if a draft with this id already exists, return it directly.
+    // This prevents duplicate rows when the client retries after a network hiccup.
+    const existing = await db.booking.findUnique({
+      where: { id: draftId },
+      select: { id: true, recordStatus: true },
+    });
+    if (existing) {
+      if (existing.recordStatus !== "draft") {
+        return { success: false, error: "Booking dengan ID tersebut sudah difinalisasi." };
+      }
+      return { success: true, draftId };
+    }
 
     await db.$transaction([
       db.booking.create({
