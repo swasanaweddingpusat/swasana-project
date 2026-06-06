@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { cn } from "@/lib/utils";
 import { editBooking } from "@/actions/booking";
+import { computeFullPrice } from "@/lib/package-prices";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 
@@ -152,19 +153,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Computed: selected package's category prices (flat — no variants)
   const allCategoryPrices = selectedPkg?.categoryPrices ?? [];
   const visibleCategories = allCategoryPrices.filter((c) => c.isShow);
-  const hiddenCategoriesBase = allCategoryPrices.filter((c) => !c.isShow).reduce((sum, c) => sum + c.basePrice, 0);
   const variantMargin = selectedPkg?.margin ?? 0;
 
-  const step2Price = (() => {
-    const hasTakeout = visibleCategories.some((c) => categoryToggles[c.categoryName]);
-    if (!hasTakeout && selectedPkg && selectedPkg.sellingPrice > 0) return selectedPkg.sellingPrice;
-    const visibleBase = visibleCategories.reduce(
-      (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
-      0,
-    );
-    const base = visibleBase + hiddenCategoriesBase;
-    return base + Math.round(base * (variantMargin / 100));
-  })();
+  // Unified price model: anchor fullPrice − Σ(takeout nominal per category).
+  // Matches the server (calcFinalFromFullPrice) so UI == DB.
+  const fullPrice = computeFullPrice(allCategoryPrices, variantMargin, selectedPkg?.sellingPrice);
+  const totalTakeoutNominal = visibleCategories
+    .filter((c) => categoryToggles[c.categoryName])
+    .reduce((sum, c) => sum + (takeoutPrices[c.categoryName] ?? c.basePrice), 0);
+  const step2Price = Math.max(0, fullPrice - totalTakeoutNominal);
 
   const isStep2Complete =
     visibleCategories.length === 0 ||
@@ -233,13 +230,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (detail.snapBonuses?.length && bonuses.length === 0) {
       setBonuses(detail.snapBonuses.map((b: Record<string, unknown>) => ({ vendorId: b.vendorId as string, vendorCategoryId: b.vendorCategoryId as string, vendorName: b.vendorName as string, description: (b.description as string) ?? "", qty: Number(b.qty) || 1, nominal: Number(b.nominal) || 0 })));
     }
-    // Load existing category toggles from saved snapPackageCategoryPrices
+    // Load existing category toggles + takeout nominals from saved snapshot
     if (detail.snapPackageCategoryPrices?.length) {
       const toggleMap: Record<string, boolean> = {};
-      for (const cp of detail.snapPackageCategoryPrices as Array<{ categoryName: string; isTakeout: boolean; isShow: boolean }>) {
-        if (cp.isShow) toggleMap[cp.categoryName] = cp.isTakeout;
+      const nominalMap: Record<string, number> = {};
+      for (const cp of detail.snapPackageCategoryPrices as Array<{ categoryName: string; isTakeout: boolean; isShow: boolean; basePrice: number; takeoutNominal?: number }>) {
+        if (cp.isShow) {
+          toggleMap[cp.categoryName] = cp.isTakeout;
+          if (cp.isTakeout) nominalMap[cp.categoryName] = Number(cp.takeoutNominal) || Number(cp.basePrice);
+        }
       }
       setCategoryToggles(toggleMap);
+      setTakeoutPrices(nominalMap);
     }
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -374,13 +376,17 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         specialBonusName: specialBonusName || null,
         specialBonusAmount: specialBonusAmount || null,
         signatureSales: signatureSales || null,
-        categoryToggles: allCategoryPrices.map((c) => ({
-          categoryName: c.categoryName,
-          basePrice: c.basePrice,
-          sortOrder: c.sortOrder,
-          isShow: c.isShow,
-          isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-        })),
+        categoryToggles: allCategoryPrices.map((c) => {
+          const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
+          return {
+            categoryName: c.categoryName,
+            basePrice: c.basePrice,
+            sortOrder: c.sortOrder,
+            isShow: c.isShow,
+            isTakeout,
+            takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
+          };
+        }),
       } : {}),
     });
     if (!r.success) { toast.error(r.error); return; }

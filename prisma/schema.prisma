@@ -694,6 +694,7 @@ model SnapPackagePricing {
   packageName      String
   pax              Int
   price            Int
+  fullPrice        Int      @default(0)
   margin           Float    @default(0)
   termAndCondition String?
   createdAt        DateTime @default(now())
@@ -741,6 +742,7 @@ model SnapPackageCategoryPrice {
   sortOrder    Int      @default(0)
   isShow       Boolean  @default(true)
   isTakeout    Boolean  @default(false)
+  takeoutNominal Int    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)

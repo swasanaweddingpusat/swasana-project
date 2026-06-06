@@ -13,13 +13,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
 const RefreshCw = Refresh;
 const RotateCcw = Refresh;
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -32,7 +25,8 @@ import { generateAgreementToken } from "@/actions/client-agreement";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
-import { EditBookingFinanceDrawer } from "./edit-finance-drawer";
+import { EditTopDrawer } from "./edit-top-drawer";
+import { EditTakeoutDrawer } from "./edit-takeout-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
@@ -175,7 +169,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [financeTarget, setFinanceTarget] = useState<{ booking: BookingListItem; tab: "top" | "takeout" } | null>(null);
+  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
+  const [takeoutTarget, setTakeoutTarget] = useState<BookingListItem | null>(null);
 
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
@@ -361,14 +356,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => setFinanceTarget({ booking, tab: "top" })}>
-              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit TOP
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
+              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term of Payment
             </DropdownMenuItem>
             {can("booking", "edit") &&
               booking.snapPackageCategoryPrices &&
               booking.snapPackageCategoryPrices.length > 0 && (
-              <DropdownMenuItem className="cursor-pointer" onClick={() => setFinanceTarget({ booking, tab: "takeout" })}>
-                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Set Harga
+              <DropdownMenuItem className="cursor-pointer" onClick={() => setTakeoutTarget(booking)}>
+                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Takeout
               </DropdownMenuItem>
             )}
             {can("booking", "transfer") && (
@@ -435,22 +430,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       </div>
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Venue</label>
-        <Select
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Venue" },
+            ...venues.map((v) => ({ id: v.id, name: v.name })),
+          ]}
           value={venueFilter || "all"}
-          onValueChange={(val) => { setVenueFilter(val === "all" ? "" : val); setCurrentPage(1); }}
-        >
-          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter venue booking">
-            <SelectValue placeholder="Semua Venue" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Venue</SelectItem>
-            {venues.map((v) => (
-              <SelectItem key={v.id} value={v.id}>
-                {v.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(val) => { setVenueFilter(val === "all" ? "" : val); setCurrentPage(1); }}
+          placeholder="Semua Venue"
+          searchPlaceholder="Cari venue..."
+          emptyText="Venue tidak ditemukan"
+          className="h-9"
+        />
       </div>
     </div>
   );
@@ -1130,7 +1121,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Pilih Manager</p>
               <SearchableSelect
                 options={managers
-                  .filter((m) => m.id !== managerTarget.manager?.id)
+                  .filter((m) => m.role?.name === "manager" && m.id !== managerTarget.manager?.id)
                   .map((m) => ({ id: m.id, name: m.fullName ?? m.id, badge: "manager" }))}
                 value={selectedManagerId}
                 onChange={setSelectedManagerId}
@@ -1215,20 +1206,20 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       )}
 
 
-      {/* Edit Keuangan Booking — unified finance drawer */}
-      {financeTarget && (
-        <EditBookingFinanceDrawer
-          isOpen={!!financeTarget}
-          onClose={() => { setFinanceTarget(null); refetch(); }}
-          bookingId={financeTarget.booking.id}
-          customerName={financeTarget.booking.snapCustomer?.name ?? ""}
-          initialTerms={(financeTarget.booking.termOfPayments ?? []).map((t) => ({
+      {/* Edit Term of Payment */}
+      {topTarget && (
+        <EditTopDrawer
+          isOpen={!!topTarget}
+          onClose={() => { setTopTarget(null); refetch(); }}
+          bookingId={topTarget.id}
+          customerName={topTarget.snapCustomer?.name ?? ""}
+          initialTerms={(topTarget.termOfPayments ?? []).map((t) => ({
             id: t.id,
             name: t.name,
             amount: Number(t.amount),
             dueDate: new Date(t.dueDate).toISOString(),
             sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
+            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
             ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
             paymentEvidence: t.paymentEvidence ?? null,
             notes: t.notes,
@@ -1236,23 +1227,29 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments
               : undefined,
           }))}
-          packagePrice={Number(financeTarget.booking.snapPackagePricing?.price ?? 0)}
-          discountName={financeTarget.booking.discountName ?? null}
-          discountAmount={financeTarget.booking.discountAmount ?? 0}
-          initialCategories={
-            (financeTarget.booking.snapPackageCategoryPrices ?? []).length > 0
-              ? (financeTarget.booking.snapPackageCategoryPrices ?? []).map((c) => ({
-                  id: c.id,
-                  categoryName: c.categoryName,
-                  basePrice: Number(c.basePrice),
-                  sortOrder: c.sortOrder,
-                  isShow: c.isShow,
-                  isTakeout: c.isTakeout,
-                }))
-              : null
-          }
-          margin={financeTarget.booking.snapPackagePricing?.margin ?? 0}
-          defaultTab={financeTarget.tab}
+          packagePrice={Number(topTarget.snapPackagePricing?.price ?? 0)}
+          discountName={topTarget.discountName ?? null}
+          discountAmount={topTarget.discountAmount ?? 0}
+        />
+      )}
+
+      {/* Edit Set Takeout */}
+      {takeoutTarget && (
+        <EditTakeoutDrawer
+          isOpen={!!takeoutTarget}
+          onClose={() => { setTakeoutTarget(null); refetch(); }}
+          bookingId={takeoutTarget.id}
+          customerName={takeoutTarget.snapCustomer?.name ?? ""}
+          initialCategories={(takeoutTarget.snapPackageCategoryPrices ?? []).map((c) => ({
+            id: c.id,
+            categoryName: c.categoryName,
+            basePrice: Number(c.basePrice),
+            sortOrder: c.sortOrder,
+            isShow: c.isShow,
+            isTakeout: c.isTakeout,
+            takeoutNominal: Number(c.takeoutNominal ?? 0),
+          }))}
+          fullPrice={Number(takeoutTarget.snapPackagePricing?.fullPrice ?? 0)}
         />
       )}
 

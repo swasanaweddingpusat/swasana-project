@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { calcFinalPrice, adjustTermsForPriceReduction } from "@/lib/package-prices";
+import { calcFinalFromFullPrice, adjustTermsForPriceChange } from "@/lib/package-prices";
 import type { Prisma } from "@prisma/client";
 
 const updatePackagePricesSchema = z.object({
@@ -16,6 +16,7 @@ const updatePackagePricesSchema = z.object({
       z.object({
         id: z.string().min(1),
         isTakeout: z.boolean(),
+        takeoutNominal: z.coerce.number().int().min(0).default(0),
       }),
     )
     .min(1),
@@ -48,7 +49,7 @@ export async function updatePackagePrices(
     const [snapVariant, allCategories, currentTerms] = await Promise.all([
       db.snapPackagePricing.findUnique({
         where: { bookingId },
-        select: { price: true, margin: true },
+        select: { price: true, fullPrice: true, margin: true },
       }),
       db.snapPackageCategoryPrice.findMany({
         where: { bookingId },
@@ -59,10 +60,11 @@ export async function updatePackagePrices(
           sortOrder: true,
           isShow: true,
           isTakeout: true,
+          takeoutNominal: true,
         },
       }),
       db.termOfPayment.findMany({
-        where: { bookingId },
+        where: { bookingId, paymentStatus: { not: "refund" } },
         select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true },
         orderBy: { sortOrder: "asc" },
       }),
@@ -72,12 +74,20 @@ export async function updatePackagePrices(
       return { success: false, error: "Booking snapshot tidak ditemukan." };
     }
 
-    // Apply incoming toggles (only for isShow=true rows)
+    // Apply incoming toggles + nominal (only for isShow=true rows)
     const toggleMap = new Map(categoryToggles.map((t) => [t.id, t.isTakeout]));
-    const updatedCategories = allCategories.map((c) => ({
-      ...c,
-      isTakeout: c.isShow ? (toggleMap.get(c.id) ?? c.isTakeout) : false,
-    }));
+    const nominalMap = new Map(categoryToggles.map((t) => [t.id, t.takeoutNominal ?? 0]));
+    const updatedCategories = allCategories.map((c) => {
+      const isTakeout = c.isShow ? (toggleMap.get(c.id) ?? c.isTakeout) : false;
+      const incomingNominal = nominalMap.get(c.id);
+      return {
+        ...c,
+        isTakeout,
+        takeoutNominal: isTakeout
+          ? ((incomingNominal ?? c.takeoutNominal ?? 0) || c.basePrice)
+          : 0,
+      };
+    });
 
     // At least one category must remain included
     const hasIncluded = updatedCategories.some((c) => !c.isTakeout);
@@ -86,27 +96,44 @@ export async function updatePackagePrices(
     }
 
     const oldPrice = snapVariant.price;
-    const newPrice = calcFinalPrice(updatedCategories, snapVariant.margin ?? 0);
-    const { adjustedTerms, refundTerm } = adjustTermsForPriceReduction(
+    // fullPrice anchor: use stored value; fall back for pre-migration rows by
+    // reconstructing it from current price + already-deducted takeout nominals.
+    const fullPrice =
+      snapVariant.fullPrice > 0
+        ? snapVariant.fullPrice
+        : snapVariant.price +
+          allCategories
+            .filter((c) => c.isShow && c.isTakeout)
+            .reduce((s, c) => s + ((c.takeoutNominal ?? 0) || c.basePrice), 0);
+    const newPrice = calcFinalFromFullPrice(updatedCategories, fullPrice);
+    // Set-to-target recompute: works both ways (takeout on → price down,
+    // takeout off → price back up), so toggling restores original amounts.
+    const { adjustedTerms, refundTerm } = adjustTermsForPriceChange(
       currentTerms.map((t) => ({ ...t, amount: Number(t.amount) })),
-      oldPrice,
       newPrice,
     );
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
-      // Update each visible category's isTakeout
-      ...categoryToggles.map((t) =>
-        db.snapPackageCategoryPrice.update({
-          where: { id: t.id },
-          data: { isTakeout: t.isTakeout },
-        }),
-      ),
-      // Update snapPackagePricing.price
+      // Drop any prior refund terms first — they are recreated below only when
+      // an overpayment still exists. Prevents stale/duplicate refund rows.
+      db.termOfPayment.deleteMany({
+        where: { bookingId, paymentStatus: "refund" },
+      }),
+      // Update each visible category's isTakeout + takeoutNominal
+      ...updatedCategories
+        .filter((c) => toggleMap.has(c.id))
+        .map((c) =>
+          db.snapPackageCategoryPrice.update({
+            where: { id: c.id },
+            data: { isTakeout: c.isTakeout, takeoutNominal: c.takeoutNominal },
+          }),
+        ),
+      // Update snapPackagePricing.price (and persist the anchor for legacy rows)
       db.snapPackagePricing.update({
         where: { bookingId },
-        data: { price: newPrice },
+        data: { price: newPrice, fullPrice },
       }),
-      // Adjust unpaid/partial terms proportionally
+      // Recompute unpaid/partial terms toward the new price
       ...adjustedTerms.map((t) =>
         db.termOfPayment.update({
           where: { id: t.id },

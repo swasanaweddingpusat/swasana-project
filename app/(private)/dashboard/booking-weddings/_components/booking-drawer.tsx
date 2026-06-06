@@ -950,13 +950,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           qty: b.qty,
           nominal: b.nominal,
         })),
-        categoryToggles: allCategoryPrices.map((c) => ({
-          categoryName: c.categoryName,
-          basePrice: c.basePrice,
-          sortOrder: c.sortOrder,
-          isShow: c.isShow,
-          isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-        })),
+        categoryToggles: allCategoryPrices.map((c) => {
+          const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
+          return {
+            categoryName: c.categoryName,
+            basePrice: c.basePrice,
+            sortOrder: c.sortOrder,
+            isShow: c.isShow,
+            isTakeout,
+            takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
+          };
+        }),
       };
 
       const result = await finalizeMut.mutateAsync(finalizePayload);
@@ -1004,13 +1008,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
-      categoryToggles: allCategoryPrices.map((c) => ({
-        categoryName: c.categoryName,
-        basePrice: c.basePrice,
-        sortOrder: c.sortOrder,
-        isShow: c.isShow,
-        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-      })),
+      categoryToggles: allCategoryPrices.map((c) => {
+        const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
+        return {
+          categoryName: c.categoryName,
+          basePrice: c.basePrice,
+          sortOrder: c.sortOrder,
+          isShow: c.isShow,
+          isTakeout,
+          takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
+        };
+      }),
     };
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }

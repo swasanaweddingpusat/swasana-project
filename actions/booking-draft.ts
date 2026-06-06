@@ -11,6 +11,7 @@ import { resolveApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { notifySuperAdmins } from "@/lib/notifications";
+import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import {
   createDraftStep1Schema,
   updateDraftStep2Schema,
@@ -562,6 +563,9 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
     const toggleMap = new Map(
       (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
     );
+    const nominalMap = new Map(
+      (input.categoryToggles ?? []).map((t) => [t.categoryName, t.takeoutNominal ?? 0])
+    );
 
     // Build transaction ops array
     const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -629,16 +633,17 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
           .filter((c) => c.isShow && (toggleMap.get(c.categoryName) ?? false) && c.categoryId)
           .map((c) => c.categoryId as string)
       );
-      const hasTakeout = (input.categoryToggles ?? []).some((t) => t.isTakeout);
-      const pkgBase = pkg.categoryPrices.reduce((sum, c) => {
-        if (!c.isShow) return sum + c.basePrice;
-        const isTakeout = toggleMap.get(c.categoryName) ?? false;
-        return isTakeout ? sum : sum + c.basePrice;
-      }, 0);
-      const pkgPrice =
-        !hasTakeout && pkg.sellingPrice > 0
-          ? pkg.sellingPrice
-          : pkgBase + Math.round(pkgBase * ((pkg.margin ?? 0) / 100));
+      // Unified price model: fullPrice anchor − Σ(takeout nominal). UI == DB.
+      const fullPrice = computeFullPrice(pkg.categoryPrices, pkg.margin ?? 0, pkg.sellingPrice);
+      const pkgPrice = calcFinalFromFullPrice(
+        pkg.categoryPrices.map((c) => ({
+          isShow: c.isShow,
+          isTakeout: c.isShow ? (toggleMap.get(c.categoryName) ?? false) : false,
+          basePrice: c.basePrice,
+          takeoutNominal: nominalMap.get(c.categoryName) ?? 0,
+        })),
+        fullPrice,
+      );
 
       ops.push(
         db.snapPackage.create({
@@ -656,6 +661,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
             packageName: pkg.packageName,
             pax: pkg.pax,
             price: pkgPrice,
+            fullPrice,
             margin: pkg.margin ?? 0,
             termAndCondition: pkg.termAndCondition ?? null,
           },
@@ -696,8 +702,9 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
 
       if (pkg.categoryPrices.length > 0) {
         ops.push(
-          ...pkg.categoryPrices.map((cp) =>
-            db.snapPackageCategoryPrice.create({
+          ...pkg.categoryPrices.map((cp) => {
+            const isTakeout = cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false;
+            return db.snapPackageCategoryPrice.create({
               data: {
                 bookingId: draftId,
                 categoryId: cp.categoryId ?? null,
@@ -705,10 +712,11 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
                 basePrice: cp.basePrice,
                 sortOrder: cp.sortOrder,
                 isShow: cp.isShow,
-                isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
+                isTakeout,
+                takeoutNominal: isTakeout ? ((nominalMap.get(cp.categoryName) ?? 0) || cp.basePrice) : 0,
               },
-            })
-          )
+            });
+          })
         );
       }
     }

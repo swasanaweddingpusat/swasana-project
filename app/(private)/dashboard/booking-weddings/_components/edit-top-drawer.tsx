@@ -7,8 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer } from "@/components/shared/drawer";
@@ -25,108 +23,17 @@ import {
 import { cn } from "@/lib/utils";
 import { updateTermOfPayments } from "@/actions/term-of-payment";
 import { deletePartialPayment } from "@/actions/partial-payment";
-import { updatePackagePrices } from "@/actions/package-prices";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBookingFinanceDetail } from "@/hooks/use-booking-finance-detail";
-
-const R2_BASE = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
-
-function toFullUrl(raw: string): string {
-  if (raw.startsWith("http")) return raw;
-  return R2_BASE ? `${R2_BASE}/${raw}` : raw;
-}
-
-function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: () => void }) {
-  const [prev, setPrev] = useState(src);
-  const [url, setUrl] = useState<string | null>(() => {
-    if (typeof src === "string") return toFullUrl(src);
-    return src.type.startsWith("image/") ? URL.createObjectURL(src) : null;
-  });
-
-  if (prev !== src) {
-    if (url && typeof prev !== "string") URL.revokeObjectURL(url);
-    if (typeof src === "string") {
-      setUrl(toFullUrl(src));
-    } else {
-      setUrl(src.type.startsWith("image/") ? URL.createObjectURL(src) : null);
-    }
-    setPrev(src);
-  }
-
-  useEffect(() => () => { if (url && typeof prev !== "string") URL.revokeObjectURL(url); }, [url, prev]);
-
-  if (!url) return null;
-  const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");
-  if (!isImage) return null;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
-}
-
-function fmtRp(n: number): string {
-  return n.toLocaleString("id-ID");
-}
-
-function toLocalISO(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}T00:00:00.000Z`;
-}
-
-const PAYMENT_STATUS = ["paid", "partial", "unpaid"] as const;
-
-interface PartialPayment {
-  tempId: string;
-  dbId?: string;
-  amount: number;
-  paidAt: string;
-  evidence: File | string | null;
-  notes: string;
-}
-
-export interface FinanceTerm {
-  id: string;
-  name: string;
-  amount: number;
-  dueDate: string;
-  sortOrder: number;
-  paymentStatus: "unpaid" | "paid" | "partial";
-  ackStatus: string | null;
-  paymentEvidence: string | null;
-  notes: string | null;
-  partialPayments?: {
-    id: string;
-    amount: number;
-    paidAt: Date | string;
-    evidence: string | null;
-    notes: string | null;
-  }[];
-}
-
-export interface FinanceCategoryRow {
-  id: string;
-  categoryName: string;
-  basePrice: number;
-  sortOrder: number;
-  isShow: boolean;
-  isTakeout: boolean;
-}
-
-export interface EditBookingFinanceDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  bookingId: string;
-  customerName: string;
-  // TOP tab
-  initialTerms: FinanceTerm[];
-  packagePrice: number;
-  discountName: string | null;
-  discountAmount: number;
-  // Set Harga tab (optional — tab hidden when null/empty)
-  initialCategories: FinanceCategoryRow[] | null;
-  margin: number;
-  defaultTab?: "top" | "takeout";
-}
+import {
+  EvidencePreview,
+  PAYMENT_STATUS,
+  fmtRp,
+  toFullUrl,
+  toLocalISO,
+  type FinanceTerm,
+  type PartialPayment,
+} from "./edit-finance-shared";
 
 /* ─── TOP Content ─────────────────────────────────────────────────────────── */
 
@@ -185,17 +92,26 @@ function TopContent({
     });
   }, [initialTerms, initialDiscountName, initialDiscountAmount]);
 
-  // Term is locked when paid OR acknowledged by finance
+  // Term is locked when paid, acknowledged by finance, OR a system refund term
   const lockedIds = useMemo(
     () =>
       initialTerms
-        .filter((t) => t.paymentStatus === "paid" || t.ackStatus === "acknowledged")
+        .filter(
+          (t) =>
+            t.paymentStatus === "paid" ||
+            t.paymentStatus === "refund" ||
+            t.ackStatus === "acknowledged",
+        )
         .map((t) => t.id),
     [initialTerms],
   );
 
   const priceAfterDiscount = Math.max(0, packagePrice - discountAmount);
-  const totalTerms = terms.reduce((s, t) => s + (t.amount || 0), 0);
+  // Refund terms are a separate reconciliation, not a billable term — exclude
+  // them from the total so the difference reflects the actual billing pool.
+  const totalTerms = terms
+    .filter((t) => t.paymentStatus !== "refund")
+    .reduce((s, t) => s + (t.amount || 0), 0);
   const difference = totalTerms - priceAfterDiscount;
 
   const isChanged = useMemo(() => {
@@ -275,8 +191,10 @@ function TopContent({
       setUploading(null);
     }
 
-    const existingTerms = terms.filter((t) => !t.id.startsWith("new-"));
-    const newTerms = terms.filter((t) => t.id.startsWith("new-"));
+    // Refund terms are system-managed — never send them back as updates.
+    const editableTerms = terms.filter((t) => t.paymentStatus !== "refund");
+    const existingTerms = editableTerms.filter((t) => !t.id.startsWith("new-"));
+    const newTerms = editableTerms.filter((t) => t.id.startsWith("new-"));
 
     const result = await updateTermOfPayments(
       bookingId,
@@ -285,7 +203,7 @@ function TopContent({
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate,
-        paymentStatus: t.paymentStatus,
+        paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
         notes: t.notes,
       })),
       newTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate })),
@@ -353,6 +271,7 @@ function TopContent({
             {terms.map((term, idx) => {
               const locked = lockedIds.includes(term.id);
               const isAcknowledged = term.ackStatus === "acknowledged";
+              const isRefund = term.paymentStatus === "refund";
               const isNew = term.id.startsWith("new-");
               const isDP = term.name.trim().toUpperCase() === "DP";
               const isDPInvalid = isDP && (!term.amount || term.amount <= 0);
@@ -373,6 +292,12 @@ function TopContent({
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {/* Refund badge */}
+                      {isRefund && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-[var(--brand-gold)]/10 px-2 py-0.5 text-xs font-medium text-[var(--brand-gold)]">
+                          Refund
+                        </span>
+                      )}
                       {/* Acknowledged badge */}
                       {isAcknowledged && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -380,7 +305,7 @@ function TopContent({
                           Acknowledged
                         </span>
                       )}
-                      {!isNew && (
+                      {!isNew && !isRefund && (
                         <Select
                           value={term.paymentStatus}
                           onValueChange={(v) => handleFieldChange(term.id, "paymentStatus", v)}
@@ -1002,131 +927,20 @@ function TopContent({
   );
 }
 
-/* ─── Set Harga Content ───────────────────────────────────────────────────── */
+/* ─── EditTopDrawer (props-langsung) ──────────────────────────────────────── */
 
-function calcDisplayPrice(
-  categories: FinanceCategoryRow[],
-  toggles: Record<string, boolean>,
-  margin: number,
-): number {
-  const base = categories.reduce(
-    (sum, c) => sum + (!c.isShow || !toggles[c.id] ? c.basePrice : 0),
-    0,
-  );
-  return base + Math.round(base * (margin / 100));
-}
-
-interface SetHargaContentProps {
+export interface EditTopDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
   bookingId: string;
-  initialCategories: FinanceCategoryRow[];
-  margin: number;
+  customerName: string;
+  initialTerms: FinanceTerm[];
+  packagePrice: number;
+  discountName: string | null;
+  discountAmount: number;
 }
 
-function SetHargaContent({
-  bookingId,
-  initialCategories,
-  margin,
-}: SetHargaContentProps): React.ReactElement {
-  const qc = useQueryClient();
-  const [toggles, setToggles] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(initialCategories.map((c) => [c.id, c.isTakeout])),
-  );
-  const [loading, setLoading] = useState(false);
-
-  const visibleCategories = initialCategories.filter((c) => c.isShow);
-  const currentPrice = calcDisplayPrice(initialCategories, toggles, margin);
-  // Guard: at least one *visible* category must remain included (not takeout).
-  // Using initialCategories.some((c) => !toggles[c.id]) was wrong — hidden
-  // categories have no toggle entry so toggles[hiddenId] === undefined (falsy),
-  // making some() always return true regardless of visible category state.
-  const hasIncluded = initialCategories.filter((c) => c.isShow).some((c) => !toggles[c.id]);
-
-  const handleSave = async () => {
-    if (!hasIncluded) {
-      toast.error("Minimal satu kategori harus tetap included.");
-      return;
-    }
-    setLoading(true);
-    const result = await updatePackagePrices({
-      bookingId,
-      categoryToggles: visibleCategories.map((c) => ({
-        id: c.id,
-        isTakeout: toggles[c.id] ?? false,
-      })),
-    });
-    setLoading(false);
-    if (!result.success) {
-      toast.error(result.error ?? "Gagal menyimpan.");
-      return;
-    }
-    toast.success("Package prices berhasil diupdate.");
-    await qc.invalidateQueries({ queryKey: ["bookings"] });
-    // Drawer stays open — user closes manually
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto space-y-3 px-1">
-        <p className="text-xs text-muted-foreground">
-          Tandai kategori sebagai takeout jika klien menyediakan sendiri. Harga otomatis berkurang
-          dan term of payments disesuaikan.
-        </p>
-        {visibleCategories.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            Tidak ada kategori harga untuk booking ini.
-          </p>
-        )}
-        <div className="space-y-2">
-          {visibleCategories.map((cat) => {
-            const isTakeout = toggles[cat.id] ?? false;
-            return (
-              <div
-                key={cat.id}
-                className={cn("flex items-center justify-between rounded-lg border p-3")}
-              >
-                <div>
-                  <p className="text-sm font-medium">{cat.categoryName}</p>
-                  <p className="text-xs text-muted-foreground">Rp{fmtRp(cat.basePrice)}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "text-xs",
-                      isTakeout ? "text-destructive" : "text-muted-foreground",
-                    )}
-                  >
-                    {isTakeout ? "Takeout" : "Included"}
-                  </span>
-                  <Switch
-                    checked={isTakeout}
-                    onCheckedChange={(v) =>
-                      setToggles((prev) => ({ ...prev, [cat.id]: v }))
-                    }
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="rounded-lg bg-muted/30 p-3 space-y-1 mt-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Harga setelah takeout</span>
-            <span className="font-semibold">Rp{fmtRp(currentPrice)}</span>
-          </div>
-        </div>
-      </div>
-      <div className="sticky bottom-0 bg-background pt-4">
-        <Button className="w-full" onClick={handleSave} disabled={loading || !hasIncluded}>
-          {loading ? "Menyimpan..." : "Update Package Prices"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ─── EditBookingFinanceDrawer ────────────────────────────────────────────── */
-
-export function EditBookingFinanceDrawer({
+export function EditTopDrawer({
   isOpen,
   onClose,
   bookingId,
@@ -1135,89 +949,41 @@ export function EditBookingFinanceDrawer({
   packagePrice,
   discountName,
   discountAmount,
-  initialCategories,
-  margin,
-  defaultTab = "top",
-}: EditBookingFinanceDrawerProps): React.ReactElement {
-  const hasTakeoutData =
-    initialCategories !== null && initialCategories.length > 0;
-
-  // Force defaultTab to "top" if no takeout data
-  const resolvedDefaultTab = hasTakeoutData ? defaultTab : "top";
-
+}: EditTopDrawerProps): React.ReactElement {
   return (
-    <Drawer
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`Edit Keuangan Booking — ${customerName}`}
-    >
-      <Tabs
-        defaultValue={resolvedDefaultTab}
-        className="flex flex-col h-full gap-0"
-      >
-        <TabsList className="mb-4 w-full">
-          <TabsTrigger value="top" className="flex-1">
-            Term of Payment
-          </TabsTrigger>
-          {hasTakeoutData && (
-            <TabsTrigger value="takeout" className="flex-1">
-              Set Takeout
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="top" className="flex-1 min-h-0 overflow-hidden">
-          <TopContent
-            bookingId={bookingId}
-            initialTerms={initialTerms}
-            packagePrice={packagePrice}
-            discountName={discountName}
-            discountAmount={discountAmount}
-          />
-        </TabsContent>
-
-        {hasTakeoutData && (
-          <TabsContent value="takeout" className="flex-1 min-h-0 overflow-hidden">
-            <SetHargaContent
-              bookingId={bookingId}
-              initialCategories={initialCategories}
-              margin={margin}
-            />
-          </TabsContent>
-        )}
-      </Tabs>
+    <Drawer isOpen={isOpen} onClose={onClose} title={`Term of Payment — ${customerName}`}>
+      <TopContent
+        bookingId={bookingId}
+        initialTerms={initialTerms}
+        packagePrice={packagePrice}
+        discountName={discountName}
+        discountAmount={discountAmount}
+      />
     </Drawer>
   );
 }
 
-/* ─── EditBookingFinanceDrawerById ────────────────────────────────────────────
- * Lazy-loading variant: fetches booking finance detail on open.
- * Used by Finance AR table — avoids over-fetching in AR list query.
+/* ─── EditTopDrawerById (lazy fetch) ──────────────────────────────────────────
+ * Fetches booking finance detail on open. Used by Finance AR table.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-export interface EditBookingFinanceDrawerByIdProps {
+export interface EditTopDrawerByIdProps {
   isOpen: boolean;
   onClose: () => void;
   bookingId: string;
   customerName: string;
-  defaultTab?: "top" | "takeout";
 }
 
-export function EditBookingFinanceDrawerById({
+export function EditTopDrawerById({
   isOpen,
   onClose,
   bookingId,
   customerName,
-  defaultTab = "top",
-}: EditBookingFinanceDrawerByIdProps): React.ReactElement {
+}: EditTopDrawerByIdProps): React.ReactElement {
   const { data, isLoading, error } = useBookingFinanceDetail(isOpen ? bookingId : null);
 
   return (
-    <Drawer
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`Edit Keuangan Booking — ${customerName}`}
-    >
+    <Drawer isOpen={isOpen} onClose={onClose} title={`Term of Payment — ${customerName}`}>
       {isLoading && (
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
           Memuat data...
@@ -1229,38 +995,13 @@ export function EditBookingFinanceDrawerById({
         </div>
       )}
       {data && !isLoading && (
-        <Tabs defaultValue={defaultTab} className="flex flex-col h-full gap-0">
-          <TabsList className="mb-4 w-full">
-            <TabsTrigger value="top" className="flex-1">
-              Term of Payment
-            </TabsTrigger>
-            {data.categories !== null && data.categories.length > 0 && (
-              <TabsTrigger value="takeout" className="flex-1">
-                Set Takeout
-              </TabsTrigger>
-            )}
-          </TabsList>
-
-          <TabsContent value="top" className="flex-1 min-h-0 overflow-hidden">
-            <TopContent
-              bookingId={data.id}
-              initialTerms={data.terms}
-              packagePrice={data.packagePrice}
-              discountName={data.discountName}
-              discountAmount={data.discountAmount}
-            />
-          </TabsContent>
-
-          {data.categories !== null && data.categories.length > 0 && (
-            <TabsContent value="takeout" className="flex-1 min-h-0 overflow-hidden">
-              <SetHargaContent
-                bookingId={data.id}
-                initialCategories={data.categories}
-                margin={data.margin}
-              />
-            </TabsContent>
-          )}
-        </Tabs>
+        <TopContent
+          bookingId={data.id}
+          initialTerms={data.terms}
+          packagePrice={data.packagePrice}
+          discountName={data.discountName}
+          discountAmount={data.discountAmount}
+        />
       )}
     </Drawer>
   );
