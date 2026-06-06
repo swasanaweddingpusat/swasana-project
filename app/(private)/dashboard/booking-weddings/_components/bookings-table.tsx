@@ -28,6 +28,7 @@ import { BookingDetailModal } from "./booking-detail-modal";
 import { EditTopDrawer } from "./edit-top-drawer";
 import { EditTakeoutDrawer } from "./edit-takeout-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
+import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "./booking-po-preview-modal";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { PermissionGate } from "@/components/shared/permission-gate";
@@ -166,7 +167,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
-  const [isGeneratingPO, setIsGeneratingPO] = useState<string | null>(null);
+  const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
@@ -184,22 +185,15 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   });
   const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
 
-  async function generatePO(bookingId: string, revisionId?: string) {
-    setIsGeneratingPO(bookingId);
-    const t = toast.loading("Membuat PDF...");
-    try {
-      const res = await fetch("/api/render-po", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, revisionId }) });
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      toast.success("PDF siap!", { id: t });
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch {
-      toast.error("Gagal membuat PDF", { id: t });
-    } finally {
-      setIsGeneratingPO(null);
-    }
+  // Open the PO preview in a modal (no new tab). The modal fetches + renders
+  // the PDF itself; here we just point it at the booking / revision.
+  function previewPO(booking: BookingListItem, revisionId?: string, revLabel?: string) {
+    const base = booking.snapCustomer?.name ?? "Booking";
+    setPoPreviewTarget({
+      bookingId: booking.id,
+      revisionId,
+      label: revLabel ? `${base} · ${revLabel}` : base,
+    });
   }
 
   function fetchRevisions(bookingId: string) {
@@ -335,24 +329,24 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
               <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Booking
             </DropdownMenuItem>
             )}
-            {booking.bookingStatus === "Confirmed" && can("booking", "print") && (
-              <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
+            {/* PO preview is available regardless of approval/Confirmed status —
+                it opens in a modal (no new tab). */}
+            <DropdownMenuSub onOpenChange={(open) => { if (open) fetchRevisions(booking.id); }}>
                 <DropdownMenuSubTrigger className="cursor-pointer">
-                  <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> {isGeneratingPO === booking.id ? "Generating..." : "Cetak PO Booking"}
+                  <Printer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Preview PO Booking
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuItem className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id)}>
-                    Cetak Terbaru (Live)
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => previewPO(booking)}>
+                    Lihat Terbaru (Live)
                   </DropdownMenuItem>
                   {(revisionCache[booking.id] ?? []).length > 0 && <DropdownMenuSeparator />}
                   {(revisionCache[booking.id] ?? []).map((rev) => (
-                    <DropdownMenuItem key={rev.id} className="cursor-pointer" disabled={isGeneratingPO === booking.id} onClick={() => generatePO(booking.id, rev.id)}>
+                    <DropdownMenuItem key={rev.id} className="cursor-pointer" onClick={() => previewPO(booking, rev.id, `Rev ${rev.revisionNumber}`)}>
                       <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.pax ? ` · ${rev.pax} PAX` : ""}</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
-            )}
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
@@ -1249,9 +1243,27 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             isTakeout: c.isTakeout,
             takeoutNominal: Number(c.takeoutNominal ?? 0),
           }))}
+          initialTerms={(takeoutTarget.termOfPayments ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            amount: Number(t.amount),
+            dueDate: new Date(t.dueDate).toISOString(),
+            sortOrder: t.sortOrder,
+            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
+            ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
+            paymentEvidence: t.paymentEvidence ?? null,
+            notes: t.notes,
+          }))}
           fullPrice={Number(takeoutTarget.snapPackagePricing?.fullPrice ?? 0)}
         />
       )}
+
+      {/* PO Preview (modal — works before approval, no new tab) */}
+      <BookingPOPreviewModal
+        open={!!poPreviewTarget}
+        onOpenChange={(open) => { if (!open) setPoPreviewTarget(null); }}
+        target={poPreviewTarget}
+      />
 
       {/* Booking Approval Dialog (from chip) */}
       {approvalDialogTarget && user && (
