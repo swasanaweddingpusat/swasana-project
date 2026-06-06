@@ -104,6 +104,9 @@ export function useFinalizeDraftBooking() {
       void qc.invalidateQueries({ queryKey: ["bookings"] });
       void qc.invalidateQueries({ queryKey: ["booking-draft"] });
       void qc.invalidateQueries({ queryKey: ["customers"] });
+      // Finalizing a booking creates its approval record — refresh the approval
+      // map so the approve button / status badge appear without a manual reload.
+      void qc.invalidateQueries({ queryKey: ["booking-approvals"] });
     },
   });
 }
