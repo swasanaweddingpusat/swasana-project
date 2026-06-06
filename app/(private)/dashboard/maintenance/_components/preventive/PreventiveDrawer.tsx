@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -119,28 +119,32 @@ export function PreventiveDrawer({
   const invalidateMaintenance = useInvalidateMaintenance();
   const isPending = isCreating || isUpdating || isUploading;
 
-  useEffect(() => {
-    if (!open) return;
-    setSelectedFiles([]);
-    if (editItem) {
-      setForm({
-        venueId: editItem.venue.id,
-        statusId: editItem.status.id,
-        priorityId: editItem.priority.id,
-        categoryId: editItem.category.id,
-        assignedToId: editItem.assignedTo?.id ?? "",
-        isVendor: editItem.isVendor,
-        isAudit: editItem.isAudit,
-        description: editItem.description,
-        frequency: editItem.frequency ?? "",
-        nextDueDate: toDateInputValue(editItem.nextDueDate),
-      });
-      setExistingImages(editItem.images.map((img) => ({ id: img.id, url: img.url, fileName: img.fileName })));
-    } else {
-      setForm(DEFAULT_FORM);
-      setExistingImages([]);
+  const resetKey = open ? (editItem?.id ?? "__new__") : "";
+  const [prevResetKey, setPrevResetKey] = useState("");
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
+    if (open) {
+      setSelectedFiles([]);
+      if (editItem) {
+        setForm({
+          venueId: editItem.venue.id,
+          statusId: editItem.status.id,
+          priorityId: editItem.priority.id,
+          categoryId: editItem.category.id,
+          assignedToId: editItem.assignedTo?.id ?? "",
+          isVendor: editItem.isVendor,
+          isAudit: editItem.isAudit,
+          description: editItem.description,
+          frequency: editItem.frequency ?? "",
+          nextDueDate: toDateInputValue(editItem.nextDueDate),
+        });
+        setExistingImages(editItem.images.map((img) => ({ id: img.id, url: img.url, fileName: img.fileName })));
+      } else {
+        setForm(DEFAULT_FORM);
+        setExistingImages([]);
+      }
     }
-  }, [open, editItem]);
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
