@@ -104,6 +104,7 @@ export interface QuotationItem {
   others?: number;
   // ── Meta ───────────────────────────────────────────────────────
   status: "draft" | "sent" | "revised" | "accepted" | "rejected";
+  paymentMethodId?: string;
   validUntil: string;
   createdAt: string;
   /** Tanggal dokumen diterbitkan (mis. "2026-02-04") */
@@ -111,15 +112,6 @@ export interface QuotationItem {
   notes: string;
   signingLocation?: string;
   signatureSales?: string;
-  // ── Term of Payment (for edit prefill) ─────────────────────────
-  termOfPayments?: Array<{
-    id: string;
-    name: string;
-    amount: number;
-    dueDate: string | null;
-    sortOrder: number;
-    paymentStatus: string;
-  }>;
 }
 
 // ── DB row → display type mapper ─────────────────────────────────────────────
@@ -153,19 +145,15 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     discount: row.discount,
     totalPrice: row.totalPrice,
     status: row.status as QuotationItem["status"],
+    paymentMethodId: row.paymentMethodId ?? undefined,
+    bankName: row.paymentMethod?.bankName,
+    bankAccountNo: row.paymentMethod?.bankAccountNumber,
+    bankAccountName: row.paymentMethod?.bankRecipient,
     validUntil: row.validUntil ? format(new Date(row.validUntil), "yyyy-MM-dd") : "",
     createdAt: format(new Date(row.createdAt), "yyyy-MM-dd"),
     notes: row.notes ?? "",
     signingLocation: row.signingLocation ?? undefined,
     signatureSales: row.signatureSales ?? undefined,
-    termOfPayments: row.terms.map((t) => ({
-      id: t.id,
-      name: t.name,
-      amount: t.amount,
-      dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : null,
-      sortOrder: t.sortOrder,
-      paymentStatus: t.paymentStatus,
-    })),
     packageName: "",
     variantName: "",
     pax: 0,

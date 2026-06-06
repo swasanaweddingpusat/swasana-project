@@ -10,14 +10,6 @@ const quotationItemSchema = z.object({
   sortOrder: z.coerce.number().int().default(0),
 });
 
-const quotationTermSchema = z.object({
-  name: z.string().min(1, "Nama term wajib diisi"),
-  amount: z.coerce.number().int().min(0, "Jumlah wajib diisi"),
-  dueDate: z.string().optional().nullable(),
-  sortOrder: z.coerce.number().int().default(0),
-  paymentStatus: z.enum(["unpaid", "paid", "partial"]).default("unpaid"),
-});
-
 export const createQuotationSchema = z.object({
   // Step 1 — Informasi
   clientName: z.string().min(1, "Nama client wajib diisi"),
@@ -39,9 +31,8 @@ export const createQuotationSchema = z.object({
   discount: z.coerce.number().int().min(0).default(0),
   validUntil: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
-  // Step 3 — Term of Payment
-  termOfPayments: z.array(quotationTermSchema).min(1, "Minimal satu term of payment wajib diisi"),
-  // Step 4 — TTD
+  paymentMethodId: z.string().optional().nullable(),
+  // Step 3 — TTD
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
 });

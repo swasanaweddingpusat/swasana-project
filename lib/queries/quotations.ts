@@ -23,13 +23,14 @@ const quotationListSelect = {
   notes: true,
   signingLocation: true,
   signatureSales: true,
+  paymentMethodId: true,
   createdAt: true,
   updatedAt: true,
   sales: { select: { id: true, fullName: true, phoneNumber: true } },
   venue: { select: { id: true, name: true } },
+  paymentMethod: { select: { id: true, bankName: true, bankAccountNumber: true, bankRecipient: true } },
   eventType: { select: { id: true, name: true } },
   items: { orderBy: { sortOrder: "asc" as const }, select: { id: true, title: true, description: true, qty: true, price: true, total: true, manualTotal: true, sortOrder: true } },
-  terms: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true } },
 } as const;
 
 export type QuotationListRow = Awaited<ReturnType<typeof db.quotation.findMany<{ select: typeof quotationListSelect }>>>[number];

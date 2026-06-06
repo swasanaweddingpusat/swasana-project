@@ -87,6 +87,20 @@ export function Header() {
                   </div>
                 </DropdownMenuItem>
               )}
+              {canCreateQuotation && (
+                <DropdownMenuItem
+                  className="gap-3 py-2.5 cursor-pointer"
+                  onClick={() => openQuotationDrawer()}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <DocumentAdd weight="BoldDuotone" className="h-4 w-4 text-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-none">Tambah Quotation</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Buat penawaran harga untuk klien</p>
+                  </div>
+                </DropdownMenuItem>
+              )}
               {canCreateWedding && (
                 <DropdownMenuItem
                   className="gap-3 py-2.5 cursor-pointer"
@@ -112,20 +126,6 @@ export function Header() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium leading-none">Booking MICE</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">Meeting, insentif, konferensi</p>
-                  </div>
-                </DropdownMenuItem>
-              )}
-              {canCreateQuotation && (
-                <DropdownMenuItem
-                  className="gap-3 py-2.5 cursor-pointer"
-                  onClick={() => openQuotationDrawer()}
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <DocumentAdd weight="BoldDuotone" className="h-4 w-4 text-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium leading-none">Tambah Quotation</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">Buat penawaran harga untuk klien</p>
                   </div>
                 </DropdownMenuItem>
               )}

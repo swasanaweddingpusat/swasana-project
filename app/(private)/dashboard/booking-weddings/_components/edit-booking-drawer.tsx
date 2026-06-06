@@ -128,6 +128,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [originalVenueId, setOriginalVenueId] = useState("");
   const [originalPackageId, setOriginalPackageId] = useState("");
 
+  // Track original values for detail fields (loaded async from /api/bookings/:id)
+  // so hasAnyChange can correctly detect edits to contactEmail, NIK, address, bitrix, bonuses.
+  const originalDetailRef = useRef<{
+    email: string;
+    nikCpp: string;
+    nikCpw: string;
+    cppAddress: string;
+    cpwAddress: string;
+    bitrixId: string;
+    bonusesJson: string;
+  } | null>(null);
+
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
@@ -206,6 +218,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     sigSalesRef.current?.clear();
     setCategoryToggles({});
     setTakeoutPrices({});
+    // Reset detail-field originals so they are re-captured when detail loads
+    originalDetailRef.current = null;
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
     const defaultTerms: TermRow[] = [
@@ -221,14 +235,45 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Init detail fields
   useEffect(() => {
     if (!detail) return;
-    setContactEmail(detail.snapCustomer?.email ?? "");
-    setContactNikCpp(detail.snapCustomer?.cppNik ?? "");
-    setContactNikCpw(detail.snapCustomer?.cpwNik ?? "");
-    setContactCppAddress(detail.snapCustomer?.cppAddress ?? "");
-    setContactCpwAddress(detail.snapCustomer?.cpwAddress ?? "");
-    setContactBitrixId(detail.customer?.bitrixId ?? "");
-    if (detail.snapBonuses?.length && bonuses.length === 0) {
-      setBonuses(detail.snapBonuses.map((b: Record<string, unknown>) => ({ vendorId: b.vendorId as string, vendorCategoryId: b.vendorCategoryId as string, vendorName: b.vendorName as string, description: (b.description as string) ?? "", qty: Number(b.qty) || 1, nominal: Number(b.nominal) || 0 })));
+    const email = detail.snapCustomer?.email ?? "";
+    // Fallback to Customer record for NIK/address in case the snapshot was created
+    // before the user filled these fields (e.g. bookings created from a lead where
+    // NIK was added to the Customer master later without going through edit booking).
+    const nikCpp = detail.snapCustomer?.cppNik ?? detail.customer?.cppNik ?? "";
+    const nikCpw = detail.snapCustomer?.cpwNik ?? detail.customer?.cpwNik ?? "";
+    const cppAddress = detail.snapCustomer?.cppAddress ?? detail.customer?.cppAddress ?? "";
+    const cpwAddress = detail.snapCustomer?.cpwAddress ?? detail.customer?.cpwAddress ?? "";
+    const bitrixId = detail.customer?.bitrixId ?? "";
+    const mappedBonuses: BonusRow[] = (detail.snapBonuses ?? []).map((b: Record<string, unknown>) => ({
+      vendorId: b.vendorId as string,
+      vendorCategoryId: b.vendorCategoryId as string,
+      vendorName: b.vendorName as string,
+      description: (b.description as string) ?? "",
+      qty: Number(b.qty) || 1,
+      nominal: Number(b.nominal) || 0,
+    }));
+
+    setContactEmail(email);
+    setContactNikCpp(nikCpp);
+    setContactNikCpw(nikCpw);
+    setContactCppAddress(cppAddress);
+    setContactCpwAddress(cpwAddress);
+    setContactBitrixId(bitrixId);
+    if (mappedBonuses.length && bonuses.length === 0) {
+      setBonuses(mappedBonuses);
+    }
+
+    // Capture originals for hasAnyChange — only once per drawer open (ref is null-reset on open)
+    if (!originalDetailRef.current) {
+      originalDetailRef.current = {
+        email,
+        nikCpp,
+        nikCpw,
+        cppAddress,
+        cpwAddress,
+        bitrixId,
+        bonusesJson: JSON.stringify(mappedBonuses),
+      };
     }
     // Load existing category toggles + takeout nominals from saved snapshot
     if (detail.snapPackageCategoryPrices?.length) {
@@ -309,8 +354,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const currentContactDisplay = contactNumbers
     .map((e) => e.name ? `${e.name}: ${e.number}` : e.number)
     .join(", ");
+  const hasDetailChange = originalDetailRef.current !== null && (
+    contactEmail !== originalDetailRef.current.email ||
+    contactNikCpp !== originalDetailRef.current.nikCpp ||
+    contactNikCpw !== originalDetailRef.current.nikCpw ||
+    contactCppAddress !== originalDetailRef.current.cppAddress ||
+    contactCpwAddress !== originalDetailRef.current.cpwAddress ||
+    contactBitrixId !== originalDetailRef.current.bitrixId ||
+    JSON.stringify(bonuses) !== originalDetailRef.current.bonusesJson
+  );
   const hasAnyChange = !booking ? false : (
     hasSignificantChange ||
+    hasDetailChange ||
     customerName !== (booking.snapCustomer?.name ?? "") ||
     currentContactDisplay !== (booking.snapCustomer?.mobileNumber ?? "") ||
     (bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : "") !== (booking.bookingDate ? format(new Date(booking.bookingDate), "yyyy-MM-dd") : "") ||

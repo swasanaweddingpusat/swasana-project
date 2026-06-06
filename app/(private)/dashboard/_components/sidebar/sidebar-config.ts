@@ -95,6 +95,12 @@ export const navItems: NavItem[] = [
     permission: { module: "leads", action: "view" },
   },
   {
+    name: "Quotations",
+    href: "/dashboard/quotations",
+    icon: DocumentAdd,
+    permission: { module: "quotations", action: "view" },
+  },
+  {
     name: "Booking Weddings",
     href: "/dashboard/booking-weddings",
     icon: Ticket,
@@ -105,12 +111,6 @@ export const navItems: NavItem[] = [
     href: "/dashboard/booking-mice",
     icon: TicketSale,
     permission: { module: "booking-mice", action: "view" },
-  },
-  {
-    name: "Quotations",
-    href: "/dashboard/quotations",
-    icon: DocumentAdd,
-    permission: { module: "quotations", action: "view" },
   },
   {
     name: "Calendar Events",
