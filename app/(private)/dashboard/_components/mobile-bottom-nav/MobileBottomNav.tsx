@@ -104,15 +104,6 @@ const CREATE_SHEET_ITEMS: CreateSheetItem[] = [
     visible: (can) => can("leads", "create"),
   },
   {
-    key: "quotation",
-    label: "Tambah Quotation",
-    description: "Buat penawaran harga untuk klien",
-    href: "/dashboard/quotations",
-    Icon: DocumentAdd,
-    drawerKey: "quotation",
-    visible: (can) => can("quotations", "create"),
-  },
-  {
     key: "booking-weddings",
     label: "Booking Wedding",
     description: "Buat booking pernikahan",
@@ -129,6 +120,15 @@ const CREATE_SHEET_ITEMS: CreateSheetItem[] = [
     Icon: Buildings,
     drawerKey: "mice",
     visible: (can) => can("booking-mice", "create"),
+  },
+  {
+    key: "quotation",
+    label: "Tambah Quotation",
+    description: "Buat penawaran harga untuk klien",
+    href: "/dashboard/quotations",
+    Icon: DocumentAdd,
+    drawerKey: "quotation",
+    visible: (can) => can("quotations", "create"),
   },
 ];
 

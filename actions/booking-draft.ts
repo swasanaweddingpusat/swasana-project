@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
-import { resolveApprovalSteps } from "@/lib/approval-flows";
+import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { notifySuperAdmins } from "@/lib/notifications";
@@ -556,8 +556,14 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       }
     }
 
-    // Resolve approval steps
-    const bookingApprovalSteps = await resolveApprovalSteps("booking");
+    // Resolve approval steps: conditional Sales + Manager → Finance.
+    // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
+    const bookingApprovalSteps = await buildBookingApprovalSteps({
+      salesId: draft.salesId,
+      creatorProfileId: session!.user.profileId!,
+      signatureSales: input.signatureSales ?? draft.salesSignature,
+      decidedAt: new Date(),
+    });
 
     // Build categoryToggles map from input (for snap creation)
     const toggleMap = new Map(
@@ -752,13 +758,9 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       );
     }
 
-    // 7. ApprovalRecord + steps
+    // 7. ApprovalRecord + steps (Sales → Manager → Finance)
     if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
       const approvalRecordId = crypto.randomUUID();
-      const creatorRoleId = session!.user.roleId;
-      const creatorStepIdx = bookingApprovalSteps.findIndex(
-        (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
-      );
 
       ops.push(
         db.approvalRecord.create({
@@ -770,22 +772,21 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
             createdById: session!.user.profileId!,
           },
         }),
-        ...bookingApprovalSteps.map((step, i) => {
-          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-          return db.approvalRecordStep.create({
+        ...bookingApprovalSteps.map((step) =>
+          db.approvalRecordStep.create({
             data: {
               recordId: approvalRecordId,
-              stepOrder: step.sortOrder,
+              stepOrder: step.stepOrder,
               approverType: step.approverType,
               approverRoleId: step.approverRoleId,
-              approverUserId: null,
-              status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-              decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: shouldAutoApprove ? (input.signatureSales ?? null) : null,
+              approverUserId: step.approverUserId,
+              status: step.status,
+              decidedById: step.decidedById,
+              decidedAt: step.decidedAt,
+              signature: step.signature,
             },
-          });
-        })
+          })
+        )
       );
     }
 

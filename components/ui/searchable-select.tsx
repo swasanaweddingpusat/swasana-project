@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle, AltArrowDown, Magnifer } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
@@ -214,7 +215,12 @@ export function SearchableSelect({
           <AltArrowDown weight="BoldDuotone" className={cn("ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
         </button>
       </div>
-      {dropdown}
+      {/* Portal to body so position:fixed is viewport-relative — escapes any
+          transformed ancestor (Popover, table cell) that would otherwise make
+          fixed coordinates resolve against the ancestor instead of the viewport. */}
+      {dropdown && typeof document !== "undefined"
+        ? createPortal(dropdown, document.body)
+        : null}
     </>
   );
 }
