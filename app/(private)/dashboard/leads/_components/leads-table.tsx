@@ -229,7 +229,7 @@ export function LeadsTable() {
           bookingDate,
           venueId: lead.venue?.id ?? "",
           eventTypeId: lead.eventType?.id ?? "",
-          miceSession: lead.weddingSession as "morning" | "evening" | null ?? null,
+          miceSession: lead.weddingSession as "morning" | "evening" | "fullday" | null ?? null,
           salesId: lead.assignedTo?.id ?? null,
           sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
           estimatedPax: lead.estimatedPax ?? null,

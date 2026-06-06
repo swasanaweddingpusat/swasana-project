@@ -11,8 +11,8 @@ export const createMiceDraftStep1Schema = z.object({
   eventTypeId: z.string().optional().nullable(),
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
-  // Session MICE: morning atau evening (fullday tidak relevan untuk MICE)
-  miceSession: z.enum(["morning", "evening"]).optional().nullable(),
+  // Session MICE: morning, evening, atau fullday
+  miceSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   // Jam event MICE (mis. "09:00 - 17:00") — stored in eventTime field
   eventTime: z.string().trim().max(50).optional().nullable(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
