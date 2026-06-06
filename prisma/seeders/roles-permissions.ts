@@ -33,6 +33,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-event-types": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
+  "settings-quotation-templates": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   // CRM modules
@@ -74,6 +75,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     leads: ["view", "create", "edit"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
   },
   // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
@@ -87,6 +89,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "vendor-specialist": ["view", "create", "edit", "delete"],
     leads: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
     maintenance: ["view", "create", "edit", "delete"],
     "settings-maintenance-category": ["view", "create", "edit", "delete"],
     "settings-maintenance-priority": ["view", "create", "edit", "delete"],
@@ -148,6 +151,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     groups: ["view", "view-all", "create", "edit", "delete"],
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
   },
 };
 
