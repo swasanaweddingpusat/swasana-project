@@ -39,6 +39,11 @@ const moduleActions: Record<string, string[]> = {
   "settings-lead-status": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+  // Maintenance modules
+  maintenance: ["view", "create", "edit", "delete"],
+  "settings-maintenance-category": ["view", "create", "edit", "delete"],
+  "settings-maintenance-priority": ["view", "create", "edit", "delete"],
+  "settings-maintenance-status": ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -81,18 +86,24 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "vendor-specialist": ["view", "create", "edit", "delete"],
     leads: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
+    maintenance: ["view", "create", "edit", "delete"],
+    "settings-maintenance-category": ["view", "create", "edit", "delete"],
+    "settings-maintenance-priority": ["view", "create", "edit", "delete"],
+    "settings-maintenance-status": ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
     customers: ["view"],
     package: ["view"],
     vendor: ["view", "create", "edit"],
+    maintenance: ["view", "create", "edit"],
   },
   operational: {
     booking: ["view", "create", "edit", "comment"],
     customers: ["view"],
     package: ["view"],
     vendor: ["view"],
+    maintenance: ["view", "create", "edit"],
   },
   finance: {
     booking: ["view", "comment"],

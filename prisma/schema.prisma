@@ -143,6 +143,8 @@ model Profile {
   leadsAssigned            Lead[]          @relation("LeadAssignee")
   quotations               Quotation[]
   termOfPaymentsAcknowledged TermOfPayment[] @relation("TOPAcknowledger")
+  maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignee")
+  maintenanceTicketsCreated  MaintenanceTicket[] @relation("MaintenanceCreator")
 
   @@index([roleId])
   @@index([managerId])
@@ -276,9 +278,10 @@ model Venue {
   brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
   packages        Package[]
   paymentMethods  PaymentMethod[]
-  bookings        Booking[]
-  leads           Lead[]
-  quotations      Quotation[]
+  bookings           Booking[]
+  leads              Lead[]
+  quotations         Quotation[]
+  maintenanceTickets MaintenanceTicket[]
 
   @@index([brandId])
   @@map("venues")
@@ -1323,4 +1326,90 @@ model QuotationTerm {
 
   @@index([quotationId])
   @@map("quotation_terms")
+}
+
+// ─── Maintenance ─────────────────────────────────────────────────────────────
+
+enum MaintenanceType {
+  TICKET
+  PREVENTIVE
+}
+
+model MaintenanceCategory {
+  id        String              @id @default(uuid())
+  name      String              @unique
+  createdAt DateTime            @default(now())
+  tickets   MaintenanceTicket[]
+
+  @@map("maintenance_categories")
+}
+
+model MaintenancePriority {
+  id           String              @id @default(uuid())
+  name         String              @unique
+  deadlineDays Int
+  createdAt    DateTime            @default(now())
+  tickets      MaintenanceTicket[]
+
+  @@map("maintenance_priorities")
+}
+
+model MaintenanceStatus {
+  id        String              @id @default(uuid())
+  name      String              @unique
+  order     Int                 @default(0)
+  createdAt DateTime            @default(now())
+  tickets   MaintenanceTicket[]
+
+  @@map("maintenance_statuses")
+}
+
+model MaintenanceTicket {
+  id           String          @id @default(uuid())
+  type         MaintenanceType @default(TICKET)
+  description  String
+  estimateDate DateTime?
+  isVendor     Boolean         @default(false)
+  isAudit      Boolean         @default(false)
+
+  venueId      String
+  categoryId   String
+  priorityId   String
+  statusId     String
+  assignedToId String?
+  createdById  String
+
+  frequency   String?
+  nextDueDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venue      Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  category   MaintenanceCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priority   MaintenancePriority  @relation(fields: [priorityId], references: [id], onDelete: Restrict)
+  status     MaintenanceStatus    @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  assignedTo Profile?             @relation("MaintenanceAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy  Profile              @relation("MaintenanceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  images     MaintenanceImage[]
+
+  @@index([venueId])
+  @@index([type])
+  @@index([statusId])
+  @@index([priorityId])
+  @@index([assignedToId])
+  @@index([createdById])
+  @@map("maintenance_tickets")
+}
+
+model MaintenanceImage {
+  id        String            @id @default(uuid())
+  ticketId  String
+  ticket    MaintenanceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  url       String
+  fileName  String
+  createdAt DateTime          @default(now())
+
+  @@index([ticketId])
+  @@map("maintenance_images")
 }

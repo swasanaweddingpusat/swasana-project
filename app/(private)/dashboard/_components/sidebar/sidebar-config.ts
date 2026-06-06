@@ -31,6 +31,7 @@ import {
   Volume,
   Bill,
   DocumentAdd,
+  Sledgehammer,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -69,6 +70,9 @@ export const SETTINGS_MODULES = [
   "settings-role-permission",
   "settings-source-of-information",
   "settings-lead-status",
+  "settings-maintenance-category",
+  "settings-maintenance-priority",
+  "settings-maintenance-status",
   "customers",
 ] as const;
 
@@ -159,6 +163,12 @@ export const navItems: NavItem[] = [
         ],
       },
     ],
+  },
+  {
+    name: "Maintenance",
+    href: "/dashboard/maintenance",
+    icon: Sledgehammer,
+    permission: { module: "maintenance", action: "view" },
   },
   {
     name: "Package",
