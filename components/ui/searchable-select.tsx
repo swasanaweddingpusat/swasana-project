@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { CheckCircle, AltArrowDown, Magnifer } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
 export interface SearchableSelectOption {
@@ -135,7 +135,7 @@ export function SearchableSelect({
     >
       {!pos.openUp && (
         <div className={cn('flex', 'items-center', 'border-b', 'px-3')}>
-          <Search className={cn('mr-2', 'h-4', 'w-4', 'shrink-0', 'opacity-50')} />
+          <Magnifer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'shrink-0', 'opacity-50')} />
           <input
             ref={inputRef}
             className={cn('flex', 'h-10', 'w-full', 'bg-transparent', 'py-3', 'text-sm', 'outline-none', 'placeholder:text-muted-foreground')}
@@ -159,11 +159,11 @@ export function SearchableSelect({
             onMouseDown={(e) => { e.preventDefault(); handleSelect(opt.id); }}
           >
             <div className={cn('flex', 'items-center', 'min-w-0')}>
-              <Check className={cn("mr-2 h-4 w-4 shrink-0", value === opt.id ? "opacity-100" : "opacity-0")} />
+              <CheckCircle weight="BoldDuotone" className={cn("mr-2 h-4 w-4 shrink-0", value === opt.id ? "opacity-100" : "opacity-0")} />
               <span className="truncate">{opt.name}</span>
             </div>
             {opt.badge && (
-              <span className={cn('ml-2', 'shrink-0', 'text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-gray-200', 'bg-gray-50', 'text-gray-500')}>
+              <span className={cn('ml-2', 'shrink-0', 'text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground')}>
                 {opt.badge}
               </span>
             )}
@@ -180,7 +180,7 @@ export function SearchableSelect({
       </div>
       {pos.openUp && (
         <div className={cn('flex', 'items-center', 'border-t', 'px-3')}>
-          <Search className={cn('mr-2', 'h-4', 'w-4', 'shrink-0', 'opacity-50')} />
+          <Magnifer weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'shrink-0', 'opacity-50')} />
           <input
             ref={inputRef}
             className={cn('flex', 'h-10', 'w-full', 'bg-transparent', 'py-3', 'text-sm', 'outline-none', 'placeholder:text-muted-foreground')}
@@ -211,7 +211,7 @@ export function SearchableSelect({
           )}
         >
           <span className="truncate">{selectedOption ? selectedOption.name : placeholder}</span>
-          <ChevronDown className={cn("ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
+          <AltArrowDown weight="BoldDuotone" className={cn("ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
         </button>
       </div>
       {dropdown}
