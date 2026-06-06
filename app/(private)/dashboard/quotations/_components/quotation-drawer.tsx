@@ -919,16 +919,14 @@ export function QuotationDrawer({
   const isStep1Incomplete =
     !watchedClientName?.trim() ||
     !watchedSalesId ||
-    !watchedVenueId ||
     !watchedCategory ||
     !watchedEventTypeId ||
     !watchedEventDate ||
     !watchedWeddingSession ||
     !watchedTime?.trim();
 
-  const watchedValidUntil = form.watch("validUntil");
-  // Step 2 requires the "Berlaku Sampai" date (only required field in step 2).
-  const isStep2Incomplete = !watchedValidUntil?.trim();
+  // Step 2 (items + discount) has no hard-required field — items default to one row.
+  const isStep2Incomplete = false;
   // Step 3 requires at least one term of payment, each with an amount > 0.
   const isStep3Incomplete =
     terms.length === 0 || terms.some((t) => !t.amount || t.amount <= 0);
@@ -1260,9 +1258,7 @@ export function QuotationDrawer({
       ]);
       if (ok) setStep(2);
     } else if (step === 2) {
-      // Validasi validUntil sebelum lanjut ke step 3 (TOP)
-      const ok = await form.trigger(["validUntil"]);
-      if (ok) setStep(3);
+      setStep(3);
     } else if (step === 3) {
       // Validasi: minimal 1 term, dan setiap term wajib punya amount > 0.
       if (terms.length === 0) {
@@ -1616,10 +1612,9 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="venueId"
-                      rules={{ required: "Venue wajib dipilih" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Venue *</FormLabel>
+                          <FormLabel className={LABEL_CLASS}>Venue</FormLabel>
                           <FormControl>
                             <SearchableSelect
                               options={venues.map((v) => ({ id: v.id, name: v.name }))}
@@ -1720,7 +1715,6 @@ export function QuotationDrawer({
                               render={
                                 <Button
                                   variant="outline"
-                                  disabled={!watchedVenueId}
                                   className={cn(
                                     "w-full justify-start text-left font-normal",
                                     !field.value && "text-muted-foreground",
@@ -1730,14 +1724,12 @@ export function QuotationDrawer({
                                     weight="BoldDuotone"
                                     className="mr-2 h-4 w-4"
                                   />
-                                  {watchedVenueId
-                                    ? field.value
-                                      ? format(
-                                          new Date(field.value + "T00:00:00"),
-                                          "PPP",
-                                        )
-                                      : "Pilih tanggal event"
-                                    : "Pilih venue terlebih dahulu"}
+                                  {field.value
+                                    ? format(
+                                        new Date(field.value + "T00:00:00"),
+                                        "PPP",
+                                      )
+                                    : "Pilih tanggal event"}
                                 </Button>
                               }
                             />
@@ -1820,15 +1812,13 @@ export function QuotationDrawer({
                                 value={field.value}
                                 onChange={(v) => field.onChange(v as WeddingSession)}
                                 placeholder={
-                                  !watchedVenueId
-                                    ? "Pilih venue dulu"
-                                    : !watchedEventDate
-                                      ? "Pilih tanggal dulu"
-                                      : "Pilih session..."
+                                  !watchedEventDate
+                                    ? "Pilih tanggal dulu"
+                                    : "Pilih session..."
                                 }
                                 searchPlaceholder="Cari session..."
                                 emptyText="Tidak ada session tersedia"
-                                disabled={!watchedVenueId || !watchedEventDate}
+                                disabled={!watchedEventDate}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1970,22 +1960,6 @@ export function QuotationDrawer({
                     </div>
                   </div>
                 </div>
-
-                {/* ── Berlaku Sampai ────────────────────────────────── */}
-                <FormField
-                  control={form.control}
-                  name="validUntil"
-                  rules={{ required: "Tanggal berlaku wajib diisi" }}
-                  render={({ field }) => (
-                    <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>Berlaku Sampai *</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="date" className="w-full" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 {/* ── Catatan ───────────────────────────────────────── */}
                 <FormField

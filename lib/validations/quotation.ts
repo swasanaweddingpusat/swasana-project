@@ -24,7 +24,7 @@ export const createQuotationSchema = z.object({
   clientPhone: z.string().min(1, "No. HP client wajib diisi"),
   instansi: z.string().optional().nullable(),
   salesId: z.string().min(1, "Sales wajib dipilih"),
-  venueId: z.string().min(1, "Venue wajib dipilih"),
+  venueId: z.string().optional().nullable(),
   // Snapshots (name at creation time for display/PDF)
   venueName: z.string().optional().nullable(),
   eventTypeId: z.string().optional().nullable(),
@@ -37,7 +37,7 @@ export const createQuotationSchema = z.object({
   // Step 2 — Items + pricing
   items: z.array(quotationItemSchema).min(1, "Minimal satu item wajib diisi"),
   discount: z.coerce.number().int().min(0).default(0),
-  validUntil: z.string().min(1, "Berlaku hingga wajib diisi"),
+  validUntil: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   // Step 3 — Term of Payment
   termOfPayments: z.array(quotationTermSchema).min(1, "Minimal satu term of payment wajib diisi"),

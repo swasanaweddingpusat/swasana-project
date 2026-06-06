@@ -133,7 +133,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     instansi: row.instansi ?? undefined,
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
-    venue: row.venueName ?? row.venue.name,
+    venue: row.venueName ?? row.venue?.name ?? "",
     category: row.category.toLowerCase() as "weddings" | "mice",
     eventType: row.eventTypeName ?? row.eventType?.name ?? "",
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",

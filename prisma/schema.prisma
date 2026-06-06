@@ -1255,7 +1255,7 @@ model Quotation {
 
   // Relations
   salesId         String
-  venueId         String
+  venueId         String?
   eventTypeId     String?
   // Snapshot of names at creation time (for display/PDF without JOIN)
   eventTypeName   String?
@@ -1282,7 +1282,7 @@ model Quotation {
   updatedAt       DateTime         @updatedAt
 
   sales     Profile    @relation(fields: [salesId], references: [id], onDelete: Restrict)
-  venue     Venue      @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  venue     Venue?     @relation(fields: [venueId], references: [id], onDelete: SetNull)
   eventType EventType? @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
 
   items QuotationItem[]
