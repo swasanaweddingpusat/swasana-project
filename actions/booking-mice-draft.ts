@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { getNextSequence } from "@/lib/counter";
 import { resolveApprovalSteps } from "@/lib/approval-flows";
 import { resolveManagerId } from "@/lib/resolve-manager";
@@ -552,6 +553,9 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
 
     return { success: true, bookingId: draftId, termIds: createdTerms };
   } catch (e) {
+    if (isSlotConflictError(e)) {
+      return { success: false, error: SLOT_TAKEN_MESSAGE };
+    }
     console.error("[finalizeDraftMiceBooking]", e);
     return { success: false, error: "Gagal memfinalisasi booking MICE." };
   }
