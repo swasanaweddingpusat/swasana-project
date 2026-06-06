@@ -135,9 +135,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "sales-mice": {
     "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
     customers: ["view", "create", "edit"],
-    package: ["view"],
     vendor: ["view"],
     quotations: ["view", "create", "edit"],
+    leads: ["view", "create", "edit", "delete"],
   },
   // MICE manager: MICE features (leads, quotations, booking-mice) + groups,
   // customers, and event-types settings. No wedding booking, no finance/package/vendor.
