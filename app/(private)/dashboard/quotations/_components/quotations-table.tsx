@@ -16,13 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -416,22 +410,18 @@ export function QuotationsTable() {
       </div>
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Status</label>
-        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter status quotation">
-            <SelectValue placeholder="Semua Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            {statusCounts.map((s) => (
-              <SelectItem key={s.status} value={s.status}>
-                <span className="flex items-center gap-2">
-                  <StatusDot className={s.dotClass} />
-                  {s.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Status" },
+            ...statusCounts.map((s) => ({ id: s.status, name: s.label })),
+          ]}
+          value={statusFilter}
+          onChange={handleStatusFilterChange}
+          placeholder="Semua Status"
+          searchPlaceholder="Cari status..."
+          emptyText="Status tidak ditemukan"
+          className="h-9"
+        />
       </div>
     </div>
   );
