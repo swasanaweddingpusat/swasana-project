@@ -130,7 +130,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // Track original values for detail fields (loaded async from /api/bookings/:id)
   // so hasAnyChange can correctly detect edits to contactEmail, NIK, address, bitrix, bonuses.
-  const originalDetailRef = useRef<{
+  // Stored in state (not a ref) because it's read during render for dirty-checking.
+  const [originalDetail, setOriginalDetail] = useState<{
     email: string;
     nikCpp: string;
     nikCpw: string;
@@ -219,7 +220,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setCategoryToggles({});
     setTakeoutPrices({});
     // Reset detail-field originals so they are re-captured when detail loads
-    originalDetailRef.current = null;
+    setOriginalDetail(null);
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
     const defaultTerms: TermRow[] = [
@@ -263,18 +264,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       setBonuses(mappedBonuses);
     }
 
-    // Capture originals for hasAnyChange — only once per drawer open (ref is null-reset on open)
-    if (!originalDetailRef.current) {
-      originalDetailRef.current = {
-        email,
-        nikCpp,
-        nikCpw,
-        cppAddress,
-        cpwAddress,
-        bitrixId,
-        bonusesJson: JSON.stringify(mappedBonuses),
-      };
-    }
+    // Capture originals for hasAnyChange — only once per drawer open (state is null-reset on open)
+    setOriginalDetail((prev) => prev ?? {
+      email,
+      nikCpp,
+      nikCpw,
+      cppAddress,
+      cpwAddress,
+      bitrixId,
+      bonusesJson: JSON.stringify(mappedBonuses),
+    });
     // Load existing category toggles + takeout nominals from saved snapshot
     if (detail.snapPackageCategoryPrices?.length) {
       const toggleMap: Record<string, boolean> = {};
@@ -354,14 +353,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const currentContactDisplay = contactNumbers
     .map((e) => e.name ? `${e.name}: ${e.number}` : e.number)
     .join(", ");
-  const hasDetailChange = originalDetailRef.current !== null && (
-    contactEmail !== originalDetailRef.current.email ||
-    contactNikCpp !== originalDetailRef.current.nikCpp ||
-    contactNikCpw !== originalDetailRef.current.nikCpw ||
-    contactCppAddress !== originalDetailRef.current.cppAddress ||
-    contactCpwAddress !== originalDetailRef.current.cpwAddress ||
-    contactBitrixId !== originalDetailRef.current.bitrixId ||
-    JSON.stringify(bonuses) !== originalDetailRef.current.bonusesJson
+  const hasDetailChange = originalDetail !== null && (
+    contactEmail !== originalDetail.email ||
+    contactNikCpp !== originalDetail.nikCpp ||
+    contactNikCpw !== originalDetail.nikCpw ||
+    contactCppAddress !== originalDetail.cppAddress ||
+    contactCpwAddress !== originalDetail.cpwAddress ||
+    contactBitrixId !== originalDetail.bitrixId ||
+    JSON.stringify(bonuses) !== originalDetail.bonusesJson
   );
   const hasAnyChange = !booking ? false : (
     hasSignificantChange ||
