@@ -3,14 +3,19 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useSession, signOut } from "next-auth/react";
 import {
   Widget,
   UsersGroupRounded,
-  Volume,
+  Documents,
+  UserCircle,
+  UserPlus,
   DocumentAdd,
-  Ticket,
-  Heart,
-  TicketSale,
+  CalendarAdd,
+  Buildings,
+  User,
+  Logout,
+  AddSquare,
 } from "@solar-icons/react";
 import type { IconProps } from "@solar-icons/react";
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
@@ -20,40 +25,41 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePermissions } from "@/hooks/use-permissions";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
+import { useMiceBookingDrawer } from "@/components/providers/mice-booking-drawer-provider";
 import { useQuotationDrawer } from "@/components/providers/quotation-drawer-provider";
 import type { OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
 
-/** Items that own a global "create" drawer. Tapping the nav entry while off the
- *  item's page opens the drawer instead of navigating; on submit it redirects
- *  to the list page. While already on the page, the entry is a plain link. */
-type DrawerKey = "lead" | "quotation" | "booking";
+/** Drawer-backed create actions surfaced inside the center "+" sheet. */
+type DrawerKey = "lead" | "quotation" | "booking" | "mice";
 
 interface BottomNavItem {
   key: string;
   label: string;
-  href?: string;
-  Icon: SolarIcon;
-  visible: (can: (m: string, a: string) => boolean, isGroupMember: boolean) => boolean;
-  isBookingTrigger?: true;
-  drawerKey?: DrawerKey;
-}
-
-interface BookingSheetItem {
-  key: string;
-  label: string;
   href: string;
   Icon: SolarIcon;
-  visible: (can: (m: string, a: string) => boolean) => boolean;
-  drawerKey?: DrawerKey;
+  visible: (can: (m: string, a: string) => boolean, isGroupMember: boolean) => boolean;
 }
 
+interface CreateSheetItem {
+  key: string;
+  label: string;
+  description: string;
+  /** List page to land on after a successful create (onSuccess redirect). */
+  href: string;
+  Icon: SolarIcon;
+  drawerKey: DrawerKey;
+  visible: (can: (m: string, a: string) => boolean) => boolean;
+}
+
+/** Left / right navigation slots — the center "+" is rendered separately as a FAB. */
 const NAV_ITEMS: BottomNavItem[] = [
   {
     key: "home",
@@ -70,51 +76,65 @@ const NAV_ITEMS: BottomNavItem[] = [
     visible: (can, isGroupMember) => can("groups", "view") || isGroupMember,
   },
   {
-    key: "leads",
-    label: "Leads",
-    href: "/dashboard/leads",
-    Icon: Volume,
-    visible: (can) => can("leads", "view"),
-    drawerKey: "lead",
+    key: "package",
+    label: "Package",
+    href: "/dashboard/packages",
+    Icon: Documents,
+    visible: (can) => can("package", "view"),
   },
   {
-    key: "quotations",
-    label: "Quotations",
-    href: "/dashboard/quotations",
-    Icon: DocumentAdd,
-    visible: (can) => can("quotations", "view"),
-    drawerKey: "quotation",
-  },
-  {
-    key: "bookings",
-    label: "Bookings",
-    Icon: Ticket,
-    isBookingTrigger: true,
-    visible: (can) => can("booking", "view") || can("booking-mice", "view"),
+    key: "profile",
+    label: "Profile",
+    href: "/dashboard/profile",
+    Icon: UserCircle,
+    visible: () => true,
   },
 ];
 
-const BOOKING_SHEET_ITEMS: BookingSheetItem[] = [
+/** Items inside the center "+" create sheet. Gated by the `create` action so it
+ *  mirrors the desktop header "Tambah Baru" menu. */
+const CREATE_SHEET_ITEMS: CreateSheetItem[] = [
+  {
+    key: "lead",
+    label: "Tambah Lead",
+    description: "Catat prospek baru",
+    href: "/dashboard/leads",
+    Icon: UserPlus,
+    drawerKey: "lead",
+    visible: (can) => can("leads", "create"),
+  },
+  {
+    key: "quotation",
+    label: "Tambah Quotation",
+    description: "Buat penawaran harga untuk klien",
+    href: "/dashboard/quotations",
+    Icon: DocumentAdd,
+    drawerKey: "quotation",
+    visible: (can) => can("quotations", "create"),
+  },
   {
     key: "booking-weddings",
-    label: "Booking Weddings",
+    label: "Booking Wedding",
+    description: "Buat booking pernikahan",
     href: "/dashboard/booking-weddings",
-    Icon: Heart,
-    visible: (can) => can("booking", "view"),
+    Icon: CalendarAdd,
     drawerKey: "booking",
+    visible: (can) => can("booking", "create"),
   },
   {
     key: "booking-mice",
     label: "Booking MICE",
+    description: "Meeting, insentif, konferensi",
     href: "/dashboard/booking-mice",
-    Icon: TicketSale,
-    visible: (can) => can("booking-mice", "view"),
+    Icon: Buildings,
+    drawerKey: "mice",
+    visible: (can) => can("booking-mice", "create"),
   },
 ];
 
 const GOLD_DOT = { backgroundColor: "var(--brand-gold)" } as const;
 
-/** Icon + label + active indicator — shared across link / drawer / sheet entries. */
+/** Icon + label + active indicator — shared across nav link entries. */
 function NavItemBody({
   Icon,
   label,
@@ -141,25 +161,29 @@ function NavItemBody({
 export function MobileBottomNav(): React.JSX.Element | null {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
   const { can, isLoading, isGroupMember } = usePermissions();
-  const [bookingSheetOpen, setBookingSheetOpen] = useState(false);
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
+  const [profileSheetOpen, setProfileSheetOpen] = useState(false);
   const { openLeadDrawer } = useLeadDrawer();
   const { openBookingDrawer } = useBookingDrawer();
+  const { openMiceBookingDrawer } = useMiceBookingDrawer();
   const { openQuotationDrawer } = useQuotationDrawer();
 
   const drawerOpeners: Record<DrawerKey, (opts?: OpenDrawerOptions) => void> = {
     lead: openLeadDrawer,
     quotation: openQuotationDrawer,
     booking: openBookingDrawer,
+    mice: openMiceBookingDrawer,
   };
 
   /**
    * Open the create drawer for `key`.
-   * When off the item's page, register an onSuccess redirect so the user lands
-   * on the list after saving. When already on the page, skip the redirect —
-   * the list will refresh automatically via TanStack Query invalidation.
+   * When off the item's list page, register an onSuccess redirect so the user
+   * lands on the list after saving. When already on the page, skip the redirect
+   * — the list refreshes via TanStack Query invalidation.
    */
-  const openCreateDrawer = (key: DrawerKey, href: string, alreadyOnPage = false): void => {
+  const openCreateDrawer = (key: DrawerKey, href: string, alreadyOnPage: boolean): void => {
     drawerOpeners[key](alreadyOnPage ? undefined : { onSuccess: () => router.push(href) });
   };
 
@@ -168,13 +192,9 @@ export function MobileBottomNav(): React.JSX.Element | null {
     return pathname.startsWith(href);
   };
 
-  const isBookingActive =
-    pathname.startsWith("/dashboard/booking-weddings") ||
-    pathname.startsWith("/dashboard/booking-mice");
-
   if (isLoading) {
     return (
-      <div className="fixed bottom-0 inset-x-0 z-50 md:hidden border-t border-border bg-card">
+      <div className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-border bg-card">
         <div
           className="flex items-center justify-around px-2 pt-2 pb-2"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -190,116 +210,183 @@ export function MobileBottomNav(): React.JSX.Element | null {
     );
   }
 
-  const visibleItems = NAV_ITEMS.filter((item) =>
-    item.visible(can, isGroupMember)
-  );
+  const visibleItems = NAV_ITEMS.filter((item) => item.visible(can, isGroupMember));
+  const visibleCreateItems = CREATE_SHEET_ITEMS.filter((item) => item.visible(can));
 
-  if (visibleItems.length === 0) return null;
+  // Split the nav slots so the FAB sits dead-center: [home, groups] | + | [package, profile].
+  const half = Math.ceil(visibleItems.length / 2);
+  const leftItems = visibleItems.slice(0, half);
+  const rightItems = visibleItems.slice(half);
 
-  const visibleBookingItems = BOOKING_SHEET_ITEMS.filter((item) =>
-    item.visible(can)
-  );
+  const userName = session?.user?.name ?? "—";
+  const userImage = session?.user?.image ?? "";
+  const userRole =
+    session?.user?.roleName
+      ?.replace(/-/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()) ?? session?.user?.email ?? "";
 
   const navItemClass = (active: boolean): string =>
     cn(
-      "relative flex flex-col items-center gap-1 px-3 pb-2 min-w-0 flex-1",
+      "relative flex flex-col items-center gap-1 px-2 pb-2 min-w-0 flex-1",
       "transition-colors duration-150",
       active ? "text-foreground" : "text-muted-foreground"
     );
 
+  const renderNavItem = (item: BottomNavItem): React.JSX.Element => {
+    // Profile opens its own bottom sheet instead of navigating directly.
+    if (item.key === "profile") {
+      const active = isActive(item.href) || profileSheetOpen;
+      return (
+        <button
+          key={item.key}
+          type="button"
+          onClick={() => setProfileSheetOpen(true)}
+          className={navItemClass(active)}
+        >
+          <NavItemBody Icon={item.Icon} label={item.label} active={active} />
+        </button>
+      );
+    }
+
+    const active = isActive(item.href);
+    return (
+      <Link key={item.key} href={item.href} className={navItemClass(active)}>
+        <NavItemBody Icon={item.Icon} label={item.label} active={active} />
+      </Link>
+    );
+  };
+
   return (
     <>
-      <div className="fixed bottom-0 inset-x-0 z-50 md:hidden border-t border-border bg-card shadow-[0_-2px_12px_0_hsl(var(--foreground)/0.06)]">
+      <div className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-border bg-card shadow-[0_-2px_12px_0_hsl(var(--foreground)/0.06)]">
         <div
           className="flex items-center justify-around px-1 pt-2"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
-          {visibleItems.map((item) => {
-            // Bookings → opens the category bottom sheet.
-            if (item.isBookingTrigger) {
-              const active = isBookingActive || bookingSheetOpen;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setBookingSheetOpen(true)}
-                  className={navItemClass(active)}
-                >
-                  <NavItemBody Icon={item.Icon} label={item.label} active={active} />
-                </button>
-              );
-            }
+          {leftItems.map(renderNavItem)}
 
-            const active = isActive(item.href!);
+          {/* Center "Tambah" — opens the create sheet. Same flat treatment as
+              the other nav items. Hidden when the user has no create permission
+              for any of the surfaced actions. */}
+          {visibleCreateItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCreateSheetOpen(true)}
+              aria-label="Tambah baru"
+              className={cn(
+                "relative flex flex-col items-center gap-1 px-2 pb-2 min-w-0 flex-1",
+                "transition-colors duration-150 text-muted-foreground"
+              )}
+            >
+              <AddSquare weight="BoldDuotone" className="h-6 w-6 shrink-0" />
+              <span className="text-[10px] font-medium leading-none truncate">Tambah</span>
+            </button>
+          )}
 
-            // Items with a create drawer always open the drawer on tap.
-            // Off-page → drawer registers onSuccess redirect to the list page.
-            // On-page  → drawer opens without redirect (list refreshes via query invalidation).
-            if (item.drawerKey) {
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => openCreateDrawer(item.drawerKey!, item.href!, active)}
-                  className={navItemClass(active)}
-                >
-                  <NavItemBody Icon={item.Icon} label={item.label} active={active} />
-                </button>
-              );
-            }
-
-            return (
-              <Link key={item.key} href={item.href!} className={navItemClass(active)}>
-                <NavItemBody Icon={item.Icon} label={item.label} active={active} />
-              </Link>
-            );
-          })}
+          {rightItems.map(renderNavItem)}
         </div>
       </div>
 
-      <Sheet open={bookingSheetOpen} onOpenChange={setBookingSheetOpen}>
+      {/* Create sheet — Leads / Quotation / Booking Wedding / Booking MICE */}
+      <Sheet open={createSheetOpen} onOpenChange={setCreateSheetOpen}>
         <SheetContent
           side="bottom"
           showCloseButton={false}
           className="rounded-t-2xl px-0 pb-0"
         >
           <SheetHeader className="px-5 pb-3">
-            <SheetTitle>Bookings</SheetTitle>
+            <SheetTitle>Tambah Baru</SheetTitle>
           </SheetHeader>
 
           <div
             className="flex flex-col gap-1 px-3"
             style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
           >
-            {visibleBookingItems.map((item) => {
+            {visibleCreateItems.map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <button
                   key={item.key}
                   type="button"
                   onClick={() => {
-                    setBookingSheetOpen(false);
-                    if (item.drawerKey) {
-                      // Always open the create drawer regardless of which page is active.
-                      // On-page tap skips the onSuccess redirect; off-page tap includes it.
-                      openCreateDrawer(item.drawerKey, item.href, active);
-                    } else if (!active) {
-                      router.push(item.href);
-                    }
+                    setCreateSheetOpen(false);
+                    openCreateDrawer(item.drawerKey, item.href, active);
                   }}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-4 py-3 w-full text-left",
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 w-full text-left",
                     "transition-colors duration-150",
-                    active
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    "text-foreground hover:bg-accent/50"
                   )}
                 >
-                  <item.Icon weight="BoldDuotone" className="h-5 w-5 shrink-0" />
-                  <span className="text-sm font-medium">{item.label}</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <item.Icon weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium leading-none">{item.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground truncate">
+                      {item.description}
+                    </span>
+                  </span>
                 </button>
               );
             })}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Profile sheet — user card + Profile link + Logout */}
+      <Sheet open={profileSheetOpen} onOpenChange={setProfileSheetOpen}>
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          className="rounded-t-2xl px-0 pb-0"
+        >
+          <SheetHeader className="px-5 pb-3">
+            <SheetTitle className="sr-only">Profil</SheetTitle>
+            <div className="flex items-center gap-3 pt-1">
+              <Avatar className="h-11 w-11">
+                <AvatarImage src={userImage} />
+                <AvatarFallback className="bg-muted text-muted-foreground text-sm font-semibold">
+                  {getInitials(userName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 text-left">
+                <p className="truncate text-sm font-semibold text-foreground">{userName}</p>
+                <p className="truncate text-xs text-muted-foreground">{userRole}</p>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div
+            className="flex flex-col gap-1 px-3"
+            style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setProfileSheetOpen(false);
+                router.push("/dashboard/profile");
+              }}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-4 py-3 w-full text-left",
+                "transition-colors duration-150 text-foreground hover:bg-accent/50"
+              )}
+            >
+              <User weight="BoldDuotone" className="h-5 w-5 shrink-0 text-primary" />
+              <span className="text-sm font-medium">Profile</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/auth/login" })}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-4 py-3 w-full text-left",
+                "transition-colors duration-150 text-destructive hover:bg-destructive/10"
+              )}
+            >
+              <Logout weight="BoldDuotone" className="h-5 w-5 shrink-0" />
+              <span className="text-sm font-medium">Keluar</span>
+            </button>
           </div>
         </SheetContent>
       </Sheet>

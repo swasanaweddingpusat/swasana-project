@@ -225,7 +225,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     !watchedSourceId ||
     !watchedEventDate ||
     !watchedTime?.trim() ||
-    (isWeddings && !watchedWeddingSession) ||
+    !watchedWeddingSession ||
     (isBitrixSource && !bitrixId.trim());
 
   // ── Venue availability ───────────────────────────────────────────────────────
@@ -451,13 +451,13 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         <div className="flex-1 overflow-y-auto">
           <Form {...form}>
             <form className="space-y-4 pb-2">
-              {/* Nama PIC */}
+              {/* Nama Client */}
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nama PIC *</FormLabel>
+                    <FormLabel>Nama Client *</FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="e.g. Budi Santoso" />
                     </FormControl>
@@ -596,6 +596,36 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
+              {/* Tipe Booking */}
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipe Booking *</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={[
+                          { id: "WEDDINGS", name: "Wedding" },
+                          { id: "MICE", name: "MICE" },
+                        ]}
+                        value={field.value}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          form.setValue("eventTypeId", "");
+                          // MICE defaults to a full-day session (still editable).
+                          if (v === "MICE") form.setValue("weddingSession", "fullday");
+                        }}
+                        placeholder="Pilih tipe booking..."
+                        searchPlaceholder="Cari tipe booking..."
+                        emptyText="Tidak ada opsi"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Assigned To */}
               {currentUserIsSales ? (
                 /* Logged-in user is a sales → locked to themselves */
@@ -619,6 +649,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                         options={salesUsers.map((u) => ({
                           id: u.id,
                           name: u.fullName ?? "",
+                          badge: u.role?.name === "sales-mice" ? "Sales-Mice" : "Sales",
                         }))}
                         value={field.value}
                         onChange={field.onChange}
@@ -683,36 +714,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                         placeholder="Pilih venue..."
                         searchPlaceholder="Cari venue..."
                         emptyText="Venue tidak ditemukan"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Tipe Booking */}
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipe Booking *</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={[
-                          { id: "WEDDINGS", name: "Wedding" },
-                          { id: "MICE", name: "MICE" },
-                        ]}
-                        value={field.value}
-                        onChange={(v) => {
-                          field.onChange(v);
-                          form.setValue("eventTypeId", "");
-                          // MICE has no session concept — clear any stale value.
-                          if (v === "MICE") form.setValue("weddingSession", "");
-                        }}
-                        placeholder="Pilih tipe booking..."
-                        searchPlaceholder="Cari tipe booking..."
-                        emptyText="Tidak ada opsi"
                       />
                     </FormControl>
                     <FormMessage />
@@ -818,8 +819,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
-              {/* Session — weddings only */}
-              {isWeddings && (
+              {/* Session — shown for both; MICE defaults to fullday (editable) */}
               <FormField
                 control={form.control}
                 name="weddingSession"
@@ -845,7 +845,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   );
                 }}
               />
-              )}
 
               {/* Time */}
               <FormField

@@ -16,13 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -192,25 +186,18 @@ export function MiceTable() {
       </div>
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Status</label>
-        <Select
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Status" },
+            ...ALL_STATUSES.map((s) => ({ id: s, name: s })),
+          ]}
           value={statusFilter}
-          onValueChange={(v) => { setStatusFilter(v as MiceBookingStatus | "all"); setCurrentPage(1); }}
-        >
-          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter status booking MICE">
-            <SelectValue placeholder="Semua Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            {ALL_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                <span className="flex items-center gap-2">
-                  <StatusDot status={s} />
-                  {s}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(v) => { setStatusFilter(v as MiceBookingStatus | "all"); setCurrentPage(1); }}
+          placeholder="Semua Status"
+          searchPlaceholder="Cari status..."
+          emptyText="Status tidak ditemukan"
+          className="h-9"
+        />
       </div>
     </div>
   );

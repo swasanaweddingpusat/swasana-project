@@ -8,13 +8,15 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/validations/booking";
-import { resolveApprovalSteps } from "@/lib/approval-flows";
+import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
+import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -265,8 +267,14 @@ export async function createBooking(data: unknown) {
       emateraiResult = await generateEmaterai(poNumber, new Date(input.bookingDate));
     }
 
-    // Resolve hardcoded approval flow: Manager (step 1) → Finance (step 2)
-    const bookingApprovalSteps = await resolveApprovalSteps("booking");
+    // Approval steps: conditional Sales step + Manager → Finance.
+    // Built later (after salesId is known) via buildBookingApprovalSteps.
+    const bookingApprovalSteps = await buildBookingApprovalSteps({
+      salesId: input.salesId ?? session!.user.profileId!,
+      creatorProfileId: session!.user.profileId!,
+      signatureSales: input.signatureSales,
+      decidedAt: new Date(),
+    });
 
     // Build array-form transaction — customer create/update included for atomicity
     const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -427,6 +435,9 @@ export async function createBooking(data: unknown) {
       const toggleMap = new Map(
         (input.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
+      const nominalMap = new Map(
+        (input.categoryToggles ?? []).map((t) => [t.categoryName, t.takeoutNominal ?? 0])
+      );
       // Resolve which category IDs are taken out, so vendor items can carry the flag
       // directly (matching by categoryId, not fragile categoryName string).
       const takeoutCategoryIds = new Set(
@@ -434,16 +445,17 @@ export async function createBooking(data: unknown) {
           .filter((c) => c.isShow && (toggleMap.get(c.categoryName) ?? false) && c.categoryId)
           .map((c) => c.categoryId as string),
       );
-      // Hidden categories (isShow=false) always included; visible ones respect isTakeout toggle
-      const hasTakeout = (input.categoryToggles ?? []).some((t) => t.isTakeout);
-      const pkgBase = pkg.categoryPrices.reduce((sum, c) => {
-        if (!c.isShow) return sum + c.basePrice;
-        const isTakeout = toggleMap.get(c.categoryName) ?? false;
-        return isTakeout ? sum : sum + c.basePrice;
-      }, 0);
-      const pkgPrice = (!hasTakeout && pkg.sellingPrice > 0)
-        ? pkg.sellingPrice
-        : pkgBase + Math.round(pkgBase * ((pkg.margin ?? 0) / 100));
+      // Unified price model: fullPrice anchor − Σ(takeout nominal). UI == DB.
+      const fullPrice = computeFullPrice(pkg.categoryPrices, pkg.margin ?? 0, pkg.sellingPrice);
+      const pkgPrice = calcFinalFromFullPrice(
+        pkg.categoryPrices.map((c) => ({
+          isShow: c.isShow,
+          isTakeout: c.isShow ? (toggleMap.get(c.categoryName) ?? false) : false,
+          basePrice: c.basePrice,
+          takeoutNominal: nominalMap.get(c.categoryName) ?? 0,
+        })),
+        fullPrice,
+      );
 
       ops.push(
         db.snapPackagePricing.create({
@@ -453,6 +465,7 @@ export async function createBooking(data: unknown) {
             packageName: pkg.packageName,
             pax: pkg.pax,
             price: pkgPrice,
+            fullPrice,
             margin: pkg.margin ?? 0,
             termAndCondition: pkg.termAndCondition ?? null,
           },
@@ -483,8 +496,9 @@ export async function createBooking(data: unknown) {
       }
       if (pkg.categoryPrices.length > 0) {
         ops.push(
-          ...pkg.categoryPrices.map((cp) =>
-            db.snapPackageCategoryPrice.create({
+          ...pkg.categoryPrices.map((cp) => {
+            const isTakeout = cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false;
+            return db.snapPackageCategoryPrice.create({
               data: {
                 bookingId,
                 categoryId: cp.categoryId ?? null,
@@ -492,10 +506,11 @@ export async function createBooking(data: unknown) {
                 basePrice: cp.basePrice,
                 sortOrder: cp.sortOrder,
                 isShow: cp.isShow,
-                isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
+                isTakeout,
+                takeoutNominal: isTakeout ? ((nominalMap.get(cp.categoryName) ?? 0) || cp.basePrice) : 0,
               },
-            })
-          )
+            });
+          })
         );
       }
     }
@@ -516,13 +531,10 @@ export async function createBooking(data: unknown) {
       );
     }
 
-    // Add ApprovalRecord + steps to the same transaction (hardcoded: Manager → Finance)
+    // Add ApprovalRecord + steps to the same transaction (Sales → Manager → Finance).
+    // Auto-approve only the Sales step, and only when the creator IS the assigned sales.
     if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
       const approvalRecordId = crypto.randomUUID();
-      const creatorRoleId = session!.user.roleId;
-      const creatorStepIdx = bookingApprovalSteps.findIndex(
-        (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
-      );
 
       ops.push(
         db.approvalRecord.create({
@@ -536,25 +548,21 @@ export async function createBooking(data: unknown) {
             emateraiQrBase64: emateraiResult?.qrBase64 ?? null,
           },
         }),
-        ...bookingApprovalSteps.map((step, i) => {
-          // Auto-approve ONLY the step whose approverRoleId matches the creator's role.
-          // Finance creating → only Finance step auto-approved; Manager still pending.
-          // Role lain → semua pending.
-          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-          return db.approvalRecordStep.create({
+        ...bookingApprovalSteps.map((step) =>
+          db.approvalRecordStep.create({
             data: {
               recordId: approvalRecordId,
-              stepOrder: step.sortOrder,
+              stepOrder: step.stepOrder,
               approverType: step.approverType,
               approverRoleId: step.approverRoleId,
-              approverUserId: null,
-              status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-              decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: shouldAutoApprove ? (input.signatureSales ?? null) : null,
+              approverUserId: step.approverUserId,
+              status: step.status,
+              decidedById: step.decidedById,
+              decidedAt: step.decidedAt,
+              signature: step.signature,
             },
-          });
-        })
+          })
+        )
       );
     }
 
@@ -609,6 +617,9 @@ export async function createBooking(data: unknown) {
 
     return { success: true, bookingId, termIds: createdTerms };
   } catch (e) {
+    if (isSlotConflictError(e)) {
+      return { success: false, error: SLOT_TAKEN_MESSAGE };
+    }
     console.error("[createBooking]", e);
     return { success: false, error: "Gagal membuat booking." };
   }
@@ -700,7 +711,10 @@ export async function updateBooking(data: unknown) {
     revalidateTag("bookings", "max");
 
     return { success: true };
-  } catch {
+  } catch (e) {
+    if (isSlotConflictError(e)) {
+      return { success: false, error: SLOT_TAKEN_MESSAGE };
+    }
     return { success: false, error: "Gagal memperbarui booking." };
   }
 }
@@ -879,7 +893,7 @@ export async function editBooking(data: unknown) {
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, venueId: true, packageId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
+      select: { customerId: true, salesId: true, venueId: true, packageId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
@@ -1010,20 +1024,25 @@ export async function editBooking(data: unknown) {
       const toggleMap = new Map(
         (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
       );
+      const nominalMap = new Map(
+        (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.takeoutNominal ?? 0])
+      );
       const takeoutCategoryIds = new Set(
         newPkg.categoryPrices
           .filter((c) => c.isShow && (toggleMap.get(c.categoryName) ?? false) && c.categoryId)
           .map((c) => c.categoryId as string),
       );
-      const hasTakeout = (parsed.data.categoryToggles ?? []).some((t) => t.isTakeout);
-      const pkgBase = newPkg.categoryPrices.reduce((sum, c) => {
-        if (!c.isShow) return sum + c.basePrice;
-        const isTakeout = toggleMap.get(c.categoryName) ?? false;
-        return isTakeout ? sum : sum + c.basePrice;
-      }, 0);
-      const pkgPrice = (!hasTakeout && newPkg.sellingPrice > 0)
-        ? newPkg.sellingPrice
-        : pkgBase + Math.round(pkgBase * ((newPkg.margin ?? 0) / 100));
+      // Unified price model: fullPrice anchor − Σ(takeout nominal). UI == DB.
+      const fullPrice = computeFullPrice(newPkg.categoryPrices, newPkg.margin ?? 0, newPkg.sellingPrice);
+      const pkgPrice = calcFinalFromFullPrice(
+        newPkg.categoryPrices.map((c) => ({
+          isShow: c.isShow,
+          isTakeout: c.isShow ? (toggleMap.get(c.categoryName) ?? false) : false,
+          basePrice: c.basePrice,
+          takeoutNominal: nominalMap.get(c.categoryName) ?? 0,
+        })),
+        fullPrice,
+      );
 
       ops.push(
         db.snapPackagePricing.upsert({
@@ -1034,6 +1053,7 @@ export async function editBooking(data: unknown) {
             packageName: newPkg.packageName,
             pax: newPkg.pax,
             price: pkgPrice,
+            fullPrice,
             margin: newPkg.margin ?? 0,
             termAndCondition: newPkg.termAndCondition ?? null,
           },
@@ -1042,6 +1062,7 @@ export async function editBooking(data: unknown) {
             packageName: newPkg.packageName,
             pax: newPkg.pax,
             price: pkgPrice,
+            fullPrice,
             margin: newPkg.margin ?? 0,
             termAndCondition: newPkg.termAndCondition ?? null,
           },
@@ -1064,8 +1085,9 @@ export async function editBooking(data: unknown) {
             },
           })
         ),
-        ...newPkg.categoryPrices.map((cp) =>
-          db.snapPackageCategoryPrice.create({
+        ...newPkg.categoryPrices.map((cp) => {
+          const isTakeout = cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false;
+          return db.snapPackageCategoryPrice.create({
             data: {
               bookingId: id,
               categoryId: cp.categoryId ?? null,
@@ -1073,10 +1095,11 @@ export async function editBooking(data: unknown) {
               basePrice: cp.basePrice,
               sortOrder: cp.sortOrder,
               isShow: cp.isShow,
-              isTakeout: cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false,
+              isTakeout,
+              takeoutNominal: isTakeout ? ((nominalMap.get(cp.categoryName) ?? 0) || cp.basePrice) : 0,
             },
-          })
-        )
+          });
+        })
       );
     }
 
@@ -1118,33 +1141,32 @@ export async function editBooking(data: unknown) {
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
     if (approvalRecord) {
-      // Resolve hardcoded approval flow: Manager (step 1) → Finance (step 2)
-      const editApprovalSteps = await resolveApprovalSteps("booking");
+      // Rebuild steps: conditional Sales + Manager → Finance. Auto-approve the
+      // Sales step only when the editor IS the assigned sales (and signed).
+      const editApprovalSteps = await buildBookingApprovalSteps({
+        salesId: booking.salesId,
+        creatorProfileId: session!.user.profileId!,
+        signatureSales: rest.signatureSales,
+        decidedAt: new Date(),
+      });
 
       if (editApprovalSteps && editApprovalSteps.length > 0) {
-        const creatorRoleId = session!.user.roleId;
-        const creatorStepIdx = editApprovalSteps.findIndex(
-          (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
-        );
-
-        const newStepOps: Prisma.PrismaPromise<unknown>[] = editApprovalSteps.map((flowStep, i) => {
-          // Auto-approve ONLY the step whose approverRoleId matches the editor's role.
-          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-          return db.approvalRecordStep.create({
+        const newStepOps: Prisma.PrismaPromise<unknown>[] = editApprovalSteps.map((step) =>
+          db.approvalRecordStep.create({
             data: {
               recordId: approvalRecord.id,
-              stepOrder: flowStep.sortOrder,
-              approverType: flowStep.approverType,
-              approverRoleId: flowStep.approverRoleId,
-              approverUserId: null,
-              status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session!.user.profileId : null,
-              decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: shouldAutoApprove ? (rest.signatureSales ?? null) : null,
+              stepOrder: step.stepOrder,
+              approverType: step.approverType,
+              approverRoleId: step.approverRoleId,
+              approverUserId: step.approverUserId,
+              status: step.status,
+              decidedById: step.decidedById,
+              decidedAt: step.decidedAt,
+              signature: step.signature,
               revisionId,
             },
-          });
-        });
+          })
+        );
 
         await db.$transaction([
           db.approvalRecordStep.deleteMany({ where: { recordId: approvalRecord.id } }),

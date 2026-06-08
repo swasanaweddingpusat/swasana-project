@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { cn } from "@/lib/utils";
 import { editBooking } from "@/actions/booking";
+import { computeFullPrice } from "@/lib/package-prices";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 
@@ -127,6 +128,19 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [originalVenueId, setOriginalVenueId] = useState("");
   const [originalPackageId, setOriginalPackageId] = useState("");
 
+  // Track original values for detail fields (loaded async from /api/bookings/:id)
+  // so hasAnyChange can correctly detect edits to contactEmail, NIK, address, bitrix, bonuses.
+  // Stored in state (not a ref) because it's read during render for dirty-checking.
+  const [originalDetail, setOriginalDetail] = useState<{
+    email: string;
+    nikCpp: string;
+    nikCpw: string;
+    cppAddress: string;
+    cpwAddress: string;
+    bitrixId: string;
+    bonusesJson: string;
+  } | null>(null);
+
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
@@ -152,19 +166,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Computed: selected package's category prices (flat — no variants)
   const allCategoryPrices = selectedPkg?.categoryPrices ?? [];
   const visibleCategories = allCategoryPrices.filter((c) => c.isShow);
-  const hiddenCategoriesBase = allCategoryPrices.filter((c) => !c.isShow).reduce((sum, c) => sum + c.basePrice, 0);
   const variantMargin = selectedPkg?.margin ?? 0;
 
-  const step2Price = (() => {
-    const hasTakeout = visibleCategories.some((c) => categoryToggles[c.categoryName]);
-    if (!hasTakeout && selectedPkg && selectedPkg.sellingPrice > 0) return selectedPkg.sellingPrice;
-    const visibleBase = visibleCategories.reduce(
-      (sum, c) => sum + (categoryToggles[c.categoryName] ? 0 : c.basePrice),
-      0,
-    );
-    const base = visibleBase + hiddenCategoriesBase;
-    return base + Math.round(base * (variantMargin / 100));
-  })();
+  // Unified price model: anchor fullPrice − Σ(takeout nominal per category).
+  // Matches the server (calcFinalFromFullPrice) so UI == DB.
+  const fullPrice = computeFullPrice(allCategoryPrices, variantMargin, selectedPkg?.sellingPrice);
+  const totalTakeoutNominal = visibleCategories
+    .filter((c) => categoryToggles[c.categoryName])
+    .reduce((sum, c) => sum + (takeoutPrices[c.categoryName] ?? c.basePrice), 0);
+  const step2Price = Math.max(0, fullPrice - totalTakeoutNominal);
 
   const isStep2Complete =
     visibleCategories.length === 0 ||
@@ -209,6 +219,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     sigSalesRef.current?.clear();
     setCategoryToggles({});
     setTakeoutPrices({});
+    // Reset detail-field originals so they are re-captured when detail loads
+    setOriginalDetail(null);
     // Terms from booking
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
     const defaultTerms: TermRow[] = [
@@ -224,22 +236,56 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Init detail fields
   useEffect(() => {
     if (!detail) return;
-    setContactEmail(detail.snapCustomer?.email ?? "");
-    setContactNikCpp(detail.snapCustomer?.cppNik ?? "");
-    setContactNikCpw(detail.snapCustomer?.cpwNik ?? "");
-    setContactCppAddress(detail.snapCustomer?.cppAddress ?? "");
-    setContactCpwAddress(detail.snapCustomer?.cpwAddress ?? "");
-    setContactBitrixId(detail.customer?.bitrixId ?? "");
-    if (detail.snapBonuses?.length && bonuses.length === 0) {
-      setBonuses(detail.snapBonuses.map((b: Record<string, unknown>) => ({ vendorId: b.vendorId as string, vendorCategoryId: b.vendorCategoryId as string, vendorName: b.vendorName as string, description: (b.description as string) ?? "", qty: Number(b.qty) || 1, nominal: Number(b.nominal) || 0 })));
+    const email = detail.snapCustomer?.email ?? "";
+    // Fallback to Customer record for NIK/address in case the snapshot was created
+    // before the user filled these fields (e.g. bookings created from a lead where
+    // NIK was added to the Customer master later without going through edit booking).
+    const nikCpp = detail.snapCustomer?.cppNik ?? detail.customer?.cppNik ?? "";
+    const nikCpw = detail.snapCustomer?.cpwNik ?? detail.customer?.cpwNik ?? "";
+    const cppAddress = detail.snapCustomer?.cppAddress ?? detail.customer?.cppAddress ?? "";
+    const cpwAddress = detail.snapCustomer?.cpwAddress ?? detail.customer?.cpwAddress ?? "";
+    const bitrixId = detail.customer?.bitrixId ?? "";
+    const mappedBonuses: BonusRow[] = (detail.snapBonuses ?? []).map((b: Record<string, unknown>) => ({
+      vendorId: b.vendorId as string,
+      vendorCategoryId: b.vendorCategoryId as string,
+      vendorName: b.vendorName as string,
+      description: (b.description as string) ?? "",
+      qty: Number(b.qty) || 1,
+      nominal: Number(b.nominal) || 0,
+    }));
+
+    setContactEmail(email);
+    setContactNikCpp(nikCpp);
+    setContactNikCpw(nikCpw);
+    setContactCppAddress(cppAddress);
+    setContactCpwAddress(cpwAddress);
+    setContactBitrixId(bitrixId);
+    if (mappedBonuses.length && bonuses.length === 0) {
+      setBonuses(mappedBonuses);
     }
-    // Load existing category toggles from saved snapPackageCategoryPrices
+
+    // Capture originals for hasAnyChange — only once per drawer open (state is null-reset on open)
+    setOriginalDetail((prev) => prev ?? {
+      email,
+      nikCpp,
+      nikCpw,
+      cppAddress,
+      cpwAddress,
+      bitrixId,
+      bonusesJson: JSON.stringify(mappedBonuses),
+    });
+    // Load existing category toggles + takeout nominals from saved snapshot
     if (detail.snapPackageCategoryPrices?.length) {
       const toggleMap: Record<string, boolean> = {};
-      for (const cp of detail.snapPackageCategoryPrices as Array<{ categoryName: string; isTakeout: boolean; isShow: boolean }>) {
-        if (cp.isShow) toggleMap[cp.categoryName] = cp.isTakeout;
+      const nominalMap: Record<string, number> = {};
+      for (const cp of detail.snapPackageCategoryPrices as Array<{ categoryName: string; isTakeout: boolean; isShow: boolean; basePrice: number; takeoutNominal?: number }>) {
+        if (cp.isShow) {
+          toggleMap[cp.categoryName] = cp.isTakeout;
+          if (cp.isTakeout) nominalMap[cp.categoryName] = Number(cp.takeoutNominal) || Number(cp.basePrice);
+        }
       }
       setCategoryToggles(toggleMap);
+      setTakeoutPrices(nominalMap);
     }
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -307,8 +353,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const currentContactDisplay = contactNumbers
     .map((e) => e.name ? `${e.name}: ${e.number}` : e.number)
     .join(", ");
+  const hasDetailChange = originalDetail !== null && (
+    contactEmail !== originalDetail.email ||
+    contactNikCpp !== originalDetail.nikCpp ||
+    contactNikCpw !== originalDetail.nikCpw ||
+    contactCppAddress !== originalDetail.cppAddress ||
+    contactCpwAddress !== originalDetail.cpwAddress ||
+    contactBitrixId !== originalDetail.bitrixId ||
+    JSON.stringify(bonuses) !== originalDetail.bonusesJson
+  );
   const hasAnyChange = !booking ? false : (
     hasSignificantChange ||
+    hasDetailChange ||
     customerName !== (booking.snapCustomer?.name ?? "") ||
     currentContactDisplay !== (booking.snapCustomer?.mobileNumber ?? "") ||
     (bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : "") !== (booking.bookingDate ? format(new Date(booking.bookingDate), "yyyy-MM-dd") : "") ||
@@ -374,13 +430,17 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         specialBonusName: specialBonusName || null,
         specialBonusAmount: specialBonusAmount || null,
         signatureSales: signatureSales || null,
-        categoryToggles: allCategoryPrices.map((c) => ({
-          categoryName: c.categoryName,
-          basePrice: c.basePrice,
-          sortOrder: c.sortOrder,
-          isShow: c.isShow,
-          isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-        })),
+        categoryToggles: allCategoryPrices.map((c) => {
+          const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
+          return {
+            categoryName: c.categoryName,
+            basePrice: c.basePrice,
+            sortOrder: c.sortOrder,
+            isShow: c.isShow,
+            isTakeout,
+            takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
+          };
+        }),
       } : {}),
     });
     if (!r.success) { toast.error(r.error); return; }

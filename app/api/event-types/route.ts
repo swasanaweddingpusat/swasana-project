@@ -1,12 +1,16 @@
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { requireAnyPermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getEventTypes } from "@/lib/queries/event-types";
 
 export async function GET(req: Request) {
-  const { session, response } = await requirePermissionForRoute({
-    module: "booking",
-    action: "view",
-  });
+  // Event types are shared reference data — readable by anyone who works with
+  // bookings, MICE bookings, leads, or quotations.
+  const { session, response } = await requireAnyPermissionForRoute([
+    { module: "booking", action: "view" },
+    { module: "booking-mice", action: "view" },
+    { module: "leads", action: "view" },
+    { module: "quotations", action: "view" },
+  ]);
   if (response) return response;
   if (!apiLimiter.check(`event-types:${session.user.id}`)) return rateLimitResponse();
 

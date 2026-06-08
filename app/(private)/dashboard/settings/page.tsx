@@ -16,6 +16,7 @@ import {
   UserRounded,
   Route,
   Sledgehammer,
+  Document,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -97,6 +98,13 @@ const GROUPS: SettingGroup[] = [
         module: "settings-payment-methods",
       },
       {
+        title: "Quotation Templates",
+        description: "Template item & rekening default quotation per venue.",
+        icon: Document,
+        href: "/dashboard/settings/quotation-templates",
+        module: "settings-quotation-templates",
+      },
+      {
         title: "Source of Information",
         description: "Sumber informasi customer untuk tracking lead.",
         icon: InfoCircle,
@@ -161,6 +169,7 @@ export default async function SettingsHubPage() {
     "settings-role-permission", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
+    "settings-quotation-templates",
     "customers", "settings-role-permission",
     "settings-maintenance-category",
     "settings-maintenance-priority",

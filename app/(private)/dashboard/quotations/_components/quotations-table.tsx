@@ -16,13 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -110,6 +104,7 @@ export interface QuotationItem {
   others?: number;
   // ── Meta ───────────────────────────────────────────────────────
   status: "draft" | "sent" | "revised" | "accepted" | "rejected";
+  paymentMethodId?: string;
   validUntil: string;
   createdAt: string;
   /** Tanggal dokumen diterbitkan (mis. "2026-02-04") */
@@ -117,15 +112,6 @@ export interface QuotationItem {
   notes: string;
   signingLocation?: string;
   signatureSales?: string;
-  // ── Term of Payment (for edit prefill) ─────────────────────────
-  termOfPayments?: Array<{
-    id: string;
-    name: string;
-    amount: number;
-    dueDate: string | null;
-    sortOrder: number;
-    paymentStatus: string;
-  }>;
 }
 
 // ── DB row → display type mapper ─────────────────────────────────────────────
@@ -139,7 +125,7 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     instansi: row.instansi ?? undefined,
     salesName: row.sales.fullName ?? "",
     salesPhone: row.sales.phoneNumber ?? undefined,
-    venue: row.venueName ?? row.venue.name,
+    venue: row.venueName ?? row.venue?.name ?? "",
     category: row.category.toLowerCase() as "weddings" | "mice",
     eventType: row.eventTypeName ?? row.eventType?.name ?? "",
     eventDate: row.eventDate ? format(new Date(row.eventDate), "yyyy-MM-dd") : "",
@@ -159,19 +145,15 @@ function mapRowToQuotationItem(row: QuotationListRow): QuotationItem {
     discount: row.discount,
     totalPrice: row.totalPrice,
     status: row.status as QuotationItem["status"],
+    paymentMethodId: row.paymentMethodId ?? undefined,
+    bankName: row.paymentMethod?.bankName,
+    bankAccountNo: row.paymentMethod?.bankAccountNumber,
+    bankAccountName: row.paymentMethod?.bankRecipient,
     validUntil: row.validUntil ? format(new Date(row.validUntil), "yyyy-MM-dd") : "",
     createdAt: format(new Date(row.createdAt), "yyyy-MM-dd"),
     notes: row.notes ?? "",
     signingLocation: row.signingLocation ?? undefined,
     signatureSales: row.signatureSales ?? undefined,
-    termOfPayments: row.terms.map((t) => ({
-      id: t.id,
-      name: t.name,
-      amount: t.amount,
-      dueDate: t.dueDate ? format(new Date(t.dueDate), "yyyy-MM-dd") : null,
-      sortOrder: t.sortOrder,
-      paymentStatus: t.paymentStatus,
-    })),
     packageName: "",
     variantName: "",
     pax: 0,
@@ -416,22 +398,18 @@ export function QuotationsTable() {
       </div>
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Status</label>
-        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter status quotation">
-            <SelectValue placeholder="Semua Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            {statusCounts.map((s) => (
-              <SelectItem key={s.status} value={s.status}>
-                <span className="flex items-center gap-2">
-                  <StatusDot className={s.dotClass} />
-                  {s.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Status" },
+            ...statusCounts.map((s) => ({ id: s.status, name: s.label })),
+          ]}
+          value={statusFilter}
+          onChange={handleStatusFilterChange}
+          placeholder="Semua Status"
+          searchPlaceholder="Cari status..."
+          emptyText="Status tidak ditemukan"
+          className="h-9"
+        />
       </div>
     </div>
   );

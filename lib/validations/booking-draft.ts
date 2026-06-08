@@ -133,6 +133,7 @@ export const finalizeDraftSchema = z.object({
         sortOrder: z.coerce.number().int().default(0),
         isShow: z.boolean().default(true),
         isTakeout: z.boolean().default(false),
+        takeoutNominal: z.coerce.number().int().min(0).default(0),
       })
     )
     .optional()

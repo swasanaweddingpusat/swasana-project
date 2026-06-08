@@ -150,6 +150,77 @@ export async function isSequentialFlow(module: string): Promise<boolean> {
   return APPROVAL_FLOWS[module]?.sequential === true;
 }
 
+/** A fully-resolved approval step ready to be persisted as an ApprovalRecordStep row. */
+export interface BuiltApprovalStep {
+  stepOrder: number;
+  approverType: "role" | "user";
+  approverRoleId: string | null;
+  approverUserId: string | null;
+  status: "pending" | "approved";
+  decidedById: string | null;
+  decidedAt: Date | null;
+  signature: string | null;
+}
+
+/**
+ * Builds the approval steps for a booking (wedding or MICE).
+ *
+ * Shape: a conditional Sales step (stepOrder 0, approverType "user") followed by
+ * the role steps from the resolved flow (manager → finance), all shifted to keep
+ * their original order after the sales step.
+ *
+ * Auto-approve rules:
+ * - Sales step: approved (with signature) ONLY when the creator IS the assigned
+ *   sales person AND a signature was captured in the wizard. Otherwise pending —
+ *   the assigned sales must sign later via the approval page.
+ * - Role steps (manager, finance): ALWAYS pending. No creator-based auto-approve.
+ *
+ * Returns null when no flow is resolvable (same contract as resolveApprovalSteps).
+ */
+export async function buildBookingApprovalSteps(opts: {
+  salesId: string | null | undefined;
+  creatorProfileId: string;
+  signatureSales: string | null | undefined;
+  decidedAt: Date;
+}): Promise<BuiltApprovalStep[] | null> {
+  const roleSteps = await resolveApprovalSteps("booking");
+  if (!roleSteps || roleSteps.length === 0) return null;
+
+  const steps: BuiltApprovalStep[] = [];
+
+  // Conditional Sales step at the front (stepOrder 0).
+  if (opts.salesId) {
+    const selfSign =
+      opts.creatorProfileId === opts.salesId && !!opts.signatureSales;
+    steps.push({
+      stepOrder: 0,
+      approverType: "user",
+      approverRoleId: null,
+      approverUserId: opts.salesId,
+      status: selfSign ? "approved" : "pending",
+      decidedById: selfSign ? opts.salesId : null,
+      decidedAt: selfSign ? opts.decidedAt : null,
+      signature: selfSign ? (opts.signatureSales ?? null) : null,
+    });
+  }
+
+  // Role steps (manager, finance) — always pending.
+  for (const s of roleSteps) {
+    steps.push({
+      stepOrder: s.sortOrder,
+      approverType: "role",
+      approverRoleId: s.approverRoleId,
+      approverUserId: null,
+      status: "pending",
+      decidedById: null,
+      decidedAt: null,
+      signature: null,
+    });
+  }
+
+  return steps;
+}
+
 /**
  * Converts a role slug (e.g. "direktur-operational") into a human-readable
  * label (e.g. "Direktur Operational") for display in documents/PDFs.

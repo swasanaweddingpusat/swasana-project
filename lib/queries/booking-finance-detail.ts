@@ -13,7 +13,7 @@ export interface BookingFinanceDetail {
     amount: number;
     dueDate: string;
     sortOrder: number;
-    paymentStatus: "unpaid" | "paid" | "partial";
+    paymentStatus: "unpaid" | "paid" | "partial" | "refund";
     ackStatus: string | null;
     paymentEvidence: string | null;
     notes: string | null;
@@ -32,6 +32,7 @@ export interface BookingFinanceDetail {
     sortOrder: number;
     isShow: boolean;
     isTakeout: boolean;
+    takeoutNominal: number;
   }[] | null;
 }
 
@@ -79,6 +80,7 @@ export async function getBookingFinanceDetail(
           sortOrder: true,
           isShow: true,
           isTakeout: true,
+          takeoutNominal: true,
         },
       },
     },
@@ -99,7 +101,7 @@ export async function getBookingFinanceDetail(
       amount: Number(t.amount),
       dueDate: new Date(t.dueDate).toISOString(),
       sortOrder: t.sortOrder,
-      paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
+      paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
       ackStatus: t.ackStatus ?? null,
       paymentEvidence: t.paymentEvidence ?? null,
       notes: t.notes ?? null,
@@ -120,6 +122,7 @@ export async function getBookingFinanceDetail(
             sortOrder: c.sortOrder,
             isShow: c.isShow,
             isTakeout: c.isTakeout,
+            takeoutNominal: Number(c.takeoutNominal),
           }))
         : null,
   };

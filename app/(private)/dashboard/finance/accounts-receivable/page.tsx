@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { ARFilterBar } from "./_components/ar-filter-bar";
 import { ARTable } from "./_components/ar-table";
 import { ARDetailDrawer } from "./_components/ar-detail-drawer";
-import { EditBookingFinanceDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-finance-drawer";
+import { EditTopDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-top-drawer";
 import { useAR } from "@/hooks/use-ar";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useQueryClient } from "@tanstack/react-query";
@@ -90,7 +90,7 @@ export default function AccountsReceivablePage() {
       />
 
       {financeTarget && (
-        <EditBookingFinanceDrawerById
+        <EditTopDrawerById
           isOpen={!!financeTarget}
           onClose={() => {
             setFinanceTarget(null);
@@ -98,7 +98,6 @@ export default function AccountsReceivablePage() {
           }}
           bookingId={financeTarget.id}
           customerName={financeTarget.customerName}
-          defaultTab="top"
         />
       )}
     </div>

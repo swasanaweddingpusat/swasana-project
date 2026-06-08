@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     let emateraiData: { sn: string; qrBase64: string } | null = null;
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: booking.id } },
-      include: { steps: { orderBy: { stepOrder: "asc" }, include: { decidedBy: { select: { fullName: true } }, approverRole: { select: { name: true } } } } },
+      include: { steps: { orderBy: { stepOrder: "asc" }, include: { decidedBy: { select: { fullName: true } }, approverRole: { select: { name: true } }, approverUser: { select: { fullName: true } } } } },
     });
     if (approvalRecord) {
       emateraiData =
@@ -106,13 +106,16 @@ export async function POST(req: Request) {
       const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
       const latestRound = steps.slice(-roundSize);
       const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
-      const roleSteps = latestRound.filter((s) => s.approverType === "role").sort((a, b) => a.stepOrder - b.stepOrder);
+      // PO signers = Sales (approverType "user") + Manager only. Finance excluded.
+      const signerSteps = latestRound
+        .filter((s) => s.approverType === "user" || (s.approverType === "role" && s.approverRole?.name === "manager"))
+        .sort((a, b) => a.stepOrder - b.stepOrder);
       pdfBooking.signatures = {
         ...(clientStep ? { client: { signature: clientStep.signature! } } : {}),
-        roles: roleSteps.map((step) => ({
+        roles: signerSteps.map((step) => ({
           ...(step.signature ? { signature: step.signature } : {}),
-          name: step.decidedBy?.fullName ?? "",
-          title: humanizeRoleName(step.approverRole?.name),
+          name: step.decidedBy?.fullName ?? step.approverUser?.fullName ?? "",
+          title: step.approverType === "user" ? "Sales" : humanizeRoleName(step.approverRole?.name),
         })),
       };
     }

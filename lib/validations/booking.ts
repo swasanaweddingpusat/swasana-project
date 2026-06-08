@@ -36,6 +36,7 @@ export const bookingSchema = z.object({
     sortOrder: z.coerce.number().int().default(0),
     isShow: z.boolean().default(true),
     isTakeout: z.boolean().default(false),
+    takeoutNominal: z.coerce.number().int().min(0).default(0),
   })).optional().default([]),
   termOfPayments: z.array(z.object({
     name: z.string().min(1),
@@ -96,6 +97,7 @@ export const editBookingSchema = z.object({
     sortOrder: z.coerce.number().int().default(0),
     isShow: z.boolean().default(true),
     isTakeout: z.boolean().default(false),
+    takeoutNominal: z.coerce.number().int().min(0).default(0),
   })).optional().default([]),
   termOfPayments: z.array(z.object({
     id: z.string().optional(),

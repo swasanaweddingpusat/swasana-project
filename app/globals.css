@@ -84,6 +84,8 @@
   --brand-ink: #0F4159;
   --brand-gold: #D4A547;
   --brand-cream: #FAF7F2;
+  /* Calendar availability dot — fully-booked indicator (intentional green). */
+  --calendar-booked-full: #16a34a;
 }
 
 .dark {
@@ -121,6 +123,7 @@
   --brand-ink: #0F4159;
   --brand-gold: #D4A547;
   --brand-cream: #FAF7F2;
+  --calendar-booked-full: #22c55e;
 }
 
 @layer base {
@@ -198,9 +201,28 @@
   scrollbar-color: #4b5563 #1a1a1a;
 }
 
-/* Calendar availability indicators */
+/* Calendar availability indicators
+   gold dot  = partially booked (some sessions still open)
+   green dot = fully booked (date disabled)
+   The dot needs z-index above the day button (relative isolate z-10) or it
+   renders underneath and stays invisible. Unavailable days carry opacity-50
+   from the disabled state, so we restore full opacity here to keep the green
+   dot visible — the muted text color still reads as disabled. */
 .day-available { position: relative; }
 .day-partial { position: relative; }
-.day-partial::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: #ca8a04; }
-.day-unavailable { position: relative; }
-.day-unavailable::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: #16a34a; }
+.day-unavailable { position: relative; opacity: 1 !important; }
+.day-partial::after,
+.day-unavailable::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  z-index: 20;
+  pointer-events: none;
+}
+.day-partial::after { background: var(--brand-gold); }
+.day-unavailable::after { background: var(--calendar-booked-full); }

@@ -126,20 +126,24 @@ export async function POST(req: Request) {
     let emateraiData: { sn: string; qrBase64: string } | null = null;
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: bookingId } },
-      include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, decidedBy: { select: { fullName: true } } } } },
+      include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, approverUser: { select: { fullName: true } }, decidedBy: { select: { fullName: true } } } } },
     });
     if (approvalRecord) {
       const steps = approvalRecord.steps;
       const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
       const latestRound = steps.slice(-roundSize);
-      const roleSteps = latestRound.filter((s) => s.approverType === "role").sort((a, b) => a.stepOrder - b.stepOrder);
+      // PO signers = Sales (approverType "user") + Manager (role "manager") only.
+      // Finance approves in-system but is intentionally excluded from the PO.
+      const signerSteps = latestRound
+        .filter((s) => s.approverType === "user" || (s.approverType === "role" && s.approverRole?.name === "manager"))
+        .sort((a, b) => a.stepOrder - b.stepOrder);
       const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
       pdfBooking.signatures = {
         ...(clientStep ? { client: { signature: clientStep.signature! } } : {}),
-        roles: roleSteps.map((step) => ({
+        roles: signerSteps.map((step) => ({
           ...(step.signature ? { signature: step.signature } : {}),
-          name: step.decidedBy?.fullName ?? "",
-          title: humanizeRoleName(step.approverRole?.name),
+          name: step.decidedBy?.fullName ?? step.approverUser?.fullName ?? "",
+          title: step.approverType === "user" ? "Sales" : humanizeRoleName(step.approverRole?.name),
         })),
       };
       emateraiData =

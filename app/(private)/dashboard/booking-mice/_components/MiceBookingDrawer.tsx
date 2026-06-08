@@ -24,7 +24,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -82,7 +81,7 @@ interface MiceFormValues {
   venueId: string;
   eventTypeId: string;
   eventDate: string;
-  miceSession: "morning" | "evening" | "";
+  miceSession: "morning" | "evening" | "fullday" | "";
   time: string;
   estimatedPax: string;
   salesId: string;
@@ -505,7 +504,7 @@ export function MiceBookingDrawer({
           venueId: values.venueId,
           eventTypeId: values.eventTypeId,
           salesId: resolvedSalesId || null,
-          miceSession: (values.miceSession || null) as "morning" | "evening" | null,
+          miceSession: (values.miceSession || null) as "morning" | "evening" | "fullday" | null,
           eventTime: values.time || null,
           estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
           notes: values.notes || null,
@@ -692,10 +691,10 @@ export function MiceBookingDrawer({
                   {/* Informasi Client */}
                   <div className="space-y-3">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi Client</p>
-                    {/* Nama PIC — search lead atau customer terdaftar */}
-                    <FormField control={form.control} name="clientName" rules={{ required: "Nama PIC wajib diisi" }} render={({ field }) => (
+                    {/* Nama Client — search lead atau customer terdaftar */}
+                    <FormField control={form.control} name="clientName" rules={{ required: "Nama Client wajib diisi" }} render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nama PIC *</FormLabel>
+                        <FormLabel>Nama Client *</FormLabel>
                         {selectedLeadId && (
                           <p className="text-xs text-[var(--brand-gold)]">Dari Lead — konversi otomatis saat booking dibuat</p>
                         )}
@@ -703,7 +702,7 @@ export function MiceBookingDrawer({
                           <FormControl>
                             <Input
                               {...field}
-                              placeholder="Cari lead / customer, atau ketik nama PIC..."
+                              placeholder="Cari lead / customer, atau ketik nama client..."
                               autoComplete="off"
                               onChange={(e) => {
                                 field.onChange(e);
@@ -868,22 +867,23 @@ export function MiceBookingDrawer({
                     )} />
                     <FormField control={form.control} name="miceSession" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Sesi Event (Pagi / Malam)</FormLabel>
+                        <FormLabel>Sesi Event</FormLabel>
                         <FormControl>
                           <SearchableSelect
                             options={[
                               { id: "morning", name: "Pagi (Morning)" },
                               { id: "evening", name: "Malam (Evening)" },
+                              { id: "fullday", name: "Fullday" },
                             ]}
                             value={field.value}
-                            onChange={(v) => field.onChange(v as "morning" | "evening" | "")}
+                            onChange={(v) => field.onChange(v as "morning" | "evening" | "fullday" | "")}
                             placeholder="Pilih sesi event..."
                             searchPlaceholder="Cari sesi..."
                             emptyText="Tidak ada opsi"
                           />
                         </FormControl>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Sesi menentukan slot venue — pagi dan malam bisa diisi event berbeda.
+                          Sesi menentukan slot venue — pagi dan malam bisa diisi event berbeda, fullday mengunci seluruh hari.
                         </p>
                         <FormMessage />
                       </FormItem>
@@ -1096,10 +1096,21 @@ export function MiceBookingDrawer({
                 <div className="space-y-4">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tanda Tangan &amp; Lokasi</p>
 
-                  <SignaturePad
-                    onSignature={(url) => { signatureRef.current = url; }}
-                    label="Tanda Tangan Sales"
-                  />
+                  {/* Sales signature — only when the logged-in user IS the assigned
+                      sales. Manager/admin-assigned bookings are signed later by the
+                      assigned sales via the approval page. */}
+                  {currentUserIsSalesMice ? (
+                    <SignaturePad
+                      onSignature={(url) => { signatureRef.current = url; }}
+                      label="Tanda Tangan Sales"
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+                      <p className="text-xs text-muted-foreground">
+                        Tanda tangan sales akan diisi oleh sales yang ditugaskan melalui halaman approval setelah booking dibuat.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">Lokasi Penandatanganan</label>

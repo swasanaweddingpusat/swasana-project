@@ -80,7 +80,8 @@ export async function createQuotation(
           clientPhone: input.clientPhone,
           instansi: input.instansi ?? null,
           salesId: input.salesId,
-          venueId: input.venueId,
+          venueId: input.venueId ?? null,
+          paymentMethodId: input.paymentMethodId ?? null,
           venueName: input.venueName ?? null,
           eventTypeId: input.eventTypeId ?? null,
           eventTypeName: input.eventTypeName ?? null,
@@ -91,7 +92,7 @@ export async function createQuotation(
           subtotal,
           discount: input.discount,
           totalPrice,
-          validUntil: new Date(input.validUntil),
+          validUntil: input.validUntil ? new Date(input.validUntil) : null,
           notes: input.notes ?? null,
           signingLocation: input.signingLocation ?? null,
           signatureSales: input.signatureSales ?? null,
@@ -113,23 +114,9 @@ export async function createQuotation(
           },
         }),
       ),
-      // 3. Create terms
-      ...input.termOfPayments.map((term, idx) =>
-        db.quotationTerm.create({
-          data: {
-            id: crypto.randomUUID(),
-            quotationId,
-            name: term.name,
-            amount: term.amount,
-            dueDate: term.dueDate ? new Date(term.dueDate) : null,
-            sortOrder: idx,
-            paymentStatus: term.paymentStatus,
-          },
-        }),
-      ),
     ];
 
-    // 4. Create approval record + steps (if flow is resolved)
+    // 3. Create approval record + steps (if flow is resolved)
     if (approvalSteps && approvalSteps.length > 0) {
       const approvalRecordId = crypto.randomUUID();
       const creatorRoleId = session!.user.roleId;
@@ -209,7 +196,6 @@ export async function updateQuotation(
     if (!existing) return { success: false, error: "Quotation tidak ditemukan." };
 
     const items = input.items ?? [];
-    const terms = input.termOfPayments ?? [];
     const discount = input.discount ?? 0;
     const { subtotal, totalPrice } = computePricing(items, discount);
 
@@ -225,6 +211,7 @@ export async function updateQuotation(
           instansi: input.instansi ?? null,
           ...(input.salesId !== undefined && { salesId: input.salesId }),
           ...(input.venueId !== undefined && { venueId: input.venueId }),
+          ...(input.paymentMethodId !== undefined && { paymentMethodId: input.paymentMethodId }),
           venueName: input.venueName ?? null,
           eventTypeId: input.eventTypeId ?? null,
           eventTypeName: input.eventTypeName ?? null,
@@ -243,9 +230,7 @@ export async function updateQuotation(
       }),
       // 2. Replace items — delete all then re-create
       db.quotationItem.deleteMany({ where: { quotationId: input.id } }),
-      // 3. Replace terms — delete all then re-create
-      db.quotationTerm.deleteMany({ where: { quotationId: input.id } }),
-      // 4. Re-create items
+      // 3. Re-create items
       ...items.map((item, idx) =>
         db.quotationItem.create({
           data: {
@@ -258,20 +243,6 @@ export async function updateQuotation(
             total: item.total,
             manualTotal: item.manualTotal,
             sortOrder: idx,
-          },
-        }),
-      ),
-      // 5. Re-create terms
-      ...terms.map((term, idx) =>
-        db.quotationTerm.create({
-          data: {
-            id: crypto.randomUUID(),
-            quotationId: input.id,
-            name: term.name,
-            amount: term.amount,
-            dueDate: term.dueDate ? new Date(term.dueDate) : null,
-            sortOrder: idx,
-            paymentStatus: term.paymentStatus,
           },
         }),
       ),

@@ -138,7 +138,7 @@ export function PreventiveDrawer({
           frequency: editItem.frequency ?? "",
           nextDueDate: toDateInputValue(editItem.nextDueDate),
         });
-        setExistingImages(editItem.images.map((img) => ({ id: img.id, url: img.url, fileName: img.fileName })));
+        setExistingImages(editItem.images.map((img: { id: string; url: string; fileName: string }) => ({ id: img.id, url: img.url, fileName: img.fileName })));
       } else {
         setForm(DEFAULT_FORM);
         setExistingImages([]);

@@ -6,8 +6,9 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { getNextSequence } from "@/lib/counter";
-import { resolveApprovalSteps } from "@/lib/approval-flows";
+import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { notifySuperAdmins } from "@/lib/notifications";
 import {
@@ -330,7 +331,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
               { weddingSession: "fullday" as const },
             ]
           : [
-              { weddingSession: draft.weddingSession as "morning" | "evening" },
+              { weddingSession: draft.weddingSession as "morning" | "evening" | "fullday" },
               { weddingSession: "fullday" as const },
             ];
 
@@ -374,8 +375,14 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
       }
     }
 
-    // Resolve approval steps
-    const bookingApprovalSteps = await resolveApprovalSteps("booking");
+    // Resolve approval steps: conditional Sales + Manager → Finance.
+    // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
+    const bookingApprovalSteps = await buildBookingApprovalSteps({
+      salesId: draft.salesId,
+      creatorProfileId: session!.user.profileId!,
+      signatureSales: input.signatureSales ?? draft.salesSignature,
+      decidedAt: new Date(),
+    });
 
     const ops: Prisma.PrismaPromise<unknown>[] = [];
 
@@ -446,13 +453,9 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
       );
     }
 
-    // 5. ApprovalRecord + steps
+    // 5. ApprovalRecord + steps (Sales → Manager → Finance)
     if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
       const approvalRecordId = crypto.randomUUID();
-      const creatorRoleId = session!.user.roleId;
-      const creatorStepIdx = bookingApprovalSteps.findIndex(
-        (s) => s.approverType === "role" && s.approverRoleId === creatorRoleId
-      );
 
       ops.push(
         db.approvalRecord.create({
@@ -464,22 +467,21 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
             createdById: session!.user.profileId!,
           },
         }),
-        ...bookingApprovalSteps.map((step, i) => {
-          const shouldAutoApprove = creatorStepIdx >= 0 && i === creatorStepIdx;
-          return db.approvalRecordStep.create({
+        ...bookingApprovalSteps.map((step) =>
+          db.approvalRecordStep.create({
             data: {
               recordId: approvalRecordId,
-              stepOrder: step.sortOrder,
+              stepOrder: step.stepOrder,
               approverType: step.approverType,
               approverRoleId: step.approverRoleId,
-              approverUserId: null,
-              status: shouldAutoApprove ? "approved" : "pending",
-              decidedById: shouldAutoApprove ? session!.user.profileId! : null,
-              decidedAt: shouldAutoApprove ? new Date() : null,
-              signature: shouldAutoApprove ? (input.signatureSales ?? null) : null,
+              approverUserId: step.approverUserId,
+              status: step.status,
+              decidedById: step.decidedById,
+              decidedAt: step.decidedAt,
+              signature: step.signature,
             },
-          });
-        })
+          })
+        )
       );
     }
 
@@ -552,6 +554,9 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
 
     return { success: true, bookingId: draftId, termIds: createdTerms };
   } catch (e) {
+    if (isSlotConflictError(e)) {
+      return { success: false, error: SLOT_TAKEN_MESSAGE };
+    }
     console.error("[finalizeDraftMiceBooking]", e);
     return { success: false, error: "Gagal memfinalisasi booking MICE." };
   }

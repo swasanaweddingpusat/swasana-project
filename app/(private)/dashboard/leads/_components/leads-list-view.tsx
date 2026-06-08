@@ -381,7 +381,7 @@ export function LeadsListView({
               {/* Status — always visible */}
               <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
               {/* Sales — sm+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden sm:table-cell">Sales</TableHead>
+              <TableHead className="px-4 whitespace-nowrap w-24 hidden sm:table-cell">Sales</TableHead>
               {/* Sumber Info — lg+ */}
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Sumber Info</TableHead>
               {/* Action — always visible */}
@@ -461,10 +461,12 @@ export function LeadsListView({
                   </TableCell>
 
                   {/* Sales */}
-                  <TableCell className="px-4 text-muted-foreground whitespace-nowrap hidden sm:table-cell">
-                    {lead.assignedTo
-                      ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
-                      : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—")}
+                  <TableCell className="px-4 text-muted-foreground align-top hidden sm:table-cell">
+                    <div className="w-24 whitespace-normal break-words leading-tight">
+                      {lead.assignedTo
+                        ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
+                        : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—")}
+                    </div>
                   </TableCell>
 
                   {/* Sumber Info */}

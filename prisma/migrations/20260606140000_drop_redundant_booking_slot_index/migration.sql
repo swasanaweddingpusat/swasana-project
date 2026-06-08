@@ -1,0 +1,13 @@
+-- Drop a redundant slot-uniqueness index.
+--
+-- Migration 20260606130000 added "bookings_active_slot_unique" for sessioned
+-- bookings, but that duplicates the pre-existing
+-- "booking_venue_date_session_active_idx" (migration 20260530000001), which
+-- already enforces uniqueness on (venueId, bookingDate, weddingSession) for
+-- non-Canceled/non-Lost bookings.
+--
+-- The companion index "bookings_active_slot_nosession_unique" (also from
+-- 20260606130000) is KEPT — it closes a genuine gap: two legacy MICE bookings
+-- with a NULL weddingSession on the same venue + date would otherwise slip
+-- through (NULL <> NULL defeats a plain unique index).
+DROP INDEX IF EXISTS "bookings_active_slot_unique";

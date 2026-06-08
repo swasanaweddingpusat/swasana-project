@@ -12,6 +12,7 @@ const roleData = [
   { name: "vendor-specialist", description: "Manage Data Vendor Specialist", sortOrder: 8 },
   { name: "human-resource", description: "Access to human resource", sortOrder: 9 },
   { name: "sales-mice", description: "Sales access for MICE bookings", sortOrder: 10 },
+  { name: "manager-mice", description: "Manager access for MICE features (leads, quotations, booking-mice)", sortOrder: 11 },
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
@@ -32,6 +33,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-event-types": ["view", "create", "edit", "delete"],
   "settings-order-status": ["view", "create", "edit", "delete"],
   "settings-payment-methods": ["view", "create", "edit", "delete"],
+  "settings-quotation-templates": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   // CRM modules
@@ -73,6 +75,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     leads: ["view", "create", "edit"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
   },
   // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
@@ -86,6 +89,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "vendor-specialist": ["view", "create", "edit", "delete"],
     leads: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
     maintenance: ["view", "create", "edit", "delete"],
     "settings-maintenance-category": ["view", "create", "edit", "delete"],
     "settings-maintenance-priority": ["view", "create", "edit", "delete"],
@@ -119,7 +123,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
     leads: ["view", "create", "edit"],
-    quotations: ["view", "create", "edit"],
+    // quotations intentionally removed — sales role no longer has quotation access.
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -134,9 +138,20 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   "sales-mice": {
     "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
     customers: ["view", "create", "edit"],
-    package: ["view"],
     vendor: ["view"],
     quotations: ["view", "create", "edit"],
+    leads: ["view", "create", "edit", "delete"],
+  },
+  // MICE manager: MICE features (leads, quotations, booking-mice) + groups,
+  // customers, and event-types settings. No wedding booking, no finance/package/vendor.
+  "manager-mice": {
+    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+    leads: ["view", "create", "edit", "delete"],
+    quotations: ["view", "create", "edit", "delete"],
+    groups: ["view", "view-all", "create", "edit", "delete"],
+    customers: ["view", "create", "edit", "delete"],
+    "settings-event-types": ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
   },
 };
 

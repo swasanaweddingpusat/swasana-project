@@ -92,10 +92,10 @@ function BarChart({
 export function TicketReportTab() {
   const { data, isLoading } = useMaintenanceReport({});
 
-  const total = data?.total ?? 0;
-  const byStatus = data?.byStatus ?? [];
-  const byCategory = data?.byCategory ?? [];
-  const byVenue = data?.byVenue ?? [];
+  const total: number = (data?.total as number | undefined) ?? 0;
+  const byStatus: { name: string; count: number }[] = (data?.byStatus as { name: string; count: number }[] | undefined) ?? [];
+  const byCategory: { name: string; count: number }[] = (data?.byCategory as { name: string; count: number }[] | undefined) ?? [];
+  const byVenue: { name: string; count: number }[] = (data?.byVenue as { name: string; count: number }[] | undefined) ?? [];
 
   // Derive simple metrics from status names
   const completed = byStatus

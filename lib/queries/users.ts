@@ -116,8 +116,8 @@ export async function getManagerProfiles() {
   cacheLife("minutes");
 
   return db.profile.findMany({
-    where: { status: "active", role: { name: "manager" } },
-    select: { id: true, fullName: true },
+    where: { status: "active", role: { name: { in: ["manager", "manager-mice"] } } },
+    select: { id: true, fullName: true, role: { select: { name: true } } },
     orderBy: { fullName: "asc" },
   });
 }

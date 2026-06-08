@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "@/components/shared/drawer";
@@ -54,6 +55,7 @@ const errorInputClass = "border-[#E80606]";
 
 export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDrawerProps) {
   const isEdit = !!editUser;
+  const { data: session, update: updateSession } = useSession();
   const inviteUser = useInviteUser();
   const updateUser = useUpdateUser();
   const { data: groupsResult } = useGroups();
@@ -168,6 +170,13 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
         ...toRemove.map((gid) => removeMember.mutateAsync({ groupId: gid, userId: profileId })),
       ]);
 
+      // If the admin edited their OWN account (e.g. changed their role),
+      // refresh the JWT now so the sidebar reflects it without waiting for
+      // the 10-min cache TTL or a full re-login.
+      if (session?.user?.id === editUser.id) {
+        await updateSession();
+      }
+
       toast.success(result.message ?? "User berhasil diperbarui.");
       onOpenChange(false);
     } else {
@@ -247,7 +256,14 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
             <Label className="text-sm font-medium text-gray-700">Manager</Label>
             <div className="mt-1">
               <SearchableSelect
-                options={[{ id: "", name: "Tanpa manager" }, ...managers.map((m) => ({ id: m.id, name: m.fullName ?? "" }))]}
+                options={[
+                  { id: "", name: "Tanpa manager" },
+                  ...managers.map((m) => ({
+                    id: m.id,
+                    name: m.fullName ?? "",
+                    badge: m.role?.name === "manager-mice" ? "manager mice" : "manager sales",
+                  })),
+                ]}
                 value={formData.managerId}
                 onChange={(v) => handleInput("managerId", v ?? "")}
                 placeholder="Pilih manager (opsional)"

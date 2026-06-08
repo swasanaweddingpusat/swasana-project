@@ -2,13 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Popover,
   PopoverContent,
@@ -58,21 +52,6 @@ interface LeadsFiltersProps {
   isRefreshing?: boolean;
 }
 
-function StatusDot({
-  color,
-  selected,
-}: {
-  color: string;
-  selected?: boolean;
-}) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("inline-block w-2 h-2 rounded-full shrink-0")}
-      style={{ backgroundColor: selected ? undefined : color }}
-    />
-  );
-}
 
 const SCOPE_TABS: { value: LeadScope; label: string; icon: React.ElementType }[] = [
   { value: "active", label: "Active", icon: UsersGroupRounded },
@@ -168,65 +147,58 @@ function FilterPanelContent({
       {/* Venue filter */}
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Venue</label>
-        <Select value={venueFilter} onValueChange={onVenueChange}>
-          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter venue lead">
-            <SelectValue placeholder="Semua Venue" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Venue</SelectItem>
-            {venues.map((v) => (
-              <SelectItem key={v.id} value={v.id}>
-                {v.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Venue" },
+            ...venues.map((v) => ({ id: v.id, name: v.name })),
+          ]}
+          value={venueFilter}
+          onChange={onVenueChange}
+          placeholder="Semua Venue"
+          searchPlaceholder="Cari venue..."
+          emptyText="Venue tidak ditemukan"
+          className="h-9"
+        />
       </div>
 
       {/* Status filter — only shown in active scope */}
       {scope === "active" && (
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground">Status</label>
-          <Select value={statusFilter} onValueChange={onStatusChange}>
-            <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter status lead">
-              <SelectValue placeholder="Semua Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Status</SelectItem>
-              {statusCounts.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  <span className="flex items-center gap-2">
-                    <StatusDot color={s.color} />
-                    {s.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            options={[
+              { id: "all", name: "Semua Status" },
+              ...statusCounts.map((s) => ({ id: s.id, name: s.name })),
+            ]}
+            value={statusFilter}
+            onChange={onStatusChange}
+            placeholder="Semua Status"
+            searchPlaceholder="Cari status..."
+            emptyText="Status tidak ditemukan"
+            className="h-9"
+          />
         </div>
       )}
 
       {/* Event Type filter */}
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Event Type</label>
-        <Select value={eventTypeFilter} onValueChange={onEventTypeChange}>
-          <SelectTrigger className="h-9 w-full text-sm" aria-label="Filter event type lead">
-            <SelectValue placeholder="Semua Event Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Event Type</SelectItem>
-            {eventTypes.map((et) => (
-              <SelectItem key={et.id} value={et.id}>
-                <span className="flex items-center gap-2">
-                  {et.name}
-                  <span className="text-[10px] text-muted-foreground">
-                    {et.category === "MICE" ? "MICE" : "Wedding"}
-                  </span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          options={[
+            { id: "all", name: "Semua Event Type" },
+            ...eventTypes.map((et) => ({
+              id: et.id,
+              name: et.name,
+              badge: et.category === "MICE" ? "MICE" : "Wedding",
+            })),
+          ]}
+          value={eventTypeFilter}
+          onChange={onEventTypeChange}
+          placeholder="Semua Event Type"
+          searchPlaceholder="Cari event type..."
+          emptyText="Event type tidak ditemukan"
+          className="h-9"
+        />
       </div>
     </div>
   );

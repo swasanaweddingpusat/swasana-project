@@ -86,3 +86,40 @@ export async function requirePermissionForRoute(
 
   return { session, response: null };
 }
+
+/**
+ * Route guard that passes when the user satisfies ANY of the given checks.
+ * Use for shared reference endpoints (e.g. event types) consumed across
+ * multiple features — a user with leads OR booking OR quotations access
+ * should all be able to read them.
+ */
+export async function requireAnyPermissionForRoute(
+  checks: PermissionCheck[]
+): Promise<
+  | { session: Session; response: null }
+  | { session: null; response: Response }
+> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return {
+      session: null,
+      response: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  if (await isSuperAdmin(session.user.roleId)) {
+    return { session, response: null };
+  }
+
+  for (const check of checks) {
+    if (await hasPermission(session.user.roleId, check.module, check.action)) {
+      return { session, response: null };
+    }
+  }
+
+  return {
+    session: null,
+    response: Response.json({ error: "Forbidden" }, { status: 403 }),
+  };
+}

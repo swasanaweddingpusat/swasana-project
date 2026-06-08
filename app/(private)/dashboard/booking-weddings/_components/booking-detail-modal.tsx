@@ -102,7 +102,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:bg-black/40">
+    <div className="fixed inset-0 z-[60] flex bg-black/40 sm:items-center sm:justify-center">
       <div
         className="bg-background w-full h-full flex flex-col sm:rounded-xl sm:shadow-lg sm:w-[70%] sm:max-w-[70%] overflow-hidden sm:h-auto sm:max-h-[90vh]"
         style={{ minWidth: 0 }}
@@ -154,7 +154,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
         </div>
 
         {/* ── Body ────────────────────────────────────────────────────────── */}
-        <div className="overflow-y-auto flex-1 px-4 sm:px-8 py-4">
+        <div className="overflow-y-auto flex-1 px-4 sm:px-8 py-4 pb-20 sm:pb-4">
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-6">
               {Array.from({ length: 12 }).map((_, i) => (
@@ -380,6 +380,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
                                   t.paymentStatus === "paid" ? "bg-primary/10 text-primary" :
                                   t.paymentStatus === "partial" ? "bg-muted text-foreground/70" :
+                                  t.paymentStatus === "refund" ? "bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]" :
                                   "bg-destructive/10 text-destructive"
                                 }`}>
                                   {t.paymentStatus || "Unpaid"}
@@ -522,7 +523,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
                   {/* Bulk action bar */}
                   {selectedDocIds.size > 0 && (
-                    <div className="sticky bottom-0 bg-background border-t pt-3 flex items-center justify-between gap-3">
+                    <div className="sticky bottom-0 bg-background border-t pt-3 pb-1 flex items-center justify-between gap-3">
                       <span className="text-sm text-muted-foreground">{selectedDocIds.size} file dipilih</span>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setSelectedDocIds(new Set())} className="text-sm text-muted-foreground hover:text-foreground">Batal</button>

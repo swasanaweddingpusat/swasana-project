@@ -609,7 +609,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       allPaidTermsHaveEvidence
     )
   );
-  const isStep4Complete = !!signatureSales && !!signingLocation.trim();
+  // Sales signature is only required when the creator IS the assigned sales.
+  // For manager/admin-assigned bookings the assigned sales signs later via approval.
+  const isStep4Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
@@ -950,13 +952,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           qty: b.qty,
           nominal: b.nominal,
         })),
-        categoryToggles: allCategoryPrices.map((c) => ({
-          categoryName: c.categoryName,
-          basePrice: c.basePrice,
-          sortOrder: c.sortOrder,
-          isShow: c.isShow,
-          isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-        })),
+        categoryToggles: allCategoryPrices.map((c) => {
+          const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
+          return {
+            categoryName: c.categoryName,
+            basePrice: c.basePrice,
+            sortOrder: c.sortOrder,
+            isShow: c.isShow,
+            isTakeout,
+            takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
+          };
+        }),
       };
 
       const result = await finalizeMut.mutateAsync(finalizePayload);
@@ -1004,13 +1010,17 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
-      categoryToggles: allCategoryPrices.map((c) => ({
-        categoryName: c.categoryName,
-        basePrice: c.basePrice,
-        sortOrder: c.sortOrder,
-        isShow: c.isShow,
-        isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-      })),
+      categoryToggles: allCategoryPrices.map((c) => {
+        const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
+        return {
+          categoryName: c.categoryName,
+          basePrice: c.basePrice,
+          sortOrder: c.sortOrder,
+          isShow: c.isShow,
+          isTakeout,
+          takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
+        };
+      }),
     };
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
@@ -1923,22 +1933,32 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan *</FormLabel>
                     <Input placeholder="Contoh: Jakarta, Bandung, Surabaya..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} />
                   </div>
-                  {/* E-Meterai — hidden for WEDDINGS category, reserved for future use */}
-                  <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Tanda Tangan Sales *</FormLabel>
-                    <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
-                      <SignatureCanvas
-                        ref={sigSalesRef}
-                        penColor="black"
-                        canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }}
-                        onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
-                      />
+                  {/* Sales signature — only when the logged-in user IS the assigned
+                      sales. When a manager/admin assigns to another sales, that sales
+                      signs later via the approval page, so we skip the pad here. */}
+                  {currentUserIsSales ? (
+                    <div>
+                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Tanda Tangan Sales *</FormLabel>
+                      <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
+                        <SignatureCanvas
+                          ref={sigSalesRef}
+                          penColor="black"
+                          canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }}
+                          onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
+                        />
+                      </div>
+                      <div className={cn('flex', 'items-center', 'justify-between', 'mt-1.5')}>
+                        {!signatureSales && <p className={cn('text-xs', 'text-destructive')}>Tanda tangan sales wajib diisi</p>}
+                        <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className={cn('text-xs', 'text-destructive', 'hover:text-destructive', 'underline', 'ml-auto')}>Hapus tanda tangan</button>
+                      </div>
                     </div>
-                    <div className={cn('flex', 'items-center', 'justify-between', 'mt-1.5')}>
-                      {!signatureSales && <p className={cn('text-xs', 'text-destructive')}>Tanda tangan sales wajib diisi</p>}
-                      <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className={cn('text-xs', 'text-destructive', 'hover:text-destructive', 'underline', 'ml-auto')}>Hapus tanda tangan</button>
+                  ) : (
+                    <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+                      <p className="text-xs text-muted-foreground">
+                        Tanda tangan sales akan diisi oleh sales yang ditugaskan ({lockedSalesName}) melalui halaman approval setelah booking dibuat.
+                      </p>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </form>

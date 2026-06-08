@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/collapsible";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
+import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import {
   AddCircle,
   TrashBinTrash,
@@ -54,12 +55,6 @@ import {
   Calendar as CalendarSolarIcon,
   MenuDots,
 } from "@solar-icons/react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import {
   getWeddingTimeRange,
   type WeddingSession,
@@ -73,16 +68,6 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import type { QuotationItem } from "./quotations-table";
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
-interface TermRow {
-  name: string;
-  amount: number;
-  dueDate: string;
-  sortOrder: number;
-  paymentStatus: "unpaid" | "paid" | "partial";
-}
-
-const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
 
 interface QuotationDrawerProps {
   open: boolean;
@@ -122,6 +107,7 @@ interface QuotationFormValues {
   discount: string;
   validUntil: string;
   notes: string;
+  paymentMethodId: string;
 }
 
 // ── API response types ───────────────────────────────────────────────────────
@@ -208,52 +194,6 @@ function deriveWeddingEventType(eventTypeName: string): WeddingEventType | "" {
 
 const LABEL_CLASS = cn("text-sm", "font-medium", "text-foreground");
 
-// ── Term of Payment helpers ───────────────────────────────────────────────────
-
-const BOOKING_FEE_DEFAULT = 5_000_000;
-const DP_DEFAULT = 10_000_000;
-
-function toLocalISO(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}T00:00:00.000Z`;
-}
-
-function makeDefaultTerms(category: "WEDDINGS" | "MICE" | ""): TermRow[] {
-  if (category === "WEDDINGS") {
-    return [
-      { name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
-      { name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
-      { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
-      { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
-      { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
-      { name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5, paymentStatus: "unpaid" },
-      { name: "Final", amount: 0, dueDate: "", sortOrder: 6, paymentStatus: "unpaid" },
-    ];
-  }
-  // MICE or unset → 2 terms
-  return [
-    { name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
-    { name: "Final", amount: 0, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
-  ];
-}
-
-function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
-  if (!eventDate || terms.length === 0) return terms;
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const event = new Date(eventDate);
-  event.setHours(0, 0, 0, 0);
-  const totalMs = event.getTime() - now.getTime();
-  if (totalMs <= 0) return terms;
-  const n = terms.length;
-  return terms.map((t, i) => ({
-    ...t,
-    dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
-  }));
-}
-
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /**
@@ -263,66 +203,9 @@ function recalcTermDates(terms: TermRow[], eventDate: string): TermRow[] {
  * tetap 1 card per item. Baris berharga di-set manualTotal karena total final
  * tidak selalu sama dengan qty × harga.
  */
-function listHtml(lines: string[]): string {
-  return `<ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
-}
-
-function makeItem(
-  title: string,
-  qty = "",
-  price = "",
-  total = "",
-  description = "",
-): QuotationItemForm {
-  return { title, description, qty, price, total, manualTotal: total !== "" };
-}
-
-const DEFAULT_ITEMS: QuotationItemForm[] = [
-  // Ballroom Facilities — 1 card, daftar fasilitas di description
-  makeItem(
-    "Ballroom Facilities :",
-    "",
-    "",
-    "",
-    listHtml([
-      "Samisara Grand Ballroom for Full Day",
-      "Full Carpet Ballroom",
-      "Full Air Conditioned",
-      "Voyager Area",
-      "6-meter High Ceiling",
-      "1 Changing Rooms",
-      "Exclusive Restroom",
-      "Parking area lot up to 800",
-      "Cleaning Service",
-      "Electricity 10.000 watt",
-      "Security",
-    ]),
-  ),
-  // Equipments — 1 card
-  makeItem(
-    "Equipments :",
-    "",
-    "",
-    "",
-    listHtml([
-      "Main Stage",
-      "100 Banquet Chairs",
-      "LED Videotron 4x3",
-      "Soundsystem Standart 1000 Watt (2 MIC)",
-      "5 Roundtables (d120)",
-      "10 Squaretables (d120)",
-      "4 Registration Table",
-    ]),
-  ),
-  // Food & Beverage Inclusions — 1 card
-  makeItem(
-    "Food & Beverage Inclusions :",
-    "",
-    "",
-    "",
-    listHtml(["1x Coffe Break", "1x Buffet Meals", "Air Mineral"]),
-  ),
-];
+// Items now come from the per-venue quotation template (auto-loaded on venue
+// select). With no template, the form starts with an empty item list.
+const DEFAULT_ITEMS: QuotationItemForm[] = [];
 
 const EMPTY_ITEM: QuotationItemForm = {
   title: "",
@@ -353,13 +236,14 @@ const DEFAULT_VALUES: QuotationFormValues = {
   discount: "",
   validUntil: "",
   notes: "",
+  paymentMethodId: "",
 };
 
 // ── Draft persistence (create mode only) ─────────────────────────────────────
 
 const QUOTATION_DRAFT_KEY = "quotation-draft-v1";
 
-type QuotationDraft = { values: Partial<QuotationFormValues>; terms?: TermRow[]; signingLocation?: string };
+type QuotationDraft = { values: Partial<QuotationFormValues>; signingLocation?: string };
 
 function readQuotationDraft(): QuotationDraft | null {
   if (typeof window === "undefined") return null;
@@ -373,7 +257,6 @@ function readQuotationDraft(): QuotationDraft | null {
 
 function persistQuotationDraft(
   values: Partial<QuotationFormValues>,
-  terms?: TermRow[],
   signingLocation?: string,
 ) {
   if (typeof window === "undefined") return;
@@ -384,7 +267,6 @@ function persistQuotationDraft(
   });
   if (hasContent) {
     const draft: QuotationDraft = { values: rest };
-    if (terms) draft.terms = terms;
     if (signingLocation !== undefined) draft.signingLocation = signingLocation;
     localStorage.setItem(QUOTATION_DRAFT_KEY, JSON.stringify(draft));
   } else {
@@ -769,7 +651,7 @@ export function QuotationDrawer({
   onSuccess,
 }: QuotationDrawerProps) {
   const isEdit = !!editQuotation;
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // ── Mutation hooks ───────────────────────────────────────────────────────
   const createQuotation = useCreateQuotation();
@@ -783,27 +665,10 @@ export function QuotationDrawer({
   // Ref to signal that the first card should auto-expand on open.
   const pendingExpandFirstItemsRef = useRef(false);
 
-  // TTD state (step 4)
+  // TTD state (step 3)
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
-
-  // Term of Payment state (step 3)
-  const [terms, setTerms] = useState<TermRow[]>(() => makeDefaultTerms(""));
-  // Track COLLAPSED terms — default empty = semua kebuka
-  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
-
-  function toggleTerm(idx: number) {
-    setCollapsedTerms((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) {
-        next.delete(idx);
-      } else {
-        next.add(idx);
-      }
-      return next;
-    });
-  }
 
   function toggleItem(id: string) {
     setExpandedItems((prev) => {
@@ -880,10 +745,39 @@ export function QuotationDrawer({
     defaultValues: DEFAULT_VALUES,
   });
 
-  const { fields: itemFields, append: appendItem, remove: removeItem, move: moveItem } = useFieldArray({
+  const { fields: itemFields, append: appendItem, remove: removeItem, move: moveItem, replace: replaceItems } = useFieldArray({
     control: form.control,
     name: "items",
   });
+
+  /**
+   * Load the per-venue quotation template (items + default payment method) and
+   * populate the form. Create mode only — never overwrites an existing edit.
+   */
+  async function loadVenueTemplate(venueId: string) {
+    if (isEdit || !venueId) return;
+    try {
+      const res = await fetch(`/api/quotation-templates/${venueId}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        items?: Array<{ title: string; description: string | null; qty: number; price: number; total: number; manualTotal: boolean }>;
+        paymentMethodId?: string | null;
+      };
+      const tplItems: QuotationItemForm[] = (data.items ?? []).map((it) => ({
+        title: it.title,
+        description: it.description ?? "",
+        qty: it.qty > 0 ? formatNumericDisplay(it.qty) : "",
+        price: it.price > 0 ? formatNumericDisplay(it.price) : "",
+        total: it.total > 0 ? formatNumericDisplay(it.total) : "",
+        manualTotal: it.manualTotal,
+      }));
+      replaceItems(tplItems);
+      setExpandedItems(new Set());
+      form.setValue("paymentMethodId", data.paymentMethodId ?? "");
+    } catch {
+      /* network error — leave form as-is */
+    }
+  }
 
   // Auto-expand the last item when a new one is appended (items).
   useEffect(() => {
@@ -919,21 +813,16 @@ export function QuotationDrawer({
   const isStep1Incomplete =
     !watchedClientName?.trim() ||
     !watchedSalesId ||
-    !watchedVenueId ||
     !watchedCategory ||
     !watchedEventTypeId ||
     !watchedEventDate ||
-    !watchedWeddingSession ||
-    !watchedTime?.trim();
+    // Session & time are wedding concepts — only required for WEDDINGS.
+    (isWeddings && (!watchedWeddingSession || !watchedTime?.trim()));
 
-  const watchedValidUntil = form.watch("validUntil");
-  // Step 2 requires the "Berlaku Sampai" date (only required field in step 2).
-  const isStep2Incomplete = !watchedValidUntil?.trim();
-  // Step 3 requires at least one term of payment, each with an amount > 0.
-  const isStep3Incomplete =
-    terms.length === 0 || terms.some((t) => !t.amount || t.amount <= 0);
-
-  const isStep4Complete = !!signatureSales && !!signingLocation.trim();
+  // Step 2 (items + discount) has no hard-required field — items default to one row.
+  const isStep2Incomplete = false;
+  // Step 3 (signature) requires a signature + signing location.
+  const isStep3Complete = !!signatureSales && !!signingLocation.trim();
 
   // Name shown in the locked sales field — resolves from the current salesId so
   // edit mode displays the record's actual sales (not the logged-in user).
@@ -1035,8 +924,6 @@ export function QuotationDrawer({
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
-    // Reset terms & collapsed state
-    setCollapsedTerms(new Set());
 
     if (editQuotation) {
       const matchedVenue = venues.find((v) => v.name === editQuotation.venue);
@@ -1053,20 +940,6 @@ export function QuotationDrawer({
               manualTotal: !!it.manualTotal,
             }))
           : [{ ...EMPTY_ITEM }];
-      // Restore terms from real DB data (termOfPayments on QuotationItem)
-      if (editQuotation.termOfPayments && editQuotation.termOfPayments.length > 0) {
-        setTerms(
-          editQuotation.termOfPayments.map((t, idx) => ({
-            name: t.name,
-            amount: t.amount,
-            dueDate: t.dueDate ? t.dueDate + "T00:00:00.000Z" : "",
-            sortOrder: idx,
-            paymentStatus: (t.paymentStatus as "unpaid" | "paid" | "partial") ?? "unpaid",
-          })),
-        );
-      } else {
-        setTerms(makeDefaultTerms(editCategory));
-      }
       // Restore signature fields
       if (editQuotation.signingLocation) setSigningLocation(editQuotation.signingLocation);
       form.reset({
@@ -1094,6 +967,7 @@ export function QuotationDrawer({
             : "",
         validUntil: editQuotation.validUntil,
         notes: editQuotation.notes,
+        paymentMethodId: editQuotation.paymentMethodId ?? "",
       });
     } else {
       const draft = readQuotationDraft();
@@ -1112,13 +986,6 @@ export function QuotationDrawer({
             ? draftItems
             : DEFAULT_ITEMS.map((it) => ({ ...it })),
         });
-        // Restore terms dari draft
-        if (Array.isArray(draft.terms) && draft.terms.length > 0) {
-          setTerms(draft.terms);
-        } else {
-          const draftCat = draft.values.category ?? "";
-          setTerms(makeDefaultTerms(draftCat));
-        }
         // Restore signingLocation dari draft
         if (draft.signingLocation) {
           setSigningLocation(draft.signingLocation);
@@ -1128,7 +995,6 @@ export function QuotationDrawer({
           ...DEFAULT_VALUES,
           items: DEFAULT_ITEMS.map((it) => ({ ...it })),
         });
-        setTerms(makeDefaultTerms(""));
       }
     }
   }, [open, editQuotation]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1145,16 +1011,16 @@ export function QuotationDrawer({
   useEffect(() => {
     if (!open || isEdit) return;
     const sub = form.watch((values) => {
-      persistQuotationDraft(values as Partial<QuotationFormValues>, terms, signingLocation);
+      persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation);
     });
     return () => sub.unsubscribe();
-  }, [open, isEdit, terms, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isEdit, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist terms & signingLocation changes to draft (not triggered by form.watch).
+  // Persist signingLocation changes to draft (not triggered by form.watch).
   useEffect(() => {
     if (!open || isEdit) return;
-    persistQuotationDraft(form.getValues(), terms, signingLocation);
-  }, [terms, signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+    persistQuotationDraft(form.getValues(), signingLocation);
+  }, [signingLocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-fill from lead ──────────────────────────────────────────────────
   function applyLeadAutofill(lead: LeadOption) {
@@ -1231,49 +1097,23 @@ export function QuotationDrawer({
     setClientDropdownOpen(false);
   }
 
-  // ── Regenerate default terms saat category berubah ──────────────────────
-  // Hanya untuk create mode supaya tidak overwrite edit-mode terms.
-  useEffect(() => {
-    if (!open || isEdit) return;
-    setTerms(makeDefaultTerms(watchedCategory));
-    setCollapsedTerms(new Set());
-  }, [watchedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Recalc term dates saat event date berubah ────────────────────────────
-  useEffect(() => {
-    if (!watchedEventDate) return;
-    setTerms((prev) => recalcTermDates(prev, watchedEventDate + "T00:00:00.000Z"));
-  }, [watchedEventDate]);
-
   // ── Navigation ───────────────────────────────────────────────────────────
   async function handleNext() {
     if (step === 1) {
-      const ok = await form.trigger([
+      const step1Fields = [
         "clientName",
         "salesId",
         "venueId",
         "category",
         "eventTypeId",
         "eventDate",
-        "weddingSession",
-        "time",
-      ]);
+        // Session & time only validated for WEDDINGS (wedding concepts).
+        ...(isWeddings ? (["weddingSession", "time"] as const) : []),
+      ] as const;
+      const ok = await form.trigger([...step1Fields]);
       if (ok) setStep(2);
     } else if (step === 2) {
-      // Validasi validUntil sebelum lanjut ke step 3 (TOP)
-      const ok = await form.trigger(["validUntil"]);
-      if (ok) setStep(3);
-    } else if (step === 3) {
-      // Validasi: minimal 1 term, dan setiap term wajib punya amount > 0.
-      if (terms.length === 0) {
-        toast.error("Minimal satu term of payment wajib diisi.");
-        return;
-      }
-      if (terms.some((t) => !t.amount || t.amount <= 0)) {
-        toast.error("Amount setiap term of payment wajib diisi.");
-        return;
-      }
-      setStep(4);
+      setStep(3);
     }
   }
 
@@ -1281,25 +1121,14 @@ export function QuotationDrawer({
     if (step === 2) {
       setStep(1);
     } else if (step === 3) {
-      setStep(2);
-    } else if (step === 4) {
-      // Clear signature saat kembali dari step 4
+      // Clear signature saat kembali dari step 3
       sigSalesRef.current?.clear();
       setSignatureSales("");
-      setStep(3);
+      setStep(2);
     }
   }
 
   async function onSubmit(values: QuotationFormValues) {
-    // Build terms payload (filter terms with no dueDate is ok — dueDate is optional in schema)
-    const termOfPayments = terms.map((t, idx) => ({
-      name: t.name,
-      amount: t.amount,
-      dueDate: t.dueDate || null,
-      sortOrder: idx,
-      paymentStatus: t.paymentStatus,
-    }));
-
     // Parse items — form stores qty/price/total as display strings ("1.000.000") → parse to int
     const items = values.items.map((it, idx) => ({
       title: it.title,
@@ -1331,7 +1160,7 @@ export function QuotationDrawer({
       discount: discountNum,
       validUntil: values.validUntil,
       notes: values.notes || null,
-      termOfPayments,
+      paymentMethodId: values.paymentMethodId || null,
       signingLocation: signingLocation || null,
       signatureSales: signatureSales || null,
     };
@@ -1353,9 +1182,7 @@ export function QuotationDrawer({
     toast.success(
       isEdit ? "Quotation berhasil diperbarui." : "Quotation berhasil disimpan.",
     );
-    // Reset terms & signature setelah submit
-    setTerms(makeDefaultTerms(""));
-    setCollapsedTerms(new Set());
+    // Reset signature setelah submit
     sigSalesRef.current?.clear();
     setSignatureSales("");
     setSigningLocation("");
@@ -1371,7 +1198,7 @@ export function QuotationDrawer({
       title={isEdit ? "Edit Quotation" : "Tambah Quotation"}
       maxWidth="sm:max-w-2xl"
       steps={step}
-      totalSteps={4}
+      totalSteps={3}
       stepperType="short"
     >
       <div className="flex flex-col h-full">
@@ -1616,10 +1443,9 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="venueId"
-                      rules={{ required: "Venue wajib dipilih" }}
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel className={LABEL_CLASS}>Venue *</FormLabel>
+                          <FormLabel className={LABEL_CLASS}>Venue</FormLabel>
                           <FormControl>
                             <SearchableSelect
                               options={venues.map((v) => ({ id: v.id, name: v.name }))}
@@ -1631,6 +1457,8 @@ export function QuotationDrawer({
                                 // Reset date & session when venue changes
                                 form.setValue("eventDate", "");
                                 form.setValue("weddingSession", "");
+                                // Auto-load per-venue template (create mode only).
+                                void loadVenueTemplate(id);
                               }}
                               placeholder="Pilih / cari venue..."
                               searchPlaceholder="Cari venue..."
@@ -1720,7 +1548,6 @@ export function QuotationDrawer({
                               render={
                                 <Button
                                   variant="outline"
-                                  disabled={!watchedVenueId}
                                   className={cn(
                                     "w-full justify-start text-left font-normal",
                                     !field.value && "text-muted-foreground",
@@ -1730,14 +1557,12 @@ export function QuotationDrawer({
                                     weight="BoldDuotone"
                                     className="mr-2 h-4 w-4"
                                   />
-                                  {watchedVenueId
-                                    ? field.value
-                                      ? format(
-                                          new Date(field.value + "T00:00:00"),
-                                          "PPP",
-                                        )
-                                      : "Pilih tanggal event"
-                                    : "Pilih venue terlebih dahulu"}
+                                  {field.value
+                                    ? format(
+                                        new Date(field.value + "T00:00:00"),
+                                        "PPP",
+                                      )
+                                    : "Pilih tanggal event"}
                                 </Button>
                               }
                             />
@@ -1806,29 +1631,29 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="weddingSession"
-                      rules={{ required: "Session wajib dipilih" }}
+                      rules={{ required: isWeddings ? "Session wajib dipilih" : false }}
                       render={({ field }) => {
                         const sessions = watchedEventDate
                           ? getAvailableSessions(watchedEventDate)
                           : ["morning", "evening", "fullday"];
                         return (
                           <FormItem className="w-full">
-                            <FormLabel className={LABEL_CLASS}>Session *</FormLabel>
+                            <FormLabel className={LABEL_CLASS}>
+                              Session {isWeddings ? "*" : ""}
+                            </FormLabel>
                             <FormControl>
                               <SearchableSelect
                                 options={sessions.map((s) => ({ id: s, name: SESSION_LABELS[s] }))}
                                 value={field.value}
                                 onChange={(v) => field.onChange(v as WeddingSession)}
                                 placeholder={
-                                  !watchedVenueId
-                                    ? "Pilih venue dulu"
-                                    : !watchedEventDate
-                                      ? "Pilih tanggal dulu"
-                                      : "Pilih session..."
+                                  !watchedEventDate
+                                    ? "Pilih tanggal dulu"
+                                    : "Pilih session..."
                                 }
                                 searchPlaceholder="Cari session..."
                                 emptyText="Tidak ada session tersedia"
-                                disabled={!watchedVenueId || !watchedEventDate}
+                                disabled={!watchedEventDate}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1841,11 +1666,11 @@ export function QuotationDrawer({
                     <FormField
                       control={form.control}
                       name="time"
-                      rules={{ required: "Time wajib diisi" }}
+                      rules={{ required: isWeddings ? "Time wajib diisi" : false }}
                       render={({ field }) => (
                         <FormItem className="flex w-full flex-col">
                           <FormLabel className={LABEL_CLASS}>
-                            Time *
+                            Time {isWeddings ? "*" : ""}
                             {isWeddings &&
                               watchedWeddingSession &&
                               derivedWeddingEventType && (
@@ -1971,17 +1796,20 @@ export function QuotationDrawer({
                   </div>
                 </div>
 
-                {/* ── Berlaku Sampai ────────────────────────────────── */}
+                {/* ── Metode Pembayaran ─────────────────────────────── */}
                 <FormField
                   control={form.control}
-                  name="validUntil"
-                  rules={{ required: "Tanggal berlaku wajib diisi" }}
+                  name="paymentMethodId"
                   render={({ field }) => (
                     <FormItem className="w-full">
-                      <FormLabel className={LABEL_CLASS}>Berlaku Sampai *</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="date" className="w-full" />
-                      </FormControl>
+                      <FormLabel className={LABEL_CLASS}>Metode Pembayaran</FormLabel>
+                      <BankAccountSelect
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        venueId={watchedVenueId || undefined}
+                        placeholder="Pilih metode pembayaran..."
+                        disableAdd
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -2008,258 +1836,8 @@ export function QuotationDrawer({
                 />
               </div>
 
-              {/* ════════════════ STEP 3 — TERM OF PAYMENT ════════════════ */}
-              <div className={cn(step !== 3 && "hidden", "space-y-3")}>
-                <div>
-                  <p className={LABEL_CLASS}>Term of Payment</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {watchedCategory === "WEDDINGS"
-                      ? "7 termin default (Wedding). Tanggal jatuh tempo dikalkulasi otomatis dari tanggal event."
-                      : "2 termin default (MICE / lainnya). Sesuaikan nama, nominal, dan tanggal jatuh tempo."}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  {terms.map((t, idx) => {
-                    const isOpen = !collapsedTerms.has(idx);
-                    const payStatus = t.paymentStatus ?? "unpaid";
-                    const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
-                    return (
-                      <Collapsible
-                        key={idx}
-                        open={isOpen}
-                        onOpenChange={() => toggleTerm(idx)}
-                        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                      >
-                        {/* ── Header — trigger + hapus sebagai sibling (bukan nested button) ── */}
-                        <div className="flex items-center gap-1 px-3 py-2.5">
-                          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                            <AltArrowDown
-                              weight="BoldDuotone"
-                              className={cn(
-                                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                isOpen && "rotate-180",
-                              )}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className={cn(
-                                  "text-sm font-medium truncate",
-                                  t.name ? "text-foreground" : "text-muted-foreground italic",
-                                )}
-                              >
-                                {t.name || "Term tanpa nama"}
-                              </p>
-                              {!isOpen && (
-                                <p className="text-xs text-muted-foreground tabular-nums">
-                                  <span
-                                    className={cn(
-                                      payStatus === "paid" ? "text-foreground" : "text-muted-foreground",
-                                    )}
-                                  >
-                                    {statusLabel}
-                                  </span>
-                                  {t.amount ? ` · Rp${t.amount.toLocaleString("id-ID")}` : ""}
-                                  {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
-                                </p>
-                              )}
-                            </div>
-                          </CollapsibleTrigger>
-                          {/* Tombol hapus — sibling dari CollapsibleTrigger, bukan child-nya */}
-                          {terms.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const eventDateStr = watchedEventDate
-                                  ? watchedEventDate + "T00:00:00.000Z"
-                                  : "";
-                                setTerms((prev) =>
-                                  recalcTermDates(
-                                    prev.filter((_, i) => i !== idx),
-                                    eventDateStr,
-                                  ),
-                                );
-                                setCollapsedTerms((prev) => {
-                                  const next = new Set<number>();
-                                  prev.forEach((n) => {
-                                    if (n < idx) {
-                                      next.add(n);
-                                    } else if (n > idx) {
-                                      next.add(n - 1);
-                                    }
-                                  });
-                                  return next;
-                                });
-                              }}
-                              aria-label="Hapus term"
-                              className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* ── Body ── */}
-                        <CollapsibleContent>
-                          <div className="px-3 pb-3 space-y-3 border-t border-border/60">
-                            {/* Term name + Status — satu row */}
-                            <div className="pt-2 flex items-center gap-2">
-                              <Input
-                                value={t.name}
-                                onChange={(e) =>
-                                  setTerms((prev) =>
-                                    prev.map((x, i) =>
-                                      i === idx ? { ...x, name: e.target.value } : x,
-                                    ),
-                                  )
-                                }
-                                placeholder="Nama term (mis. Booking Fee)"
-                                className="flex-1 border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                              />
-                              <Select
-                                value={payStatus}
-                                onValueChange={(v) =>
-                                  setTerms((prev) =>
-                                    prev.map((x, i) =>
-                                      i === idx
-                                        ? { ...x, paymentStatus: v as TermRow["paymentStatus"] }
-                                        : x,
-                                    ),
-                                  )
-                                }
-                              >
-                                <SelectTrigger className="w-32 h-8 bg-background shrink-0">
-                                  <span
-                                    className={cn(
-                                      "text-xs font-semibold",
-                                      payStatus === "paid"
-                                        ? "text-foreground"
-                                        : "text-muted-foreground",
-                                    )}
-                                  >
-                                    {statusLabel}
-                                  </span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {PAYMENT_STATUS.map((s) => (
-                                    <SelectItem key={s} value={s}>
-                                      {s.charAt(0).toUpperCase() + s.slice(1)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            {/* Amount + Due Date row */}
-                            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                              <div className="sm:flex-[2]">
-                                <Input
-                                  value={t.amount ? t.amount.toLocaleString("id-ID") : ""}
-                                  onChange={(e) => {
-                                    const num =
-                                      parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
-                                    setTerms((prev) =>
-                                      prev.map((x, i) =>
-                                        i === idx ? { ...x, amount: num } : x,
-                                      ),
-                                    );
-                                  }}
-                                  placeholder="Amount *"
-                                  inputMode="numeric"
-                                  className={cn(
-                                    "bg-background",
-                                    (!t.amount || t.amount <= 0) && "border-destructive/40",
-                                  )}
-                                />
-                                {(!t.amount || t.amount <= 0) && (
-                                  <p className="text-xs text-destructive mt-1">
-                                    Amount wajib diisi
-                                  </p>
-                                )}
-                              </div>
-                              <div className="sm:flex-1">
-                                <Popover>
-                                  <PopoverTrigger
-                                    render={
-                                      <Button
-                                        variant="outline"
-                                        className={cn(
-                                          "w-full justify-start text-left font-normal bg-background",
-                                          !t.dueDate && "text-muted-foreground",
-                                        )}
-                                      >
-                                        <CalendarSolarIcon
-                                          weight="BoldDuotone"
-                                          className="mr-2 h-4 w-4"
-                                        />
-                                        {t.dueDate
-                                          ? format(new Date(t.dueDate), "dd MMM yyyy")
-                                          : "Pilih Tanggal"}
-                                      </Button>
-                                    }
-                                  />
-                                  <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                      mode="single"
-                                      captionLayout="dropdown"
-                                      selected={
-                                        t.dueDate ? new Date(t.dueDate) : undefined
-                                      }
-                                      onSelect={(date) =>
-                                        setTerms((prev) =>
-                                          prev.map((x, i) =>
-                                            i === idx
-                                              ? { ...x, dueDate: date ? date.toISOString() : "" }
-                                              : x,
-                                          ),
-                                        )
-                                      }
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                              </div>
-                            </div>
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    );
-                  })}
-                </div>
-
-                {/* Tambah Payment button */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-dashed gap-1.5 text-muted-foreground rounded-xl"
-                  onClick={() => {
-                    const eventDateStr = watchedEventDate
-                      ? watchedEventDate + "T00:00:00.000Z"
-                      : "";
-                    setTerms((prev) =>
-                      recalcTermDates(
-                        [
-                          ...prev,
-                          {
-                            name: "",
-                            amount: 0,
-                            dueDate: "",
-                            sortOrder: prev.length,
-                            paymentStatus: "unpaid",
-                          },
-                        ],
-                        eventDateStr,
-                      ),
-                    );
-                  }}
-                >
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                  Tambah Payment
-                </Button>
-              </div>
-
-              {/* ════════════════ STEP 4 — TTD ════════════════ */}
-              <div className={cn(step !== 4 && "hidden", "space-y-6")}>
+              {/* ════════════════ STEP 3 — TTD ════════════════ */}
+              <div className={cn(step !== 3 && "hidden", "space-y-6")}>
                 <div>
                   <FormLabel className={cn("text-sm", "font-medium", "text-foreground", "mb-2", "block")}>
                     Lokasi Tanda Tangan *
@@ -2280,10 +1858,10 @@ export function QuotationDrawer({
                       !signatureSales ? "border-destructive/40" : "border-border",
                     )}
                   >
-                    {/* Mount only when step 4 is active — a SignatureCanvas mounted
+                    {/* Mount only when step 3 is active — a SignatureCanvas mounted
                         inside a display:none container has 0 dimensions and never
                         captures strokes. */}
-                    {step === 4 && (
+                    {step === 3 && (
                       <SignatureCanvas
                         ref={sigSalesRef}
                         penColor="black"
@@ -2349,18 +1927,10 @@ export function QuotationDrawer({
                 Kembali
               </Button>
             )}
-            {step < 4 ? (
+            {step < 3 ? (
               <Button
                 onClick={handleNext}
-                disabled={
-                  step === 1
-                    ? isStep1Incomplete
-                    : step === 2
-                      ? isStep2Incomplete
-                      : step === 3
-                        ? isStep3Incomplete
-                        : false
-                }
+                disabled={step === 1 ? isStep1Incomplete : isStep2Incomplete}
                 className="flex-[60%] cursor-pointer"
               >
                 Lanjut
@@ -2369,7 +1939,7 @@ export function QuotationDrawer({
             ) : (
               <Button
                 onClick={form.handleSubmit(onSubmit)}
-                disabled={!isStep4Complete || isPending}
+                disabled={!isStep3Complete || isPending}
                 className="flex-[60%] cursor-pointer"
               >
                 {isPending ? "Menyimpan..." : isEdit ? "Simpan" : "Tambah"}

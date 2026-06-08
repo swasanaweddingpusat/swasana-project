@@ -276,11 +276,12 @@ model Venue {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  packages        Package[]
-  paymentMethods  PaymentMethod[]
+  packages           Package[]
+  paymentMethods     PaymentMethod[]
   bookings           Booking[]
   leads              Lead[]
   quotations         Quotation[]
+  quotationTemplates QuotationTemplate[]
   maintenanceTickets MaintenanceTicket[]
 
   @@index([brandId])
@@ -352,8 +353,10 @@ model PaymentMethod {
   createdAt         DateTime                   @default(now())
   vendor            Vendor?                    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   venue             Venue?                     @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  bookings          Booking[]
-  settlements       BookingPaymentSettlement[]
+  bookings           Booking[]
+  settlements        BookingPaymentSettlement[]
+  quotations         Quotation[]
+  quotationTemplates QuotationTemplate[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -694,6 +697,7 @@ model SnapPackagePricing {
   packageName      String
   pax              Int
   price            Int
+  fullPrice        Int      @default(0)
   margin           Float    @default(0)
   termAndCondition String?
   createdAt        DateTime @default(now())
@@ -741,6 +745,7 @@ model SnapPackageCategoryPrice {
   sortOrder    Int      @default(0)
   isShow       Boolean  @default(true)
   isTakeout    Boolean  @default(false)
+  takeoutNominal Int    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -1253,8 +1258,9 @@ model Quotation {
 
   // Relations
   salesId         String
-  venueId         String
+  venueId         String?
   eventTypeId     String?
+  paymentMethodId String?
   // Snapshot of names at creation time (for display/PDF without JOIN)
   eventTypeName   String?
   venueName       String?
@@ -1279,9 +1285,10 @@ model Quotation {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  sales     Profile    @relation(fields: [salesId], references: [id], onDelete: Restrict)
-  venue     Venue      @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  eventType EventType? @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  sales         Profile        @relation(fields: [salesId], references: [id], onDelete: Restrict)
+  venue         Venue?         @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  eventType     EventType?     @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   items QuotationItem[]
   terms QuotationTerm[]
@@ -1289,6 +1296,7 @@ model Quotation {
   @@index([salesId])
   @@index([venueId])
   @@index([eventTypeId])
+  @@index([paymentMethodId])
   @@index([status])
   @@index([createdAt])
   @@map("quotations")
@@ -1313,19 +1321,55 @@ model QuotationItem {
 }
 
 model QuotationTerm {
-  id            String   @id @default(uuid())
-  quotationId   String
-  name          String
-  amount        Int
-  dueDate       DateTime?
-  sortOrder     Int      @default(0)
-  paymentStatus String   @default("unpaid")
-  createdAt     DateTime @default(now())
+  id              String   @id @default(uuid())
+  quotationId     String
+  name            String
+  amount          Int
+  dueDate         DateTime?
+  sortOrder       Int      @default(0)
+  paymentStatus   String   @default("unpaid")
+  paymentEvidence String?  // R2 key for payment proof (required when paid)
+  createdAt       DateTime @default(now())
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([quotationId])
   @@map("quotation_terms")
+}
+
+// ── Quotation Template (per venue) ──────────────────────────────────────────────
+// Reusable default line items + default payment method, auto-loaded into the
+// quotation form when a venue is selected.
+model QuotationTemplate {
+  id              String   @id @default(uuid())
+  venueId         String   @unique // one template per venue
+  paymentMethodId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  venue         Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  items         QuotationTemplateItem[]
+
+  @@index([paymentMethodId])
+  @@map("quotation_templates")
+}
+
+model QuotationTemplateItem {
+  id          String  @id @default(uuid())
+  templateId  String
+  title       String
+  description String? // rich HTML (TipTap)
+  qty         Int     @default(0)
+  price       Int     @default(0)
+  total       Int     @default(0)
+  manualTotal Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  template QuotationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("quotation_template_items")
 }
 
 // ─── Maintenance ─────────────────────────────────────────────────────────────
