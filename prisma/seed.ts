@@ -7,10 +7,11 @@ import { seedUsers } from "./seeders/users";
 import { seedGroups } from "./seeders/groups";
 import { seedOrderStatuses } from "./seeders/order-statuses";
 import { seedEventTypes } from "./seeders/event-types";
+import { seedQuotationTemplates, seedBripensQuotationTemplate, seedPatrajasaQuotationTemplate, seedLippoQuotationTemplate, seedParamitaQuotationTemplate } from "./seeders/quotation-templates";
 import { prisma } from "./seeders/_client";
 
 async function main() {
-  console.log("🌱 Seeding database...\n"); 
+  console.log("🌱 Seeding database...\n");
 
   await seedRolesPermissions();
   await seedReferenceData();
@@ -21,6 +22,11 @@ async function main() {
   await seedGroups();
   await seedOrderStatuses();
   await seedEventTypes();
+  await seedQuotationTemplates();
+  await seedBripensQuotationTemplate();
+  await seedPatrajasaQuotationTemplate();
+  await seedLippoQuotationTemplate();
+  await seedParamitaQuotationTemplate();
 
   console.log("\n🎉 Seeding completed!");
 }
