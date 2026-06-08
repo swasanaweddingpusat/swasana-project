@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Earth, User, UsersGroupRounded } from "@solar-icons/react";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import { useInviteUser, useUpdateUser } from "@/hooks/use-users";
 import { useGroups, useCreateGroup, useAddGroupMember, useRemoveGroupMember } from "@/hooks/use-groups";
@@ -233,6 +234,17 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
               onChange={(e) => handleInput("fullName", e.target.value)}
             />
             {errors.fullName && <p className="mt-1 text-sm text-destructive">{errors.fullName}</p>}
+          </div>
+
+          {/* Phone Number */}
+          <div>
+            <Label className="text-sm font-medium text-gray-700">No. HP</Label>
+            <div className="mt-1">
+              <PhoneInput
+                value={formData.phoneNumber}
+                onChange={(v) => handleInput("phoneNumber", v)}
+              />
+            </div>
           </div>
 
           {/* Role */}

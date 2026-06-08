@@ -13,6 +13,7 @@ import { useCreateVendor, useUpdateVendor, useCreateVendorCategory } from "@/hoo
 import type { VendorCategoryItem } from "@/lib/queries/vendors";
 import type { PaymentMethodInput } from "@/lib/validations/vendor";
 import { cn } from "../../../../../lib/utils";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 
 type VendorWithPayments = VendorCategoryItem["vendors"][number] & { categoryName?: string };
 
@@ -148,7 +149,7 @@ export function VendorDrawer({ isOpen, onClose, vendor, categories }: VendorDraw
 
           <div className="space-y-1">
             <Label className={cn('text-sm', 'font-medium')}>No. Telepon</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Contoh: 08123456789" className={cn('h-9', 'text-sm')} />
+            <PhoneInput value={phone} onChange={setPhone} />
           </div>
 
           <div className="space-y-1">

@@ -3,7 +3,7 @@ import { z } from "zod";
 // ─── Sub-schemas ──────────────────────────────────────────────────────────────
 
 export const contactNumberSchema = z.object({
-  label: z.string().trim().max(50).optional().default(""),
+  label: z.string().trim().min(1, "Label wajib diisi").max(50),
   number: z
     .string()
     .trim()

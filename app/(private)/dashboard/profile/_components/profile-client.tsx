@@ -18,6 +18,7 @@ import { updateMyProfile } from "@/actions/profile"
 import { createEducationLevel } from "@/actions/education-level"
 import { AvatarUpload } from "@/components/shared/avatar-upload"
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import { PhoneInput } from "@/components/shared/PhoneInput"
 
 interface ProfileData {
   id: string
@@ -277,7 +278,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                   <Input value={form.kkNumber} onChange={(e) => set("kkNumber", e.target.value)} placeholder="16 digit No. KK" maxLength={16} />
                 </Field>
                 <Field label="No. Telepon">
-                  <Input value={form.phoneNumber} onChange={(e) => set("phoneNumber", e.target.value)} placeholder="08xxxxxxxxxx" />
+                  <PhoneInput value={form.phoneNumber ?? ""} onChange={(v) => set("phoneNumber", v)} />
                 </Field>
                 <Field label="Email">
                   <Input value={user.email} readOnly className={cn('bg-muted', 'text-muted-foreground', 'cursor-not-allowed')} />
@@ -359,7 +360,7 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                   <Input value={form.emergencyContactRel} onChange={(e) => set("emergencyContactRel", e.target.value)} placeholder="Orang tua, pasangan, dll" />
                 </Field>
                 <Field label="No. Telepon">
-                  <Input value={form.emergencyContactPhone} onChange={(e) => set("emergencyContactPhone", e.target.value)} placeholder="08xxxxxxxxxx" />
+                  <PhoneInput value={form.emergencyContactPhone ?? ""} onChange={(v) => set("emergencyContactPhone", v)} />
                 </Field>
               </div>
 
