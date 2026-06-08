@@ -117,7 +117,7 @@ export function TicketDrawer({
           isAudit: editItem.isAudit,
           description: editItem.description,
         });
-        setExistingImages(editItem.images.map((img) => ({ id: img.id, url: img.url, fileName: img.fileName })));
+        setExistingImages(editItem.images.map((img: { id: string; url: string; fileName: string }) => ({ id: img.id, url: img.url, fileName: img.fileName })));
       } else {
         setForm(DEFAULT_FORM);
         setExistingImages([]);
