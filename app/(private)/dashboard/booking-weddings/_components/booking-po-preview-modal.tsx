@@ -80,7 +80,7 @@ export function BookingPOPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false} className="flex h-[85vh] w-[70vw] max-w-[70vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[70vw]">
+      <DialogContent showCloseButton={false} className="flex h-screen w-screen max-w-none top-0 left-0 translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 ring-0 sm:max-w-none">
         <DialogHeader className="shrink-0 border-b p-4">
           <div className="flex items-center justify-between gap-3">
             <DialogTitle>Preview PO — {target.label}</DialogTitle>

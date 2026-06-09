@@ -139,6 +139,46 @@
   button:not(:disabled) {
     cursor: pointer;
   }
+
+}
+
+/* ── iOS Safari auto-zoom prevention ──────────────────────────────────
+   Safari mobile zooms in when a focused input/select/textarea has
+   font-size < 16px. This rule lives OUTSIDE @layer so it sits above
+   all @layer base / @layer components / @layer utilities in the CSS
+   cascade — Tailwind utility classes (text-xs, text-sm) that apply
+   font-size are all inside @layer utilities, which loses to unlayered
+   rules at equal specificity. Placing this outside every @layer
+   ensures it wins regardless of what utility classes are on the element.
+   Desktop is unaffected — text-sm (14px) still renders above 767px
+   because the media query does not match.
+   [contenteditable] covers rich-text editors (e.g. simple-editor).
+──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select,
+  [contenteditable],
+  [cmdk-input] {
+    font-size: 16px !important;
+  }
+}
+
+/* ── iOS Safari — hide native password/credentials overlay buttons ──
+   iOS Safari 14+ injects a native "eye" reveal button and a credentials
+   autofill button directly inside <input type="password"> fields. These
+   native controls are rendered on top of absolutely-positioned UI (like
+   our custom toggle), making the custom button un-tappable on iPhone.
+   The pseudo-element selectors below suppress them so our toggle works.
+─────────────────────────────────────────────────────────────────── */
+input[type="password"]::-webkit-contacts-auto-fill-button,
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="text"]::-webkit-contacts-auto-fill-button,
+input[type="text"]::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────── */
