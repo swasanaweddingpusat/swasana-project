@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText } from "@solar-icons/react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
@@ -17,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import { editBooking } from "@/actions/booking";
 import { computeFullPrice } from "@/lib/package-prices";
@@ -34,7 +36,15 @@ interface CategoryPriceEntry { id: string; categoryName: string; basePrice: numb
 interface PackageOption { id: string; packageName: string; pax: number; margin: number; sellingPrice: number; categoryPrices: CategoryPriceEntry[] }
 interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
-interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number }
+type TermPaymentStatus = "unpaid" | "paid" | "partial" | "refund";
+interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; paymentEvidence?: string | null }
+
+const PAYMENT_STATUS_LABELS: Record<TermPaymentStatus, string> = {
+  unpaid: "Unpaid",
+  paid: "Paid",
+  partial: "Partial",
+  refund: "Refund",
+};
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -90,7 +100,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Step 1 state
   const [customerName, setCustomerName] = useState("");
   const [contactNumbers, setContactNumbers] = useState<MobileNumberEntry[]>([]);
-  const [contactInput, setContactInput] = useState({ name: "", number: "" });
+  const [contactInput, setContactInput] = useState({ name: "", phone: "" });
+  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
   const [contactNikCpp, setContactNikCpp] = useState("");
   const [contactNikCpw, setContactNikCpw] = useState("");
@@ -118,6 +129,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Track whether price changed between step 2 and step 3 to decide if
   // allocatePrice should overwrite manual edits when re-entering step 3.
   const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
+  // Track collapsed term cards (Set of indices) — default empty = semua terbuka
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
+
+  function toggleTerm(idx: number) {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
+      return next;
+    });
+  }
 
   // Step 4 state (Signature)
   const [signingLocation, setSigningLocation] = useState("");
@@ -222,13 +243,22 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     // Reset detail-field originals so they are re-captured when detail loads
     setOriginalDetail(null);
     // Terms from booking
-    const bTerms = (booking.termOfPayments ?? []).map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: new Date(t.dueDate).toISOString(), sortOrder: t.sortOrder }));
+    const bTerms = (booking.termOfPayments ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: Number(t.amount),
+      dueDate: new Date(t.dueDate).toISOString(),
+      sortOrder: t.sortOrder,
+      paymentStatus: (t.paymentStatus ?? "unpaid") as TermPaymentStatus,
+      paymentEvidence: (t as Record<string, unknown>).paymentEvidence as string | null ?? null,
+    }));
     const defaultTerms: TermRow[] = [
-      { name: "Booking Fee", amount: 5_000_000, dueDate: toLocalISO(new Date()), sortOrder: 0 },
-      { name: "DP", amount: 10_000_000, dueDate: "", sortOrder: 1 },
+      { name: "Booking Fee", amount: 5_000_000, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
+      { name: "DP", amount: 10_000_000, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
     ];
     setTerms(bTerms.length > 0 ? bTerms : defaultTerms);
     setLastAllocatedPrice(0);
+    setCollapsedTerms(new Set());
     // Package price from snapshot
     setSelectedPackagePrice(Number(booking.snapPackagePricing?.price ?? 0));
   }, [open, booking]);
@@ -426,7 +456,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       // Only include TOP + signature + categoryToggles if significant change (steps 2-4 were shown)
       ...(hasSignificantChange ? {
-        termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ id: t.id, name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
+        termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ id: t.id, name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
         specialBonusName: specialBonusName || null,
         specialBonusAmount: specialBonusAmount || null,
         signatureSales: signatureSales || null,
@@ -467,16 +497,37 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <div className="mt-1 rounded-lg bg-muted p-3 space-y-2">
                   {contactNumbers.map((entry, i) => (
                     <div key={i} className="flex items-center gap-2 rounded-md bg-background border px-3 py-2">
-                      <div className="flex-1 min-w-0">{entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}<p className="text-sm font-medium">{entry.number}</p></div>
+                      <div className="flex-1 min-w-0">{entry.name && <p className="text-xs text-muted-foreground">{entry.name}</p>}<p className="text-sm font-medium">+{entry.number}</p></div>
                       <button type="button" className="shrink-0 text-destructive hover:bg-destructive/10 rounded-full p-1" onClick={() => setContactNumbers((p) => p.filter((_, j) => j !== i))}><CloseCircle weight="BoldDuotone" className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input value={contactInput.name} onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))} placeholder="Label (opsional)" className="w-full sm:flex-1 bg-background" />
-                    <Input value={contactInput.number} onChange={(e) => setContactInput((p) => ({ ...p, number: e.target.value.replace(/\D/g, "") }))} placeholder="081234567890" inputMode="numeric" className="w-full sm:flex-1 bg-background"
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const num = contactInput.number.trim(); if (!num || contactNumbers.some((c) => c.number === num)) return; setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]); setContactInput({ name: "", number: "" }); } }} />
-                    <Button type="button" variant="outline" className="w-full sm:w-auto sm:shrink-0 bg-background" onClick={() => { const num = contactInput.number.trim(); if (!num || contactNumbers.some((c) => c.number === num)) return; setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: num }]); setContactInput({ name: "", number: "" }); }}>Tambah</Button>
-                  </div>
+                  <Popover open={contactPopoverOpen} onOpenChange={(o) => { setContactPopoverOpen(o); if (!o) setContactInput({ name: "", phone: "" }); }}>
+                    <PopoverTrigger render={
+                      <Button type="button" variant="outline" className="shrink-0 bg-background w-full text-xs h-8">
+                        Tambah Nomor
+                      </Button>
+                    } />
+                    <PopoverContent className="w-72 p-3" align="end">
+                      <p className="text-xs font-medium mb-2">Tambah Nomor</p>
+                      <ContactEntry
+                        nameValue={contactInput.name}
+                        onNameChange={(v) => setContactInput((p) => ({ ...p, name: v }))}
+                        phoneValue={contactInput.phone}
+                        onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
+                        onAdd={() => {
+                          const stored = contactInput.phone.trim();
+                          const label = contactInput.name.trim();
+                          const { nationalNumber } = parseStoredPhone(stored);
+                          if (!label) { toast.error("Label wajib diisi"); return; }
+                          if (nationalNumber.length < 7) return;
+                          if (contactNumbers.some((c) => c.number === stored)) { toast.error("Nomor sudah ada"); return; }
+                          setContactNumbers((prev) => [...prev, { name: label, number: stored }]);
+                          setContactInput({ name: "", phone: "" });
+                          setContactPopoverOpen(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
@@ -638,58 +689,224 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <div className="space-y-4">
               <div><label className={LBL}>Total Harga Package</label><Input disabled value={`Rp${fmtRp(getPriceAfterDiscount())}`} className="mt-1" /></div>
 
-              {/* Discount */}
-              <div className="flex flex-col gap-2 border-y py-4">
-                <Input placeholder="Nama bonus (e.g. Discount)" value={specialBonusName} onChange={(e) => setSpecialBonusName(e.target.value)} className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto" />
-                <Input placeholder="IDR. 0" value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""} onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }} inputMode="numeric" className="rounded-none" />
+              {/* Discount / Special Bonus */}
+              <div className={cn("flex", "flex-col", "gap-2", "border-y", "py-4")}>
+                <Input
+                  placeholder="Nama bonus (e.g. Discount)"
+                  value={specialBonusName}
+                  onChange={(e) => setSpecialBonusName(e.target.value)}
+                  className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                />
+                <Input
+                  placeholder="IDR. 0"
+                  value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
+                  onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
+                  inputMode="numeric"
+                  className="rounded-none"
+                />
+                <p className={cn("text-xs", "text-muted-foreground")}>Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat discount diubah.</p>
               </div>
 
               {/* Payment Method */}
-              <div><label className={LBL}>Pembayaran Melalui</label><BankAccountSelect value={paymentMethodId} onChange={setPaymentMethodId} placeholder={venueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!venueId} venueId={venueId} /></div>
-
-              {/* Terms */}
               <div>
-                <label className={cn(LBL, 'mb-2 block')}>Term of Payments</label>
-                <div className="space-y-4">
+                <label className={LBL}>Pembayaran Melalui *</label>
+                <BankAccountSelect value={paymentMethodId} onChange={setPaymentMethodId} placeholder={venueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!venueId} venueId={venueId} />
+              </div>
+
+              {/* Term of Payments */}
+              <div>
+                <label className={cn(LBL, "mb-2 block")}>Term of Payments</label>
+                <div className="space-y-2">
                   {terms.map((t, idx) => {
-                    const isDP = t.name.trim().toUpperCase() === "DP";
-                    const isDPInvalid = isDP && (!t.amount || t.amount <= 0);
+                    const isPaid = t.paymentStatus === "paid";
+                    const isOpen = !collapsedTerms.has(idx);
+                    const statusLabel = PAYMENT_STATUS_LABELS[t.paymentStatus] ?? t.paymentStatus;
                     return (
-                    <div key={t.id ?? idx} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-0.5 flex-1">
-                          <Input value={t.name} onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} placeholder="Term name" className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto" />
-                          {isDP && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
+                      <Collapsible
+                        key={t.id ?? idx}
+                        open={isOpen}
+                        onOpenChange={() => toggleTerm(idx)}
+                        className="rounded-xl border border-border bg-muted/30 overflow-hidden"
+                      >
+                        {/* ── Collapsible header ── */}
+                        <div className="flex items-center gap-1 px-3 py-2.5">
+                          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
+                            <AltArrowDown
+                              weight="BoldDuotone"
+                              className={cn(
+                                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                isOpen && "rotate-180",
+                              )}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className={cn("text-sm font-medium truncate", t.name ? "text-foreground" : "text-muted-foreground italic")}>
+                                {t.name || "Term tanpa nama"}
+                                {isPaid && <span className="ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium bg-primary/10 text-primary">Paid</span>}
+                              </p>
+                              {!isOpen && (
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  <span className={cn(isPaid ? "text-foreground" : "text-muted-foreground")}>{statusLabel}</span>
+                                  {t.amount ? ` · Rp${fmtRp(t.amount)}` : ""}
+                                  {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
+                                </p>
+                              )}
+                            </div>
+                          </CollapsibleTrigger>
+                          {/* Tombol hapus — hanya muncul jika term BUKAN paid dan ada >1 term */}
+                          {terms.length > 1 && !isPaid && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), bookingDate));
+                                setCollapsedTerms((prev) => {
+                                  const next = new Set<number>();
+                                  prev.forEach((n) => { if (n < idx) { next.add(n); } else if (n > idx) { next.add(n - 1); } });
+                                  return next;
+                                });
+                              }}
+                              aria-label="Hapus term"
+                              className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
-                        {terms.length > 1 && <button type="button" onClick={() => setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), bookingDate))} className="text-destructive hover:text-destructive shrink-0"><TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                        <div className="sm:flex-2"><Input value={t.amount ? fmtRp(t.amount) : ""} onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }} placeholder="Amount" inputMode="numeric" /></div>
-                        <div className="sm:flex-1">
-                          <Popover>
-                            <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !t.dueDate && "text-muted-foreground")}><CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}</Button>} />
-                            <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" captionLayout="dropdown" selected={t.dueDate ? new Date(t.dueDate) : undefined} onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))} fromYear={new Date().getFullYear() - 10} toYear={new Date().getFullYear() + 10} /></PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                      {isDPInvalid && (
-                        <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
-                      )}
-                      {idx < terms.length - 1 && <div className="border-b border-border pt-1" />}
-                    </div>
+
+                        {/* ── Collapsible body ── */}
+                        <CollapsibleContent>
+                          <div className="px-3 pb-3 space-y-3 border-t border-border/60">
+                            {/* Term name + Status badge/select — satu row */}
+                            <div className="pt-2 flex items-center gap-2">
+                              <div className="flex flex-1 min-w-0 items-center gap-1">
+                                <Input
+                                  value={t.name}
+                                  onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                                  placeholder="Nama term (mis. Booking Fee)"
+                                  disabled={isPaid}
+                                  className={cn(
+                                    "border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto",
+                                    isPaid && "opacity-60 cursor-not-allowed",
+                                  )}
+                                />
+                              </div>
+
+                              {/* Status: badge read-only untuk paid, select untuk lainnya */}
+                              {isPaid ? (
+                                <span className={cn(
+                                  "shrink-0 inline-flex items-center rounded-xl px-2.5 py-1 text-xs font-semibold",
+                                  "bg-primary/10 text-primary",
+                                )}>
+                                  Paid
+                                </span>
+                              ) : (
+                                <Select
+                                  value={t.paymentStatus}
+                                  onValueChange={(v) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentStatus: v as TermPaymentStatus } : x))}
+                                >
+                                  <SelectTrigger className="w-32 h-8 bg-background shrink-0">
+                                    <span className="text-xs font-semibold text-muted-foreground">{statusLabel}</span>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(["unpaid", "paid"] as TermPaymentStatus[]).map((s) => (
+                                      <SelectItem key={s} value={s}>{PAYMENT_STATUS_LABELS[s]}</SelectItem>
+                                    ))}
+                                    {t.paymentStatus === "partial" && (
+                                      <SelectItem value="partial" disabled>{PAYMENT_STATUS_LABELS.partial}</SelectItem>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </div>
+
+                            {/* Amount + Date row */}
+                            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                              <div className="sm:flex-[2]">
+                                <Input
+                                  value={t.amount ? fmtRp(t.amount) : ""}
+                                  onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x)); }}
+                                  placeholder="Amount"
+                                  inputMode="numeric"
+                                  disabled={isPaid}
+                                  className={cn("bg-background", isPaid && "opacity-60 cursor-not-allowed")}
+                                />
+                              </div>
+                              <div className="sm:flex-1">
+                                {isPaid ? (
+                                  <div className={cn("flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground cursor-not-allowed")}>
+                                    <CalendarIcon weight="BoldDuotone" className="h-4 w-4 shrink-0" />
+                                    <span>{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "—"}</span>
+                                  </div>
+                                ) : (
+                                  <Popover>
+                                    <PopoverTrigger render={
+                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-background", !t.dueDate && "text-muted-foreground")}>
+                                        <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                        {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
+                                      </Button>
+                                    } />
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar
+                                        mode="single"
+                                        captionLayout="dropdown"
+                                        selected={t.dueDate ? new Date(t.dueDate) : undefined}
+                                        onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
+                                        fromYear={new Date().getFullYear() - 10}
+                                        toYear={new Date().getFullYear() + 10}
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Bukti pembayaran — read-only preview untuk term paid (URL dari R2) */}
+                            {isPaid && t.paymentEvidence && (
+                              <div>
+                                <a
+                                  href={t.paymentEvidence}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "flex items-center gap-2 px-3 py-2 rounded-xl border border-border",
+                                    "bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors",
+                                  )}
+                                >
+                                  <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="flex-1 truncate">Lihat bukti pembayaran</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     );
                   })}
                 </div>
-                <div className="flex gap-2 mt-4"><Button type="button" variant="outline" className="flex-1" onClick={() => setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length }], bookingDate))}>Tambah Payment</Button></div>
+
+                {/* Tambah Payment — border-dashed, pill */}
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed gap-1.5 text-muted-foreground rounded-xl"
+                    onClick={() => {
+                      setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], bookingDate));
+                    }}
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                    Tambah Payment
+                  </Button>
+                </div>
               </div>
 
               {/* Summary */}
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-foreground">Harga Paket:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getBasePrice())}</span></div>
-                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-destructive">{specialBonusName || "Discount"}:</span><span className="text-sm font-medium text-destructive">- Rp{fmtRp(specialBonusAmount)}</span></div>
-                <div className="flex justify-between items-center mb-2 border-t pt-2"><span className="text-sm font-medium text-foreground">Harga Setelah Discount:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getPriceAfterDiscount())}</span></div>
-                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-foreground">Total Input:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getTotalTerms())}</span></div>
-                <div className="flex justify-between items-center"><span className="text-sm font-medium text-foreground">Selisih:</span><span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-destructive" : "text-foreground")}>Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}</span></div>
+              <div className={cn("p-3", "bg-muted", "rounded-lg")}>
+                <div className={cn("flex", "justify-between", "items-center", "mb-2")}><span className="text-sm font-medium text-foreground">Harga Paket:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getBasePrice())}</span></div>
+                <div className={cn("flex", "justify-between", "items-center", "mb-2")}><span className="text-sm font-medium text-destructive">{specialBonusName || "Discount"}:</span><span className="text-sm font-medium text-destructive">- Rp{fmtRp(specialBonusAmount)}</span></div>
+                <div className={cn("flex", "justify-between", "items-center", "mb-2", "border-t", "pt-2")}><span className="text-sm font-medium text-foreground">Harga Setelah Discount:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getPriceAfterDiscount())}</span></div>
+                <div className={cn("flex", "justify-between", "items-center", "mb-2")}><span className="text-sm font-medium text-foreground">Total Input User:</span><span className="text-sm font-medium text-foreground">Rp{fmtRp(getTotalTerms())}</span></div>
+                <div className={cn("flex", "justify-between", "items-center")}><span className="text-sm font-medium text-foreground">Selisih:</span><span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-destructive" : "text-foreground")}>Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}</span></div>
               </div>
             </div>
           )}

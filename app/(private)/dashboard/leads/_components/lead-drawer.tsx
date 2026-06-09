@@ -44,6 +44,7 @@ import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 
 interface LeadDrawerProps {
   open: boolean;
@@ -191,7 +192,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
   });
 
   const [contactNumbers, setContactNumbers] = useState<ContactNumber[]>([]);
-  const [contactInput, setContactInput] = useState({ name: "", number: "" });
+  const [contactInput, setContactInput] = useState({ name: "", phone: "" });
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
   const watchedVenueId = form.watch("venueId");
@@ -318,7 +319,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         setBitrixId("");
       }
     }
-    setContactInput({ name: "", number: "" });
+    setContactInput({ name: "", phone: "" });
     setContactPopoverOpen(false);
   }, [open, editLead]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -359,18 +360,28 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
   }, [contactNumbers, bitrixId, open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addContact() {
-    const digits = contactInput.number.trim();
-    if (digits.length < 7) return;
-    const full = "62" + digits;
-    if (contactNumbers.some((c) => c.number === full)) {
+    const stored = contactInput.phone.trim();
+    const label = contactInput.name.trim();
+    // Label is mandatory
+    if (!label) {
+      toast.error("Label wajib diisi (contoh: cpw, cpp, ortu)");
+      return;
+    }
+    // stored is dialCode+national; national part must be ≥ 7 digits
+    const { nationalNumber } = parseStoredPhone(stored);
+    if (nationalNumber.length < 7) {
+      toast.error("Nomor terlalu pendek");
+      return;
+    }
+    if (contactNumbers.some((c) => c.number === stored)) {
       toast.error("Nomor sudah ada");
       return;
     }
     setContactNumbers((prev) => [
       ...prev,
-      { label: contactInput.name.trim(), number: full },
+      { label, number: stored },
     ]);
-    setContactInput({ name: "", number: "" });
+    setContactInput({ name: "", phone: "" });
     setContactPopoverOpen(false);
   }
 
@@ -509,7 +520,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                     open={contactPopoverOpen}
                     onOpenChange={(o) => {
                       setContactPopoverOpen(o);
-                      if (!o) setContactInput({ name: "", number: "" });
+                      if (!o) setContactInput({ name: "", phone: "" });
                     }}
                   >
                     <PopoverTrigger render={
@@ -517,46 +528,15 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                         Tambah Nomor
                       </Button>
                     } />
-                    <PopoverContent className="w-72 p-3 space-y-2" align="end">
-                      <p className="text-xs font-medium">Tambah Nomor</p>
-                      <Input
-                        value={contactInput.name}
-                        onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))}
-                        placeholder="e.g. Budi (opsional)"
-                        className="h-8 text-xs"
+                    <PopoverContent className="w-72 p-3" align="end">
+                      <p className="text-xs font-medium mb-2">Tambah Nomor</p>
+                      <ContactEntry
+                        nameValue={contactInput.name}
+                        onNameChange={(v) => setContactInput((p) => ({ ...p, name: v }))}
+                        phoneValue={contactInput.phone}
+                        onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
+                        onAdd={addContact}
                       />
-                      <div className="flex items-center rounded-md border border-input bg-background overflow-hidden">
-                        <span className="px-2 text-xs text-muted-foreground border-r bg-muted self-stretch flex items-center shrink-0">
-                          +62
-                        </span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={contactInput.number}
-                          onChange={(e) => {
-                            let raw = e.target.value.replace(/\D/g, "");
-                            if (raw.startsWith("62")) raw = raw.slice(2);
-                            else if (raw.startsWith("0")) raw = raw.slice(1);
-                            setContactInput((p) => ({ ...p, number: raw.slice(0, 13) }));
-                          }}
-                          placeholder="81234567890"
-                          className="flex-1 px-3 py-1.5 text-xs outline-none bg-transparent min-w-0"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addContact();
-                            }
-                          }}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="w-full h-8 text-xs"
-                        onClick={addContact}
-                      >
-                        Tambah
-                      </Button>
                     </PopoverContent>
                   </Popover>
                 </div>

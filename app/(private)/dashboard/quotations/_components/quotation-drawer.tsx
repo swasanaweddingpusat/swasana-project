@@ -46,6 +46,7 @@ import {
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { SimpleEditor } from "@/components/shared/SimpleEditor";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import {
   AddCircle,
   TrashBinTrash,
@@ -143,10 +144,6 @@ function parseNumericInput(raw: string): number {
   return parseInt(raw.replace(/\D/g, ""), 10) || 0;
 }
 
-function normalizePhone(phone: string): string {
-  const stripped = phone.replace(/\s/g, "");
-  return stripped.startsWith("0") ? stripped.slice(1) : stripped;
-}
 
 function formatNumericDisplay(raw: string | number): string {
   const digits = String(raw).replace(/\D/g, "");
@@ -944,13 +941,11 @@ export function QuotationDrawer({
       if (editQuotation.signingLocation) setSigningLocation(editQuotation.signingLocation);
       form.reset({
         clientName: editQuotation.leadName,
-        clientPhone: normalizePhone(editQuotation.leadPhone),
+        clientPhone: editQuotation.leadPhone ?? "",
         instansi: editQuotation.instansi ?? "",
         salesId: matchedSales?.id ?? "",
         salesName: editQuotation.salesName,
-        salesPhone: editQuotation.salesPhone
-          ? normalizePhone(editQuotation.salesPhone)
-          : "",
+        salesPhone: editQuotation.salesPhone ?? "",
         category: editCategory,
         eventTypeId: "",
         eventTypeName: editQuotation.eventType,
@@ -1027,14 +1022,11 @@ export function QuotationDrawer({
     setSelectedLeadId(lead.id);
     setCustomerId("");
     form.setValue("clientName", lead.name);
-    // Phone: ambil nomor pertama dari contactNumbers
+    // Phone: ambil nomor pertama dari contactNumbers — pass raw stored value,
+    // PhoneInput akan parse dial code secara generic (longest-prefix-match)
     const firstContact = lead.contactNumbers?.[0];
     if (firstContact?.number) {
-      // Sudah dalam format "62xxx" — strip "62" prefix untuk display dengan +62 prefix
-      const num = firstContact.number.startsWith("62")
-        ? firstContact.number.slice(2)
-        : normalizePhone(firstContact.number);
-      form.setValue("clientPhone", num);
+      form.setValue("clientPhone", firstContact.number.replace(/\D/g, ""));
     }
     // Category UPPERCASE
     if (lead.category) {
@@ -1077,6 +1069,7 @@ export function QuotationDrawer({
     setSelectedLeadId("");
     form.setValue("clientName", customer.name);
     // mobileNumber bisa string JSON array atau plain number string
+    // Pass raw stored value — PhoneInput will parse dial code via longest-prefix-match
     if (customer.mobileNumber) {
       let phone = "";
       try {
@@ -1084,12 +1077,11 @@ export function QuotationDrawer({
         if (Array.isArray(parsed) && parsed.length > 0) {
           const first = parsed[0];
           const raw: string = typeof first === "object" ? (first.number ?? "") : String(first);
-          phone = raw.startsWith("62") ? raw.slice(2) : normalizePhone(raw);
+          phone = raw.replace(/\D/g, "");
         }
       } catch {
         // Plain string
-        const raw = customer.mobileNumber.split(",")[0].trim();
-        phone = raw.startsWith("62") ? raw.slice(2) : normalizePhone(raw);
+        phone = customer.mobileNumber.split(",")[0].trim().replace(/\D/g, "");
       }
       if (phone) form.setValue("clientPhone", phone);
     }
@@ -1321,20 +1313,11 @@ export function QuotationDrawer({
                         <FormItem className="w-full">
                           <FormLabel className={LABEL_CLASS}>No. Hp Client</FormLabel>
                           <FormControl>
-                            <div className="relative w-full">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none pointer-events-none">
-                                +62
-                              </span>
-                              <Input
-                                value={field.value}
-                                onChange={(e) =>
-                                  field.onChange(e.target.value.replace(/\D/g, ""))
-                                }
-                                placeholder="8xx xxxx xxxx"
-                                inputMode="tel"
-                                className="w-full pl-10"
-                              />
-                            </div>
+                            <PhoneInput
+                              value={field.value}
+                              onChange={field.onChange}
+                              onBlur={field.onBlur}
+                            />
                           </FormControl>
                         </FormItem>
                       )}
@@ -1412,20 +1395,11 @@ export function QuotationDrawer({
                       <FormItem className="w-full">
                         <FormLabel className={LABEL_CLASS}>No. Hp Sales</FormLabel>
                         <FormControl>
-                          <div className="relative w-full">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground select-none pointer-events-none">
-                              +62
-                            </span>
-                            <Input
-                              value={field.value}
-                              onChange={(e) =>
-                                field.onChange(e.target.value.replace(/\D/g, ""))
-                              }
-                              placeholder="8xx xxxx xxxx"
-                              inputMode="tel"
-                              className="w-full pl-10"
-                            />
-                          </div>
+                          <PhoneInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                          />
                         </FormControl>
                       </FormItem>
                     )}

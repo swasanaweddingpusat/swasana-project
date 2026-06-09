@@ -56,6 +56,7 @@ import { createMiceDraftStep1Schema } from "@/lib/validations/booking-mice-draft
 import type { MiceBookingItem } from "./types";
 import type { BookingPrefillLead } from "@/types/lead";
 import { cn } from "@/lib/utils";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -425,11 +426,13 @@ export function MiceBookingDrawer({
           ? user.profileId
           : (prefillLead.assignedTo?.id ?? "");
         const phone = prefillLead.contactNumbers?.[0]?.number ?? "";
+        // phone is already stored as "62xxx" in lead contactNumbers
+        const clientPhonePrefill = phone.replace(/\D/g, "");
         form.reset({
           ...DEFAULT_VALUES,
           clientName: prefillLead.name,
           companyName: "",
-          clientPhone: phone.replace(/\D/g, ""),
+          clientPhone: clientPhonePrefill,
           venueId: prefillLead.venue?.id ?? "",
           eventTypeId: prefillLead.eventType?.id ?? "",
           eventDate: prefillLead.eventDate ? new Date(prefillLead.eventDate).toISOString().split("T")[0] : "",
@@ -782,7 +785,13 @@ export function MiceBookingDrawer({
                     <FormField control={form.control} name="clientPhone" rules={{ required: "No. telepon wajib diisi" }} render={({ field }) => (
                       <FormItem>
                         <FormLabel>No. Telepon *</FormLabel>
-                        <FormControl><Input {...field} type="tel" inputMode="numeric" placeholder="0812345678" /></FormControl>
+                        <FormControl>
+                          <PhoneInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />

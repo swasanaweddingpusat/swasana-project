@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah } from "@/lib/utils";
 import {
@@ -264,7 +265,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [specialBonusName, setSpecialBonusName] = useState("Discount");
   const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
   const [contactNumbers, setContactNumbers] = useState<MobileNumberEntry[]>([]);
-  const [contactInput, setContactInput] = useState({ name: "", number: "" });
+  const [contactInput, setContactInput] = useState({ name: "", phone: "" });
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactEmail, setContactEmail] = useState("");
   const [contactNikCpp, setContactNikCpp] = useState("");
@@ -1234,64 +1235,38 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         <div key={idx} className={cn('flex', 'items-center', 'gap-2', 'rounded-md', 'bg-background', 'border', 'px-3', 'py-2')}>
                           <div className={cn('flex-1', 'min-w-0')}>
                             {entry.name && <p className={cn('text-xs', 'text-muted-foreground')}>{entry.name}</p>}
-                            <p className={cn('text-sm', 'font-medium')}>{entry.number}</p>
+                            <p className={cn('text-sm', 'font-medium')}>+{entry.number}</p>
                           </div>
                           <button type="button" className={cn('shrink-0', 'text-destructive', 'hover:bg-destructive/10', 'rounded-full', 'p-1')} onClick={() => setContactNumbers((prev) => prev.filter((_, i) => i !== idx))}>
                             <CloseCircle weight="BoldDuotone" className={cn('w-3.5', 'h-3.5')} />
                           </button>
                         </div>
                       ))}
-                      <Popover open={contactPopoverOpen} onOpenChange={(o) => { setContactPopoverOpen(o); if (!o) setContactInput({ name: "", number: "" }); }}>
+                      <Popover open={contactPopoverOpen} onOpenChange={(o) => { setContactPopoverOpen(o); if (!o) setContactInput({ name: "", phone: "" }); }}>
                         <PopoverTrigger render={
                           <Button type="button" variant="outline" className="shrink-0 bg-background w-full text-xs h-8">
                             Tambah Nomor
                           </Button>
                         } />
-                        <PopoverContent className="w-72 p-3 space-y-2" align="end">
-                          <p className="text-xs font-medium">Tambah Nomor</p>
-                          <Input
-                            value={contactInput.name}
-                            onChange={(e) => setContactInput((p) => ({ ...p, name: e.target.value }))}
-                            placeholder="cpw, cpp, ortu, ..."
-                            className="h-8 text-xs"
+                        <PopoverContent className="w-72 p-3" align="end">
+                          <p className="text-xs font-medium mb-2">Tambah Nomor</p>
+                          <ContactEntry
+                            nameValue={contactInput.name}
+                            onNameChange={(v) => setContactInput((p) => ({ ...p, name: v }))}
+                            phoneValue={contactInput.phone}
+                            onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
+                            onAdd={() => {
+                              const stored = contactInput.phone.trim();
+                              const label = contactInput.name.trim();
+                              const { nationalNumber } = parseStoredPhone(stored);
+                              if (!label) { toast.error("Label wajib diisi"); return; }
+                              if (nationalNumber.length < 7) return;
+                              if (contactNumbers.some((c) => c.number === stored)) { toast.error("Nomor sudah ada"); return; }
+                              setContactNumbers((prev) => [...prev, { name: label, number: stored }]);
+                              setContactInput({ name: "", phone: "" });
+                              setContactPopoverOpen(false);
+                            }}
                           />
-                          <div className="flex items-center rounded-md border border-input bg-background overflow-hidden">
-                            <span className="px-2 text-xs text-muted-foreground border-r bg-muted self-stretch flex items-center shrink-0">+62</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={contactInput.number}
-                              onChange={(e) => {
-                                let raw = e.target.value.replace(/\D/g, "");
-                                if (raw.startsWith("62")) raw = raw.slice(2);
-                                else if (raw.startsWith("0")) raw = raw.slice(1);
-                                setContactInput((p) => ({ ...p, number: raw.slice(0, 13) }));
-                              }}
-                              placeholder="81234567890"
-                              className="flex-1 px-3 py-1.5 text-xs outline-none bg-transparent min-w-0"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  const digits = contactInput.number.trim();
-                                  if (digits.length < 7) return;
-                                  const full = "62" + digits;
-                                  if (contactNumbers.some((c) => c.number === full)) { toast.error("Nomor sudah ada"); return; }
-                                  setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: full }]);
-                                  setContactInput({ name: "", number: "" });
-                                  setContactPopoverOpen(false);
-                                }
-                              }}
-                            />
-                          </div>
-                          <Button type="button" size="sm" className="w-full h-8 text-xs" onClick={() => {
-                            const digits = contactInput.number.trim();
-                            if (digits.length < 7) return;
-                            const full = "62" + digits;
-                            if (contactNumbers.some((c) => c.number === full)) { toast.error("Nomor sudah ada"); return; }
-                            setContactNumbers((prev) => [...prev, { name: contactInput.name.trim(), number: full }]);
-                            setContactInput({ name: "", number: "" });
-                            setContactPopoverOpen(false);
-                          }}>Tambah</Button>
                         </PopoverContent>
                       </Popover>
                     </div>
