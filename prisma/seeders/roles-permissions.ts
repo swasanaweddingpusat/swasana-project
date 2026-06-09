@@ -13,6 +13,7 @@ const roleData = [
   { name: "human-resource", description: "Access to human resource", sortOrder: 9 },
   { name: "sales-mice", description: "Sales access for MICE bookings", sortOrder: 10 },
   { name: "manager-mice", description: "Manager access for MICE features (leads, quotations, booking-mice)", sortOrder: 11 },
+  { name: "procurement-manager", description: "Manage procurement requests and approvals", sortOrder: 12 },
 ];
 
 // ── Modules & Actions ────────────────────────────────────────────────
@@ -48,6 +49,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-maintenance-priority": ["view", "create", "edit", "delete"],
   "settings-maintenance-status": ["view", "create", "edit", "delete"],
   promo: ["view", "create", "edit", "delete"],
+  procurement: ["view", "create", "edit", "delete", "approve"],
 };
 
 // Modules removed (not used in code):
@@ -93,6 +95,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
     promo: ["view"],
+    procurement: ["view", "create", "edit", "delete", "approve"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -101,6 +104,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view", "create", "edit"],
     maintenance: ["view", "create", "edit"],
     promo: ["view"],
+    procurement: ["view", "approve"],
   },
   operational: {
     booking: ["view", "create", "edit", "comment"],
@@ -109,6 +113,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     maintenance: ["view", "create", "edit"],
     promo: ["view"],
+    procurement: ["view", "create"],
   },
   finance: {
     // Finance has near-full access per PROD (118 perms). Excludes settings-role-permission
@@ -170,13 +175,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     quotations: ["view", "create", "edit"],
     leads: ["view", "create", "edit", "delete"],
-    // view+create only: same rationale as sales — operational access to pick/create
-    // complimentary entries, master data management stays with direktur-sales and above.
     complimentary: ["view", "create"],
     promo: ["view"],
   },
-  // MICE manager: MICE features (leads, quotations, booking-mice) + groups,
-  // customers, and event-types settings. No wedding booking, no finance/package/vendor.
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     leads: ["view", "create", "edit", "delete"],
@@ -186,6 +187,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     promo: ["view"],
+  },
+  "procurement-manager": {
+    procurement: ["view", "create", "edit", "delete", "approve"],
   },
 };
 
