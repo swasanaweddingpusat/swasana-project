@@ -56,6 +56,7 @@ import { createMiceDraftStep1Schema } from "@/lib/validations/booking-mice-draft
 import type { MiceBookingItem } from "./types";
 import type { BookingPrefillLead } from "@/types/lead";
 import { cn } from "@/lib/utils";
+import { safeRandomUUID } from "@/lib/uuid";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -495,7 +496,7 @@ export function MiceBookingDrawer({
       // Create draft on Step 1 continue (await — draftId doesn't exist yet)
       if (!isEdit) {
         // Generate client-side draftId for idempotency; reuse if already set
-        const pendingDraftId = draftId ?? crypto.randomUUID();
+        const pendingDraftId = draftId ?? safeRandomUUID();
         const values = form.getValues();
         const resolvedSalesId = currentUserIsSalesMice
           ? (user?.profileId ?? values.salesId)

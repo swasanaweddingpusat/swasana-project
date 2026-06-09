@@ -1,13 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Refresh, CloseCircle } from "@solar-icons/react";
+import dynamic from "next/dynamic";
+import { Refresh, CloseCircle, ArrowRightUp } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+// react-pdf must not be SSR'd — load client-only
+const PdfCanvasViewer = dynamic(
+  () => import("@/components/shared/PdfCanvasViewer").then((m) => ({ default: m.PdfCanvasViewer })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center">
+        <Refresh weight="BoldDuotone" className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    ),
+  }
+);
 
 export interface BookingPOPreviewTarget {
   bookingId: string;
@@ -76,6 +90,10 @@ export function BookingPOPreviewModal({
     };
   }, [open, target]);
 
+  function handleOpenNewTab(): void {
+    if (blobUrl) window.open(blobUrl, "_blank");
+  }
+
   if (!target) return null;
 
   return (
@@ -83,14 +101,27 @@ export function BookingPOPreviewModal({
       <DialogContent showCloseButton={false} className="flex h-screen w-screen max-w-none top-0 left-0 translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 ring-0 sm:max-w-none">
         <DialogHeader className="shrink-0 border-b p-4">
           <div className="flex items-center justify-between gap-3">
-            <DialogTitle>Preview PO — {target.label}</DialogTitle>
-            <button
-              onClick={() => onOpenChange(false)}
-              className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
-              aria-label="Close"
-            >
-              <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
-            </button>
+            <DialogTitle className="truncate">Preview PO — {target.label}</DialogTitle>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleOpenNewTab}
+                disabled={!blobUrl}
+                title="Buka di Tab Baru"
+                className="h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center cursor-pointer bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Buka di tab baru"
+              >
+                <ArrowRightUp weight="BoldDuotone" className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                aria-label="Tutup"
+              >
+                <CloseCircle weight="BoldDuotone" className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
+              </button>
+            </div>
           </div>
         </DialogHeader>
 
@@ -108,11 +139,7 @@ export function BookingPOPreviewModal({
             </div>
           )}
           {blobUrl && !loading && !error && (
-            <iframe
-              src={blobUrl}
-              className="h-full w-full border-0"
-              title={`Preview PO ${target.label}`}
-            />
+            <PdfCanvasViewer blobUrl={blobUrl} />
           )}
         </div>
       </DialogContent>

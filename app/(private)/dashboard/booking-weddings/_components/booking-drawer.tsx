@@ -22,6 +22,7 @@ import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah } from "@/lib/utils";
+import { safeRandomUUID } from "@/lib/uuid";
 import {
   idbClearAllEvidence,
 } from "@/lib/idbDraftStore";
@@ -786,7 +787,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (currentStep === 1) {
       // Generate client-side draftId for idempotency. If we already have one
       // (resumed draft OR localStorage-restored pointer), reuse it.
-      const pendingDraftId = draftId ?? crypto.randomUUID();
+      const pendingDraftId = draftId ?? safeRandomUUID();
 
       const step1Payload = {
         id: pendingDraftId,
