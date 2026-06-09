@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, UploadMinimalistic } from "@solar-icons/react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -131,6 +131,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
   // Track collapsed term cards (Set of indices) — default empty = semua terbuka
   const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
+  const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
 
   function toggleTerm(idx: number) {
     setCollapsedTerms((prev) => {
@@ -440,6 +441,27 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     mutationFn: (data: Parameters<typeof editBooking>[0]) => editBooking(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["bookings"] }); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); },
   });
+
+  async function handleUploadEvidence(termId: string, file: File) {
+    if (!termId || termId.startsWith("new-")) return;
+    setUploadingEvidenceId(termId);
+    const fd = new FormData();
+    fd.set("termId", termId);
+    fd.set("file", file);
+    try {
+      const res = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+      if (!res.ok) throw new Error();
+      const { filePath } = await res.json() as { filePath: string };
+      setTerms((prev) =>
+        prev.map((x) => x.id === termId ? { ...x, paymentEvidence: filePath } : x),
+      );
+      toast.success("Bukti pembayaran berhasil diupload");
+    } catch {
+      toast.error("Gagal upload bukti pembayaran");
+    } finally {
+      setUploadingEvidenceId(null);
+    }
+  }
 
   async function handleSubmit() {
     if (!booking) return;
@@ -833,15 +855,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                               </div>
                               <div className="sm:flex-1">
                                 {isPaid ? (
-                                  <div className={cn("flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground cursor-not-allowed")}>
-                                    <CalendarIcon weight="BoldDuotone" className="h-4 w-4 shrink-0" />
+                                  <div className={cn("flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/40 text-xs text-muted-foreground cursor-not-allowed")}>
+                                    <CalendarIcon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
                                     <span>{t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "—"}</span>
                                   </div>
                                 ) : (
                                   <Popover>
                                     <PopoverTrigger render={
-                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-background", !t.dueDate && "text-muted-foreground")}>
-                                        <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal text-xs bg-background", !t.dueDate && "text-muted-foreground")}>
+                                        <CalendarIcon weight="BoldDuotone" className="mr-2 h-3.5 w-3.5" />
                                         {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
                                       </Button>
                                     } />
@@ -860,21 +882,74 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                               </div>
                             </div>
 
-                            {/* Bukti pembayaran — read-only preview untuk term paid (URL dari R2) */}
-                            {isPaid && t.paymentEvidence && (
+                            {/* Bukti pembayaran — uploader atau read-only preview untuk term paid */}
+                            {isPaid && (
                               <div>
-                                <a
-                                  href={t.paymentEvidence}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={cn(
-                                    "flex items-center gap-2 px-3 py-2 rounded-xl border border-border",
-                                    "bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors",
-                                  )}
-                                >
-                                  <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="flex-1 truncate">Lihat bukti pembayaran</span>
-                                </a>
+                                {t.paymentEvidence ? (
+                                  /* Preview bukti yang sudah ada — clickable buka di tab baru */
+                                  <div className="flex items-center gap-2">
+                                    <a
+                                      href={t.paymentEvidence}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={cn(
+                                        "flex flex-1 items-center gap-2 px-3 py-2 rounded-xl border border-border",
+                                        "bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors min-w-0",
+                                      )}
+                                    >
+                                      <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="flex-1 truncate">Lihat bukti pembayaran</span>
+                                    </a>
+                                    {/* Ganti bukti — hanya muncul kalau term punya id (bukan term baru) */}
+                                    {t.id && !t.id.startsWith("new-") && (
+                                      <label className={cn(
+                                        "relative shrink-0 flex items-center justify-center h-9 w-9 rounded-xl border border-border",
+                                        "bg-background text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors",
+                                        uploadingEvidenceId === t.id && "pointer-events-none opacity-50",
+                                      )}>
+                                        <UploadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                        <input
+                                          type="file"
+                                          accept="image/*,application/pdf"
+                                          className="absolute inset-0 opacity-0 cursor-pointer"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file && t.id) {
+                                              void handleUploadEvidence(t.id, file);
+                                            }
+                                            e.target.value = "";
+                                          }}
+                                        />
+                                      </label>
+                                    )}
+                                  </div>
+                                ) : (
+                                  /* Uploader saat belum ada bukti — hanya untuk term yang sudah tersimpan */
+                                  t.id && !t.id.startsWith("new-") ? (
+                                    <label className={cn(
+                                      "relative flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-border",
+                                      "bg-muted/20 text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer transition-colors",
+                                      uploadingEvidenceId === t.id && "pointer-events-none opacity-50",
+                                    )}>
+                                      <UploadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="flex-1 truncate">
+                                        {uploadingEvidenceId === t.id ? "Mengupload..." : "Upload bukti pembayaran"}
+                                      </span>
+                                      <input
+                                        type="file"
+                                        accept="image/*,application/pdf"
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file && t.id) {
+                                            void handleUploadEvidence(t.id, file);
+                                          }
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                    </label>
+                                  ) : null
+                                )}
                               </div>
                             )}
                           </div>
