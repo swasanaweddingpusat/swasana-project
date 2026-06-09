@@ -153,16 +153,16 @@ export function PackageTCDrawer({ open, onClose, pkg }: Props) {
         {pkg && (
           <div className="shrink-0">
             <Label className="text-sm font-medium mb-1 block">Paket</Label>
-            <div className="px-3 py-2 rounded-lg bg-muted/40 border border-border text-sm font-medium">
+            <div className="px-3 py-2 rounded-lg bg-muted/40 border border-border text-sm font-medium truncate">
               {pkg.packageName} · {pkg.pax} PAX
             </div>
           </div>
         )}
 
         {/* Editor + Variable Panel */}
-        <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
-          {/* Left — Editor */}
-          <div className="flex-1 flex flex-col min-w-0 border rounded-lg overflow-hidden">
+        <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0 overflow-hidden">
+          {/* Editor */}
+          <div className="flex-1 flex flex-col min-w-0 border rounded-lg overflow-hidden min-h-48 md:min-h-0">
             {editor && (
               <div className="flex items-center gap-0.5 px-2 py-1.5 border-b bg-card">
                 <ToolbarButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold">
@@ -188,14 +188,33 @@ export function PackageTCDrawer({ open, onClose, pkg }: Props) {
             </div>
           </div>
 
-          {/* Right — Variable Panel */}
-          <div className="w-72 shrink-0 border rounded-lg flex flex-col overflow-hidden max-h-full">
+          {/* Variable Panel — chip wrap on mobile (<md), vertical list on desktop (md+) */}
+          <div className="md:w-72 w-full shrink-0 border rounded-xl overflow-hidden md:flex md:flex-col md:max-h-full">
             <div className="px-4 py-3 border-b bg-card">
               <h3 className="text-sm font-semibold">Variable</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Klik untuk insert ke editor</p>
             </div>
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <div className="p-3 space-y-4">
+
+            {/* Mobile: horizontal chip wrap */}
+            <div className="md:hidden p-3 flex flex-wrap gap-1.5">
+              {VARIABLE_GROUPS.flatMap((group) =>
+                group.variables.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => insertVariable(v.key)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-border bg-card text-xs font-medium hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-3 w-3 text-muted-foreground" />
+                    {v.label}
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Desktop: vertical scrollable list */}
+            <div className="hidden md:flex flex-1 overflow-y-auto min-h-0">
+              <div className="p-3 space-y-4 w-full">
                 {VARIABLE_GROUPS.map((group) => (
                   <div key={group.name}>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 px-1">
