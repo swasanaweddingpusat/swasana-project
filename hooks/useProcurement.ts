@@ -14,7 +14,7 @@ import {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
-} from "@/services/procurement-service";
+} from "@/services/procurementService";
 import type { ProcurementFilterInput, CreateProcurementInput, UpdateProcurementInput, ApproveProcurementInput, CreateAnnouncementInput, UpdateAnnouncementInput } from "@/lib/validations/procurement";
 
 // ─── Procurement Items ────────────────────────────────────────────────────────
