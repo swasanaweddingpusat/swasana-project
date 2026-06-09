@@ -5,7 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CloseCircle, FileText, Copy, Refresh, Link, DownloadMinimalistic, TrashBinTrash } from "@solar-icons/react";
+import {
+  CloseCircle, FileText, Copy, Refresh, Link, DownloadMinimalistic, TrashBinTrash,
+  UserRounded, CalendarMark, Wallet, UserId, Buildings, ClockCircle, Bill, Tag,
+} from "@solar-icons/react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { generateAgreementToken, markAgreementSent } from "@/actions/client-agreement";
@@ -55,6 +58,46 @@ const AGREEMENT_COLOR: Record<string, string> = {
   Viewed: "bg-muted text-foreground/70",
   Signed: "bg-primary/20 text-primary",
 };
+
+/* ─── Mobile section card wrapper ─────────────────────────────────────────── */
+
+function MobileCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">{icon}</span>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{title}</p>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function MobileField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className={lbl}>{label}</p>
+      <div className={val}>{children}</div>
+    </div>
+  );
+}
+
+/* ─── Payment status badge class helper ────────────────────────────────────── */
+
+function paymentStatusClass(status: string | null | undefined): string {
+  if (status === "paid") return "bg-primary/10 text-primary";
+  if (status === "partial") return "bg-muted text-foreground/70";
+  if (status === "refund") return "bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]";
+  return "bg-destructive/10 text-destructive";
+}
 
 /* ─── Component ────────────────────────────────────────────────────────────── */
 
@@ -112,8 +155,13 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           {loading ? (
             <Skeleton className="h-6 w-48" />
           ) : (
-            <div className="flex items-center gap-2 flex-1 pr-4">
-              <h2 className="text-lg sm:text-xl font-semibold">
+            <div className="flex items-center gap-2 flex-1 pr-4 min-w-0">
+              {/* Mobile: truncated short title */}
+              <h2 className="text-lg font-semibold truncate sm:hidden">
+                {booking?.snapCustomer?.name ?? "Detail Booking"}
+              </h2>
+              {/* Desktop: full title */}
+              <h2 className="hidden sm:block text-xl font-semibold">
                 {booking ? `Daftar lengkap booking ${booking.snapCustomer?.name ?? ""}` : "Detail Booking"}
               </h2>
               {bookingId && (
@@ -129,10 +177,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           )}
           <button
             onClick={onClose}
-            className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
+            className="shrink-0 h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
             aria-label="Close"
           >
-            <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
+            <CloseCircle weight="BoldDuotone" className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
           </button>
         </div>
 
@@ -170,138 +218,341 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
             <>
               {/* ═══ TAB: Booking Details ═══ */}
               {activeTab === "booking" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4 text-sm">
-                  {/* Col 1 */}
-                  <div>
-                    <p className={lbl}>Nama</p>
-                    <p className={val}>{booking.snapCustomer?.name ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Sales PIC</p>
-                    <p className={val}>{booking.sales?.fullName ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Email</p>
-                    <p className={val}>{booking.snapCustomer?.email ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Phone Number</p>
-                    {(() => {
-                      const raw = booking.snapCustomer?.mobileNumber ?? "";
-                      let nums: string[] = []; try { const arr = JSON.parse(raw); if (Array.isArray(arr)) nums = arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number); } catch { nums = raw.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean); }
-                      if (nums.length <= 1) return <p className={val}>{nums[0] ?? "-"}</p>;
-                      return <ul className="mt-1 space-y-0.5">{nums.map((n, i) => <li key={i} className={val}>• {n}</li>)}</ul>;
-                    })()}
-                    <p className={lbl + " mt-4"}>Venue</p>
-                    <p className={val}>{booking.snapVenue?.venueName ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Package Type</p>
-                    <p className={val}>{booking.snapPackage?.packageName ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Sumber Informasi</p>
-                    <p className={val}>{booking.sourceOfInformation?.name ?? "-"}</p>
+                <>
+                  {/* ── Mobile: grouped cards ── */}
+                  <div className="sm:hidden space-y-4">
+                    {/* Customer */}
+                    <MobileCard title="Customer" icon={<UserRounded weight="BoldDuotone" className="h-4 w-4" />}>
+                      <MobileField label="Nama">
+                        {booking.snapCustomer?.name ?? "-"}
+                      </MobileField>
+                      <MobileField label="Sales PIC">
+                        {booking.sales?.fullName ?? "-"}
+                      </MobileField>
+                      <MobileField label="Email">
+                        {booking.snapCustomer?.email ?? "-"}
+                      </MobileField>
+                      <MobileField label="Phone Number">
+                        {(() => {
+                          const raw = booking.snapCustomer?.mobileNumber ?? "";
+                          let nums: string[] = [];
+                          try {
+                            const arr = JSON.parse(raw);
+                            if (Array.isArray(arr)) nums = arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number);
+                          } catch {
+                            nums = raw.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean);
+                          }
+                          if (nums.length <= 1) return <span>{nums[0] ?? "-"}</span>;
+                          return <ul className="space-y-0.5">{nums.map((n, i) => <li key={i}>• {n}</li>)}</ul>;
+                        })()}
+                      </MobileField>
+                      <MobileField label="Sumber Informasi">
+                        {booking.sourceOfInformation?.name ?? "-"}
+                      </MobileField>
+                    </MobileCard>
+
+                    {/* Event & Status */}
+                    <MobileCard title="Event & Status" icon={<CalendarMark weight="BoldDuotone" className="h-4 w-4" />}>
+                      <MobileField label="Event Date">
+                        {fmtDate(booking.bookingDate, "long")}
+                      </MobileField>
+                      <MobileField label="Session">
+                        {booking.weddingSession ?? "-"}
+                      </MobileField>
+                      <MobileField label="Status Booking">
+                        {booking.bookingStatus ?? "Pending"}
+                      </MobileField>
+                      <MobileField label="Client Agreement">
+                        {booking.clientAgreement ? (
+                          <Badge className={AGREEMENT_COLOR[booking.clientAgreement.status]}>{booking.clientAgreement.status}</Badge>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </MobileField>
+                      {booking.bookingStatus === "Rejected" && booking.rejectionNotes && (
+                        <MobileField label="Notes of Rejection">
+                          <span className="text-muted-foreground">{booking.rejectionNotes}</span>
+                        </MobileField>
+                      )}
+                    </MobileCard>
+
+                    {/* Harga & Paket */}
+                    <MobileCard title="Harga & Paket" icon={<Wallet weight="BoldDuotone" className="h-4 w-4" />}>
+                      <MobileField label="Package Type">
+                        {booking.snapPackage?.packageName ?? "-"}
+                      </MobileField>
+                      <MobileField label="Package Price">
+                        {fmtPrice(booking.snapPackagePricing?.price)}
+                      </MobileField>
+                      <MobileField label="Package">
+                        {booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)
+                      </MobileField>
+                      <MobileField label="Payment Method">
+                        {booking.paymentMethod ? (
+                          <div className="space-y-0.5">
+                            <span className="block">{booking.paymentMethod.bankName}</span>
+                            <span className="block text-xs text-muted-foreground">{booking.paymentMethod.bankAccountNumber}</span>
+                            <span className="block text-xs text-muted-foreground">{booking.paymentMethod.bankRecipient}</span>
+                          </div>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </MobileField>
+                      <MobileField label="PO Number">
+                        {booking.poNumber ?? "-"}
+                      </MobileField>
+                      <MobileField label="Wedding Type">
+                        {booking.weddingType ?? "-"}
+                      </MobileField>
+                    </MobileCard>
+
+                    {/* Identitas */}
+                    <MobileCard title="Identitas (NIK & Alamat)" icon={<UserId weight="BoldDuotone" className="h-4 w-4" />}>
+                      <MobileField label="NIK CPP">
+                        {booking.snapCustomer?.cppNik ?? "-"}
+                      </MobileField>
+                      <MobileField label="Alamat CPP">
+                        {booking.snapCustomer?.cppAddress ?? "-"}
+                      </MobileField>
+                      <MobileField label="NIK CPW">
+                        {booking.snapCustomer?.cpwNik ?? "-"}
+                      </MobileField>
+                      <MobileField label="Alamat CPW">
+                        {booking.snapCustomer?.cpwAddress ?? "-"}
+                      </MobileField>
+                    </MobileCard>
+
+                    {/* Venue & Brand */}
+                    <MobileCard title="Venue & Brand" icon={<Buildings weight="BoldDuotone" className="h-4 w-4" />}>
+                      <MobileField label="Venue">
+                        {booking.snapVenue?.venueName ?? "-"}
+                      </MobileField>
+                      <MobileField label="Venue Address">
+                        {booking.snapVenue?.address ?? "-"}
+                      </MobileField>
+                      <MobileField label="Brand">
+                        {booking.snapVenue?.brandName ?? "-"}
+                      </MobileField>
+                      <MobileField label="Manager">
+                        {booking.manager?.fullName ?? "-"}
+                      </MobileField>
+                    </MobileCard>
+
+                    {/* Meta */}
+                    <MobileCard title="Meta" icon={<ClockCircle weight="BoldDuotone" className="h-4 w-4" />}>
+                      <MobileField label="Created At">
+                        {fmtDate(booking.createdAt)}
+                      </MobileField>
+                      <MobileField label="Updated At">
+                        {fmtDate(booking.updatedAt)}
+                      </MobileField>
+                    </MobileCard>
                   </div>
-                  {/* Col 2 */}
-                  <div>
-                    <p className={lbl}>Event Date</p>
-                    <p className={val}>{fmtDate(booking.bookingDate, "long")}</p>
-                    <p className={lbl + " mt-4"}>Session</p>
-                    <p className={val}>{booking.weddingSession ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Status Booking</p>
-                    <p className={val}>{booking.bookingStatus ?? "Pending"}</p>
-                    <p className={lbl + " mt-4"}>Payment Method</p>
-                    {booking.paymentMethod ? (
-                      <div className="space-y-0.5">
-                        <p className={val}>{booking.paymentMethod.bankName}</p>
-                        <p className="text-xs text-muted-foreground">{booking.paymentMethod.bankAccountNumber}</p>
-                        <p className="text-xs text-muted-foreground">{booking.paymentMethod.bankRecipient}</p>
-                      </div>
-                    ) : (
-                      <p className={val}>-</p>
-                    )}
-                    <p className={lbl + " mt-4"}>Package Price</p>
-                    <p className={val}>{fmtPrice(booking.snapPackagePricing?.price)}</p>
-                    <p className={lbl + " mt-4"}>Package</p>
-                    <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)</p>
-                    <p className={lbl + " mt-4"}>Manager</p>
-                    <p className={val}>{booking.manager?.fullName ?? "-"}</p>
+
+                  {/* ── Desktop: original 4-col grid ── */}
+                  <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4 text-sm">
+                    {/* Col 1 */}
+                    <div>
+                      <p className={lbl}>Nama</p>
+                      <p className={val}>{booking.snapCustomer?.name ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Sales PIC</p>
+                      <p className={val}>{booking.sales?.fullName ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Email</p>
+                      <p className={val}>{booking.snapCustomer?.email ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Phone Number</p>
+                      {(() => {
+                        const raw = booking.snapCustomer?.mobileNumber ?? "";
+                        let nums: string[] = [];
+                        try {
+                          const arr = JSON.parse(raw);
+                          if (Array.isArray(arr)) nums = arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number);
+                        } catch {
+                          nums = raw.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean);
+                        }
+                        if (nums.length <= 1) return <p className={val}>{nums[0] ?? "-"}</p>;
+                        return <ul className="mt-1 space-y-0.5">{nums.map((n, i) => <li key={i} className={val}>• {n}</li>)}</ul>;
+                      })()}
+                      <p className={lbl + " mt-4"}>Venue</p>
+                      <p className={val}>{booking.snapVenue?.venueName ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Package Type</p>
+                      <p className={val}>{booking.snapPackage?.packageName ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Sumber Informasi</p>
+                      <p className={val}>{booking.sourceOfInformation?.name ?? "-"}</p>
+                    </div>
+                    {/* Col 2 */}
+                    <div>
+                      <p className={lbl}>Event Date</p>
+                      <p className={val}>{fmtDate(booking.bookingDate, "long")}</p>
+                      <p className={lbl + " mt-4"}>Session</p>
+                      <p className={val}>{booking.weddingSession ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Status Booking</p>
+                      <p className={val}>{booking.bookingStatus ?? "Pending"}</p>
+                      <p className={lbl + " mt-4"}>Payment Method</p>
+                      {booking.paymentMethod ? (
+                        <div className="space-y-0.5">
+                          <p className={val}>{booking.paymentMethod.bankName}</p>
+                          <p className="text-xs text-muted-foreground">{booking.paymentMethod.bankAccountNumber}</p>
+                          <p className="text-xs text-muted-foreground">{booking.paymentMethod.bankRecipient}</p>
+                        </div>
+                      ) : (
+                        <p className={val}>-</p>
+                      )}
+                      <p className={lbl + " mt-4"}>Package Price</p>
+                      <p className={val}>{fmtPrice(booking.snapPackagePricing?.price)}</p>
+                      <p className={lbl + " mt-4"}>Package</p>
+                      <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)</p>
+                      <p className={lbl + " mt-4"}>Manager</p>
+                      <p className={val}>{booking.manager?.fullName ?? "-"}</p>
+                    </div>
+                    {/* Col 3 */}
+                    <div>
+                      <p className={lbl}>PO Number</p>
+                      <p className={val}>{booking.poNumber ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Wedding Type</p>
+                      <p className={val}>{booking.weddingType ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>NIK CPP</p>
+                      <p className={val}>{booking.snapCustomer?.cppNik ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Alamat CPP</p>
+                      <p className={val}>{booking.snapCustomer?.cppAddress ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>NIK CPW</p>
+                      <p className={val}>{booking.snapCustomer?.cpwNik ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Alamat CPW</p>
+                      <p className={val}>{booking.snapCustomer?.cpwAddress ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Created At</p>
+                      <p className={val}>{fmtDate(booking.createdAt)}</p>
+                      <p className={lbl + " mt-4"}>Updated At</p>
+                      <p className={val}>{fmtDate(booking.updatedAt)}</p>
+                    </div>
+                    {/* Col 4 */}
+                    <div>
+                      <p className={lbl}>Client Agreement</p>
+                      {booking.clientAgreement ? (
+                        <Badge className={AGREEMENT_COLOR[booking.clientAgreement.status]}>{booking.clientAgreement.status}</Badge>
+                      ) : (
+                        <p className={val}>-</p>
+                      )}
+                      {booking.bookingStatus === "Rejected" && booking.rejectionNotes && (
+                        <>
+                          <p className={lbl + " mt-4"}>Notes of rejection</p>
+                          <p className="text-muted-foreground text-sm font-normal">{booking.rejectionNotes}</p>
+                        </>
+                      )}
+                      <p className={lbl + " mt-4"}>Venue Address</p>
+                      <p className={val}>{booking.snapVenue?.address ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Brand</p>
+                      <p className={val}>{booking.snapVenue?.brandName ?? "-"}</p>
+                    </div>
                   </div>
-                  {/* Col 3 */}
-                  <div>
-                    <p className={lbl}>PO Number</p>
-                    <p className={val}>{booking.poNumber ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Wedding Type</p>
-                    <p className={val}>{booking.weddingType ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>NIK CPP</p>
-                    <p className={val}>{booking.snapCustomer?.cppNik ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Alamat CPP</p>
-                    <p className={val}>{booking.snapCustomer?.cppAddress ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>NIK CPW</p>
-                    <p className={val}>{booking.snapCustomer?.cpwNik ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Alamat CPW</p>
-                    <p className={val}>{booking.snapCustomer?.cpwAddress ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Created At</p>
-                    <p className={val}>{fmtDate(booking.createdAt)}</p>
-                    <p className={lbl + " mt-4"}>Updated At</p>
-                    <p className={val}>{fmtDate(booking.updatedAt)}</p>
-                  </div>
-                  {/* Col 4 */}
-                  <div>
-                    <p className={lbl}>Client Agreement</p>
-                    {booking.clientAgreement ? (
-                      <Badge className={AGREEMENT_COLOR[booking.clientAgreement.status]}>{booking.clientAgreement.status}</Badge>
-                    ) : (
-                      <p className={val}>-</p>
-                    )}
-                    {booking.bookingStatus === "Rejected" && booking.rejectionNotes && (
-                      <>
-                        <p className={lbl + " mt-4"}>Notes of rejection</p>
-                        <p className="text-muted-foreground text-sm font-normal">{booking.rejectionNotes}</p>
-                      </>
-                    )}
-                    <p className={lbl + " mt-4"}>Venue Address</p>
-                    <p className={val}>{booking.snapVenue?.address ?? "-"}</p>
-                    <p className={lbl + " mt-4"}>Brand</p>
-                    <p className={val}>{booking.snapVenue?.brandName ?? "-"}</p>
-                  </div>
-                </div>
+                </>
               )}
 
               {/* ═══ TAB: Vendor Details ═══ */}
               {activeTab === "vendor" && (
                 <div className="space-y-6">
-                  {/* Vendor + Bonus unified table */}
+                  {/* Vendor + Bonus section */}
                   {(booking.snapVendorItems.length > 0 || booking.snapBonuses.length > 0) && (
-                    <div className="rounded-md border overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="px-4 w-40">Kategori</TableHead>
-                            <TableHead className="px-4">Nama Vendor</TableHead>
-                            <TableHead className="px-4 w-37.5">Nominal</TableHead>
-                            <TableHead className="px-4">Keterangan</TableHead>
-                            <TableHead className="px-4 w-37.5">Status Order</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
-                            <TableRow key={v.id}>
-                              <TableCell className="px-4 font-medium text-sm text-foreground">{v.vendorCategoryName}</TableCell>
-                              <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
-                              <TableCell className="px-4 text-sm">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
-                              <TableCell className="px-4 text-sm"><RichText html={v.description} /></TableCell>
-                              <TableCell className="px-4 text-sm text-muted-foreground">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
-                            </TableRow>
-                          ))}
-                          {booking.snapBonuses.length > 0 && (
+                    <>
+                      {/* Mobile: card per vendor row */}
+                      <div className="sm:hidden space-y-3">
+                        {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
+                          <div key={v.id} className="rounded-2xl border bg-card p-4 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Tag weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <p className="text-sm font-semibold text-foreground">{v.vendorCategoryName}</p>
+                            </div>
+                            <div className="space-y-1.5 text-sm">
+                              <div>
+                                <p className={lbl}>Nama Vendor</p>
+                                <p className={val}>{v.vendorName}</p>
+                              </div>
+                              <div>
+                                <p className={lbl}>Nominal</p>
+                                <p className={val}>{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</p>
+                              </div>
+                              <div>
+                                <p className={lbl}>Keterangan</p>
+                                <RichText html={v.description} />
+                              </div>
+                              <div>
+                                <p className={lbl}>Status Order</p>
+                                <p className={val}>{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {booking.snapBonuses.length > 0 && (
+                          <>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">Complimentary / Bonus</p>
+                            {booking.snapBonuses.map((b) => (
+                              <div key={b.id} className="rounded-2xl border bg-card p-4 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Tag weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  <p className="text-sm font-semibold text-foreground">Complimentary</p>
+                                </div>
+                                <div className="space-y-1.5 text-sm">
+                                  <div>
+                                    <p className={lbl}>Nama Vendor</p>
+                                    <p className={val}>{b.vendorName}</p>
+                                  </div>
+                                  <div>
+                                    <p className={lbl}>Nominal</p>
+                                    <p className={val}>{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className={lbl}>Keterangan</p>
+                                    <RichText html={b.description} />
+                                  </div>
+                                  <div>
+                                    <p className={lbl}>Status Order</p>
+                                    <p className={val}>{b.orderStatus?.name ?? "-"}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Desktop: original table */}
+                      <div className="hidden sm:block rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Complimentary / Bonus</TableCell>
+                              <TableHead className="px-4 w-40">Kategori</TableHead>
+                              <TableHead className="px-4">Nama Vendor</TableHead>
+                              <TableHead className="px-4 w-37.5">Nominal</TableHead>
+                              <TableHead className="px-4">Keterangan</TableHead>
+                              <TableHead className="px-4 w-37.5">Status Order</TableHead>
                             </TableRow>
-                          )}
-                          {booking.snapBonuses.map((b) => (
-                            <TableRow key={b.id}>
-                              <TableCell className="px-4 font-medium text-sm text-foreground">Complimentary</TableCell>
-                              <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>
-                              <TableCell className="px-4 text-sm">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
-                              <TableCell className="px-4 text-sm"><RichText html={b.description} /></TableCell>
-                              <TableCell className="px-4 text-sm text-muted-foreground">{b.orderStatus?.name ?? "-"}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
+                              <TableRow key={v.id}>
+                                <TableCell className="px-4 font-medium text-sm text-foreground">{v.vendorCategoryName}</TableCell>
+                                <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
+                                <TableCell className="px-4 text-sm">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
+                                <TableCell className="px-4 text-sm"><RichText html={v.description} /></TableCell>
+                                <TableCell className="px-4 text-sm text-muted-foreground">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
+                              </TableRow>
+                            ))}
+                            {booking.snapBonuses.length > 0 && (
+                              <TableRow className="bg-muted/50">
+                                <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Complimentary / Bonus</TableCell>
+                              </TableRow>
+                            )}
+                            {booking.snapBonuses.map((b) => (
+                              <TableRow key={b.id}>
+                                <TableCell className="px-4 font-medium text-sm text-foreground">Complimentary</TableCell>
+                                <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>
+                                <TableCell className="px-4 text-sm">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
+                                <TableCell className="px-4 text-sm"><RichText html={b.description} /></TableCell>
+                                <TableCell className="px-4 text-sm text-muted-foreground">{b.orderStatus?.name ?? "-"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
                   )}
 
                   {/* Internal items */}
@@ -358,39 +609,68 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   {booking.termOfPayments.length === 0 ? (
                     <p className="text-muted-foreground text-sm">Belum ada data pembayaran.</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50">
-                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
-                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
-                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
-                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">No. Invoice</th>
-                            <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {booking.termOfPayments.map((t, i) => (
-                            <tr key={t.id} className="border-b hover:bg-muted/50">
-                              <td className="px-4 py-3 font-medium text-foreground">{t.name || `Termin ${i + 1}`}</td>
-                              <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
-                              <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
-                              <td className="px-4 py-3 text-foreground">{t.invoiceNumber ?? "-"}</td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                                  t.paymentStatus === "paid" ? "bg-primary/10 text-primary" :
-                                  t.paymentStatus === "partial" ? "bg-muted text-foreground/70" :
-                                  t.paymentStatus === "refund" ? "bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]" :
-                                  "bg-destructive/10 text-destructive"
-                                }`}>
-                                  {t.paymentStatus || "Unpaid"}
-                                </span>
-                              </td>
+                    <>
+                      {/* Mobile: card per termin */}
+                      <div className="sm:hidden space-y-3">
+                        {booking.termOfPayments.map((t, i) => (
+                          <div key={t.id} className="rounded-2xl border bg-card p-4 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Bill weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <p className="text-sm font-semibold text-foreground">{t.name || `Termin ${i + 1}`}</p>
+                              </div>
+                              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${paymentStatusClass(t.paymentStatus)}`}>
+                                {t.paymentStatus || "Unpaid"}
+                              </span>
+                            </div>
+                            <div className="space-y-1.5 text-sm">
+                              <div>
+                                <p className={lbl}>Nominal</p>
+                                <p className={val}>{fmtPrice(t.amount)}</p>
+                              </div>
+                              <div>
+                                <p className={lbl}>Jatuh Tempo</p>
+                                <p className={val}>{fmtDate(t.dueDate, "long")}</p>
+                              </div>
+                              <div>
+                                <p className={lbl}>No. Invoice</p>
+                                <p className={val}>{t.invoiceNumber ?? "-"}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Desktop: original table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">No. Invoice</th>
+                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {booking.termOfPayments.map((t, i) => (
+                              <tr key={t.id} className="border-b hover:bg-muted/50">
+                                <td className="px-4 py-3 font-medium text-foreground">{t.name || `Termin ${i + 1}`}</td>
+                                <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
+                                <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
+                                <td className="px-4 py-3 text-foreground">{t.invoiceNumber ?? "-"}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${paymentStatusClass(t.paymentStatus)}`}>
+                                    {t.paymentStatus || "Unpaid"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
