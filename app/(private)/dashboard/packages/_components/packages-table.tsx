@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer } from "@solar-icons/react";
+import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer, Filter } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -588,8 +588,66 @@ export function PackagesTable() {
     <>
       <Card>
         <CardContent className="p-0">
-          {/* Header */}
-          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'py-4', 'border-b')}>
+          {/* ── Mobile toolbar (< sm) ──
+              Row 1: [Packages (count) refresh] ── [filter] [add]
+              Row 2: [search full-width] */}
+          <div className="flex flex-col gap-2 px-4 pt-0 pb-3 border-b sm:hidden">
+            {/* Row 1 */}
+            <div className="flex items-center gap-2">
+              <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
+              <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
+              <button onClick={handleRefresh} disabled={refreshing} className={cn('p-1', 'rounded-md', 'hover:bg-muted', 'cursor-pointer', 'text-muted-foreground')}>
+                <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+              </button>
+              <div className="flex-1" />
+              {/* Venue filter — icon only */}
+              <Select
+                value={selectedVenueId ?? "all"}
+                onValueChange={(val) => {
+                  setSelectedVenueId(val === "all" ? undefined : val);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Filter venue"
+                  className={cn('shrink-0', 'w-9', 'justify-center', 'px-0', '[&>svg:last-child]:hidden', 'bg-muted/40', selectedVenueId && 'border-primary/50')}
+                >
+                  <Filter weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue className="hidden!" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Venue</SelectItem>
+                  {venues.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedIds.size > 0 && can("package", "delete") && (
+                <Button variant="destructive" size="icon" onClick={() => setBulkDeleteOpen(true)} aria-label={`Hapus ${selectedIds.size} paket`} className="shrink-0">
+                  <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                </Button>
+              )}
+              {canCreate("package") && (
+                <Button size="icon" onClick={openAdd} aria-label="Add New Package" className="shrink-0">
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {/* Row 2: Search */}
+            <div className="relative w-full">
+              <Magnifer weight="BoldDuotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search packages..."
+                className="pl-10 bg-muted/40"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          {/* ── Desktop toolbar (sm+) ── */}
+          <div className={cn('hidden', 'sm:flex', 'flex-row', 'items-center', 'justify-between', 'gap-3', 'px-6', 'pt-0', 'pb-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
@@ -597,42 +655,34 @@ export function PackagesTable() {
                 <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               </button>
             </div>
-            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:flex-wrap', 'sm:items-center', 'gap-2', 'w-full', 'sm:w-auto')}>
-              {/* Venue filter + Search: 2-col grid on mobile, inline on sm+ */}
-              <div className="grid grid-cols-2 sm:contents gap-2">
-                {/* Venue filter */}
-                <Select
-                  value={selectedVenueId ?? "all"}
-                  onValueChange={(val) => {
-                    setSelectedVenueId(val === "all" ? undefined : val);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-48 bg-muted/40">
-                    <SelectValue placeholder="Semua Venue" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Venue</SelectItem>
-                    {venues.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Search */}
-                <div className="relative w-full sm:w-75">
-                  <Magnifer weight="BoldDuotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search packages..."
-                    className="pl-10 bg-muted/40"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    autoComplete="off"
-                  />
-                </div>
+            <div className={cn('flex', 'flex-row', 'items-center', 'gap-2')}>
+              <div className="relative w-75">
+                <Magnifer weight="BoldDuotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search packages..."
+                  className="pl-10 bg-muted/40"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoComplete="off"
+                />
               </div>
+              <Select
+                value={selectedVenueId ?? "all"}
+                onValueChange={(val) => {
+                  setSelectedVenueId(val === "all" ? undefined : val);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-48 bg-muted/40">
+                  <SelectValue placeholder="Semua Venue" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Venue</SelectItem>
+                  {venues.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
                   <TrashBinTrash weight="BoldDuotone" className={cn('h-4', 'w-4')} /> Delete ({selectedIds.size})
@@ -769,7 +819,7 @@ export function PackagesTable() {
               {isFetching ? (
                 <SkeletonMobileCards rows={Math.max(paginated.length, ROWS_PER_PAGE)} />
               ) : (
-              <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
+              <div className={cn('block', 'sm:hidden', 'px-3', 'py-3', 'space-y-3')}>
                 {paginated.map((pkg, idx) => {
                   const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
                   return (
