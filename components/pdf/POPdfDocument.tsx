@@ -399,47 +399,12 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
       return `<li>${t.name} sebesar ${fmtRpTerbilang(t.amount)}${due}</li>`;
     }).join("");
 
-    // Check if {term_of_payment} is already inside a <ul> or <li> (seeder format)
-    const tpIdx = html.indexOf("{term_of_payment}");
-    const before = html.slice(Math.max(0, tpIdx - 5), tpIdx);
-    const isInsideUl = before.includes("<ul>") || before.includes("<li>");
-
-    if (isInsideUl) {
-      // Seeder format: <ul>{term_of_payment}</ul> inside <li> — just replace with list items
-      html = html.replace(/\{term_of_payment\}/g, topHtml);
-    } else {
-      // Editor format: <p>{term_of_payment}</p> standalone between two <ol> blocks
-      // Nest into preceding <li> and fix numbering
-      const topUl = `<ul>${topHtml}</ul>`;
-      const beforeTp = html.slice(0, tpIdx);
-      const lastLiClose = beforeTp.lastIndexOf("</li>");
-      if (lastLiClose !== -1) {
-        html = html.slice(0, lastLiClose) + topUl + html.slice(lastLiClose);
-        html = html.replace(/(<p>)?\{term_of_payment\}(<\/p>)?/, "");
-      } else {
-        html = html.replace(/(<p>)?\{term_of_payment\}(<\/p>)?/, topUl);
-      }
-
-      // Fix numbering for next <ol> after the inserted content
-      const topUlIdx = html.indexOf(topUl);
-      if (topUlIdx !== -1) {
-        const beforeBlock = html.slice(0, topUlIdx);
-        const lastOlClose = beforeBlock.lastIndexOf("</ol>");
-        if (lastOlClose !== -1) {
-          const lastOlOpen = beforeBlock.lastIndexOf("<ol", lastOlClose);
-          if (lastOlOpen !== -1) {
-            const olBlock = beforeBlock.slice(lastOlOpen, lastOlClose + 5);
-            const itemCount = (olBlock.match(/<li>/g) || []).length;
-            const afterBlock = html.slice(topUlIdx);
-            const nextOlIdx = afterBlock.indexOf("<ol>");
-            if (nextOlIdx !== -1) {
-              const absIdx = topUlIdx + nextOlIdx;
-              html = html.slice(0, absIdx) + `<ol start="${itemCount + 1}">` + html.slice(absIdx + 4);
-            }
-          }
-        }
-      }
-    }
+    // Editor format: <ul><li><p>{term_of_payment}</p></li></ul>
+    // Strip the <li><p>…</p></li> wrapper and inject raw payment items directly into the <ul>.
+    // Resilient to optional whitespace/newlines between tags and around the placeholder.
+    html = html.replace(/<li>\s*<p>\s*\{term_of_payment\}\s*<\/p>\s*<\/li>/g, topHtml);
+    // Seeder format: <ul>{term_of_payment}</ul> — placeholder sits bare inside <ul>
+    html = html.replace(/\{term_of_payment\}/g, topHtml);
   }
 
   for (const [key, value] of Object.entries(vars)) {

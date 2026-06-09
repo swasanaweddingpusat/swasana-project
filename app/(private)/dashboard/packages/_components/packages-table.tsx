@@ -90,7 +90,7 @@ function SkeletonMobileCards({ rows = ROWS_PER_PAGE }: { rows?: number }) {
   return (
     <div className="block sm:hidden p-4 space-y-3">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
+        <div key={i} className="rounded-2xl border bg-card p-4 space-y-2 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Skeleton className="h-4 w-4 rounded-sm shrink-0" />
@@ -311,6 +311,7 @@ export function PackagesTable() {
     setDrawerOpen(true);
   };
 
+  // Desktop actions — icon buttons + dropdowns (sm+)
   function renderPackageActions(pkg: PackageQueryItem) {
     return (
       <>
@@ -464,6 +465,123 @@ export function PackagesTable() {
     );
   }
 
+  // Mobile actions — compact single dropdown "..." with all secondary actions
+  function renderMobileActions(pkg: PackageQueryItem) {
+    const hasTc = can("package", "term-&-condition");
+    const hasSetHarga = can("package", "set-harga");
+    const hasPreview = can("package", "view");
+    const hasDelete = can("package", "delete");
+
+    const approvalRecord = approvalMap.get(pkg.id);
+    const hasApproval = !!approvalRecord &&
+      approvalRecord.status !== "approved" &&
+      pkg.approvalStatus !== "approved";
+
+    const hasAnySecondary = hasTc || hasSetHarga || hasPreview || hasDelete || hasApproval;
+    if (!hasAnySecondary) return null;
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="h-9 w-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors cursor-pointer shrink-0"
+            aria-label="Aksi lainnya"
+          >
+            <MenuDots weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-44">
+          {hasTc && (
+            <DropdownMenuItem
+              onSelect={async () => {
+                setTcPkg(pkg);
+                setTcDrawerOpen(true);
+                try {
+                  const fresh = await fetchPackages({
+                    page: currentPage,
+                    pageSize: ROWS_PER_PAGE,
+                    search: debouncedSearch || undefined,
+                    venueId: selectedVenueId,
+                  });
+                  const updated = fresh.data.find((p) => p.id === pkg.id);
+                  if (updated) setTcPkg(updated);
+                } catch {
+                  /* keep the already-shown data on failure */
+                }
+              }}
+            >
+              <FileText weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              Term & Condition
+            </DropdownMenuItem>
+          )}
+          {hasSetHarga && (
+            <DropdownMenuItem
+              onSelect={() => { setFinancePkg(pkg); setFinanceOpen(true); }}
+            >
+              <SettingsMinimalistic weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              Set Harga
+            </DropdownMenuItem>
+          )}
+          {hasApproval && approvalRecord && (() => {
+            const steps = approvalRecord.steps;
+            return steps.map((step) => {
+              const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+              const isApproved = step.status === "approved";
+              const isRejected = step.status === "rejected";
+              const isPending = step.status === "pending";
+              const canAct = isPending && (
+                isAdmin ||
+                (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
+                (step.approverType === "user" && step.approverUserId === user?.profileId)
+              );
+              return (
+                <DropdownMenuItem
+                  key={step.id}
+                  className="cursor-pointer"
+                  disabled={isApproved || isRejected || (isPending && !canAct)}
+                  onClick={() => {
+                    if (canAct) {
+                      setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", packageName: pkg.packageName });
+                    } else {
+                      setApprovalPkg(pkg);
+                    }
+                  }}
+                >
+                  <ClipboardCheck weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+                  {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
+                </DropdownMenuItem>
+              );
+            });
+          })()}
+          {hasPreview && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setPreviewTarget({ packageId: pkg.id, packageName: pkg.packageName });
+                setPreviewOpen(true);
+              }}
+            >
+              <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              Preview PO
+            </DropdownMenuItem>
+          )}
+          {hasDelete && (
+            <>
+              {(hasTc || hasSetHarga || hasApproval || hasPreview) && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
+                className="text-destructive focus:text-destructive"
+              >
+                <TrashBinTrash weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Hapus
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   if (isLoading || approvalsLoading) return <SkeletonTable />;
 
   return (
@@ -471,7 +589,7 @@ export function PackagesTable() {
       <Card>
         <CardContent className="p-0">
           {/* Header */}
-          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'pb-4', 'border-b')}>
+          <div className={cn('flex', 'flex-col', 'sm:flex-row', 'items-start', 'sm:items-center', 'justify-between', 'gap-3', 'px-6', 'py-4', 'border-b')}>
             <div className={cn('flex', 'items-center', 'gap-2')}>
               <h2 className={cn('text-base', 'font-bold', 'text-foreground')}>Packages</h2>
               <span className={cn('text-sm', 'text-muted-foreground')}>({total})</span>
@@ -479,38 +597,41 @@ export function PackagesTable() {
                 <Refresh weight="BoldDuotone" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               </button>
             </div>
-            <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-2')}>
-              {/* Venue filter */}
-              <Select
-                value={selectedVenueId ?? "all"}
-                onValueChange={(val) => {
-                  setSelectedVenueId(val === "all" ? undefined : val);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-48 bg-muted/40">
-                  <SelectValue placeholder="Semua Venue" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Venue</SelectItem>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className={cn('flex', 'flex-col', 'sm:flex-row', 'sm:flex-wrap', 'sm:items-center', 'gap-2', 'w-full', 'sm:w-auto')}>
+              {/* Venue filter + Search: 2-col grid on mobile, inline on sm+ */}
+              <div className="grid grid-cols-2 sm:contents gap-2">
+                {/* Venue filter */}
+                <Select
+                  value={selectedVenueId ?? "all"}
+                  onValueChange={(val) => {
+                    setSelectedVenueId(val === "all" ? undefined : val);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-48 bg-muted/40">
+                    <SelectValue placeholder="Semua Venue" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Venue</SelectItem>
+                    {venues.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {/* Search */}
-              <div className="relative w-full sm:w-75">
-                <Magnifer weight="BoldDuotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search packages..."
-                  className="pl-10 bg-muted/40"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  autoComplete="off"
-                />
+                {/* Search */}
+                <div className="relative w-full sm:w-75">
+                  <Magnifer weight="BoldDuotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search packages..."
+                    className="pl-10 bg-muted/40"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
               </div>
               {selectedIds.size > 0 && can("package", "delete") && (
                 <Button variant="destructive" onClick={() => setBulkDeleteOpen(true)} className={cn('cursor-pointer', 'flex', 'items-center', 'gap-2')}>
@@ -654,7 +775,7 @@ export function PackagesTable() {
                   return (
                     <div
                       key={pkg.id}
-                      className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', selectedIds.has(pkg.id) && "border-primary/40 bg-primary/5")}
+                      className={cn('rounded-2xl', 'border', 'bg-card', 'p-4', 'space-y-2', 'shadow-sm', 'hover:shadow-md', 'transition-shadow', selectedIds.has(pkg.id) && "border-primary/40 bg-primary/5")}
                     >
                       {/* Row 1: checkbox + name + status badge */}
                       <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
@@ -742,12 +863,12 @@ export function PackagesTable() {
                         )}
                       </div>
 
-                      {/* Footer: action buttons */}
-                      <div className={cn('flex', 'items-center', 'gap-1', 'pt-1', 'border-t', 'border-border')}>
+                      {/* Footer: action buttons — primary CTAs + compact secondary dropdown */}
+                      <div className={cn('flex', 'items-center', 'gap-1.5', 'pt-2', 'border-t', 'border-border')}>
                         {can("package", "edit") && (
                           <Button
                             variant="outline"
-                            className={cn('h-9', 'flex-1', 'text-xs')}
+                            className={cn('h-9', 'flex-1', 'text-xs', 'rounded-xl')}
                             onClick={() => openEdit(pkg)}
                             aria-label={`Edit ${pkg.packageName}`}
                           >
@@ -757,16 +878,14 @@ export function PackagesTable() {
                         {can("package", "view") && (
                           <Button
                             variant="outline"
-                            className={cn('h-9', 'flex-1', 'text-xs')}
+                            className={cn('h-9', 'flex-1', 'text-xs', 'rounded-xl')}
                             onClick={() => { setDetailPkg(pkg); setDetailOpen(true); }}
                             aria-label={`Lihat detail ${pkg.packageName}`}
                           >
                             <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Detail
                           </Button>
                         )}
-                        <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
-                          {renderPackageActions(pkg)}
-                        </div>
+                        {renderMobileActions(pkg)}
                       </div>
                     </div>
                   );

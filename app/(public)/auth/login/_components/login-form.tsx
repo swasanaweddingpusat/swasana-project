@@ -132,21 +132,33 @@ export function LoginForm({
                     type={showPassword ? "text" : "password"}
                     required
                     disabled={isPending}
+                    className="pr-10"
+                    autoComplete={showPassword ? "off" : "current-password"}
                   />
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn('absolute', 'right-0', 'top-0', 'h-full', 'px-3', 'py-2', 'hover:bg-transparent')}
+                    aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                    className={cn(
+                      'absolute', 'right-0', 'top-0',
+                      'h-full', 'w-10',
+                      'flex', 'items-center', 'justify-center',
+                      'z-10',
+                      'text-muted-foreground', 'hover:text-foreground',
+                      'transition-colors',
+                      'touch-manipulation',
+                      'cursor-pointer',
+                      'disabled:pointer-events-none', 'disabled:opacity-50',
+                    )}
                     onClick={() => setShowPassword(!showPassword)}
                     disabled={isPending}
+                    tabIndex={-1}
                   >
                     {showPassword ? (
-                      <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4')} />
+                      <EyeClosed weight="BoldDuotone" className={cn('h-4', 'w-4', 'pointer-events-none')} />
                     ) : (
-                      <Eye weight="BoldDuotone" className={cn('h-4', 'w-4')} />
+                      <Eye weight="BoldDuotone" className={cn('h-4', 'w-4', 'pointer-events-none')} />
                     )}
-                  </Button>
+                  </button>
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={isPending}>

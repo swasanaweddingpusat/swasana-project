@@ -7,9 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 
 interface POPreviewTarget {
   packageId: string;
@@ -79,11 +77,31 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[85vh] w-[70vw] max-w-[70vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[70vw]">
+      <DialogContent showCloseButton={false} className="flex h-screen w-screen max-w-none top-0 left-0 translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 ring-0 sm:max-w-none">
         <DialogHeader className="shrink-0 border-b p-4">
-          <DialogTitle>
-            Preview PO — {target.packageName}
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle>Preview PO — {target.packageName}</DialogTitle>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleOpenNewTab}
+                disabled={!blobUrl}
+                title="Buka di Tab Baru"
+                className="h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Buka di tab baru"
+              >
+                <ArrowRightUp weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                aria-label="Tutup"
+              >
+                <CloseCircle weight="BoldDuotone" className="h-6 w-6 text-destructive" />
+              </button>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="relative min-h-0 flex-1 overflow-hidden bg-muted">
@@ -107,17 +125,6 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
             />
           )}
         </div>
-
-        <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none border-t p-4">
-          <Button variant="outline" onClick={handleOpenNewTab} disabled={!blobUrl}>
-            <ArrowRightUp weight="BoldDuotone" className="mr-2 h-4 w-4" />
-            Buka di Tab Baru
-          </Button>
-          <Button variant="default" onClick={() => onOpenChange(false)}>
-            <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
-            Tutup
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
