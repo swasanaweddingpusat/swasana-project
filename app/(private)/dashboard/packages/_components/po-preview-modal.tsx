@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Refresh, ArrowRightUp, CloseCircle } from "@solar-icons/react";
 import {
   Dialog,
@@ -8,6 +9,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+// react-pdf must not be SSR'd — load client-only
+const PdfCanvasViewer = dynamic(
+  () => import("@/components/shared/PdfCanvasViewer").then((m) => ({ default: m.PdfCanvasViewer })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center">
+        <Refresh weight="BoldDuotone" className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    ),
+  }
+);
 
 interface POPreviewTarget {
   packageId: string;
@@ -118,11 +132,7 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
             </div>
           )}
           {blobUrl && !loading && !error && (
-            <iframe
-              src={blobUrl}
-              className="h-full w-full border-0"
-              title={`Preview PO ${target.packageName}`}
-            />
+            <PdfCanvasViewer blobUrl={blobUrl} />
           )}
         </div>
       </DialogContent>
