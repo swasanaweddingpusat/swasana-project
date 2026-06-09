@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS "procurement_items_tanggalPermintaan_idx" ON "procure
 CREATE INDEX IF NOT EXISTS "procurement_announcements_isActive_idx" ON "procurement_announcements"("isActive");
 CREATE INDEX IF NOT EXISTS "procurement_announcements_createdById_idx" ON "procurement_announcements"("createdById");
 
--- AddForeignKey (safe: only if not exists via IF NOT EXISTS on constraint)
+-- AddForeignKey (safe: PostgreSQL does not support ADD CONSTRAINT IF NOT EXISTS, using DO $$ exception block instead)
 DO $$ BEGIN
   ALTER TABLE "procurement_items" ADD CONSTRAINT "procurement_items_venueId_fkey"
     FOREIGN KEY ("venueId") REFERENCES "venues"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
