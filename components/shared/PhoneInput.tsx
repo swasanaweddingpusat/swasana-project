@@ -155,14 +155,34 @@ export function PhoneInput({
   onBlur,
   size = "default",
 }: PhoneInputProps) {
-  // Fully controlled — derive country and national number from value prop on
-  // every render. parseStoredPhone is a pure synchronous function so this is
-  // always cheap. No internal state needed: whenever country or national number
-  // changes we call onChange(), which causes the parent to update value, which
-  // causes React to re-render with the new parsed result.
-  const { country, nationalNumber: national } = parseStoredPhone(value);
+  // The national number is always derived from the stored value (source of
+  // truth). The COUNTRY, however, cannot live solely in the stored string:
+  // when the national number is empty, composeStoredPhone() returns "", which
+  // would parse back to the default country — silently discarding the user's
+  // country choice. So we keep the selected country in local state and only
+  // re-sync it from `value` when the stored string actually encodes a country
+  // (i.e. it has digits to parse).
+  const parsed = parseStoredPhone(value);
+  const national = parsed.nationalNumber;
+
+  const [country, setCountry] = useState<CountryData>(parsed.country);
+  // Adjust the selected country when the `value` prop changes externally
+  // (autofill, edit-form load) — the official "adjust state during render"
+  // pattern (https://react.dev/reference/react/useState#storing-information-from-previous-renders),
+  // which avoids the cascading renders an effect would cause.
+  // We only adopt the parsed country when the value carries digits; an empty
+  // value (e.g. right after picking a country before typing) must leave the
+  // user's current selection intact, otherwise it would snap back to default.
+  const [lastSyncedValue, setLastSyncedValue] = useState(value);
+  if (value !== lastSyncedValue) {
+    setLastSyncedValue(value);
+    if (value.replace(/\D/g, "") && parsed.country.iso2 !== country.iso2) {
+      setCountry(parsed.country);
+    }
+  }
 
   function handleCountryChange(c: CountryData) {
+    setCountry(c);
     const composed = composeStoredPhone(c, national);
     onChange(composed);
   }
