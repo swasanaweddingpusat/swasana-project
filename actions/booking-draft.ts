@@ -10,6 +10,7 @@ import { getNextSequence } from "@/lib/counter";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
+import { getProfileDataScope } from "@/lib/access-control";
 import { notifySuperAdmins } from "@/lib/notifications";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import {
@@ -948,9 +949,33 @@ export async function getUserUnfinishedDraft(
 ): Promise<UnfinishedDraft | null> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+  // Resume scope follows the user's dataScope (set at invite time), independent
+  // of permissions: "own" → only their drafts, "group" → drafts of group peers,
+  // "all" → any draft. This lets e.g. an admin (scope "all") resume a draft they
+  // created under a different Sales PIC.
+  const dataScope = await getProfileDataScope(profileId);
+  let salesFilter: Prisma.BookingWhereInput = { salesId: profileId };
+  if (dataScope === "all") {
+    salesFilter = {};
+  } else if (dataScope === "group") {
+    const myGroups = await db.userGroupMember.findMany({
+      where: { userId: profileId },
+      select: { groupId: true },
+    });
+    const groupIds = myGroups.map((g) => g.groupId);
+    if (groupIds.length > 0) {
+      const peers = await db.userGroupMember.findMany({
+        where: { groupId: { in: groupIds } },
+        select: { userId: true },
+      });
+      const peerIds = Array.from(new Set([profileId, ...peers.map((p) => p.userId)]));
+      salesFilter = { salesId: { in: peerIds } };
+    }
+  }
+
   const draft = await db.booking.findFirst({
     where: {
-      salesId: profileId,
+      ...salesFilter,
       recordStatus: "draft",
       category,
       createdAt: { gte: sevenDaysAgo },
