@@ -25,7 +25,8 @@ export const createDraftStep1Schema = z.object({
   // New customer fields (used when customerName is provided without customerId/leadId)
   customerName: z.string().optional(),
   contactNumbers: z.string().optional().default(""),
-  contactEmail: z.string().optional().default(""),
+  contactEmailCpp: z.string().optional().default(""),
+  contactEmailCpw: z.string().optional().default(""),
   contactNikCpp: z.string().optional().default(""),
   contactNikCpw: z.string().optional().default(""),
   contactCppAddress: z.string().optional().default(""),
@@ -54,6 +55,20 @@ export const updateDraftStep2Schema = z.object({
       z.object({
         categoryName: z.string().min(1),
         isTakeout: z.boolean().default(false),
+        takeoutNominal: z.coerce.number().int().min(0).default(0),
+      })
+    )
+    .optional()
+    .default([]),
+  draftComplimentaries: z
+    .array(
+      z.object({
+        complimentaryId: z.string().optional().nullable(),
+        name: z.string().min(1),
+        price: z.coerce.number().int().min(0).default(0),
+        isShowPrice: z.boolean().default(false),
+        description: z.string().optional().nullable(),
+        qty: z.coerce.number().int().min(1).default(1),
       })
     )
     .optional()
@@ -109,7 +124,7 @@ export const finalizeDraftSchema = z.object({
   // Lead ID to stamp conversion tracking
   leadId: z.string().optional().nullable(),
 
-  // Bonuses — snapped at finalize time
+  // Bonuses (legacy vendor-based) — kept for backward compat, booking-drawer no longer populates this
   bonuses: z
     .array(
       z.object({
@@ -119,6 +134,22 @@ export const finalizeDraftSchema = z.object({
         description: z.string().optional().nullable(),
         qty: z.coerce.number().int().min(1).default(1),
         nominal: z.coerce.number().min(0).default(0),
+      })
+    )
+    .optional()
+    .default([]),
+
+  // Complimentaries — new complimentary-based, snapped at finalize time
+  complimentaries: z
+    .array(
+      z.object({
+        complimentaryId: z.string().optional().nullable(),
+        name: z.string().min(1),
+        price: z.coerce.number().int().min(0).default(0),
+        isShowPrice: z.boolean().default(false),
+        description: z.string().optional().nullable(),
+        qty: z.coerce.number().int().min(1).default(1),
+        sortOrder: z.coerce.number().int().default(0),
       })
     )
     .optional()

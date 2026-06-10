@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
 const RefreshCw = Refresh;
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -25,8 +25,6 @@ import { generateAgreementToken } from "@/actions/client-agreement";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
-import { EditTopDrawer } from "./edit-top-drawer";
-import { EditTakeoutDrawer } from "./edit-takeout-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "./booking-po-preview-modal";
 import { BookingCommentPanel } from "./booking-comment-panel";
@@ -170,10 +168,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
-  const [takeoutTarget, setTakeoutTarget] = useState<BookingListItem | null>(null);
-
-  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
+  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
     queryFn: async () => {
       const res = await fetch("/api/approval-records?module=booking");
@@ -208,17 +203,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   function renderBookingActions(booking: BookingListItem) {
     // Client Agreement is gated on internal approval: it appears only after BOTH
-    // the manager and finance approval steps (current round) are approved.
-    const agreementSteps = approvalMap.get(booking.id)?.steps ?? [];
-    const agreementFirstStep = agreementSteps[0];
-    let agreementRoundSize = agreementSteps.length;
-    for (let i = 1; i < agreementSteps.length; i++) {
-      if (agreementSteps[i].approverType === agreementFirstStep?.approverType && agreementSteps[i].approverRoleId === agreementFirstStep?.approverRoleId && agreementSteps[i].approverUserId === agreementFirstStep?.approverUserId) {
-        agreementRoundSize = i;
-        break;
-      }
-    }
-    const currentRoundSteps = agreementSteps.slice(-agreementRoundSize);
+    // the manager and finance approval steps (current revision) are approved.
+    // Filter steps by currentRevisionId (snapshot approach).
+    // Backward compat: if booking has no currentRevisionId OR all steps have null revisionId,
+    // fall back to showing all steps (legacy data before this feature).
+    const allAgreementSteps = approvalMap.get(booking.id)?.steps ?? [];
+    // booking.currentRevisionId is a scalar field returned by Prisma `include` — no cast needed.
+    const currentRevisionId = booking.currentRevisionId;
+    const hasRevisionedSteps = allAgreementSteps.some((s) => s.revisionId !== null);
+    const currentRoundSteps = (currentRevisionId && hasRevisionedSteps)
+      ? allAgreementSteps.filter((s) => s.revisionId === currentRevisionId)
+      : allAgreementSteps;
     const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
     const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
     const internalApproved = isManagerApproved && isFinanceApproved;
@@ -241,16 +236,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {approvalMap.has(booking.id) && (() => {
           const record = approvalMap.get(booking.id)!;
           const allSteps = record.steps;
-          // Show only latest round: detect round size from first repeated approver pattern
-          const firstStep = allSteps[0];
-          let roundSize = allSteps.length;
-          for (let i = 1; i < allSteps.length; i++) {
-            if (allSteps[i].approverType === firstStep?.approverType && allSteps[i].approverRoleId === firstStep?.approverRoleId && allSteps[i].approverUserId === firstStep?.approverUserId) {
-              roundSize = i;
-              break;
-            }
-          }
-          const steps = allSteps.slice(-roundSize);
+          // Show only steps for the active revision (snapshot approach).
+          // Backward compat: if no currentRevisionId or no steps have revisionId → show all steps.
+          const bCurrentRevisionId = booking.currentRevisionId;
+          const bHasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+          const steps = (bCurrentRevisionId && bHasRevisionedSteps)
+            ? allSteps.filter((s) => s.revisionId === bCurrentRevisionId)
+            : allSteps;
           const nonClientSteps = steps.filter((s) => s.approverType !== "client");
           if (nonClientSteps.every((s) => s.status === "approved")) return null;
           return (
@@ -350,16 +342,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term of Payment
-            </DropdownMenuItem>
-            {can("booking", "edit") &&
-              booking.snapPackageCategoryPrices &&
-              booking.snapPackageCategoryPrices.length > 0 && (
-              <DropdownMenuItem className="cursor-pointer" onClick={() => setTakeoutTarget(booking)}>
-                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Takeout
-              </DropdownMenuItem>
-            )}
             {can("booking", "transfer") && (
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
               <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Booking
@@ -1199,64 +1181,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-
-      {/* Edit Term of Payment */}
-      {topTarget && (
-        <EditTopDrawer
-          isOpen={!!topTarget}
-          onClose={() => { setTopTarget(null); refetch(); }}
-          bookingId={topTarget.id}
-          customerName={topTarget.snapCustomer?.name ?? ""}
-          initialTerms={(topTarget.termOfPayments ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            amount: Number(t.amount),
-            dueDate: new Date(t.dueDate).toISOString(),
-            sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-            ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
-            paymentEvidence: t.paymentEvidence ?? null,
-            notes: t.notes,
-            partialPayments: "partialPayments" in t
-              ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments
-              : undefined,
-          }))}
-          packagePrice={Number(topTarget.snapPackagePricing?.price ?? 0)}
-          discountName={topTarget.discountName ?? null}
-          discountAmount={topTarget.discountAmount ?? 0}
-        />
-      )}
-
-      {/* Edit Set Takeout */}
-      {takeoutTarget && (
-        <EditTakeoutDrawer
-          isOpen={!!takeoutTarget}
-          onClose={() => { setTakeoutTarget(null); refetch(); }}
-          bookingId={takeoutTarget.id}
-          customerName={takeoutTarget.snapCustomer?.name ?? ""}
-          initialCategories={(takeoutTarget.snapPackageCategoryPrices ?? []).map((c) => ({
-            id: c.id,
-            categoryName: c.categoryName,
-            basePrice: Number(c.basePrice),
-            sortOrder: c.sortOrder,
-            isShow: c.isShow,
-            isTakeout: c.isTakeout,
-            takeoutNominal: Number(c.takeoutNominal ?? 0),
-          }))}
-          initialTerms={(takeoutTarget.termOfPayments ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            amount: Number(t.amount),
-            dueDate: new Date(t.dueDate).toISOString(),
-            sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-            ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
-            paymentEvidence: t.paymentEvidence ?? null,
-            notes: t.notes,
-          }))}
-          fullPrice={Number(takeoutTarget.snapPackagePricing?.fullPrice ?? 0)}
-        />
-      )}
 
       {/* PO Preview (modal — works before approval, no new tab) */}
       <BookingPOPreviewModal

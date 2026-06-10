@@ -6,7 +6,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
-import { canAccessBooking, getProfileDataScope, getBookingIdFromSnapBonus } from "@/lib/access-control";
+import { canAccessBooking, getProfileDataScope, getBookingIdFromSnapBonus, getBookingIdFromSnapComplimentary } from "@/lib/access-control";
 
 interface VendorSelection {
   vendorCategoryId: string;
@@ -187,5 +187,118 @@ export async function deleteSnapBonus(id: string) {
   } catch (e) {
     console.error("[deleteSnapBonus]", e);
     return { success: false as const, error: "Gagal menghapus bonus." };
+  }
+}
+
+// ─── SnapComplimentary CRUD (edit-booking side) ───────────────────────────────
+
+export async function addSnapComplimentary(
+  bookingId: string,
+  data: {
+    complimentaryId?: string | null;
+    name: string;
+    price?: number;
+    isShowPrice?: boolean;
+    description?: string | null;
+    qty?: number;
+    sortOrder?: number;
+  }
+) {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`add-complementary:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const [item] = await db.$transaction([
+      db.snapComplimentary.create({
+        data: {
+          bookingId,
+          complimentaryId: data.complimentaryId ?? null,
+          name: data.name,
+          price: data.price ?? 0,
+          isShowPrice: data.isShowPrice ?? false,
+          description: data.description ?? null,
+          qty: data.qty ?? 1,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      }),
+    ]);
+    await logAudit({ userId: session!.user.id, action: "booking.complimentary.add", result: "success", entityType: "SnapComplimentary", entityId: item.id });
+    revalidateTag("bookings", "max");
+    return { success: true as const, item };
+  } catch (e) {
+    console.error("[addSnapComplimentary]", e);
+    return { success: false as const, error: "Gagal menambah complimentary." };
+  }
+}
+
+export async function updateSnapComplimentary(
+  id: string,
+  data: {
+    complimentaryId?: string | null;
+    name?: string;
+    price?: number;
+    isShowPrice?: boolean;
+    description?: string | null;
+    qty?: number;
+  }
+) {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`update-complementary:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
+
+  const bookingId = await getBookingIdFromSnapComplimentary(id);
+  if (!bookingId) return { success: false as const, error: "Complimentary tidak ditemukan." };
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    await db.$transaction([
+      db.snapComplimentary.update({
+        where: { id },
+        data: {
+          ...(data.complimentaryId !== undefined && { complimentaryId: data.complimentaryId }),
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.price !== undefined && { price: data.price }),
+          ...(data.isShowPrice !== undefined && { isShowPrice: data.isShowPrice }),
+          ...(data.description !== undefined && { description: data.description }),
+          ...(data.qty !== undefined && { qty: data.qty }),
+        },
+      }),
+    ]);
+    revalidateTag("bookings", "max");
+    return { success: true as const };
+  } catch (e) {
+    console.error("[updateSnapComplimentary]", e);
+    return { success: false as const, error: "Gagal update complimentary." };
+  }
+}
+
+export async function deleteSnapComplimentary(id: string) {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false as const, error };
+  if (!mutationLimiter.check(`delete-complementary:${session!.user.id}`)) return { success: false as const, ...rateLimitError() };
+
+  const bookingId = await getBookingIdFromSnapComplimentary(id);
+  if (!bookingId) return { success: false as const, error: "Complimentary tidak ditemukan." };
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+    return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    await db.$transaction([db.snapComplimentary.delete({ where: { id } })]);
+    revalidateTag("bookings", "max");
+    return { success: true as const };
+  } catch (e) {
+    console.error("[deleteSnapComplimentary]", e);
+    return { success: false as const, error: "Gagal menghapus complimentary." };
   }
 }

@@ -50,6 +50,7 @@ const bookingDetailInclude = {
   snapPackageInternalItems: { orderBy: { sortOrder: "asc" as const } },
   snapPackageVendorItems: { orderBy: { sortOrder: "asc" as const } },
   snapBonuses: { include: { orderStatus: { select: { id: true, name: true } } } },
+  snapComplimentaries: { orderBy: { sortOrder: "asc" as const } },
   snapVendorItems: true,
   termOfPayments: { orderBy: { sortOrder: "asc" as const } },
   bookingDocuments: { orderBy: { createdAt: "desc" as const } },

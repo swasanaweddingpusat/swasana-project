@@ -128,7 +128,10 @@ export function adjustTermsForPriceChange(
   const overpayment = Math.max(0, paidLockedTotal - newPrice);
 
   // Fund DP first so it stays > 0 while any target remains.
-  const dpTerm = pool.find((t) => t.name.trim().toUpperCase() === "DP");
+  // DP = index 1 of the input terms array (caller must pass terms sorted by sortOrder asc).
+  // Index 0 = Booking Fee, Index 1 = DP. Guard: if fewer than 2 terms, no DP identified.
+  const dpById = terms.length >= 2 ? terms[1].id : null;
+  const dpTerm = dpById ? pool.find((t) => t.id === dpById) : null;
   let adjustedTerms: AdjustedTerm[];
   if (dpTerm) {
     const dpTarget = Math.min(dpTerm.amount, targetTotalForPool);

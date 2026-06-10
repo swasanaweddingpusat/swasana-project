@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Refresh, CloseCircle, ArrowRightUp } from "@solar-icons/react";
+import { Refresh, CloseCircle, ArrowRightUp, Printer } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +45,7 @@ export function BookingPOPreviewModal({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     if (!open || !target) return;
@@ -94,6 +95,51 @@ export function BookingPOPreviewModal({
     if (blobUrl) window.open(blobUrl, "_blank");
   }
 
+  const handlePrint = useCallback((): void => {
+    if (!blobUrl || printing) return;
+
+    // iOS/Safari detection — blob print via iframe is blocked on iOS
+    const isIOS = /iP(hone|ad|od)/i.test(navigator.userAgent);
+    if (isIOS) {
+      // Fallback: buka di tab baru, user print manual dari sana
+      window.open(blobUrl, "_blank");
+      return;
+    }
+
+    setPrinting(true);
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.top = "-9999px";
+    iframe.style.left = "-9999px";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.style.visibility = "hidden";
+    iframe.src = blobUrl;
+
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow?.print();
+      } catch {
+        // Fallback kalau print iframe gagal (misal Firefox strict mode)
+        window.open(blobUrl, "_blank");
+      } finally {
+        // Cleanup iframe setelah jeda singkat (print dialog mungkin masih open)
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          setPrinting(false);
+        }, 2000);
+      }
+    };
+
+    iframe.onerror = () => {
+      document.body.removeChild(iframe);
+      setPrinting(false);
+      window.open(blobUrl, "_blank");
+    };
+
+    document.body.appendChild(iframe);
+  }, [blobUrl, printing]);
+
   if (!target) return null;
 
   return (
@@ -103,6 +149,20 @@ export function BookingPOPreviewModal({
           <div className="flex items-center justify-between gap-3">
             <DialogTitle className="truncate">Preview PO — {target.label}</DialogTitle>
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={!blobUrl || printing}
+                title="Cetak PDF"
+                className="h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center cursor-pointer bg-primary hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Cetak PDF"
+              >
+                {printing ? (
+                  <Refresh weight="BoldDuotone" className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground animate-spin" />
+                ) : (
+                  <Printer weight="BoldDuotone" className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
+                )}
+              </button>
               <button
                 type="button"
                 onClick={handleOpenNewTab}

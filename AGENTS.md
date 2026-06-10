@@ -460,6 +460,7 @@ Permission `(module, action)` tuples — kebab-case format:
 | `settings-payment-methods` | `view`, `create`, `edit`, `delete` |
 | `settings-role-permission` | `view`, `create`, `edit`, `delete` |
 | `settings-source-of-information` | `view`, `create`, `edit`, `delete` |
+| `settings-complimentary` | `view`, `create`, `edit`, `delete` |
 | `leads` | `view`, `create`, `edit`, `delete` |
 | `settings-lead-status` | `view`, `create`, `edit`, `delete` |
 | `quotations` | `view`, `create`, `edit`, `delete` |

@@ -87,6 +87,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola paket wedding",
   },
 
+  // ─── Complimentary ─────────────────────────────────────────────────────────
+  "/dashboard/complimentary": {
+    title: "Complimentary",
+    subtitle: "Kelola master item complimentary untuk booking",
+  },
+
   // ─── Vendors ───────────────────────────────────────────────────────────────
   "/dashboard/vendors": {
     title: "Vendors",

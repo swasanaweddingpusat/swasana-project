@@ -20,7 +20,8 @@ export const createMiceBookingSchema = z.object({
     .min(7, "Nomor terlalu pendek")
     .max(15, "Nomor terlalu panjang")
     .regex(/^\d+$/, "Nomor hanya boleh angka"),
-  email: z.string().trim().email("Format email tidak valid").optional().or(z.literal("")),
+  emailCpp: z.string().trim().email("Format email CPP tidak valid").optional().or(z.literal("")),
+  emailCpw: z.string().trim().email("Format email CPW tidak valid").optional().or(z.literal("")),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   eventTypeId: z.string().min(1, "Tipe event wajib dipilih"),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),

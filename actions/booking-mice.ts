@@ -98,7 +98,8 @@ export async function createMiceBooking(
                 id: customerId,
                 name: input.clientName,
                 mobileNumber: [{ number: input.clientPhone }],
-                email: input.email || "",
+                emailCpp: input.emailCpp || null,
+                emailCpw: input.emailCpw || null,
                 type: "mice",
                 memberStatus: "Non-Member",
                 sourceOfInformationId: input.sourceOfInformationId ?? null,
@@ -208,7 +209,8 @@ export async function updateMiceBooking(
     if (input.clientName !== undefined) customerUpdate.name = input.clientName;
     if (input.clientPhone !== undefined)
       customerUpdate.mobileNumber = [{ number: input.clientPhone }];
-    if (input.email !== undefined) customerUpdate.email = input.email || "";
+    if (input.emailCpp !== undefined) customerUpdate.emailCpp = input.emailCpp || null;
+    if (input.emailCpw !== undefined) customerUpdate.emailCpw = input.emailCpw || null;
     if (input.sourceOfInformationId !== undefined)
       customerUpdate.sourceOfInformationId = input.sourceOfInformationId ?? null;
     if (Object.keys(customerUpdate).length > 0) {

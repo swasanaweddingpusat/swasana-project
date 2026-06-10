@@ -7,7 +7,8 @@ export const bookingSchema = z.object({
   customerId: z.string().optional().default(""),
   customerName: z.string().optional().default(""),
   contactNumbers: z.string().optional().default(""),
-  contactEmail: z.string().optional().default(""),
+  contactEmailCpp: z.string().optional().default(""),
+  contactEmailCpw: z.string().optional().default(""),
   contactNikCpp: z.string().optional().default(""),
   contactNikCpw: z.string().optional().default(""),
   contactCppAddress: z.string().optional().default(""),
@@ -29,6 +30,15 @@ export const bookingSchema = z.object({
     description: z.string().optional().nullable(),
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
+  })).optional().default([]),
+  complimentaries: z.array(z.object({
+    complimentaryId: z.string().optional().nullable(),
+    name: z.string().min(1),
+    price: z.coerce.number().int().min(0).default(0),
+    isShowPrice: z.boolean().default(false),
+    description: z.string().optional().nullable(),
+    qty: z.coerce.number().int().min(1).default(1),
+    sortOrder: z.coerce.number().int().default(0),
   })).optional().default([]),
   categoryToggles: z.array(z.object({
     categoryName: z.string().min(1),
@@ -77,7 +87,8 @@ export const editBookingSchema = z.object({
   // Customer fields
   customerName: z.string().min(1, "Nama customer wajib diisi"),
   contactNumbers: z.string().optional().default(""),
-  contactEmail: z.string().optional().default(""),
+  contactEmailCpp: z.string().optional().default(""),
+  contactEmailCpw: z.string().optional().default(""),
   contactNikCpp: z.string().optional().default(""),
   contactNikCpw: z.string().optional().default(""),
   contactCppAddress: z.string().optional().default(""),
@@ -90,6 +101,15 @@ export const editBookingSchema = z.object({
     description: z.string().optional().nullable(),
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
+  })).optional().default([]),
+  complimentaries: z.array(z.object({
+    complimentaryId: z.string().optional().nullable(),
+    name: z.string().min(1),
+    price: z.coerce.number().int().min(0).default(0),
+    isShowPrice: z.boolean().default(false),
+    description: z.string().optional().nullable(),
+    qty: z.coerce.number().int().min(1).default(1),
+    sortOrder: z.coerce.number().int().default(0),
   })).optional().default([]),
   categoryToggles: z.array(z.object({
     categoryName: z.string().min(1),
@@ -105,6 +125,10 @@ export const editBookingSchema = z.object({
     amount: z.coerce.number().min(0),
     dueDate: z.string().min(1),
     sortOrder: z.coerce.number().int().default(0),
+    // Read-only status fields — sent by client for UI logic only.
+    // Server ALWAYS re-fetches from DB and ignores these for authorization.
+    paymentStatus: z.enum(["unpaid", "paid", "partial", "refund"]).optional(),
+    ackStatus: z.string().optional(),
   })).optional().default([]),
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),
@@ -116,7 +140,25 @@ export const approveBookingSchema = z.object({
   signatureManager: z.string().min(1, "Tanda tangan manager wajib diisi"),
 });
 
+/** Client-info-only update: updates snapCustomer + customer master WITHOUT touching
+ *  venue/package/TOP or triggering approval reset. Used by Step 1 "Save & Publish". */
+export const updateBookingClientInfoSchema = z.object({
+  id: z.string().min(1),
+  customerName: z.string().min(1, "Nama customer wajib diisi"),
+  contactNumbers: z.string().optional().default(""),
+  contactEmailCpp: z.string().optional().default(""),
+  contactEmailCpw: z.string().optional().default(""),
+  contactNikCpp: z.string().optional().default(""),
+  contactNikCpw: z.string().optional().default(""),
+  contactCppAddress: z.string().optional().default(""),
+  contactCpwAddress: z.string().optional().default(""),
+  contactBitrixId: z.string().optional().default(""),
+  salesId: z.string().optional().nullable(),
+  sourceOfInformationId: z.string().optional().nullable(),
+});
+
 export type BookingInput = z.infer<typeof bookingSchema>;
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 export type EditBookingInput = z.infer<typeof editBookingSchema>;
+export type UpdateBookingClientInfoInput = z.infer<typeof updateBookingClientInfoSchema>;
 export type ApproveBookingInput = z.infer<typeof approveBookingSchema>;

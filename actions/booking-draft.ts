@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
@@ -53,7 +53,7 @@ export interface UnfinishedDraft {
   updatedAt: Date;
 }
 
-/** Full step-1 detail for prefilling draft resume (includes Customer relation). */
+/** Full step-1..4 detail for prefilling draft resume (includes Customer relation and persisted draft state). */
 export interface DraftBookingDetail {
   id: string;
   customerName: string | null;
@@ -66,14 +66,42 @@ export interface DraftBookingDetail {
   eventTime: string | null;
   notes: string | null;
   sourceOfInformationId: string | null;
+  bookingDate: string | null;
+  paymentMethodId: string | null;
+  discountName: string | null;
+  discountAmount: number;
+  signingLocation: string | null;
+  withMaterai: boolean;
   // From Customer relation
   contactNumbers: Array<{ name: string; number: string }>;
-  contactEmail: string | null;
+  contactEmailCpp: string | null;
+  contactEmailCpw: string | null;
   contactNikCpp: string | null;
   contactNikCpw: string | null;
   contactCppAddress: string | null;
   contactCpwAddress: string | null;
   contactBitrixId: string | null;
+  // Persisted draft step 2/3 data
+  termOfPayments: Array<{
+    name: string;
+    amount: number;
+    dueDate: string;
+    sortOrder: number;
+    paymentStatus: "unpaid" | "paid" | "partial" | "refund";
+  }>;
+  draftCategoryToggles: Array<{
+    categoryName: string;
+    isTakeout: boolean;
+    takeoutNominal: number;
+  }>;
+  draftComplimentaries: Array<{
+    complimentaryId: string | null;
+    name: string;
+    price: number;
+    isShowPrice: boolean;
+    description: string | null;
+    qty: number;
+  }>;
 }
 
 // ─── Helper: build customer from draft input ──────────────────────────────────
@@ -171,7 +199,8 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
             id: customerId,
             name: leadRecord.name,
             mobileNumber: contactNums as Prisma.InputJsonValue,
-            email: leadRecord.email || "-@placeholder.com",
+            emailCpp: leadRecord.email || null,
+            emailCpw: null,
             ktpAddress: leadRecord.address ?? null,
             cppAddress: leadRecord.address ?? null,
             cpwAddress: null,
@@ -210,7 +239,8 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           id: customerId,
           name: input.customerName,
           mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? "") as Prisma.InputJsonValue,
-          email: input.contactEmail || "-@placeholder.com",
+          emailCpp: input.contactEmailCpp || null,
+          emailCpw: input.contactEmailCpw || null,
           cppNik: input.contactNikCpp || null,
           cpwNik: input.contactNikCpw || null,
           ktpAddress: null,
@@ -335,6 +365,12 @@ export async function updateDraftBookingStep2(
           packageId: input.packageId ?? null,
           discountName: input.specialBonusName ?? null,
           discountAmount: input.specialBonusAmount ?? 0,
+          draftCategoryToggles: (input.categoryToggles && input.categoryToggles.length > 0)
+            ? (input.categoryToggles as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          draftComplimentaries: (input.draftComplimentaries && input.draftComplimentaries.length > 0)
+            ? (input.draftComplimentaries as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         },
       }),
     ]);
@@ -604,7 +640,8 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
           bookingId: draftId,
           customerId: customer.id,
           name: customer.name,
-          email: customer.email,
+          emailCpp: customer.emailCpp ?? null,
+          emailCpw: customer.emailCpw ?? null,
           mobileNumber: mobileDisplay,
           cppNik: customer.cppNik,
           cpwNik: customer.cpwNik,
@@ -727,7 +764,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       }
     }
 
-    // 5. Add bonuses
+    // 5. Add bonuses (legacy vendor-based — kept for backward compat)
     if (input.bonuses && input.bonuses.length > 0) {
       ops.push(
         ...input.bonuses.map((bonus) =>
@@ -740,6 +777,26 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
               description: bonus.description ?? null,
               qty: bonus.qty,
               nominal: bonus.nominal ?? 0,
+            },
+          })
+        )
+      );
+    }
+
+    // 5b. Add complimentaries (new complimentary-based snap rows)
+    if (input.complimentaries && input.complimentaries.length > 0) {
+      ops.push(
+        ...input.complimentaries.map((c, i) =>
+          db.snapComplimentary.create({
+            data: {
+              bookingId: draftId,
+              complimentaryId: c.complimentaryId ?? null,
+              name: c.name,
+              price: c.price,
+              isShowPrice: c.isShowPrice,
+              description: c.description ?? null,
+              qty: c.qty,
+              sortOrder: c.sortOrder ?? i,
             },
           })
         )
@@ -961,16 +1018,35 @@ export async function getDraftBookingDetail(
       eventTime: true,
       notes: true,
       sourceOfInformationId: true,
+      bookingDate: true,
+      paymentMethodId: true,
+      discountName: true,
+      discountAmount: true,
+      signingLocation: true,
+      withMaterai: true,
+      draftCategoryToggles: true,
+      draftComplimentaries: true,
       customer: {
         select: {
           name: true,
           mobileNumber: true,
-          email: true,
+          emailCpp: true,
+          emailCpw: true,
           cppNik: true,
           cpwNik: true,
           cppAddress: true,
           cpwAddress: true,
           bitrixId: true,
+        },
+      },
+      termOfPayments: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          name: true,
+          amount: true,
+          dueDate: true,
+          sortOrder: true,
+          paymentStatus: true,
         },
       },
     },
@@ -990,10 +1066,41 @@ export async function getDraftBookingDetail(
       .filter((e) => e.number);
   }
 
-  // Strip placeholder email set during new-customer creation
-  const rawEmail = draft.customer?.email ?? null;
-  const contactEmail =
-    rawEmail && !rawEmail.endsWith("@placeholder.com") ? rawEmail : null;
+  // Parse draftCategoryToggles JSON → typed array
+  const rawToggles = draft.draftCategoryToggles;
+  let draftCategoryToggles: Array<{ categoryName: string; isTakeout: boolean; takeoutNominal: number }> = [];
+  if (Array.isArray(rawToggles)) {
+    draftCategoryToggles = (rawToggles as Array<Record<string, unknown>>)
+      .filter((e) => typeof e.categoryName === "string")
+      .map((e) => ({
+        categoryName: e.categoryName as string,
+        isTakeout: typeof e.isTakeout === "boolean" ? e.isTakeout : false,
+        takeoutNominal: typeof e.takeoutNominal === "number" ? e.takeoutNominal : 0,
+      }));
+  }
+
+  // Parse draftComplimentaries JSON → typed array
+  const rawComps = draft.draftComplimentaries;
+  let draftComplimentaries: Array<{
+    complimentaryId: string | null;
+    name: string;
+    price: number;
+    isShowPrice: boolean;
+    description: string | null;
+    qty: number;
+  }> = [];
+  if (Array.isArray(rawComps)) {
+    draftComplimentaries = (rawComps as Array<Record<string, unknown>>)
+      .filter((e) => typeof e.name === "string")
+      .map((e) => ({
+        complimentaryId: typeof e.complimentaryId === "string" ? e.complimentaryId : null,
+        name: e.name as string,
+        price: typeof e.price === "number" ? e.price : 0,
+        isShowPrice: typeof e.isShowPrice === "boolean" ? e.isShowPrice : false,
+        description: typeof e.description === "string" ? e.description : null,
+        qty: typeof e.qty === "number" ? e.qty : 1,
+      }));
+  }
 
   return {
     id: draft.id,
@@ -1007,13 +1114,29 @@ export async function getDraftBookingDetail(
     eventTime: draft.eventTime ?? null,
     notes: draft.notes ?? null,
     sourceOfInformationId: draft.sourceOfInformationId ?? null,
+    bookingDate: draft.bookingDate ? draft.bookingDate.toISOString() : null,
+    paymentMethodId: draft.paymentMethodId ?? null,
+    discountName: draft.discountName ?? null,
+    discountAmount: draft.discountAmount ?? 0,
+    signingLocation: draft.signingLocation ?? null,
+    withMaterai: draft.withMaterai ?? false,
     contactNumbers,
-    contactEmail,
+    contactEmailCpp: draft.customer?.emailCpp ?? null,
+    contactEmailCpw: draft.customer?.emailCpw ?? null,
     contactNikCpp: draft.customer?.cppNik ?? null,
     contactNikCpw: draft.customer?.cpwNik ?? null,
     contactCppAddress: draft.customer?.cppAddress ?? null,
     contactCpwAddress: draft.customer?.cpwAddress ?? null,
     contactBitrixId: draft.customer?.bitrixId ?? null,
+    termOfPayments: draft.termOfPayments.map((t) => ({
+      name: t.name,
+      amount: t.amount,
+      dueDate: t.dueDate.toISOString(),
+      sortOrder: t.sortOrder,
+      paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
+    })),
+    draftCategoryToggles,
+    draftComplimentaries,
   };
 }
 

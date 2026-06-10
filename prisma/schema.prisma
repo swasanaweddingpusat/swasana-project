@@ -459,7 +459,8 @@ model Customer {
   id           String    @id @default(uuid())
   name         String
   mobileNumber Json      @default("[]")
-  email        String
+  emailCpp     String?
+  emailCpw     String?
   cppNik       String?
   cpwNik       String?
   ktpAddress   String?
@@ -561,6 +562,11 @@ model Booking {
   packageId             String?
   paymentMethodId       String?
   sourceOfInformationId String?
+  // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
+  draftCategoryToggles  Json?                // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
+  draftComplimentaries  Json?                // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  // Tracks the active revision for approval step filtering (snapshot approach)
+  currentRevisionId     String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -571,6 +577,7 @@ model Booking {
   package             Package?             @relation(fields: [packageId], references: [id], onDelete: Restrict)
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
+  currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -583,7 +590,8 @@ model Booking {
   snapPackageVendorItems    SnapPackageVendorItem[]
   snapPackageCategoryPrices SnapPackageCategoryPrice[]
   snapBonuses               SnapBonus[]
-  snapVendorItems          SnapVendorItem[]
+  snapVendorItems           SnapVendorItem[]
+  snapComplimentaries       SnapComplimentary[]
 
   // Live relations
   termOfPayments    TermOfPayment[]
@@ -608,6 +616,7 @@ model Booking {
   @@index([bookingDate])
   @@index([category])
   @@index([eventDate])
+  @@index([currentRevisionId])
   @@map("bookings")
 }
 
@@ -636,6 +645,7 @@ model BookingRevision {
   booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   createdBy      Profile  @relation(fields: [createdById], references: [id], onDelete: Restrict)
   approvalSteps  ApprovalRecordStep[]
+  currentForBookings Booking[] @relation("BookingCurrentRevision")
 
   @@unique([bookingId, revisionNumber])
   @@index([bookingId])
@@ -650,7 +660,8 @@ model SnapCustomer {
   bookingId    String   @unique
   customerId   String
   name         String
-  email        String
+  emailCpp     String?
+  emailCpw     String?
   mobileNumber String
   cppNik       String?
   cpwNik       String?
@@ -772,6 +783,42 @@ model SnapBonus {
   @@index([bookingId])
   @@index([orderStatusId])
   @@map("snap_bonuses")
+}
+
+// ─── Complimentary Master ─────────────────────────────────────────────────────
+
+model Complimentary {
+  id            String              @id @default(uuid())
+  name          String              @unique
+  price         Int                 @default(0)
+  description   String?
+  isShowPrice   Boolean             @default(false)
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  snapComplimentaries SnapComplimentary[]
+
+  @@map("complimentaries")
+}
+
+model SnapComplimentary {
+  id                String         @id @default(uuid())
+  bookingId         String
+  complimentaryId   String?
+  name              String
+  price             Int            @default(0)
+  isShowPrice       Boolean        @default(false)
+  description       String?
+  qty               Int            @default(1)
+  sortOrder         Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  booking           Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  complimentary     Complimentary? @relation(fields: [complimentaryId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([complimentaryId])
+  @@map("snap_complimentaries")
 }
 
 model SnapVendorItem {

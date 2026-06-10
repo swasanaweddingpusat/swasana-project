@@ -49,13 +49,14 @@ async function main(): Promise<void> {
   // ── Helper: get or create a dummy customer ───────────────────────────────
 
   async function getOrCreateCustomer(name: string, idx: number) {
-    const email = `dummy.customer${idx}@swasana-dev.com`;
-    let cust = await prisma.customer.findFirst({ where: { email } });
+    const emailCpp = `dummy.customer${idx}@swasana-dev.com`;
+    let cust = await prisma.customer.findFirst({ where: { name } });
     if (!cust) {
       cust = await prisma.customer.create({
         data: {
           name,
-          email,
+          emailCpp,
+          emailCpw: null,
           mobileNumber: [`0812000000${idx}`],
           type: "Reguler",
           memberStatus: "Non-Member",

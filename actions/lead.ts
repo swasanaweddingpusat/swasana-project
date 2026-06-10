@@ -326,7 +326,8 @@ export async function convertLead(leadId: string) {
     const customer = await db.customer.create({
       data: {
         name: lead.name,
-        email: lead.email ?? "",
+        emailCpp: lead.email || null,
+        emailCpw: null,
         mobileNumber: mobileNumberJson,
         type: "Personal",
         memberStatus: "Non-Member",
