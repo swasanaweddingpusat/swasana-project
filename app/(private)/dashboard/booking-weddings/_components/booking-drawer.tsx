@@ -239,6 +239,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // While hasPendingWriteError is true the Continue/Submit button is blocked.
   const [hasPendingWriteError, setHasPendingWriteError] = useState(false);
   const [pendingWriteErrorMsg, setPendingWriteErrorMsg] = useState<string | null>(null);
+  // Guards the entire final-submit window (mutation + evidence upload + drawer close)
+  // so the button stays disabled even after the mutation's isPending flips back to false.
+  // Prevents a double-click from creating two bookings.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // Holds the retry thunk for the last failed background save — calling it re-fires the save.
   const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
@@ -472,6 +476,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       setShowResumePrompt(false);
       setHasPendingWriteError(false);
       setPendingWriteErrorMsg(null);
+      setIsSubmitting(false);
       retryWriteRef.current = null;
 
       // Deal flow: initialDraftId injected — resume that draft, no resume prompt.
@@ -1107,7 +1112,20 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     }
   };
 
-  async function onSubmit(values: BookingInput) {
+  // Wrapper: blocks re-entry and keeps the submit button disabled across the
+  // whole flow (mutation + evidence upload + close), not just while the
+  // mutation isPending. On success the drawer closes; on failure we re-enable.
+  async function onSubmit(values: BookingInput): Promise<void> {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await runSubmit(values);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function runSubmit(values: BookingInput): Promise<void> {
     // If we have a draftId, use finalize flow
     if (draftId) {
       // Persist step 4 data (signingLocation + signatureSales) to draft first.
@@ -1264,7 +1282,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 5 && isDraftMutating);
+    (currentStep === 5 && isDraftMutating) ||
+    (currentStep === 5 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
