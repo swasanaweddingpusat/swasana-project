@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -71,15 +71,12 @@ export function AddProcurementDrawer({
 
   const buktiBelUrl = watch("buktiBelUrl");
 
-  // Reset form when drawer opens/closes
-  const prevOpen = useRef(false);
-  if (open !== prevOpen.current) {
-    prevOpen.current = open;
+  useEffect(() => {
     if (!open) {
       reset();
       setUploadFile(null);
     }
-  }
+  }, [open, reset]);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
