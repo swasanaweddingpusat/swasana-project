@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 
 const bookingListInclude = {
   snapCustomer: { select: { name: true, mobileNumber: true } },
+  // Drafts have no snapshot yet — fall back to the live customer for display.
+  customer: { select: { name: true, mobileNumber: true } },
   snapVenue: { select: { venueName: true, brandCode: true } },
   snapPackage: { select: { packageName: true } },
   snapPackagePricing: { select: { packageName: true, pax: true, price: true, fullPrice: true, margin: true } },
