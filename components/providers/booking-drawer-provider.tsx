@@ -11,7 +11,7 @@ interface BookingDrawerContextValue {
 const BookingDrawerContext = createContext<BookingDrawerContextValue | null>(null);
 
 export function BookingDrawerProvider({ children }: { children: ReactNode }) {
-  const { open, setOpen, openDrawer, handleSuccess } = useDrawerController();
+  const { open, setOpen, openDrawer, handleSuccess, pendingDraftId, pendingResumeMode } = useDrawerController();
 
   return (
     <BookingDrawerContext.Provider value={{ openBookingDrawer: openDrawer }}>
@@ -21,6 +21,8 @@ export function BookingDrawerProvider({ children }: { children: ReactNode }) {
           open={open}
           onOpenChange={setOpen}
           onSuccess={handleSuccess}
+          initialDraftId={pendingResumeMode ? undefined : (pendingDraftId ?? null)}
+          resumeDraftId={pendingResumeMode ? (pendingDraftId ?? null) : null}
         />
       )}
     </BookingDrawerContext.Provider>

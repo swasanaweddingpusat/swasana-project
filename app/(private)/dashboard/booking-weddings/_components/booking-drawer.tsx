@@ -66,9 +66,18 @@ interface BookingDrawerProps {
   prefillLead?: BookingPrefillLead | null;
   /**
    * When provided (Deal flow), the drawer resumes this existing draft instead of
-   * creating a new one on Step 1 "Continue". Skips the resume prompt entirely.
+   * creating a new one on Step 1 "Continue". Skips the resume prompt entirely
+   * and forces step 3.
    */
   initialDraftId?: string | null;
+  /**
+   * When provided (resume from booking table), the drawer immediately triggers
+   * the data-driven resume flow: fetches the draft, prefills all fields, and
+   * advances to the step appropriate for the draft's data — without showing the
+   * in-drawer resume prompt (the user already chose to resume by clicking the row).
+   * Unlike `initialDraftId`, this does NOT force step 3.
+   */
+  resumeDraftId?: string | null;
 }
 
 type Option = { id: string; name: string };
@@ -218,7 +227,7 @@ function clearWeddingDraftFromStorage() {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, initialDraftId }: BookingDrawerProps) {
+export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, initialDraftId, resumeDraftId }: BookingDrawerProps) {
   // Keep legacy createBooking for backwards compat (used as final fallback if draft flow fails)
   const createMut = useCreateBooking();
   const createDraftMut = useCreateDraftBooking();
@@ -549,6 +558,18 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
+      // Resume from table: resumeDraftId injected by the table row click.
+      // Bypass the in-drawer resume prompt — user already chose to resume.
+      // Reuse the pendingResumeDraftId path so the existing resumeDraftDetail
+      // useEffect does all the prefill + step navigation (data-driven, not forced).
+      if (resumeDraftId) {
+        resetToClean();
+        setDraftId(resumeDraftId);
+        saveWeddingDraftToStorage(resumeDraftId);
+        setPendingResumeDraftId(resumeDraftId);
+        return;
+      }
+
       // Clean slate — check localStorage for a draft pointer from a previous session.
       // If found, it means the user had an active draft and refreshed the page.
       // We don't prefill form fields from localStorage (data stays in DB); we just
@@ -572,11 +593,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // to continue or discard.
   // Skip if initialDraftId was injected by the Deal flow (that IS the draft to use
   // and the user already confirmed it from the Deal modal).
+  // Also skip if resumeDraftId is set (user explicitly chose the draft from the table).
   useEffect(() => {
-    if (open && !prefillLead && !initialDraftId && unfinishedDraft) {
+    if (open && !prefillLead && !initialDraftId && !resumeDraftId && unfinishedDraft) {
       setShowResumePrompt(true);
     }
-  }, [open, prefillLead, initialDraftId, unfinishedDraft]);
+  }, [open, prefillLead, initialDraftId, resumeDraftId, unfinishedDraft]);
 
   // Note: localStorage auto-save draft removed — DB-backed draft is created on Step 1 "Continue".
   // Draft ID is tracked in `draftId` state and updated per step.

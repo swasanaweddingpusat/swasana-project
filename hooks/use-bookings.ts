@@ -10,6 +10,7 @@ interface BookingsParams {
   pageSize: number;
   search: string;
   venueId?: string;
+  recordStatus?: "saved" | "draft" | "all";
 }
 
 async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
@@ -18,6 +19,7 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
     pageSize: String(params.pageSize),
     ...(params.search ? { search: params.search } : {}),
     ...(params.venueId ? { venueId: params.venueId } : {}),
+    ...(params.recordStatus ? { recordStatus: params.recordStatus } : {}),
   });
   const res = await fetch(`/api/bookings?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch bookings");
@@ -25,9 +27,14 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
 }
 
 export function useBookings(params: BookingsParams, initialData?: BookingsResult) {
-  const isDefaultQuery = params.page === 1 && !params.search && !params.venueId;
+  // "saved" is the implicit default — treat it like no filter so SSR initialData is reused.
+  const isDefaultQuery =
+    params.page === 1 &&
+    !params.search &&
+    !params.venueId &&
+    (!params.recordStatus || params.recordStatus === "saved");
   return useQuery({
-    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId],
+    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved"],
     queryFn: () => fetchBookings(params),
     initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,
