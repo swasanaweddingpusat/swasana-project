@@ -67,8 +67,7 @@ export function ProcurementClient({
     }
   }
 
-  const deleteItemName =
-    data?.items.find((i) => i.id === deleteId)?.namaBarang ?? "";
+  const deleteItemName = deleteId ? (findItem(deleteId)?.namaBarang ?? "") : "";
 
   return (
     <div className="space-y-6">
