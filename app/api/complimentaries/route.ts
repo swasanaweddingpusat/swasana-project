@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!apiLimiter.check(`complimentaries:${session.user.id}`)) return rateLimitResponse();
 
-  const { response } = await requirePermissionForRoute({ module: "settings-complimentary", action: "view" });
+  const { response } = await requirePermissionForRoute({ module: "complimentary", action: "view" });
   if (response) return response;
 
   const { searchParams } = new URL(req.url);

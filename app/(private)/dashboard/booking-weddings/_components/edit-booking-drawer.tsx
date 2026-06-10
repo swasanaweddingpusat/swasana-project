@@ -229,7 +229,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const { data: complimentaryData } = useComplimentaries({ activeOnly: true });
   const complimentaryOptions = complimentaryData?.items ?? [];
   const { can: canPermission, isAdmin: isPermAdmin } = usePermissions();
-  const canCreateComplimentary = canPermission("settings-complimentary", "create") || isPermAdmin;
+  const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
 
   const isBitrixSource = sources.find((o) => o.id === sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
 

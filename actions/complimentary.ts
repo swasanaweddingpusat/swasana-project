@@ -15,7 +15,7 @@ import {
 export async function createComplimentary(
   input: CreateComplimentaryInput
 ): Promise<{ success: boolean; item?: { id: string; name: string; price: number; isShowPrice: boolean; description: string | null }; error?: string }> {
-  const { session, error } = await requirePermission({ module: "settings-complimentary", action: "create" });
+  const { session, error } = await requirePermission({ module: "complimentary", action: "create" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`complimentary-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -56,7 +56,7 @@ export async function updateComplimentary(
   id: string,
   input: UpdateComplimentaryInput
 ): Promise<{ success: boolean; item?: { id: string; name: string; price: number; isShowPrice: boolean; description: string | null; isActive: boolean }; error?: string }> {
-  const { session, error } = await requirePermission({ module: "settings-complimentary", action: "edit" });
+  const { session, error } = await requirePermission({ module: "complimentary", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`complimentary-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -98,7 +98,7 @@ export async function updateComplimentary(
 export async function deleteComplimentary(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { session, error } = await requirePermission({ module: "settings-complimentary", action: "delete" });
+  const { session, error } = await requirePermission({ module: "complimentary", action: "delete" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`complimentary-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

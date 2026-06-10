@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ComplimentaryPage() {
-  await requirePagePermission("settings-complimentary");
+  await requirePagePermission("complimentary");
   return (
     <Suspense fallback={<ComplimentaryLoading />}>
       <ComplimentaryContent />
