@@ -85,7 +85,7 @@ export interface PaginatedBookings {
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all" },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
@@ -96,7 +96,8 @@ export async function getBookings(
     rs === "draft" ? { recordStatus: "draft" } :
     rs === "all" ? {} :
     { recordStatus: "saved" };
-  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter };
+  const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo);
+  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...dateFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
@@ -130,6 +131,16 @@ function buildSearchFilter(search?: string): Prisma.BookingWhereInput {
       { sourceOfInformation: { name: { contains: q, mode: "insensitive" } } },
     ],
   };
+}
+
+function buildDateFilter(dateFrom?: string, dateTo?: string): Prisma.BookingWhereInput {
+  if (!dateFrom && !dateTo) return {};
+  // dateFrom/dateTo are full ISO instants (local day start/end) computed client-side.
+  const gte = dateFrom ? new Date(dateFrom) : undefined;
+  const lte = dateTo ? new Date(dateTo) : undefined;
+  if (gte && lte) return { bookingDate: { gte, lte } };
+  if (gte) return { bookingDate: { gte } };
+  return { bookingDate: { lte: lte! } };
 }
 
 async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
