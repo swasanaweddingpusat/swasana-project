@@ -55,7 +55,7 @@ export function ProcurementDetailDrawer({
   open,
   onOpenChange,
   item,
-}: ProcurementDetailDrawerProps) {
+}: ProcurementDetailDrawerProps): JSX.Element | null {
   if (!item) return null;
 
   const cfg = STATUS_CONFIG[item.status] ?? {
