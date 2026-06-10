@@ -36,7 +36,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-quotation-templates": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
-  "settings-complimentary": ["view", "create", "edit", "delete"],
+  complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
   leads: ["view", "create", "edit", "delete"],
   "settings-lead-status": ["view", "create", "edit", "delete"],
@@ -77,7 +77,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    "settings-complimentary": ["view", "create", "edit", "delete"],
+    complimentary: ["view", "create", "edit", "delete"],
   },
   // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
@@ -92,11 +92,11 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     leads: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    "settings-complimentary": ["view", "create", "edit", "delete"],
     maintenance: ["view", "create", "edit", "delete"],
     "settings-maintenance-category": ["view", "create", "edit", "delete"],
     "settings-maintenance-priority": ["view", "create", "edit", "delete"],
     "settings-maintenance-status": ["view", "create", "edit", "delete"],
+    complimentary: ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -125,11 +125,11 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     groups: ["view"],
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
-    leads: ["view", "create", "edit"],
+    // leads intentionally removed for now — only sales-mice keeps leads access.
     // quotations intentionally removed — sales role no longer has quotation access.
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
     // but master data management (edit/delete) is reserved for direktur-sales and above.
-    "settings-complimentary": ["view", "create"],
+    complimentary: ["view", "create"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -149,7 +149,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     leads: ["view", "create", "edit", "delete"],
     // view+create only: same rationale as sales — operational access to pick/create
     // complimentary entries, master data management stays with direktur-sales and above.
-    "settings-complimentary": ["view", "create"],
+    complimentary: ["view", "create"],
   },
   // MICE manager: MICE features (leads, quotations, booking-mice) + groups,
   // customers, and event-types settings. No wedding booking, no finance/package/vendor.
@@ -180,6 +180,7 @@ const REMOVED_MODULES = [
   "settings-groups", // renamed → "groups" (code uses module "groups", not "settings-groups")
   "settings-approval-flow", // approval flow is now hardcoded, no longer a DB-driven setting
   "approval", // approve/reject authorization handled by role-matching in approval flow (manager → finance), not a permission toggle
+  "settings-complimentary", // renamed → "complimentary" (now a top-level module, not under settings)
 ];
 
 // ── Main Seeder ──────────────────────────────────────────────────────

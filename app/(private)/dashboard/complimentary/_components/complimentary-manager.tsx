@@ -151,7 +151,7 @@ export function ComplimentaryManager({ initialData }: Props) {
                 >
                   <Refresh weight="BoldDuotone" className={cn("w-4", "h-4", refreshing && "animate-spin")} />
                 </Button>
-                {(can("settings-complimentary", "create") || isAdmin) && (
+                {(can("complimentary", "create") || isAdmin) && (
                   <Button onClick={handleOpenAdd} className={cn("cursor-pointer", "rounded-xl")}>
                     <AddCircle weight="BoldDuotone" className={cn("w-4", "h-4", "mr-2")} /> Tambah
                   </Button>
@@ -171,12 +171,12 @@ export function ComplimentaryManager({ initialData }: Props) {
                         <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
                         <div className="flex items-center gap-1 shrink-0">
                           {!item.isActive && <Badge variant="secondary" className="text-xs">Nonaktif</Badge>}
-                          {(can("settings-complimentary", "edit") || isAdmin) && (
+                          {(can("complimentary", "edit") || isAdmin) && (
                             <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
                               <PenNewSquare weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
                             </button>
                           )}
-                          {(can("settings-complimentary", "delete") || isAdmin) && (
+                          {(can("complimentary", "delete") || isAdmin) && (
                             <button onClick={() => setDeleteTarget(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
                               <TrashBinTrash weight="BoldDuotone" className={cn("w-4", "h-4", "text-destructive")} />
                             </button>
@@ -245,12 +245,12 @@ export function ComplimentaryManager({ initialData }: Props) {
                         </TableCell>
                         <TableCell>
                           <div className={cn("flex", "items-center", "gap-1", "justify-end", "pr-2")}>
-                            {(can("settings-complimentary", "edit") || isAdmin) && (
+                            {(can("complimentary", "edit") || isAdmin) && (
                               <button onClick={() => handleOpenEdit(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Edit">
                                 <PenNewSquare weight="BoldDuotone" className={cn("w-4", "h-4", "text-muted-foreground")} />
                               </button>
                             )}
-                            {(can("settings-complimentary", "delete") || isAdmin) && (
+                            {(can("complimentary", "delete") || isAdmin) && (
                               <button onClick={() => setDeleteTarget(item)} className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")} aria-label="Hapus">
                                 <TrashBinTrash weight="BoldDuotone" className={cn("w-4", "h-4", "text-destructive")} />
                               </button>

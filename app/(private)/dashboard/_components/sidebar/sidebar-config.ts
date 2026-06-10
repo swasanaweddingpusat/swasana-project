@@ -181,7 +181,7 @@ export const navItems: NavItem[] = [
     name: "Complimentary",
     href: "/dashboard/complimentary",
     icon: Gift,
-    permission: { module: "settings-complimentary", action: "view" },
+    permission: { module: "complimentary", action: "view" },
   },
   {
     name: "Vendor",

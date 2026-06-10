@@ -401,7 +401,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     });
   }
 
-  const canCreateComplimentary = canPermission("settings-complimentary", "create") || isPermAdmin;
+  const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
 
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   // Track COLLAPSED terms — default empty = semua kebuka
