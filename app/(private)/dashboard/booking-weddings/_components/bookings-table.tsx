@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, Wallet as WalletMinimal, SettingsMinimalistic as Settings2, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
 const RefreshCw = Refresh;
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -25,8 +25,6 @@ import { generateAgreementToken } from "@/actions/client-agreement";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
-import { EditTopDrawer } from "./edit-top-drawer";
-import { EditTakeoutDrawer } from "./edit-takeout-drawer";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "./booking-po-preview-modal";
 import { BookingCommentPanel } from "./booking-comment-panel";
@@ -170,9 +168,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
-  const [takeoutTarget, setTakeoutTarget] = useState<BookingListItem | null>(null);
-
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
     queryFn: async () => {
@@ -347,16 +342,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => setTopTarget(booking)}>
-              <WalletMinimal weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term of Payment
-            </DropdownMenuItem>
-            {can("booking", "edit") &&
-              booking.snapPackageCategoryPrices &&
-              booking.snapPackageCategoryPrices.length > 0 && (
-              <DropdownMenuItem className="cursor-pointer" onClick={() => setTakeoutTarget(booking)}>
-                <Settings2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Takeout
-              </DropdownMenuItem>
-            )}
             {can("booking", "transfer") && (
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
               <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Booking
@@ -1196,64 +1181,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-
-      {/* Edit Term of Payment */}
-      {topTarget && (
-        <EditTopDrawer
-          isOpen={!!topTarget}
-          onClose={() => { setTopTarget(null); refetch(); }}
-          bookingId={topTarget.id}
-          customerName={topTarget.snapCustomer?.name ?? ""}
-          initialTerms={(topTarget.termOfPayments ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            amount: Number(t.amount),
-            dueDate: new Date(t.dueDate).toISOString(),
-            sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-            ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
-            paymentEvidence: t.paymentEvidence ?? null,
-            notes: t.notes,
-            partialPayments: "partialPayments" in t
-              ? (t as { partialPayments?: { id: string; amount: number; paidAt: Date; evidence: string | null; notes: string | null }[] }).partialPayments
-              : undefined,
-          }))}
-          packagePrice={Number(topTarget.snapPackagePricing?.price ?? 0)}
-          discountName={topTarget.discountName ?? null}
-          discountAmount={topTarget.discountAmount ?? 0}
-        />
-      )}
-
-      {/* Edit Set Takeout */}
-      {takeoutTarget && (
-        <EditTakeoutDrawer
-          isOpen={!!takeoutTarget}
-          onClose={() => { setTakeoutTarget(null); refetch(); }}
-          bookingId={takeoutTarget.id}
-          customerName={takeoutTarget.snapCustomer?.name ?? ""}
-          initialCategories={(takeoutTarget.snapPackageCategoryPrices ?? []).map((c) => ({
-            id: c.id,
-            categoryName: c.categoryName,
-            basePrice: Number(c.basePrice),
-            sortOrder: c.sortOrder,
-            isShow: c.isShow,
-            isTakeout: c.isTakeout,
-            takeoutNominal: Number(c.takeoutNominal ?? 0),
-          }))}
-          initialTerms={(takeoutTarget.termOfPayments ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            amount: Number(t.amount),
-            dueDate: new Date(t.dueDate).toISOString(),
-            sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-            ackStatus: ("ackStatus" in t ? (t as { ackStatus?: string | null }).ackStatus : null) ?? null,
-            paymentEvidence: t.paymentEvidence ?? null,
-            notes: t.notes,
-          }))}
-          fullPrice={Number(takeoutTarget.snapPackagePricing?.fullPrice ?? 0)}
-        />
-      )}
 
       {/* PO Preview (modal — works before approval, no new tab) */}
       <BookingPOPreviewModal
