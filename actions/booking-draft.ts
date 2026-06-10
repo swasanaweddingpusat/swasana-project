@@ -283,6 +283,38 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
       if (existing.recordStatus !== "draft") {
         return { success: false, error: "Booking dengan ID tersebut sudah difinalisasi." };
       }
+      // Resume + edit: the draft already exists, so persist any step-1/step-2
+      // changes (event date, venue, package, session, type, time, note, discount)
+      // instead of the previous no-op early return that silently dropped edits.
+      await db.$transaction([
+        db.booking.update({
+          where: { id: draftId },
+          data: {
+            bookingDate: new Date(input.bookingDate),
+            salesId,
+            managerId,
+            customerId,
+            venueId: input.venueId,
+            packageId: input.packageId ?? null,
+            sourceOfInformationId: input.sourceOfInformationId ?? null,
+            weddingSession: input.weddingSession ?? null,
+            weddingType: input.weddingType ?? null,
+            eventTime: input.eventTime ?? null,
+            notes: input.notes ?? null,
+            discountName: input.specialBonusName ?? null,
+            discountAmount: input.specialBonusAmount ?? 0,
+          },
+        }),
+      ]);
+      await logAudit({
+        userId: session!.user.id,
+        action: "booking.draft_updated",
+        entityType: "booking",
+        entityId: draftId,
+        changes: { venueId: input.venueId, bookingDate: input.bookingDate },
+        description: `Updated booking draft for ${input.customerName ?? customerId}`,
+      });
+      revalidateTag("bookings", "max");
       return { success: true, draftId };
     }
 
