@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { deleteFromR2, getPublicUrl } from "@/lib/r2";
 import { getNextSequence } from "@/lib/counter";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
@@ -84,11 +85,14 @@ export interface DraftBookingDetail {
   contactBitrixId: string | null;
   // Persisted draft step 2/3 data
   termOfPayments: Array<{
+    id: string;
     name: string;
     amount: number;
     dueDate: string;
     sortOrder: number;
     paymentStatus: "unpaid" | "paid" | "partial" | "refund";
+    /** Stored R2 key. Caller should call getPublicUrl(key) to get a displayable URL. */
+    paymentEvidence: string | null;
   }>;
   draftCategoryToggles: Array<{
     categoryName: string;
@@ -407,8 +411,29 @@ export async function updateDraftBookingStep3(
     });
     if (!draftCheck) return { success: false, error: "Draft tidak ditemukan." };
 
-    // Replace term of payments atomically — delete existing, insert new ones.
-    // Invoice numbers are NOT generated yet (only on finalize).
+    // Upsert terms by sortOrder so IDs remain stable (evidence keys stay linked).
+    // - Existing term with matching sortOrder → UPDATE (preserve paymentEvidence).
+    // - New sortOrder in payload → CREATE.
+    // - Existing term whose sortOrder is gone from payload → DELETE (+ R2 cleanup).
+    const existingTerms = await db.termOfPayment.findMany({
+      where: { bookingId: draftId },
+      select: { id: true, sortOrder: true, paymentEvidence: true },
+    });
+
+    const incomingOrders = new Set((input.termOfPayments ?? []).map((t, i) => t.sortOrder ?? i));
+    const toDelete = existingTerms.filter((e) => !incomingOrders.has(e.sortOrder));
+
+    // Fire-and-forget: best-effort cleanup of R2 orphans for removed terms.
+    // We do this OUTSIDE the transaction because R2 is not transactional — a
+    // partial R2 failure must not rollback the DB writes.
+    void Promise.allSettled(
+      toDelete
+        .filter((e) => e.paymentEvidence)
+        .map((e) => deleteFromR2(e.paymentEvidence!).catch((err: unknown) => {
+          console.error("[updateDraftBookingStep3] Failed to delete R2 orphan", e.paymentEvidence, err);
+        }))
+    );
+
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.booking.update({
         where: { id: draftId },
@@ -418,15 +443,39 @@ export async function updateDraftBookingStep3(
           discountAmount: input.specialBonusAmount ?? 0,
         },
       }),
-      db.termOfPayment.deleteMany({ where: { bookingId: draftId } }),
-      ...(input.termOfPayments ?? []).map((t, i) =>
-        db.termOfPayment.create({
+      // Delete terms that no longer exist in payload
+      ...(toDelete.length > 0
+        ? [db.termOfPayment.deleteMany({ where: { id: { in: toDelete.map((e) => e.id) } } })]
+        : []),
+      // Upsert each incoming term by sortOrder
+      ...(input.termOfPayments ?? []).map((t, i) => {
+        const effectiveSortOrder = t.sortOrder ?? i;
+        const existing = existingTerms.find((e) => e.sortOrder === effectiveSortOrder);
+        if (existing) {
+          return db.termOfPayment.update({
+            where: { id: existing.id },
+            data: {
+              name: t.name,
+              amount: t.amount,
+              dueDate: new Date(t.dueDate),
+              sortOrder: effectiveSortOrder,
+              paymentStatus: (t.paymentStatus ?? "unpaid") as
+                | "unpaid"
+                | "paid"
+                | "partial"
+                | "refund",
+              // Preserve existing paymentEvidence — never overwrite with null from
+              // a payload that doesn't carry evidence (evidence is uploaded separately).
+            },
+          });
+        }
+        return db.termOfPayment.create({
           data: {
             bookingId: draftId,
             name: t.name,
             amount: t.amount,
             dueDate: new Date(t.dueDate),
-            sortOrder: t.sortOrder ?? i,
+            sortOrder: effectiveSortOrder,
             paymentStatus: (t.paymentStatus ?? "unpaid") as
               | "unpaid"
               | "paid"
@@ -434,8 +483,8 @@ export async function updateDraftBookingStep3(
               | "refund",
             // invoiceNumber stays null until finalize
           },
-        })
-      ),
+        });
+      }),
     ];
 
     await db.$transaction(ops);
@@ -1067,11 +1116,13 @@ export async function getDraftBookingDetail(
       termOfPayments: {
         orderBy: { sortOrder: "asc" },
         select: {
+          id: true,
           name: true,
           amount: true,
           dueDate: true,
           sortOrder: true,
           paymentStatus: true,
+          paymentEvidence: true,
         },
       },
     },
@@ -1154,11 +1205,15 @@ export async function getDraftBookingDetail(
     contactCpwAddress: draft.customer?.cpwAddress ?? null,
     contactBitrixId: draft.customer?.bitrixId ?? null,
     termOfPayments: draft.termOfPayments.map((t) => ({
+      id: t.id,
       name: t.name,
       amount: t.amount,
       dueDate: t.dueDate.toISOString(),
       sortOrder: t.sortOrder,
       paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
+      // Transform stored R2 key → public URL for the drawer to display.
+      // Null when no evidence has been uploaded yet.
+      paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
     })),
     draftCategoryToggles,
     draftComplimentaries,

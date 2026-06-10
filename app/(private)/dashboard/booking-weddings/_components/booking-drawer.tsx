@@ -100,7 +100,18 @@ interface PackageData {
 }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
-interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: "unpaid" | "paid" | "partial" | "refund"; paymentEvidence?: File | null }
+interface TermRow {
+  name: string;
+  amount: number;
+  dueDate: string;
+  sortOrder: number;
+  paymentStatus: "unpaid" | "paid" | "partial" | "refund";
+  /** File = newly selected by user (not yet uploaded).
+   *  string = URL from DB (already uploaded). null = no evidence. */
+  paymentEvidence?: File | string | null;
+  /** DB term id — present once the draft term has been persisted. Used for upload. */
+  termId?: string | null;
+}
 
 const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
 
@@ -133,6 +144,13 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
+}
+
+function UrlPreview({ url, onOpen }: { url: string; onOpen: () => void }) {
+  const isImage = /\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(url);
+  if (!isImage) return null;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
@@ -252,6 +270,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // so the button stays disabled even after the mutation's isPending flips back to false.
   // Prevents a double-click from creating two bookings.
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Tracks in-flight evidence uploads at step 4 → 5 transition.
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   // Holds the retry thunk for the last failed background save — calling it re-fires the save.
   const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
@@ -467,6 +487,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setPendingResumeDraftId(null);
     setHasPendingWriteError(false);
     setPendingWriteErrorMsg(null);
+    setIsUploadingEvidence(false);
     retryWriteRef.current = null;
     // Reset term customisation guard so a fresh allocation runs on the next package pick.
     setUserHasCustomizedTerms(false);
@@ -686,9 +707,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     visibleCategories.length === 0 ||
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
+  // Evidence is considered present when it's a File (newly picked) OR a string URL (already uploaded).
   const allPaidTermsHaveEvidence = terms
     .filter(t => (t.paymentStatus ?? "unpaid") === "paid")
-    .every(t => t.paymentEvidence instanceof File);
+    .every(t => t.paymentEvidence instanceof File || typeof t.paymentEvidence === "string");
   // Step 4 complete: term of payments
   const isStep4Complete = !!wPaymentMethodId && (
     getBasePrice() === 0 || (
@@ -831,6 +853,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         dueDate: t.dueDate,
         sortOrder: t.sortOrder,
         paymentStatus: t.paymentStatus,
+        // Restore persisted evidence (URL string) so the uploader shows it on resume.
+        paymentEvidence: t.paymentEvidence ?? null,
+        // Track stable DB id for evidence upload at step 4→5.
+        termId: t.id,
       })));
       // Mark terms as user-customized so future allocatePrice calls use preserveFixed
       setUserHasCustomizedTerms(true);
@@ -1076,7 +1102,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 4 → 5: Term of Payments — optimistic advance, save terms in background ──
+    // ── Step 4 → 5: Term of Payments ──────────────────────────────────────────
+    // Flow:
+    //   1. Validate (first term, diff check).
+    //   2. Save step-3 data to draft (background, awaited before advancing).
+    //   3. Upload any File evidence to R2 — refetch termIds from the freshly-saved
+    //      draft so IDs are stable. Set state to URL string on success.
+    //   4. Advance to step 5.
     if (currentStep === 4) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
@@ -1093,8 +1125,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
-      // Advance immediately (optimistic)
-      setCurrentStep(5);
+      const hasNewFiles = terms.some((t) => t.paymentEvidence instanceof File);
 
       if (draftId) {
         const step3Payload = {
@@ -1110,17 +1141,88 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           })),
         };
         const capturedDraftId = draftId;
-        const prev = step3SaveInFlightRef.current;
-        const savePromise = backgroundSave(
-          async () => {
-            if (prev) await prev.catch(() => undefined);
-            return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
-          },
-          "Gagal menyimpan term of payment",
-        );
-        step3SaveInFlightRef.current = savePromise;
+
+        if (hasNewFiles) {
+          // Await step-3 save first so term IDs are stable, then upload evidence.
+          setIsUploadingEvidence(true);
+          try {
+            const prev = step3SaveInFlightRef.current;
+            const savePromise = backgroundSave(
+              async () => {
+                if (prev) await prev.catch(() => undefined);
+                return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
+              },
+              "Gagal menyimpan term of payment",
+            );
+            step3SaveInFlightRef.current = savePromise;
+            await savePromise;
+
+            if (hasPendingWriteError) {
+              // Step-3 save failed even after retry — block advance
+              setIsUploadingEvidence(false);
+              return;
+            }
+
+            // Fetch current term IDs from DB (stable after upsert)
+            const dbTermsRes = await fetch(`/api/bookings/${capturedDraftId}/terms`);
+            let termIdMap: Array<{ id: string; sortOrder: number }> = [];
+            if (dbTermsRes.ok) {
+              termIdMap = await dbTermsRes.json() as Array<{ id: string; sortOrder: number }>;
+            }
+
+            // Upload each new File in parallel
+            const uploads = await Promise.allSettled(
+              terms
+                .filter((t) => t.paymentEvidence instanceof File)
+                .map(async (t) => {
+                  const termId = termIdMap.find((r) => r.sortOrder === t.sortOrder)?.id ?? t.termId;
+                  if (!termId) return { sortOrder: t.sortOrder, url: null };
+                  const fd = new FormData();
+                  fd.append("termId", termId);
+                  fd.append("file", t.paymentEvidence as File);
+                  const res = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+                  if (!res.ok) throw new Error(`Upload failed for term sortOrder ${t.sortOrder}`);
+                  const json = await res.json() as { filePath: string };
+                  return { sortOrder: t.sortOrder, url: json.filePath };
+                })
+            );
+
+            // Update state: replace File with URL string on success
+            setTerms((prev) => prev.map((t) => {
+              if (!(t.paymentEvidence instanceof File)) return t;
+              const result = uploads.find(
+                (u) => u.status === "fulfilled" && u.value.sortOrder === t.sortOrder
+              );
+              if (result?.status === "fulfilled" && result.value.url) {
+                return { ...t, paymentEvidence: result.value.url };
+              }
+              return t;
+            }));
+
+            const failed = uploads.filter((u) => u.status === "rejected");
+            if (failed.length > 0) {
+              toast.error("Beberapa bukti bayar gagal di-upload. Silakan coba lagi.");
+              setIsUploadingEvidence(false);
+              return;
+            }
+          } finally {
+            setIsUploadingEvidence(false);
+          }
+        } else {
+          // No new files — just save step-3 in background as before
+          const prev = step3SaveInFlightRef.current;
+          const savePromise = backgroundSave(
+            async () => {
+              if (prev) await prev.catch(() => undefined);
+              return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
+            },
+            "Gagal menyimpan term of payment",
+          );
+          step3SaveInFlightRef.current = savePromise;
+        }
       }
 
+      setCurrentStep(5);
       return;
     }
 
@@ -1204,13 +1306,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       const result = await finalizeMut.mutateAsync(finalizePayload);
       if (!result.success) { toast.error(result.error ?? "Gagal memfinalisasi booking."); return; }
 
-      // Upload payment evidence per term
-      const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
-      if (termsWithEvidence.length > 0 && result.termIds?.length) {
+      // Upload payment evidence that is still a File (not yet uploaded at step 4→5).
+      // Evidence that was already uploaded (string URL) is already linked to the term — skip.
+      const termsWithNewFiles = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
+      if (termsWithNewFiles.length > 0 && result.termIds?.length) {
         await Promise.allSettled(
-          termsWithEvidence.map((t) => {
+          termsWithNewFiles.map((t) => {
             const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
-            if (!termId || !t.paymentEvidence) return Promise.resolve();
+            if (!termId || !(t.paymentEvidence instanceof File)) return Promise.resolve();
             const fd = new FormData();
             fd.append("termId", termId);
             fd.append("file", t.paymentEvidence);
@@ -1263,12 +1366,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
 
-    const termsWithEvidence = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
-    if (termsWithEvidence.length > 0 && result.termIds?.length) {
+    const termsWithNewFiles = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
+    if (termsWithNewFiles.length > 0 && result.termIds?.length) {
       await Promise.allSettled(
-        termsWithEvidence.map((t) => {
+        termsWithNewFiles.map((t) => {
           const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
-          if (!termId || !t.paymentEvidence) return Promise.resolve();
+          if (!termId || !(t.paymentEvidence instanceof File)) return Promise.resolve();
           const fd = new FormData();
           fd.append("termId", termId);
           fd.append("file", t.paymentEvidence);
@@ -1304,6 +1407,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 2 && isDraftMutating) ||
+    (currentStep === 4 && isUploadingEvidence) ||
     (currentStep === 5 && isDraftMutating) ||
     (currentStep === 5 && isSubmitting);
 
@@ -2311,14 +2415,21 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                 {payStatus === "paid" && (
                                   <div>
                                     <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs">
-                                      {t.paymentEvidence instanceof File && t.paymentEvidence.type.startsWith("image/") ? (
-                                        <FilePreview file={t.paymentEvidence} onOpen={() => { const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }} />
+                                      {/* Preview: File (object URL) or string URL from DB */}
+                                      {t.paymentEvidence instanceof File ? (
+                                        <FilePreview file={t.paymentEvidence} onOpen={() => { const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }} />
+                                      ) : typeof t.paymentEvidence === "string" ? (
+                                        <UrlPreview url={t.paymentEvidence} onOpen={() => { window.open(t.paymentEvidence as string, "_blank"); }} />
                                       ) : (
                                         <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
                                       )}
-                                      {t.paymentEvidence ? (
-                                        <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const url = URL.createObjectURL(t.paymentEvidence!); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 10000); }}>
-                                          {t.paymentEvidence.name}
+                                      {t.paymentEvidence instanceof File ? (
+                                        <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }}>
+                                          {(t.paymentEvidence as File).name}
+                                        </button>
+                                      ) : typeof t.paymentEvidence === "string" ? (
+                                        <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); window.open(t.paymentEvidence as string, "_blank"); }}>
+                                          {(t.paymentEvidence as string).split("/").pop()}
                                         </button>
                                       ) : (
                                         <span className="flex-1 truncate">Upload bukti pembayaran</span>
@@ -2330,9 +2441,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                       )}
                                       <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
                                     </div>
-                                    <p className="mt-1 text-xs text-destructive">
-                                      Bukti pembayaran wajib diupload untuk melanjutkan ke langkah berikutnya.
-                                    </p>
+                                    {!t.paymentEvidence && (
+                                      <p className="mt-1 text-xs text-destructive">
+                                        Bukti pembayaran wajib diupload untuk melanjutkan ke langkah berikutnya.
+                                      </p>
+                                    )}
                                   </div>
                                 )}
 
@@ -2453,9 +2566,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             >
               {hasPendingWriteError
                 ? "Coba Lagi"
-                : currentStep < totalSteps
-                  ? (isDraftMutating ? "Menyimpan..." : "Continue")
-                  : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
+                : isUploadingEvidence
+                  ? "Mengupload bukti..."
+                  : currentStep < totalSteps
+                    ? (isDraftMutating ? "Menyimpan..." : "Continue")
+                    : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
             </Button>
           </div>
         </div>
