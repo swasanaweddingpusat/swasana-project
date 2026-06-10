@@ -94,7 +94,8 @@ interface CustomerOption {
   id: string;
   name: string;
   mobileNumber: unknown;
-  email: string;
+  emailCpp: string | null;
+  emailCpw: string | null;
 }
 interface LeadOption {
   id: string;
@@ -765,7 +766,7 @@ export function MiceBookingDrawer({
                                       }}
                                     >
                                       <p className="font-medium">{c.name}</p>
-                                      {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
+                                      {(c.emailCpp ?? c.emailCpw) && <p className="text-xs text-muted-foreground">{c.emailCpp ?? c.emailCpw}</p>}
                                     </div>
                                   ))}
                                 </div>

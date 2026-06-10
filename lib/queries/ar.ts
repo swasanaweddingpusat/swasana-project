@@ -46,7 +46,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
       salesId: true,
       venueId: true,
       sales: { select: { fullName: true, nickName: true } },
-      snapCustomer: { select: { name: true, email: true, mobileNumber: true } },
+      snapCustomer: { select: { name: true, emailCpp: true, emailCpw: true, mobileNumber: true } },
       snapVenue: { select: { venueName: true, venueId: true, brandName: true } },
       snapPackage: { select: { packageName: true } },
       termOfPayments: {
@@ -133,7 +133,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
       id: b.id,
       noPo: b.poNumber ?? "-",
       customerEvent: b.snapCustomer?.name ?? "-",
-      customerEmail: b.snapCustomer?.email ?? "",
+      customerEmail: b.snapCustomer?.emailCpp ?? b.snapCustomer?.emailCpw ?? "",
       customerPhone: b.snapCustomer?.mobileNumber ?? "",
       customerDate: b.bookingDate.toISOString(),
       namaEvent: b.snapVenue?.venueName ?? "-",

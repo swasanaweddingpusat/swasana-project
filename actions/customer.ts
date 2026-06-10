@@ -22,6 +22,8 @@ export async function createCustomer(data: unknown) {
       data: {
         ...rest,
         mobileNumber: mobileNumber as unknown as Prisma.InputJsonValue,
+        emailCpp: rest.emailCpp || null,
+        emailCpw: rest.emailCpw || null,
         cppNik: rest.cppNik || null,
         cpwNik: rest.cpwNik || null,
         updatedBy: session!.user.name ?? session!.user.email,
@@ -59,6 +61,8 @@ export async function updateCustomer(data: unknown) {
       data: {
         ...rest,
         ...(mn !== undefined && { mobileNumber: mn as unknown as Prisma.InputJsonValue }),
+        emailCpp: rest.emailCpp || null,
+        emailCpw: rest.emailCpw || null,
         cppNik: rest.cppNik || null,
         cpwNik: rest.cpwNik || null,
         updatedBy: session!.user.name ?? session!.user.email,

@@ -166,7 +166,7 @@ export function CustomersTable({ initialData }: { initialData: CustomersResult }
     return (
       c.name.toLowerCase().includes(q) ||
       mobileNumbersSearchable(c.mobileNumber).includes(q) ||
-      c.email.toLowerCase().includes(q) ||
+      (c.emailCpp ?? c.emailCpw ?? "").toLowerCase().includes(q) ||
       (c.type ?? "").toLowerCase().includes(q) ||
       (c.club ?? "").toLowerCase().includes(q) ||
       (c.memberStatus ?? "").toLowerCase().includes(q) ||

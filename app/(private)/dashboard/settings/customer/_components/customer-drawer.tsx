@@ -27,10 +27,11 @@ interface CustomerDrawerProps {
 type OptionItem = { id: string; name: string };
 
 // Form type excludes mobileNumber — handled separately via state + manual validation
-type CustomerFormValues = Omit<CustomerInput, "mobileNumber">;
+// emailCpp/emailCpw are plain strings in the form (empty string = no email); Zod transforms them to undefined on submit
+type CustomerFormValues = Omit<CustomerInput, "mobileNumber" | "emailCpp" | "emailCpw"> & { emailCpp: string; emailCpw: string };
 
 const DRAFT_KEY = "customer_drawer_draft";
-interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; email: string; cppNik: string; cpwNik: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
+interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; emailCpp: string; emailCpw: string; cppNik: string; cpwNik: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
 function saveDraft(d: CustomerDraft) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ } }
 function loadDraft(): CustomerDraft | null { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
@@ -64,7 +65,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   const [mobileError, setMobileError] = useState<string | null>(null);
 
   const form = useForm<CustomerFormValues>({
-    defaultValues: { name: "", email: "", cppNik: "", cpwNik: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
+    defaultValues: { name: "", emailCpp: "", emailCpw: "", cppNik: "", cpwNik: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
 
   const prevOpenRef = useRef(false);
@@ -84,14 +85,15 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         const draft = loadDraft();
         if (draft) {
           setMobileNumbers(draft.mobileNumbers ?? []);
-          form.reset({ name: draft.name, email: draft.email, cppNik: draft.cppNik, cpwNik: draft.cpwNik, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
+          form.reset({ name: draft.name, emailCpp: draft.emailCpp, emailCpw: draft.emailCpw, cppNik: draft.cppNik, cpwNik: draft.cpwNik, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
           return;
         }
       }
       setMobileNumbers(parseMobileNumbers(editCustomer?.mobileNumber));
       form.reset({
         name: editCustomer?.name ?? "",
-        email: editCustomer?.email ?? "",
+        emailCpp: editCustomer?.emailCpp ?? "",
+        emailCpw: editCustomer?.emailCpw ?? "",
         cppNik: editCustomer?.cppNik ?? "",
         cpwNik: editCustomer?.cpwNik ?? "",
         ktpAddress: editCustomer?.ktpAddress ?? "",
@@ -121,7 +123,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   useEffect(() => {
     if (!open || editCustomer) return;
     const values = form.getValues();
-    saveDraft({ name: values.name, mobileNumbers, email: values.email, cppNik: values.cppNik ?? "", cpwNik: values.cpwNik ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
+    saveDraft({ name: values.name, mobileNumbers, emailCpp: values.emailCpp ?? "", emailCpw: values.emailCpw ?? "", cppNik: values.cppNik ?? "", cpwNik: values.cpwNik ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
   }); // intentionally no deps
 
   async function handleAddSourceOfInfo(name: string) {
@@ -242,9 +244,14 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                 )}
               </FormItem>
 
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>Email *</FormLabel><FormControl>
-                  <Input {...field} placeholder="nama@email.com" />
+              <FormField control={form.control} name="emailCpp" render={({ field }) => (
+                <FormItem><FormLabel>Email CPP</FormLabel><FormControl>
+                  <Input {...field} placeholder="email-cpp@contoh.com" />
+                </FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="emailCpw" render={({ field }) => (
+                <FormItem><FormLabel>Email CPW</FormLabel><FormControl>
+                  <Input {...field} placeholder="email-cpw@contoh.com" />
                 </FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="cppNik" render={({ field }) => (
