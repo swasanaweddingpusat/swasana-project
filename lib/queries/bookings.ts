@@ -83,13 +83,18 @@ export interface PaginatedBookings {
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE" },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all" },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
   const venueFilter: Prisma.BookingWhereInput = options?.venueId ? { venueId: options.venueId } : {};
   const categoryFilter: Prisma.BookingWhereInput = options?.category ? { category: options.category } : {};
-  const where: Prisma.BookingWhereInput = { recordStatus: "saved", ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter };
+  const rs = options?.recordStatus;
+  const recordStatusFilter: Prisma.BookingWhereInput =
+    rs === "draft" ? { recordStatus: "draft" } :
+    rs === "all" ? {} :
+    { recordStatus: "saved" };
+  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));

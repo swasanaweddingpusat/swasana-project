@@ -15,6 +15,12 @@ export async function GET(request: Request) {
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 10));
   const search = searchParams.get("search") ?? "";
   const venueId = searchParams.get("venueId") ?? undefined;
+  const rawRecordStatus = searchParams.get("recordStatus");
+  const recordStatus: "saved" | "draft" | "all" | undefined =
+    rawRecordStatus === "draft" ? "draft" :
+    rawRecordStatus === "all" ? "all" :
+    rawRecordStatus === "saved" ? "saved" :
+    undefined;
 
   const profileId = session.user.profileId ?? undefined;
   let dataScope: DataScope = "own";
@@ -23,7 +29,7 @@ export async function GET(request: Request) {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId, category: "WEDDINGS" });
+  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus });
 
   const transformed = {
     ...result,

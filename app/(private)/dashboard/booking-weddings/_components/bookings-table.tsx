@@ -123,6 +123,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
+  const [recordStatusFilter, setRecordStatusFilter] = useState<"saved" | "draft" | "all">("saved");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
@@ -141,7 +142,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter },
     initialData,
   );
   const bookings = result.data;
@@ -202,6 +203,29 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const { data: unreadCounts = {} } = useUnreadCommentCounts(bookings.map((b: BookingListItem) => b.id));
 
   function renderBookingActions(booking: BookingListItem) {
+    // Draft rows: show only a delete action (resume happens via row click)
+    if (booking.recordStatus === "draft") {
+      return (
+        <>
+          {can("booking", "delete") && (
+            <DropdownMenu>
+              <DropdownMenuTrigger className={cn('p-1.5', 'rounded-md', 'hover:bg-muted', 'cursor-pointer')}>
+                <EllipsisVertical weight="BoldDuotone" className={cn('h-4', 'w-4', 'text-muted-foreground')} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className={cn('cursor-pointer', 'text-destructive', 'focus:text-destructive')}
+                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(booking); }}
+                >
+                  <Trash2 weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-destructive')} /> Hapus Draft
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </>
+      );
+    }
+
     // Client Agreement is gated on internal approval: it appears only after BOTH
     // the manager and finance approval steps (current revision) are approved.
     // Filter steps by currentRevisionId (snapshot approach).
@@ -389,15 +413,24 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }
 
   const hasVenueFilter = venueFilter !== "" && venueFilter !== "all";
+  const hasRecordStatusFilter = recordStatusFilter !== "saved";
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0);
+  const hasActiveFilter = activeFilterCount > 0;
 
-  const VenueFilterPopoverContent = (
+  const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
+    { id: "saved", name: "Saved" },
+    { id: "draft", name: "Draft" },
+    { id: "all", name: "Semua" },
+  ];
+
+  const FilterPopoverContent = (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground">Filter</p>
-        {hasVenueFilter && (
+        {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -416,6 +449,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           placeholder="Semua Venue"
           searchPlaceholder="Cari venue..."
           emptyText="Venue tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Status Data</label>
+        <SearchableSelect
+          options={RECORD_STATUS_OPTIONS}
+          value={recordStatusFilter}
+          onChange={(val) => { setRecordStatusFilter(val as "saved" | "draft" | "all"); setCurrentPage(1); }}
+          placeholder="Saved"
+          searchPlaceholder="Cari status..."
+          emptyText="Status tidak ditemukan"
           className="h-9"
         />
       </div>
@@ -446,20 +491,20 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       type="button"
                       variant="outline"
                       size="icon"
-                      className={cn("shrink-0 relative", hasVenueFilter && "border-primary/50")}
+                      className={cn("shrink-0 relative", hasActiveFilter && "border-primary/50")}
                       aria-label="Filter booking"
                     >
                       <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                      {hasVenueFilter && (
+                      {hasActiveFilter && (
                         <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground leading-none">
-                          1
+                          {activeFilterCount}
                         </span>
                       )}
                     </Button>
                   }
                 />
                 <PopoverContent align="end" className="w-72 p-3">
-                  {VenueFilterPopoverContent}
+                  {FilterPopoverContent}
                 </PopoverContent>
               </Popover>
               {/* Refresh */}
@@ -522,21 +567,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   <Button
                     type="button"
                     variant="outline"
-                    className={cn("h-9 gap-1.5 shrink-0", hasVenueFilter && "border-primary/50")}
+                    className={cn("h-9 gap-1.5 shrink-0", hasActiveFilter && "border-primary/50")}
                     aria-label="Filter booking"
                   >
                     <Filter weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                     Filter
-                    {hasVenueFilter && (
+                    {hasActiveFilter && (
                       <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                        1
+                        {activeFilterCount}
                       </span>
                     )}
                   </Button>
                 }
               />
               <PopoverContent align="end" className="w-72 p-3">
-                {VenueFilterPopoverContent}
+                {FilterPopoverContent}
               </PopoverContent>
             </Popover>
 
@@ -559,7 +604,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           {bookings.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
               <CalendarDays weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
-              <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada booking."}</p>
+              <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : recordStatusFilter === "draft" ? "Tidak ada draft booking." : "Belum ada booking."}</p>
             </div>
           ) : (
             <>
@@ -579,7 +624,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 </TableHeader>
                 <TableBody>
                   {bookings.map((booking: BookingListItem, idx: number) => (
-                    <TableRow key={booking.id} className={cn('hover:bg-muted/40', 'cursor-pointer')} onClick={() => setDetailTarget(booking.id)}>
+                    <TableRow
+                      key={booking.id}
+                      className={cn('hover:bg-muted/40', 'cursor-pointer')}
+                      onClick={() => {
+                        if (booking.recordStatus === "draft") {
+                          openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } });
+                        } else {
+                          setDetailTarget(booking.id);
+                        }
+                      }}
+                    >
                       <TableCell className={cn('px-2', 'py-2', 'text-center', 'hidden', 'sm:table-cell')}>{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</TableCell>
 
                       {/* Customer cell */}
@@ -608,6 +663,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                           {/* Event date — tablet only (date col shown at sm) */}
                           <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'sm:hidden')}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
                           <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-1', 'mt-1')}>
+                            {/* Draft badge — shown when recordStatus is draft */}
+                            {booking.recordStatus === "draft" && (
+                              <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-secondary', 'text-secondary-foreground', 'text-[10px]', 'font-semibold')}>
+                                Draft
+                              </span>
+                            )}
                             {/* Status badge */}
                             <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
                               <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
@@ -724,17 +785,30 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   <div
                     key={booking.id}
                     className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', 'cursor-pointer')}
-                    onClick={() => setDetailTarget(booking.id)}
+                    onClick={() => {
+                      if (booking.recordStatus === "draft") {
+                        openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } });
+                      } else {
+                        setDetailTarget(booking.id);
+                      }
+                    }}
                   >
                     {/* Row 1: customer name + status badge */}
                     <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
                       <span className={cn('font-medium', 'text-foreground', 'truncate')}>
                         {rowNumber}. {booking.snapCustomer?.name ?? "—"}
                       </span>
-                      <span className={cn("inline-flex items-center shrink-0 px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
-                        <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
-                        {booking.bookingStatus}
-                      </span>
+                      <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
+                        {booking.recordStatus === "draft" && (
+                          <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-secondary', 'text-secondary-foreground', 'text-[10px]', 'font-semibold')}>
+                            Draft
+                          </span>
+                        )}
+                        <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
+                          <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
+                          {booking.bookingStatus}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Row 2: venue + package */}
@@ -799,23 +873,36 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
                     {/* Footer: action buttons */}
                     <div className={cn('flex', 'items-center', 'gap-1', 'pt-1', 'border-t', 'border-border')} onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="outline"
-                        className={cn('h-9', 'flex-1', 'text-xs')}
-                        onClick={() => setDetailTarget(booking.id)}
-                        aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
-                      >
-                        <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Detail
-                      </Button>
-                      {can("booking", "edit") && (
+                      {booking.recordStatus === "draft" ? (
                         <Button
                           variant="outline"
                           className={cn('h-9', 'flex-1', 'text-xs')}
-                          onClick={() => setEditTarget(booking)}
-                          aria-label={`Edit booking ${booking.snapCustomer?.name ?? ""}`}
+                          onClick={() => openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } })}
+                          aria-label={`Lanjutkan draft booking ${booking.snapCustomer?.name ?? ""}`}
                         >
-                          <Pencil weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
+                          <AddCircle weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Lanjutkan
                         </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            className={cn('h-9', 'flex-1', 'text-xs')}
+                            onClick={() => setDetailTarget(booking.id)}
+                            aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
+                          >
+                            <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Detail
+                          </Button>
+                          {can("booking", "edit") && (
+                            <Button
+                              variant="outline"
+                              className={cn('h-9', 'flex-1', 'text-xs')}
+                              onClick={() => setEditTarget(booking)}
+                              aria-label={`Edit booking ${booking.snapCustomer?.name ?? ""}`}
+                            >
+                              <Pencil weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> Edit
+                            </Button>
+                          )}
+                        </>
                       )}
                       <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
                         {renderBookingActions(booking)}
