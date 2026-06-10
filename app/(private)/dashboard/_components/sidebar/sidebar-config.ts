@@ -32,6 +32,7 @@ import {
   Bill,
   DocumentAdd,
   Sledgehammer,
+  Gift,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -175,6 +176,12 @@ export const navItems: NavItem[] = [
     href: "/dashboard/packages",
     icon: Documents,
     permission: { module: "package", action: "view" },
+  },
+  {
+    name: "Complimentary",
+    href: "/dashboard/complimentary",
+    icon: Gift,
+    permission: { module: "settings-complimentary", action: "view" },
   },
   {
     name: "Vendor",

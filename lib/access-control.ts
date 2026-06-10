@@ -96,6 +96,14 @@ export async function getBookingIdFromSnapBonus(bonusId: string): Promise<string
   return bonus?.bookingId ?? null;
 }
 
+export async function getBookingIdFromSnapComplimentary(snapId: string): Promise<string | null> {
+  const snap = await db.snapComplimentary.findUnique({
+    where: { id: snapId },
+    select: { bookingId: true },
+  });
+  return snap?.bookingId ?? null;
+}
+
 // ─── Get user's dataScope from session profileId ─────────────────────────────
 
 export async function getProfileDataScope(profileId: string): Promise<DataScope> {
