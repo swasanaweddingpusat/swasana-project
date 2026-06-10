@@ -13,7 +13,7 @@ export const createProcurementSchema = z.object({
   linkBarang: z.string().url("Format URL tidak valid").optional().or(z.literal("")).or(z.null()),
   note: z.string().optional().nullable(),
   keterangan: z.string().optional().nullable(),
-  keteranganAcara: z.enum(["WEDDING", "NON_WEDDING"]).default("WEDDING"),
+  keteranganAcara: z.enum(["WEDDING", "NON_WEDDING"]),
   weddingNote: z.string().optional().nullable(),
   nonWeddingNote: z.string().optional().nullable(),
   totalWedding: z.number().min(0).optional().nullable(),

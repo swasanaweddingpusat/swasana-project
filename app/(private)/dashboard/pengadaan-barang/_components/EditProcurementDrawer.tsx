@@ -97,9 +97,9 @@ export function EditProcurementDrawer({
         keteranganAcara: (item.keteranganAcara as "WEDDING" | "NON_WEDDING") ?? "WEDDING",
         weddingNote: item.weddingNote ?? "",
         nonWeddingNote: item.nonWeddingNote ?? "",
-        totalWedding: item.totalWedding ?? undefined,
-        totalNonWedding: item.totalNonWedding ?? undefined,
-        total: item.total ?? undefined,
+        totalWedding: item.totalWedding != null ? Number(item.totalWedding) : undefined,
+        totalNonWedding: item.totalNonWedding != null ? Number(item.totalNonWedding) : undefined,
+        total: item.total != null ? Number(item.total) : undefined,
         division: (item.division as "HR" | "OPERATIONAL" | "IT" | "FINANCE" | "MICE" | null) ?? null,
         buktiBelUrl: item.buktiBelUrl ?? "",
       });
