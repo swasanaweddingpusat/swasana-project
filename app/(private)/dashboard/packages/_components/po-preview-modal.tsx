@@ -84,8 +84,6 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
     };
   }, [open, target]);
 
-  if (!target) return null;
-
   function handleOpenNewTab(): void {
     if (blobUrl) window.open(blobUrl, "_blank");
   }
@@ -131,6 +129,8 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
 
     document.body.appendChild(iframe);
   }, [blobUrl, printing]);
+
+  if (!target) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

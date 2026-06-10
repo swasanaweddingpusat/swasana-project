@@ -89,7 +89,6 @@ interface PackageData {
   sellingPrice: number;
   categoryPrices: CategoryPriceEntry[];
 }
-interface VendorCategoryData { id: string; name: string; vendors: { id: string; name: string; categoryId: string }[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 interface TermRow { name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: "unpaid" | "paid" | "partial" | "refund"; paymentEvidence?: File | null }
@@ -320,7 +319,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const leadOptions = leadsResult?.items ?? [];
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
-  const { data: vendorCategories = [] } = useQuery({ queryKey: ["vendors"], queryFn: () => fetchJson<VendorCategoryData[]>("/api/vendors"), staleTime: 5 * 60_000 });
 
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const { data: packages = [], isLoading: packagesLoading, isError: packagesError } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000, retry: 1 });
@@ -379,10 +377,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     return sessions;
   }
 
+  // Vendor bonus UI deprecated (diganti Complimentary). `bonuses` dipreserve (selalu []) agar payload tetap konsisten.
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
-  const [bonusPickerOpen, setBonusPickerOpen] = useState(false);
-  const allVendors = vendorCategories.flatMap((c) => c.vendors.map((v) => ({ ...v, categoryId: c.id, categoryName: c.name })));
-  const availableVendorsForBonus = allVendors.filter((v) => !bonuses.some((b) => b.vendorId === v.id));
 
   // New complimentary state (replaces vendor-based bonus in booking drawer UI)
   const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
@@ -472,7 +468,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   useEffect(() => {
     if (open) {
-      setBonusPickerOpen(false);
       setComplimentaryMode("none");
       setShowResumePrompt(false);
       setHasPendingWriteError(false);
