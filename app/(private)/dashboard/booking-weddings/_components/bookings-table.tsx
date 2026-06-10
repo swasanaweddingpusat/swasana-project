@@ -173,7 +173,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [topTarget, setTopTarget] = useState<BookingListItem | null>(null);
   const [takeoutTarget, setTakeoutTarget] = useState<BookingListItem | null>(null);
 
-  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
+  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
     queryFn: async () => {
       const res = await fetch("/api/approval-records?module=booking");
@@ -208,17 +208,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   function renderBookingActions(booking: BookingListItem) {
     // Client Agreement is gated on internal approval: it appears only after BOTH
-    // the manager and finance approval steps (current round) are approved.
-    const agreementSteps = approvalMap.get(booking.id)?.steps ?? [];
-    const agreementFirstStep = agreementSteps[0];
-    let agreementRoundSize = agreementSteps.length;
-    for (let i = 1; i < agreementSteps.length; i++) {
-      if (agreementSteps[i].approverType === agreementFirstStep?.approverType && agreementSteps[i].approverRoleId === agreementFirstStep?.approverRoleId && agreementSteps[i].approverUserId === agreementFirstStep?.approverUserId) {
-        agreementRoundSize = i;
-        break;
-      }
-    }
-    const currentRoundSteps = agreementSteps.slice(-agreementRoundSize);
+    // the manager and finance approval steps (current revision) are approved.
+    // Filter steps by currentRevisionId (snapshot approach).
+    // Backward compat: if booking has no currentRevisionId OR all steps have null revisionId,
+    // fall back to showing all steps (legacy data before this feature).
+    const allAgreementSteps = approvalMap.get(booking.id)?.steps ?? [];
+    const currentRevisionId = (booking as unknown as { currentRevisionId: string | null }).currentRevisionId;
+    const hasRevisionedSteps = allAgreementSteps.some((s) => s.revisionId !== null);
+    const currentRoundSteps = (currentRevisionId && hasRevisionedSteps)
+      ? allAgreementSteps.filter((s) => s.revisionId === currentRevisionId)
+      : allAgreementSteps;
     const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
     const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
     const internalApproved = isManagerApproved && isFinanceApproved;
@@ -241,16 +240,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {approvalMap.has(booking.id) && (() => {
           const record = approvalMap.get(booking.id)!;
           const allSteps = record.steps;
-          // Show only latest round: detect round size from first repeated approver pattern
-          const firstStep = allSteps[0];
-          let roundSize = allSteps.length;
-          for (let i = 1; i < allSteps.length; i++) {
-            if (allSteps[i].approverType === firstStep?.approverType && allSteps[i].approverRoleId === firstStep?.approverRoleId && allSteps[i].approverUserId === firstStep?.approverUserId) {
-              roundSize = i;
-              break;
-            }
-          }
-          const steps = allSteps.slice(-roundSize);
+          // Show only steps for the active revision (snapshot approach).
+          // Backward compat: if no currentRevisionId or no steps have revisionId → show all steps.
+          const bCurrentRevisionId = (booking as unknown as { currentRevisionId: string | null }).currentRevisionId;
+          const bHasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+          const steps = (bCurrentRevisionId && bHasRevisionedSteps)
+            ? allSteps.filter((s) => s.revisionId === bCurrentRevisionId)
+            : allSteps;
           const nonClientSteps = steps.filter((s) => s.approverType !== "client");
           if (nonClientSteps.every((s) => s.status === "approved")) return null;
           return (

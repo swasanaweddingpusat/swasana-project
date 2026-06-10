@@ -88,6 +88,7 @@ export async function POST(req: Request) {
       bookingDate: new Date(),
       weddingSession: PLACEHOLDER,
       weddingType: PLACEHOLDER,
+      eventTime: null,
       signingLocation: PLACEHOLDER,
 
       // ── Customer — all BLANK to render as blank form lines ─────────────────
@@ -99,6 +100,8 @@ export async function POST(req: Request) {
         ktpAddress: null,
         cppAddress: BLANK,
         cpwAddress: BLANK,
+        emailCpp: BLANK,
+        emailCpw: BLANK,
       },
 
       // ── Venue — from live DB ────────────────────────────────────────────────
@@ -145,9 +148,10 @@ export async function POST(req: Request) {
         isTakeout: false,
       })),
 
-      // ── Vendor items & bonuses — not applicable for Package preview ────────
+      // ── Vendor items, bonuses & complimentaries — not applicable for Package preview ────────
       snapVendorItems: [],
       snapBonuses: [],
+      snapComplimentaries: [],
 
       termOfPayments: [
         {

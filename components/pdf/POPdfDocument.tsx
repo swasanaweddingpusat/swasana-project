@@ -8,8 +8,9 @@ export interface POPdfBooking {
   bookingDate: Date;
   weddingSession: string | null;
   weddingType: string | null;
+  eventTime?: string | null;
   signingLocation: string | null;
-  snapCustomer: { name: string; mobileNumber: string; cppNik?: string | null; cpwNik?: string | null; ktpAddress?: string | null; cppAddress?: string | null; cpwAddress?: string | null } | null;
+  snapCustomer: { name: string; mobileNumber: string; cppNik?: string | null; cpwNik?: string | null; ktpAddress?: string | null; cppAddress?: string | null; cpwAddress?: string | null; emailCpp?: string | null; emailCpw?: string | null } | null;
   snapVenue: { venueName: string; address?: string | null; description?: string | null; brandName?: string | null; brandCode?: string | null } | null;
   snapPackage: { packageName: string; notes?: string | null } | null;
   snapPackagePricing: { packageName: string; pax: number; price: number } | null;
@@ -18,6 +19,7 @@ export interface POPdfBooking {
   snapPackageCategoryPrices?: { categoryName: string; basePrice: number; isTakeout: boolean }[];
   snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: number; qty: number; unit?: string | null; totalPrice: number; isAddons: boolean }[];
   snapBonuses: { id: string; vendorName: string; description?: string | null; qty: number }[];
+  snapComplimentaries?: { id: string; name: string; description?: string | null; price: number; isShowPrice: boolean; qty: number }[];
   termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
@@ -30,23 +32,23 @@ export interface POPdfBooking {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  page: { fontSize: 10, fontFamily: "Helvetica", padding: 32, paddingTop: 100, paddingBottom: 120 },
-  fixedHeader: { position: "absolute", top: 20, left: 32, right: 32, height: 80, flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "white", paddingBottom: 10 },
+  page: { fontSize: 10, fontFamily: "Helvetica", padding: 32, paddingTop: 84, paddingBottom: 120 },
+  fixedHeader: { position: "absolute", top: 20, left: 32, right: 32, height: 64, flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "white", paddingBottom: 8 },
   fixedFooter: { position: "absolute", bottom: 20, left: 32, right: 32, flexDirection: "row", justifyContent: "space-between", backgroundColor: "white", paddingTop: 10 },
-  title: { fontSize: 12, fontWeight: "bold", marginBottom: 4, textAlign: "center" },
-  subtitle: { fontSize: 12, fontWeight: "bold", marginBottom: 4, textAlign: "center" },
-  headerAddress: { fontSize: 10, textAlign: "center", marginBottom: 0, color: "#333", maxWidth: 350, alignSelf: "center" },
-  sectionTitle: { fontSize: 9, fontWeight: "bold", marginVertical: 8 },
-  poNumber: { fontSize: 8, fontWeight: "bold", marginBottom: 8, textAlign: "right" },
+  title: { fontSize: 9, fontWeight: "bold", marginBottom: 3, textAlign: "center" },
+  subtitle: { fontSize: 9, fontWeight: "bold", marginBottom: 3, textAlign: "center" },
+  headerAddress: { fontSize: 8, textAlign: "center", marginBottom: 0, color: "#333", maxWidth: 350, alignSelf: "center" },
+  sectionTitle: { fontSize: 7, fontWeight: "bold", marginVertical: 8 },
+  poNumber: { fontSize: 7, fontWeight: "bold", marginBottom: 8, textAlign: "right" },
   divider: { borderBottomWidth: 1, borderBottomColor: "#000", marginVertical: 8 },
-  termRow: { flexDirection: "row", marginBottom: 10, alignItems: "flex-start" },
-  termNo: { width: 18, fontWeight: "bold", textAlign: "right", marginRight: 4, fontSize: 9 },
-  termText: { fontSize: 9, flex: 1, textAlign: "justify" },
+  termRow: { flexDirection: "row", marginBottom: 8, alignItems: "flex-start" },
+  termNo: { width: 18, fontWeight: "bold", textAlign: "right", marginRight: 4, fontSize: 8 },
+  termText: { fontSize: 8, flex: 1, textAlign: "justify" },
   table: { marginTop: 16, borderWidth: 1, borderColor: "#000" },
-  tableHeader: { flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000", minHeight: 20 },
-  tableRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000", minHeight: 20 },
-  tableCell: { padding: 4, borderRightWidth: 1, borderColor: "#000" },
-  tableCellLast: { padding: 4 },
+  tableHeader: { flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000", minHeight: 14 },
+  tableRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000", minHeight: 14 },
+  tableCell: { padding: 2, borderRightWidth: 1, borderColor: "#000" },
+  tableCellLast: { padding: 2 },
   paymentSection: { marginBottom: 16, width: "50%" },
   paymentRow: { flexDirection: "row", height: 18 },
   paymentCell: { borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: "#000", justifyContent: "center", paddingLeft: 4 },
@@ -55,6 +57,14 @@ const s = StyleSheet.create({
   signBox: { alignItems: "center", width: "30%" },
   signatureLabel: { fontSize: 9, fontWeight: "bold", marginTop: 1 },
   signerName: { fontSize: 8, fontWeight: "bold" },
+  infoRow: { flexDirection: "row", alignItems: "flex-start" },
+  infoLabel: { fontSize: 7, width: 72 },
+  infoLabelRight: { fontSize: 7, width: 78 },
+  infoValue: { fontSize: 7, flex: 1 },
+  detailRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000", minHeight: 14 },
+  detailColNo: { width: "5%", fontSize: 7, padding: 2, borderRightWidth: 1, borderColor: "#000" },
+  detailColLabel: { width: "30%", fontSize: 7, padding: 2, borderRightWidth: 1, borderColor: "#000" },
+  detailColValue: { flex: 1, fontSize: 7, padding: 2 },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -88,25 +98,25 @@ function parseInlineHtml(text: string): React.ReactNode {
   return <>{parts}</>;
 }
 
-function parseRichText(text: string, baseFontWeight: string = "normal") {
-  if (!text) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold" }} />;
-  if (text.includes("<")) return parseHtmlToReactPdf(text, baseFontWeight);
-  if (!text.includes("*")) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold" }}>{text}</Text>;
+function parseRichText(text: string, baseFontWeight: string = "normal", fontSize: number = 8) {
+  if (!text) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }} />;
+  if (text.includes("<")) return parseHtmlToReactPdf(text, baseFontWeight, fontSize);
+  if (!text.includes("*")) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{text}</Text>;
   const parts: React.ReactNode[] = [];
   const regex = /\*([^*]+)\*/g;
   let lastIndex = 0;
   let match;
   let k = 0;
   while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold" }}>{text.slice(lastIndex, match.index)}</Text>);
-    parts.push(<Text key={k++} style={{ fontWeight: "bold" }}>{match[1]}</Text>);
+    if (match.index > lastIndex) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{text.slice(lastIndex, match.index)}</Text>);
+    parts.push(<Text key={k++} style={{ fontWeight: "bold", fontSize }}>{match[1]}</Text>);
     lastIndex = regex.lastIndex;
   }
-  if (lastIndex < text.length) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold" }}>{text.slice(lastIndex)}</Text>);
+  if (lastIndex < text.length) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{text.slice(lastIndex)}</Text>);
   return <>{parts}</>;
 }
 
-function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): React.ReactNode {
+function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fontSize: number = 8): React.ReactNode {
   let k = 0;
 
   function renderList(listHtml: string, type: "ol" | "ul", depth: number, startNum: number = 1): React.ReactNode[] {
@@ -149,9 +159,9 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
 
       if (mainText) {
         nodes.push(
-          <View key={k++} style={{ flexDirection: "row", marginLeft: indent, marginBottom: depth === 0 ? 6 : 2 }}>
-            <Text style={{ fontSize: 9, width: type === "ol" ? 18 : 10 }}>{bullet}</Text>
-            <Text style={{ fontSize: 9, flex: 1 }}>{parseInlineHtml(mainText)}</Text>
+          <View key={k++} wrap={depth === 0 ? false : undefined} style={{ flexDirection: "row", marginLeft: indent, marginBottom: depth === 0 ? 2 : 1 }}>
+            <Text style={{ fontSize, width: type === "ol" ? 18 : 10, lineHeight: 1.3 }}>{bullet}</Text>
+            <Text style={{ fontSize, flex: 1, lineHeight: 1.3 }}>{parseInlineHtml(mainText)}</Text>
           </View>
         );
       }
@@ -207,7 +217,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
     for (const seg of segments) {
       if (seg.type === "text") {
         const clean = seg.content.replace(/<\/?p>/g, "").trim();
-        if (clean) elements.push(<Text key={k++} style={{ fontSize: 9, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(clean)}</Text>);
+        if (clean) elements.push(<Text key={k++} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop: 10 }}>{parseInlineHtml(clean)}</Text>);
       } else {
         elements.push(<View key={k++}>{renderList(seg.content, seg.listType!, 0, seg.start ?? 1)}</View>);
       }
@@ -216,7 +226,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal"): R
   }
 
   const blocks = html.replace(/^<p>|<\/p>$/g, "").split(/<\/p>\s*<p>|<br\s*\/?>/).filter(Boolean);
-  return (<Text style={{ fontSize: 9, fontWeight: baseFontWeight as "normal" | "bold" }}>{blocks.map((block, i) => { const c = block.replace(/<\/?p>/g, "").trim(); if (!c) return null; return (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>); })}</Text>);
+  return (<Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }}>{blocks.map((block, i) => { const c = block.replace(/<\/?p>/g, "").trim(); if (!c) return null; return (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>); })}</Text>);
 }
 
 function renderHtmlToPdf(html: string) {
@@ -257,7 +267,7 @@ function renderHtmlToPdf(html: string) {
     }
   }
   if (parts.length === 0) { const p = stripHtml(html); if (p) parts.push({ raw: p, isBullet: false }); }
-  return (<View style={{ marginLeft: 8 }}>{parts.map((part, i) => (<Text key={i} style={{ fontSize: 8, marginBottom: 1 }}>{part.isBullet ? "• " : ""}{parseInline(part.raw)}</Text>))}</View>);
+  return (<View style={{ marginLeft: 8 }}>{parts.map((part, i) => (<Text key={i} style={{ fontSize: 7, marginBottom: 1 }}>{part.isBullet ? "• " : ""}{parseInline(part.raw)}</Text>))}</View>);
 }
 
 // ─── Build Table Rows ─────────────────────────────────────────────────────────
@@ -385,7 +395,7 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
     package_name: booking.snapPackage?.packageName ?? "",
     package_price: booking.snapPackagePricing ? fmtRp(booking.snapPackagePricing.price) : "",
     discount_amount: fmtRp(booking.discountAmount ?? 0),
-    booking_fee: (() => { const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return bf ? fmtRp(bf.amount) : ""; })(),
+    booking_fee: (() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })(),
     total_paid: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0)),
     remaining_balance: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus !== "paid").reduce((sum, t) => sum + t.amount, 0)),
     sales_name: booking.sales?.fullName ?? "",
@@ -445,7 +455,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
         {logoBase64 && (
           <View style={s.fixedHeader} fixed>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
-            <Image src={logoBase64} style={{ width: 180, height: 60, objectFit: "contain", alignSelf: "center" }} />
+            <Image src={logoBase64} style={{ width: 150, height: 48, objectFit: "contain", alignSelf: "center" }} />
           </View>
         )}
 
@@ -486,42 +496,65 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             ))
           )}
 
-          {/* Detail Section — flows natural setelah T&C; tiap unit kecil dilindungi dari orphan */}
-          {/* Mini Form — kept together (blok kecil), ngalir tepat setelah T&C */}
-          <View wrap={false} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 16, marginBottom: 4 }}>
-              <View style={{ flexDirection: "column", gap: 4, flex: 1, paddingRight: 12 }}>
-                <Text style={{ fontSize: 9 }}>Nama : {booking.snapCustomer?.name ?? "_____________________"}</Text>
-                <Text style={{ fontSize: 9 }}>
-                  {"No. Telp : "}
-                  {(() => {
-                    const raw = booking.snapCustomer?.mobileNumber;
-                    if (!raw) return "_____________________";
-                    try {
-                      const arr = JSON.parse(raw) as { name?: string; number: string }[];
-                      if (Array.isArray(arr)) return arr.map((e) => (e.name ? `${e.number} (${e.name})` : e.number)).join(", ");
-                    } catch { /* not JSON */ }
-                    return raw;
-                  })()}
-                </Text>
-                <Text style={{ fontSize: 9 }}>No.KTP CPP : {booking.snapCustomer?.cppNik ?? "_____________________"}</Text>
-                <Text style={{ fontSize: 9 }}>Alamat CPP : {booking.snapCustomer?.cppAddress ?? "_____________________"}</Text>
-                <Text style={{ fontSize: 9 }}>No.KTP CPW : {booking.snapCustomer?.cpwNik ?? "_____________________"}</Text>
-                <Text style={{ fontSize: 9 }}>Alamat CPW : {booking.snapCustomer?.cpwAddress ?? "_____________________"}</Text>
-              </View>
-              <View style={{ flexDirection: "column", gap: 4 }}>
-                <Text style={{ fontSize: 9 }}>Acara : {(() => { const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" }; return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception"; })()}</Text>
-                <Text style={{ fontSize: 9 }}>Hari/Tanggal : {new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
-                <Text style={{ fontSize: 9 }}>Jam : {booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "_____________________"}</Text>
-                <Text style={{ fontSize: 9 }}>Tempat : {venueName}</Text>
-              </View>
-            </View>
+          {/* Detail Section — tabel 3 kolom (NO, NAMA, VALUE); selalu mulai di halaman baru & gak kepotong */}
+          <View break wrap={false} style={{ marginTop: 0, marginBottom: 8, borderWidth: 1, borderColor: "#000" }}>
+            {(() => {
+              const phone = (() => {
+                const raw = booking.snapCustomer?.mobileNumber;
+                if (!raw) return "-";
+                try {
+                  const arr = JSON.parse(raw) as { name?: string; number: string }[];
+                  if (Array.isArray(arr)) return arr.map((e) => (e.name ? `${e.number} (${e.name})` : e.number)).join(", ");
+                } catch { /* not JSON */ }
+                return raw;
+              })();
+              const acara = (() => {
+                const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" };
+                return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception";
+              })();
+              const jam = booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "-";
+              const tanggal = new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+              const items: { label: string; value: string }[] = [
+                { label: "Nama", value: booking.snapCustomer?.name ?? "-" },
+                { label: "No. Telp", value: phone },
+                { label: "No.KTP CPP", value: booking.snapCustomer?.cppNik ?? "-" },
+                { label: "Alamat CPP", value: booking.snapCustomer?.cppAddress ?? "-" },
+                { label: "Email CPP", value: booking.snapCustomer?.emailCpp ?? "-" },
+                { label: "No.KTP CPW", value: booking.snapCustomer?.cpwNik ?? "-" },
+                { label: "Alamat CPW", value: booking.snapCustomer?.cpwAddress ?? "-" },
+                { label: "Email CPW", value: booking.snapCustomer?.emailCpw ?? "-" },
+                { label: "Acara", value: acara },
+                { label: "Hari/Tanggal", value: tanggal },
+                { label: "Jam", value: jam },
+                { label: "Tempat", value: venueName },
+              ];
+              return (
+                <>
+                  <View style={[s.detailRow, { backgroundColor: "#eee" }]}>
+                    <Text style={[s.detailColNo, { fontWeight: "bold" }]}>NO</Text>
+                    <Text style={[s.detailColLabel, { fontWeight: "bold" }]}>INFORMASI</Text>
+                    <Text style={[s.detailColValue, { fontWeight: "bold" }]}>KETERANGAN</Text>
+                  </View>
+                  {items.map((it, i) => (
+                    <View key={i} style={[s.detailRow, i === items.length - 1 ? { borderBottomWidth: 0 } : {}]}>
+                      <Text style={s.detailColNo}>{i + 1}</Text>
+                      <Text style={s.detailColLabel}>{it.label}</Text>
+                      <Text style={s.detailColValue}>{it.value}</Text>
+                    </View>
+                  ))}
+                </>
+              );
+            })()}
+          </View>
 
-            {/* Table Header — anti-orphan: pindah halaman cuma kalau ruang tersisa kurang */}
-            <View style={s.table} minPresenceAhead={72}>
+          {/* Tabel paket — mulai halaman baru (break), boleh ngalir lintas halaman biar gak overflow */}
+          <View break>
+            {/* Table Header */}
+            <View style={s.table}>
               <View style={s.tableHeader}>
-                <Text style={[s.tableCell, { width: "8%", fontWeight: "bold", fontSize: 9 }]}>NO</Text>
-                <Text style={[s.tableCell, { width: "72%", fontWeight: "bold", fontSize: 9 }]}>DESCRIPTION</Text>
-                <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 9 }]}>Total (Rp.)</Text>
+                <Text style={[s.tableCell, { width: "5%", fontWeight: "bold", fontSize: 7 }]}>NO</Text>
+                <Text style={[s.tableCell, { width: "75%", fontWeight: "bold", fontSize: 7 }]}>DESCRIPTION</Text>
+                <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 7 }]}>Total (Rp.)</Text>
               </View>
             </View>
 
@@ -536,18 +569,18 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 const noValue = group.find((r) => r.no)?.no ?? "";
                 return (
                   <View key={gi} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
-                    <View style={{ width: "8%", borderRightWidth: 1, borderColor: "#000", justifyContent: "flex-start" }}>
-                      {noValue ? <Text style={{ padding: 4, fontSize: 9 }}>{noValue}</Text> : null}
+                    <View style={{ width: "5%", borderRightWidth: 1, borderColor: "#000", justifyContent: "flex-start" }}>
+                      {noValue ? <Text style={{ padding: 2, fontSize: 7 }}>{noValue}</Text> : null}
                     </View>
                     <View style={{ flex: 1, flexDirection: "column" }}>
                       {group.map((row, ri) => (
-                        <View key={ri} style={{ flexDirection: "row", borderBottomWidth: ri < group.length - 1 ? 1 : 0, borderColor: "#000", minHeight: 18 }}>
+                        <View key={ri} style={{ flexDirection: "row", borderBottomWidth: ri < group.length - 1 ? 1 : 0, borderColor: "#000", minHeight: 14 }}>
                           {row.desc.includes("<ul>") || row.desc.includes("<ol>") ? (
-                            <View style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", ...(row.isTakeout ? { opacity: 0.4 } : {}) }}>{parseRichText(row.desc)}</View>
+                            <View style={{ width: "78.95%", padding: 2, borderRightWidth: 1, borderColor: "#000", ...(row.isTakeout ? { opacity: 0.4 } : {}) }}>{parseRichText(row.desc, "normal", 7)}</View>
                           ) : (
-                            <Text style={{ width: "78.26%", padding: 4, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 9, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc)}</Text>
+                            <Text style={{ width: "78.95%", padding: 2, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 7, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc, "normal", 7)}</Text>
                           )}
-                          <Text style={{ width: "21.74%", padding: 4, fontSize: 9 }}>{row.total}</Text>
+                          <Text style={{ width: "21.05%", padding: 2, fontSize: 7 }}>{row.total}</Text>
                         </View>
                       ))}
                     </View>
@@ -556,66 +589,82 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               });
             })()}
           </View>
+          </View>
 
-          {/* Complimentary + Payment */}
-          <View style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 8 }}>
-            {booking.snapBonuses.length > 0 && (
+          {/* Complimentary + Payment — blok kecil, dijaga utuh & ngalir natural setelah tabel */}
+          <View wrap={false} style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 8 }}>
+            {/* Prioritize new snapComplimentaries; fall back to legacy snapBonuses */}
+            {(booking.snapComplimentaries ?? []).length > 0 ? (
               <View style={s.complimentarySection}>
-                <Text style={{ fontWeight: "bold", fontSize: 8, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+                <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+                <View style={{ marginLeft: 8 }}>
+                  {(booking.snapComplimentaries ?? []).map((c) => (
+                    <View key={c.id} style={{ marginBottom: 4 }}>
+                      <Text style={{ fontSize: 7, fontWeight: "bold" }}>
+                        {c.name}{c.qty > 1 ? ` (${c.qty}x)` : ""}{c.isShowPrice ? ` - ${fmtRp(c.price)}` : ""}
+                      </Text>
+                      {c.description ? renderHtmlToPdf(c.description) : null}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : booking.snapBonuses.length > 0 ? (
+              <View style={s.complimentarySection}>
+                <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
                 <View style={{ marginLeft: 8 }}>
                   {booking.snapBonuses.map((b) => (
                     <View key={b.id} style={{ marginBottom: 4 }}>
-                      <Text style={{ fontSize: 8, fontWeight: "bold" }}>{b.vendorName}</Text>
+                      <Text style={{ fontSize: 7, fontWeight: "bold" }}>{b.vendorName}</Text>
                       {b.description ? renderHtmlToPdf(b.description) : null}
                     </View>
                   ))}
                 </View>
               </View>
-            )}
+            ) : null}
             <View style={[s.paymentSection, { marginLeft: "auto" }]}>
               <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Total Payment</Text></View>
-                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text></View>
+                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Total Payment</Text></View>
+                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text></View>
               </View>
               {(booking.discountAmount ?? 0) > 0 && (
                 <>
                   <View style={s.paymentRow}>
-                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8, color: "red" }}>{booking.discountName || "Discount"}</Text></View>
-                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text></View>
+                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6, color: "red" }}>{booking.discountName || "Discount"}</Text></View>
+                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text></View>
                   </View>
                   <View style={s.paymentRow}>
-                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Harga Setelah Discount</Text></View>
-                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text></View>
+                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Harga Setelah Discount</Text></View>
+                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text></View>
                   </View>
                 </>
               )}
               <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}</Text></View>
-                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 8 }}>{(() => { const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
+                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}</Text></View>
+                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
               </View>
               <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>Sisa Bayar</Text></View>
-                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 8 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments.find((t) => t.name === "Booking Fee"); return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text></View>
+                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Sisa Bayar</Text></View>
+                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments[0]; return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text></View>
               </View>
             </View>
           </View>
 
-          {/* Closing + Signature */}
-          <View wrap={false}>
+          {/* Closing — teks ngalir natural nempel ke atas; signature di-jaga utuh sendiri */}
+          <View>
             <Text style={{ fontSize: 8, marginLeft: 20, marginBottom: 10 }}>
               Demikian Surat Purchase Order ini dibuat oleh pihak penyewa dan penyelenggara dengan keadaan sehat, tanpa paksaan dari pihak manapun. Serta mempunyai kekuatan mengikat satu dengan lainnya. Apabila dikemudian hari salah satu pihak melanggar sesuai dengan ketentuan diatas, maka perjanjian ini menjadi bukti yang sah dan sempurna di mata hukum.
             </Text>
-            <Text style={{ fontSize: 8, fontWeight: "bold", marginTop: 10, marginLeft: 20 }}>
+            <Text style={{ fontSize: 7, fontWeight: "bold", marginTop: 10, marginLeft: 20 }}>
               {booking.signingLocation ?? "_______________"}, {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}
             </Text>
-            <View style={{ flexDirection: "row", marginTop: 60, marginBottom: 10 }}>
+            <View wrap={false} style={{ flexDirection: "row", marginTop: 12, marginBottom: 6 }}>
               {/* E-Meterai QR — hanya jika ada */}
               {ematerai && (
                 <View style={{ flex: 1, alignItems: "center" }}>
                   {/* eslint-disable-next-line jsx-a11y/alt-text */}
                   <Image
                     src={ematerai.qrBase64.startsWith("data:") ? ematerai.qrBase64 : `data:image/png;base64,${ematerai.qrBase64}`}
-                    style={{ width: 70, height: 70, marginBottom: 4 }}
+                    style={{ width: 56, height: 56, marginBottom: 4 }}
                   />
                   <Text style={{ fontSize: 6, textAlign: "center", color: "#333" }}>E-Meterai</Text>
                   <Text style={{ fontSize: 5, textAlign: "center", color: "#555" }}>{ematerai.sn}</Text>
@@ -623,10 +672,10 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               )}
               {/* Client */}
               <View style={{ flex: 1, alignItems: "center" }}>
-                <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
+                <View style={{ width: 100, height: 36, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
                   {sigs?.client?.signature ? (
                     // eslint-disable-next-line jsx-a11y/alt-text
-                    <Image src={sigs.client.signature} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
+                    <Image src={sigs.client.signature} style={{ maxWidth: 100, maxHeight: 36, objectFit: "contain" }} />
                   ) : null}
                 </View>
                 <Text style={s.signerName}>({booking.snapCustomer?.name ?? ""})</Text>
@@ -635,10 +684,10 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               {/* Role signers — dynamic from approval steps */}
               {sigs?.roles?.map((r, i) => (
                 <View key={`${i}-${r.title}`} style={{ flex: 1, alignItems: "center" }}>
-                  <View style={{ width: 100, height: 50, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
+                  <View style={{ width: 100, height: 36, marginBottom: 4, justifyContent: "center", alignItems: "center" }}>
                     {r.signature ? (
                       // eslint-disable-next-line jsx-a11y/alt-text
-                      <Image src={r.signature} style={{ maxWidth: 100, maxHeight: 50, objectFit: "contain" }} />
+                      <Image src={r.signature} style={{ maxWidth: 100, maxHeight: 36, objectFit: "contain" }} />
                     ) : null}
                   </View>
                   <Text style={s.signerName}>({r.name})</Text>

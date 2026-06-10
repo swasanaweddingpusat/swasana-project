@@ -9,7 +9,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
-import { bookingSchema, updateBookingSchema, editBookingSchema } from "@/lib/validations/booking";
+import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema } from "@/lib/validations/booking";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence } from "@/lib/counter";
 import { createBookingRevision } from "@/lib/booking-revision";
@@ -84,7 +84,8 @@ export async function createBooking(data: unknown) {
             id: customerId,
             name: leadRecord.name,
             mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers) as Prisma.InputJsonValue,
-            email: leadRecord.email || "-@placeholder.com",
+            emailCpp: leadRecord.email || null,
+            emailCpw: null,
             cppNik: null,
             cpwNik: null,
             ktpAddress: leadRecord.address ?? null,
@@ -207,7 +208,8 @@ export async function createBooking(data: unknown) {
             id: customerId,
             name: leadRecord.name,
             mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers),
-            email: leadRecord.email || "-@placeholder.com",
+            emailCpp: leadRecord.email || null,
+            emailCpw: null as string | null,
             cppNik: null as string | null,
             cpwNik: null as string | null,
             ktpAddress: leadRecord.address ?? null,
@@ -219,7 +221,8 @@ export async function createBooking(data: unknown) {
             id: customerId,
             name: input.customerName!,
             mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? ""),
-            email: input.contactEmail || "-@placeholder.com",
+            emailCpp: input.contactEmailCpp || null,
+            emailCpw: input.contactEmailCpw || null,
             cppNik: input.contactNikCpp || null,
             cpwNik: input.contactNikCpw || null,
             ktpAddress: null as string | null,
@@ -230,7 +233,8 @@ export async function createBooking(data: unknown) {
           id: existingCustomer!.id,
           name: existingCustomer!.name,
           mobileNumber: existingCustomer!.mobileNumber,
-          email: existingCustomer!.email,
+          emailCpp: existingCustomer!.emailCpp,
+          emailCpw: existingCustomer!.emailCpw,
           cppNik: existingCustomer!.cppNik,
           cpwNik: existingCustomer!.cpwNik,
           ktpAddress: existingCustomer!.ktpAddress,
@@ -288,7 +292,8 @@ export async function createBooking(data: unknown) {
               id: customerId,
               name: leadRecord.name,
               mobileNumber: mapLeadContactNumbers(leadRecord.contactNumbers) as Prisma.InputJsonValue,
-              email: leadRecord.email || "-@placeholder.com",
+              emailCpp: leadRecord.email || null,
+              emailCpw: null,
               cppNik: null,
               cpwNik: null,
               ktpAddress: leadRecord.address ?? null,
@@ -310,7 +315,8 @@ export async function createBooking(data: unknown) {
               id: customerId,
               name: input.customerName!,
               mobileNumber: parseContactNumbersToArray(input.contactNumbers ?? "") as Prisma.InputJsonValue,
-              email: input.contactEmail || "-@placeholder.com",
+              emailCpp: input.contactEmailCpp || null,
+              emailCpw: input.contactEmailCpw || null,
               cppNik: input.contactNikCpp || null,
               cpwNik: input.contactNikCpw || null,
               ktpAddress: null,
@@ -327,7 +333,8 @@ export async function createBooking(data: unknown) {
     } else {
       const updates: Record<string, unknown> = {};
       if (input.contactNumbers) updates.mobileNumber = parseContactNumbersToArray(input.contactNumbers) as Prisma.InputJsonValue;
-      if (input.contactEmail) updates.email = input.contactEmail;
+      if (input.contactEmailCpp !== undefined) updates.emailCpp = input.contactEmailCpp || null;
+      if (input.contactEmailCpw !== undefined) updates.emailCpw = input.contactEmailCpw || null;
       if (input.contactNikCpp) updates.cppNik = input.contactNikCpp;
       if (input.contactNikCpw) updates.cpwNik = input.contactNikCpw;
       if (input.contactCppAddress !== undefined) updates.cppAddress = input.contactCppAddress || null;
@@ -369,7 +376,8 @@ export async function createBooking(data: unknown) {
           bookingId,
           customerId: customerData.id,
           name: customerData.name,
-          email: customerData.email,
+          emailCpp: customerData.emailCpp ?? null,
+          emailCpw: customerData.emailCpw ?? null,
           mobileNumber: Array.isArray(customerData.mobileNumber)
             ? (customerData.mobileNumber as Array<{ name?: string; number: string }>)
                 .map((e) => (e.name ? `${e.name}: ${e.number}` : e.number))
@@ -523,6 +531,25 @@ export async function createBooking(data: unknown) {
       );
     }
 
+    if (input.complimentaries && input.complimentaries.length > 0) {
+      ops.push(
+        ...input.complimentaries.map((c, i) =>
+          db.snapComplimentary.create({
+            data: {
+              bookingId,
+              complimentaryId: c.complimentaryId ?? null,
+              name: c.name,
+              price: c.price,
+              isShowPrice: c.isShowPrice,
+              description: c.description ?? null,
+              qty: c.qty,
+              sortOrder: c.sortOrder ?? i,
+            },
+          })
+        )
+      );
+    }
+
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
@@ -588,12 +615,18 @@ export async function createBooking(data: unknown) {
       description: `Created booking for ${customerData.name}${leadId ? " (from lead)" : ""}`,
     });
 
-    // Create initial PO revision snapshot + link approval steps
+    // Create initial PO revision snapshot + link approval steps + set currentRevisionId
     const revisionId = await createBookingRevision(bookingId, session!.user.profileId!, "Initial booking");
-    await db.approvalRecordStep.updateMany({
-      where: { record: { module: "booking", entityId: bookingId } },
-      data: { revisionId },
-    });
+    await db.$transaction([
+      db.approvalRecordStep.updateMany({
+        where: { record: { module: "booking", entityId: bookingId } },
+        data: { revisionId },
+      }),
+      db.booking.update({
+        where: { id: bookingId },
+        data: { currentRevisionId: revisionId },
+      }),
+    ]);
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
@@ -875,15 +908,19 @@ export async function transferBookingManager(
   }
 }
 
-export async function editBooking(data: unknown) {
+// ─── Update Booking Client Info (Step 1 — no approval trigger) ───────────────
+/** Updates ONLY client/customer fields on a saved booking. Does NOT touch venue,
+ *  package, term of payments, or approval state. Used by Edit Drawer Step 1
+ *  "Save & Publish" button. */
+export async function updateBookingClientInfo(data: unknown): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
-  if (!mutationLimiter.check(`booking-edit:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`booking-client-info:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
-  const parsed = editBookingSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+  const parsed = updateBookingClientInfoSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
 
-  const { id, customerName, contactNumbers, contactEmail, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, ...rest } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId } = parsed.data;
 
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
@@ -893,7 +930,98 @@ export async function editBooking(data: unknown) {
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, salesId: true, venueId: true, packageId: true, bookingDate: true, weddingSession: true, weddingType: true, paymentMethodId: true, sourceOfInformationId: true, discountName: true, discountAmount: true, snapCustomer: { select: { name: true, mobileNumber: true, email: true } } },
+      select: { customerId: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
+    });
+    if (!booking) return { success: false, error: "Booking tidak ditemukan." };
+
+    const contactDisplay = serializeContactNumbersToDisplay(contactNumbers ?? "");
+    const contactArray = parseContactNumbersToArray(contactNumbers ?? "");
+
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.booking.update({
+        where: { id },
+        data: {
+          sourceOfInformationId: sourceOfInformationId ?? undefined,
+          ...(salesId != null ? { salesId } : {}),
+        },
+      }),
+      db.snapCustomer.update({
+        where: { bookingId: id },
+        data: {
+          name: customerName,
+          mobileNumber: contactDisplay || "-",
+          emailCpp: contactEmailCpp || null,
+          emailCpw: contactEmailCpw || null,
+          cppNik: contactNikCpp || null,
+          cpwNik: contactNikCpw || null,
+          cppAddress: contactCppAddress || null,
+          cpwAddress: contactCpwAddress || null,
+        },
+      }),
+      db.customer.update({
+        where: { id: booking.customerId },
+        data: {
+          name: customerName,
+          mobileNumber: contactArray as Prisma.InputJsonValue,
+          emailCpp: contactEmailCpp || null,
+          emailCpw: contactEmailCpw || null,
+          cppNik: contactNikCpp || null,
+          cpwNik: contactNikCpw || null,
+          cppAddress: contactCppAddress || null,
+          cpwAddress: contactCpwAddress || null,
+          bitrixId: contactBitrixId || null,
+          updatedBy: session!.user.name ?? session!.user.email,
+        },
+      }),
+    ];
+
+    await db.$transaction(ops);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "updated",
+      entityType: "booking",
+      entityId: id,
+      changes: {
+        scope: "client-info-only",
+        customerName,
+      },
+      description: `Updated client info for booking ${id}`,
+    });
+
+    revalidateTag("bookings", "max");
+    revalidateTag("customers", "max");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Gagal mengupdate informasi client." };
+  }
+}
+
+export async function editBooking(data: unknown) {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-edit:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = editBookingSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, ...rest } = parsed.data;
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const booking = await db.booking.findUnique({
+      where: { id },
+      select: {
+        customerId: true, salesId: true, venueId: true, packageId: true,
+        bookingDate: true, weddingSession: true, weddingType: true,
+        paymentMethodId: true, sourceOfInformationId: true,
+        discountName: true, discountAmount: true, currentRevisionId: true,
+        snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
+      },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
@@ -929,6 +1057,73 @@ export async function editBooking(data: unknown) {
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
 
+    // ── Material change detection ─────────────────────────────────────────────
+    // Compare event date (bookingDate field = event date in wedding bookings)
+    const newBookingDate = new Date(rest.bookingDate).toISOString().split("T")[0];
+    const oldBookingDate = booking.bookingDate.toISOString().split("T")[0];
+    const eventDateChanged = newBookingDate !== oldBookingDate;
+
+    // Compare discount
+    const newDiscountName = rest.specialBonusName ?? null;
+    const newDiscountAmount = rest.specialBonusAmount ?? 0;
+    const discountChanged =
+      newDiscountName !== booking.discountName ||
+      newDiscountAmount !== (booking.discountAmount ?? 0);
+
+    // Compare takeout toggles against current snapPackageCategoryPrices
+    let takeoutChanged = false;
+    if (parsed.data.categoryToggles && parsed.data.categoryToggles.length > 0) {
+      const currentSnaps = await db.snapPackageCategoryPrice.findMany({
+        where: { bookingId: id },
+        select: { categoryName: true, isTakeout: true, takeoutNominal: true, isShow: true },
+      });
+      const currentTakeoutMap = new Map(
+        currentSnaps.filter((c) => c.isShow).map((c) => [c.categoryName, { isTakeout: c.isTakeout, takeoutNominal: c.takeoutNominal ?? 0 }])
+      );
+      for (const t of parsed.data.categoryToggles) {
+        if (!t.isShow) continue;
+        const cur = currentTakeoutMap.get(t.categoryName);
+        if (!cur) { takeoutChanged = true; break; }
+        if (cur.isTakeout !== t.isTakeout) { takeoutChanged = true; break; }
+        if (t.isTakeout && cur.takeoutNominal !== (t.takeoutNominal ?? 0)) { takeoutChanged = true; break; }
+      }
+    }
+
+    // Compare term of payments (count, names, amounts, order)
+    let topChanged = false;
+    if (rest.termOfPayments && rest.termOfPayments.length > 0) {
+      const currentTerms = await db.termOfPayment.findMany({
+        where: { bookingId: id },
+        select: { id: true, name: true, amount: true, sortOrder: true },
+        orderBy: { sortOrder: "asc" },
+      });
+      const newTerms = rest.termOfPayments;
+      if (currentTerms.length !== newTerms.length) {
+        topChanged = true;
+      } else {
+        for (let i = 0; i < currentTerms.length; i++) {
+          const cur = currentTerms[i];
+          const nw = newTerms[i];
+          if (
+            cur.name !== nw.name ||
+            cur.amount !== nw.amount ||
+            cur.sortOrder !== nw.sortOrder
+          ) {
+            topChanged = true;
+            break;
+          }
+        }
+      }
+    }
+
+    const hasMaterialChange =
+      venueChanged ||
+      packageChanged ||
+      eventDateChanged ||
+      discountChanged ||
+      takeoutChanged ||
+      topChanged;
+
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
       db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
@@ -960,7 +1155,8 @@ export async function editBooking(data: unknown) {
           name: customerName,
           // snapCustomer.mobileNumber persists as display string: "name: number, ..."
           mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
-          email: contactEmail || "-@placeholder.com",
+          emailCpp: contactEmailCpp || null,
+          emailCpw: contactEmailCpw || null,
           cppNik: contactNikCpp || null,
           cpwNik: contactNikCpw || null,
           ktpAddress: null,
@@ -974,7 +1170,8 @@ export async function editBooking(data: unknown) {
         data: {
           name: customerName,
           mobileNumber: parseContactNumbersToArray(contactNumbers ?? "") as Prisma.InputJsonValue,
-          email: contactEmail || "-@placeholder.com",
+          emailCpp: contactEmailCpp || null,
+          emailCpw: contactEmailCpw || null,
           cppNik: contactNikCpp || null,
           cpwNik: contactNikCpw || null,
           ktpAddress: null,
@@ -1103,7 +1300,7 @@ export async function editBooking(data: unknown) {
       );
     }
 
-    // Bonuses — replace existing atomically within transaction
+    // Bonuses (legacy) — replace existing atomically within transaction
     if (parsed.data.bonuses && parsed.data.bonuses.length > 0) {
       ops.push(
         db.snapBonus.deleteMany({ where: { bookingId: id } }),
@@ -1113,78 +1310,144 @@ export async function editBooking(data: unknown) {
       );
     }
 
-    // Term of payments — upsert atomically within transaction
-    if ((venueChanged || packageChanged) && rest.termOfPayments && rest.termOfPayments.length > 0) {
-      const existingTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
+    // Complimentaries — replace existing atomically within transaction
+    if (parsed.data.complimentaries !== undefined) {
+      ops.push(db.snapComplimentary.deleteMany({ where: { bookingId: id } }));
+      if (parsed.data.complimentaries.length > 0) {
+        ops.push(
+          ...parsed.data.complimentaries.map((c, i) =>
+            db.snapComplimentary.create({
+              data: {
+                bookingId: id,
+                complimentaryId: c.complimentaryId ?? null,
+                name: c.name,
+                price: c.price,
+                isShowPrice: c.isShowPrice,
+                description: c.description ?? null,
+                qty: c.qty,
+                sortOrder: c.sortOrder ?? i,
+              },
+            })
+          )
+        );
+      }
+    }
+
+    // Term of payments — upsert atomically within transaction when material change
+    if (hasMaterialChange && rest.termOfPayments && rest.termOfPayments.length > 0) {
+      // Re-fetch existing terms from DB to detect locked terms server-side.
+      // We NEVER trust client-sent paymentStatus / ackStatus for authorization.
+      const dbTerms = await db.termOfPayment.findMany({
+        where: { bookingId: id },
+        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true },
+      });
+
+      // A term is locked when it has been paid, refunded, or acknowledged by finance.
+      // Locked terms must NOT have their amount/name overwritten by client data.
+      const isLockedTerm = (t: { paymentStatus: string; ackStatus: string }) =>
+        t.paymentStatus === "paid" ||
+        t.paymentStatus === "refund" ||
+        t.ackStatus === "acknowledged";
+
+      const dbTermMap = new Map(dbTerms.map((t) => [t.id, t]));
+      const lockedTermIds = new Set(
+        dbTerms.filter(isLockedTerm).map((t) => t.id),
+      );
+
+      // Client-sent term IDs that are still in DB (the rest are new terms).
+      const clientTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
+
+      // Locked terms must always be preserved — include them in the "keep" set
+      // even if the client somehow didn't include them in the payload.
+      const keepIds = new Set([...clientTermIds, ...lockedTermIds]);
+
       ops.push(
-        db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: existingTermIds } } }),
+        // Delete only terms that are NOT locked and NOT sent by the client.
+        db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: [...keepIds] } } }),
         ...rest.termOfPayments.map((t) => {
           if (t.id) {
-            return db.termOfPayment.update({ where: { id: t.id }, data: { name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
+            // Locked and unlocked terms both allow full update — the explicit pencil-click
+            // gesture on the client is the authorization signal. Server preserves the
+            // invariant that locked terms cannot be silently deleted (see keepIds above),
+            // but their data (amount, name, dueDate) may be updated when the user sends
+            // new values. sortOrder is always updated regardless.
+            return db.termOfPayment.update({
+              where: { id: t.id },
+              data: { name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder },
+            });
           }
-          return db.termOfPayment.create({ data: { bookingId: id, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } });
+          // New term (no id) — always allowed.
+          return db.termOfPayment.create({
+            data: { bookingId: id, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder },
+          });
         })
       );
     }
 
     await db.$transaction(ops);
 
-    // Reset approval + create revision — only when package or venue changed
-    if (venueChanged || packageChanged) {
-    const reasons: string[] = [];
-    if (venueChanged) reasons.push("venue");
-    if (packageChanged) reasons.push("package");
-    const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
+    // Snapshot approval + create revision — when any material change detected
+    if (hasMaterialChange) {
+      const reasons: string[] = [];
+      if (venueChanged) reasons.push("venue");
+      if (packageChanged) reasons.push("package");
+      if (eventDateChanged) reasons.push("event date");
+      if (discountChanged) reasons.push("discount");
+      if (takeoutChanged) reasons.push("takeout");
+      if (topChanged) reasons.push("terms of payment");
+      const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
-    const approvalRecord = await db.approvalRecord.findUnique({
-      where: { module_entityId: { module: "booking", entityId: id } },
-      include: { steps: { orderBy: { stepOrder: "asc" } } },
-    });
-    if (approvalRecord) {
-      // Rebuild steps: conditional Sales + Manager → Finance. Auto-approve the
-      // Sales step only when the editor IS the assigned sales (and signed).
-      const editApprovalSteps = await buildBookingApprovalSteps({
-        salesId: booking.salesId,
-        creatorProfileId: session!.user.profileId!,
-        signatureSales: rest.signatureSales,
-        decidedAt: new Date(),
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "booking", entityId: id } },
+        select: { id: true },
       });
+      if (approvalRecord) {
+        // SNAPSHOT approach: do NOT delete old steps — they stay as history.
+        // Build new steps for this revision only. Old steps remain linked to
+        // their old revisionId (historical record). New steps get the new revisionId.
+        const editApprovalSteps = await buildBookingApprovalSteps({
+          salesId: booking.salesId,
+          creatorProfileId: session!.user.profileId!,
+          signatureSales: rest.signatureSales,
+          decidedAt: new Date(),
+        });
 
-      if (editApprovalSteps && editApprovalSteps.length > 0) {
-        const newStepOps: Prisma.PrismaPromise<unknown>[] = editApprovalSteps.map((step) =>
-          db.approvalRecordStep.create({
-            data: {
-              recordId: approvalRecord.id,
-              stepOrder: step.stepOrder,
-              approverType: step.approverType,
-              approverRoleId: step.approverRoleId,
-              approverUserId: step.approverUserId,
-              status: step.status,
-              decidedById: step.decidedById,
-              decidedAt: step.decidedAt,
-              signature: step.signature,
-              revisionId,
-            },
-          })
-        );
+        if (editApprovalSteps && editApprovalSteps.length > 0) {
+          const newStepOps: Prisma.PrismaPromise<unknown>[] = editApprovalSteps.map((step) =>
+            db.approvalRecordStep.create({
+              data: {
+                recordId: approvalRecord.id,
+                stepOrder: step.stepOrder,
+                approverType: step.approverType,
+                approverRoleId: step.approverRoleId,
+                approverUserId: step.approverUserId,
+                status: step.status,
+                decidedById: step.decidedById,
+                decidedAt: step.decidedAt,
+                signature: step.signature,
+                revisionId,
+              },
+            })
+          );
 
-        await db.$transaction([
-          db.approvalRecordStep.deleteMany({ where: { recordId: approvalRecord.id } }),
-          db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
-          db.booking.update({ where: { id }, data: { bookingStatus: "Pending" } }),
-          ...newStepOps,
-        ]);
+          // Update approval record to pending + booking to Pending + set currentRevisionId
+          // Old steps are kept untouched (snapshot, not reset)
+          await db.$transaction([
+            db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
+            db.booking.update({ where: { id }, data: { bookingStatus: "Pending", currentRevisionId: revisionId } }),
+            ...newStepOps,
+          ]);
+        }
+
+        // Reset client agreement — invalidate old link, generate new token
+        const newToken = crypto.randomUUID();
+        const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        await db.clientAgreement.updateMany({
+          where: { bookingId: id },
+          data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+        });
       }
-
-      // Reset client agreement — invalidate old link, generate new token
-      const newToken = crypto.randomUUID();
-      const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-      await db.clientAgreement.updateMany({
-        where: { bookingId: id },
-        data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-      });
-    }
-    } // end if venueChanged || packageChanged
+    } // end if hasMaterialChange
 
     await logAudit({
       userId: session!.user.id,
@@ -1199,12 +1462,13 @@ export async function editBooking(data: unknown) {
         const oldContact = booking.snapCustomer?.mobileNumber ?? "";
         const newContact = contactNumbers ? serializeContactNumbersToDisplay(contactNumbers) : "";
         if (newContact !== oldContact) diff.contactNumbers = newContact;
-        if (contactEmail !== (booking.snapCustomer?.email ?? "")) diff.email = contactEmail;
+        if (contactEmailCpp !== (booking.snapCustomer?.emailCpp ?? "")) diff.emailCpp = contactEmailCpp;
+        if (contactEmailCpw !== (booking.snapCustomer?.emailCpw ?? "")) diff.emailCpw = contactEmailCpw;
         if (rest.bookingDate !== booking.bookingDate.toISOString().split("T")[0]) diff.bookingDate = rest.bookingDate;
         if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
         if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
 
-        if (venueChanged || packageChanged) {
+        if (hasMaterialChange) {
           // New snap values (already updated by transaction)
           const [newSnapV, newSnapP, newSnapPV] = await Promise.all([
             db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
@@ -1222,13 +1486,16 @@ export async function editBooking(data: unknown) {
               diff.packagePricing = `${oldPV} → ${newPV}`;
             }
           }
-          const discount = rest.specialBonusAmount ?? 0;
-          const oldDiscount = booking.discountAmount ?? 0;
-          if (discount !== oldDiscount) {
-            diff.discount = `${fmtNum(oldDiscount)} → ${rest.specialBonusName ?? "Discount"}: -${fmtNum(discount)}`;
+          if (eventDateChanged) diff.eventDate = `${oldBookingDate} → ${newBookingDate}`;
+          if (discountChanged) {
+            const discount = newDiscountAmount;
+            const oldDiscount = booking.discountAmount ?? 0;
+            diff.discount = `${fmtNum(oldDiscount)} → ${newDiscountName ?? "Discount"}: -${fmtNum(discount)}`;
             const newPrice = newSnapPV?.price ?? 0;
             diff.priceAfterDiscount = fmtNum(Math.max(0, newPrice - discount));
           }
+          if (takeoutChanged) diff.takeout = "Takeout categories updated";
+          if (topChanged) diff.termOfPayments = "Terms of payment updated";
         }
 
         return diff;

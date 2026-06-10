@@ -25,9 +25,11 @@ interface Props {
   minDropdownWidth?: number;
   venueId?: string;
   disableAdd?: boolean;
+  /** Tampilkan semua rekening lintas venue (hanya yang punya venueId, kecualikan yang null). Mengabaikan filter venueId. */
+  crossVenue?: boolean;
 }
 
-export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekening...", disabled, className, minDropdownWidth = 320, venueId, disableAdd = false }: Props) {
+export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekening...", disabled, className, minDropdownWidth = 320, venueId, disableAdd = false, crossVenue = false }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -39,10 +41,14 @@ export function BankAccountSelect({ value, onChange, placeholder = "Pilih rekeni
   const [pos, setPos] = React.useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
 
   const { data: paymentMethods = [] } = useQuery<PaymentMethod[]>({
-    queryKey: ["payment-methods", venueId ?? "all"],
+    queryKey: ["payment-methods", crossVenue ? "cross-venue" : (venueId ?? "all")],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: "100" });
-      if (venueId) params.set("venueId", venueId);
+      if (crossVenue) {
+        params.set("crossVenue", "true");
+      } else if (venueId) {
+        params.set("venueId", venueId);
+      }
       const r = await fetch(`/api/payment-methods?${params}`);
       if (!r.ok) return [];
       const d = await r.json();

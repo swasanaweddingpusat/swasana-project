@@ -229,8 +229,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <MobileField label="Sales PIC">
                         {booking.sales?.fullName ?? "-"}
                       </MobileField>
-                      <MobileField label="Email">
-                        {booking.snapCustomer?.email ?? "-"}
+                      <MobileField label="Email CPP">
+                        {booking.snapCustomer?.emailCpp ?? "-"}
+                      </MobileField>
+                      <MobileField label="Email CPW">
+                        {booking.snapCustomer?.emailCpw ?? "-"}
                       </MobileField>
                       <MobileField label="Phone Number">
                         {(() => {
@@ -357,8 +360,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <p className={val}>{booking.snapCustomer?.name ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Sales PIC</p>
                       <p className={val}>{booking.sales?.fullName ?? "-"}</p>
-                      <p className={lbl + " mt-4"}>Email</p>
-                      <p className={val}>{booking.snapCustomer?.email ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Email CPP</p>
+                      <p className={val}>{booking.snapCustomer?.emailCpp ?? "-"}</p>
+                      <p className={lbl + " mt-4"}>Email CPW</p>
+                      <p className={val}>{booking.snapCustomer?.emailCpw ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Phone Number</p>
                       {(() => {
                         const raw = booking.snapCustomer?.mobileNumber ?? "";
@@ -581,6 +586,52 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                             <RichText html={item.itemText} />
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* New-style complimentaries */}
+                  {(booking as typeof booking & { snapComplimentaries?: { id: string; name: string; price: number; isShowPrice: boolean; qty: number; description?: string | null }[] }).snapComplimentaries && (booking as typeof booking & { snapComplimentaries?: { id: string; name: string; price: number; isShowPrice: boolean; qty: number; description?: string | null }[] }).snapComplimentaries!.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Complimentary</p>
+                      {/* Mobile */}
+                      <div className="sm:hidden space-y-3">
+                        {(booking as typeof booking & { snapComplimentaries: { id: string; name: string; price: number; isShowPrice: boolean; qty: number; description?: string | null }[] }).snapComplimentaries.map((c) => (
+                          <div key={c.id} className="rounded-2xl border bg-card p-4 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Tag weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <p className="text-sm font-semibold text-foreground">{c.name}</p>
+                            </div>
+                            <div className="space-y-1.5 text-sm">
+                              <div><p className={lbl}>Qty</p><p className={val}>{c.qty}</p></div>
+                              <div><p className={lbl}>Harga</p><p className={val}>{c.isShowPrice ? fmtPrice(c.price) : "(Tersembunyi)"}</p></div>
+                              {c.description && <div><p className={lbl}>Keterangan</p><RichText html={c.description} /></div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Desktop */}
+                      <div className="hidden sm:block rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="px-4">Nama</TableHead>
+                              <TableHead className="px-4 w-20">Qty</TableHead>
+                              <TableHead className="px-4 w-37.5">Harga</TableHead>
+                              <TableHead className="px-4">Keterangan</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(booking as typeof booking & { snapComplimentaries: { id: string; name: string; price: number; isShowPrice: boolean; qty: number; description?: string | null }[] }).snapComplimentaries.map((c) => (
+                              <TableRow key={c.id}>
+                                <TableCell className="px-4 font-medium text-sm text-foreground">{c.name}</TableCell>
+                                <TableCell className="px-4 text-sm">{c.qty}</TableCell>
+                                <TableCell className="px-4 text-sm">{c.isShowPrice ? fmtPrice(c.price) : <span className="text-muted-foreground">(Tersembunyi)</span>}</TableCell>
+                                <TableCell className="px-4 text-sm"><RichText html={c.description} /></TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
                     </div>
                   )}

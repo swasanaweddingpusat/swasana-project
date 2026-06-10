@@ -6,10 +6,12 @@ import { db } from "@/lib/db";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const venueId = searchParams.get("venueId") ?? undefined;
+  // crossVenue: tampilkan semua rekening yang punya venueId (lintas venue), kecualikan yang venueId null.
+  const crossVenue = searchParams.get("crossVenue") === "true";
 
   let userId: string;
 
-  if (venueId) {
+  if (venueId || crossVenue) {
     // Booking context — cukup authenticated
     const session = await auth();
     if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -28,7 +30,12 @@ export async function GET(request: Request) {
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 10));
     const skip = (page - 1) * limit;
 
-    const where = venueId ? { venueId } : {};
+    let where: { venueId?: string | { not: null } } = {};
+    if (venueId) {
+      where = { venueId };
+    } else if (crossVenue) {
+      where = { venueId: { not: null } };
+    }
 
     const [data, total] = await Promise.all([
       db.paymentMethod.findMany({
