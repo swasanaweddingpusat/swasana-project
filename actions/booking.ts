@@ -1144,6 +1144,8 @@ export async function editBooking(data: unknown) {
           weddingSession: rest.weddingSession ?? null,
           weddingType: rest.weddingType ?? null,
           signingLocation: rest.signingLocation ?? null,
+          ...(rest.eventTime !== undefined && { eventTime: rest.eventTime || null }),
+          ...(rest.notes !== undefined && { notes: rest.notes || null }),
           discountName: rest.specialBonusName ?? null,
           discountAmount: rest.specialBonusAmount ?? 0,
         },

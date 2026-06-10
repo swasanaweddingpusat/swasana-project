@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { uploadToR2, getPublicUrl } from "@/lib/r2";
+import { uploadToR2, getPublicUrl, deleteFromR2 } from "@/lib/r2";
 import sharp from "sharp";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "edit" });
   if (response) return response;
   if (!mutationLimiter.check(`upload-evidence:${session.user.id}`)) return rateLimitResponse();
@@ -29,10 +29,26 @@ export async function POST(req: Request) {
     ext = "webp";
   }
 
+  // Fetch existing evidence key so we can delete the old file from R2 after successful upload.
+  const existing = await db.termOfPayment.findUnique({
+    where: { id: termId },
+    select: { paymentEvidence: true },
+  });
+  const oldKey = existing?.paymentEvidence ?? null;
+
   const randomId = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, "0")).join("");
   const key = `${randomId}.${ext}`;
   await uploadToR2(buffer, key, contentType);
   await db.termOfPayment.update({ where: { id: termId }, data: { paymentEvidence: key } });
+
+  // Best-effort: delete old R2 object. Failure must NOT fail the whole request.
+  if (oldKey && oldKey !== key) {
+    try {
+      await deleteFromR2(oldKey);
+    } catch (err) {
+      console.error("[upload-evidence] Failed to delete old R2 object", oldKey, err);
+    }
+  }
 
   return NextResponse.json({ filePath: getPublicUrl(key) });
 }

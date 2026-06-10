@@ -84,6 +84,8 @@ export const editBookingSchema = z.object({
   paymentMethodId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   signingLocation: z.string().optional().nullable(),
+  eventTime: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
   // Customer fields
   customerName: z.string().min(1, "Nama customer wajib diisi"),
   contactNumbers: z.string().optional().default(""),
