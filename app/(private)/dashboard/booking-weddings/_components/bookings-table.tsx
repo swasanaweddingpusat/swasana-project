@@ -213,7 +213,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     // Backward compat: if booking has no currentRevisionId OR all steps have null revisionId,
     // fall back to showing all steps (legacy data before this feature).
     const allAgreementSteps = approvalMap.get(booking.id)?.steps ?? [];
-    const currentRevisionId = (booking as unknown as { currentRevisionId: string | null }).currentRevisionId;
+    // booking.currentRevisionId is a scalar field returned by Prisma `include` — no cast needed.
+    const currentRevisionId = booking.currentRevisionId;
     const hasRevisionedSteps = allAgreementSteps.some((s) => s.revisionId !== null);
     const currentRoundSteps = (currentRevisionId && hasRevisionedSteps)
       ? allAgreementSteps.filter((s) => s.revisionId === currentRevisionId)
@@ -242,7 +243,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           const allSteps = record.steps;
           // Show only steps for the active revision (snapshot approach).
           // Backward compat: if no currentRevisionId or no steps have revisionId → show all steps.
-          const bCurrentRevisionId = (booking as unknown as { currentRevisionId: string | null }).currentRevisionId;
+          const bCurrentRevisionId = booking.currentRevisionId;
           const bHasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
           const steps = (bCurrentRevisionId && bHasRevisionedSteps)
             ? allSteps.filter((s) => s.revisionId === bCurrentRevisionId)

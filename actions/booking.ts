@@ -1349,7 +1349,6 @@ export async function editBooking(data: unknown) {
         t.paymentStatus === "refund" ||
         t.ackStatus === "acknowledged";
 
-      const dbTermMap = new Map(dbTerms.map((t) => [t.id, t]));
       const lockedTermIds = new Set(
         dbTerms.filter(isLockedTerm).map((t) => t.id),
       );

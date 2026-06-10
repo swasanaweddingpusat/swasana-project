@@ -120,8 +120,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // This controls whether step 5 (Signing) is shown. If not Sales PIC, the drawer
   // has 4 effective steps; the Sales step in the approval flow stays pending until
   // the Sales PIC signs via the approve modal.
+  // booking.salesId is a scalar field returned by Prisma `include` — no cast needed.
   const isSalesPIC = !!currentUser?.profileId && !!booking?.salesId &&
-    currentUser.profileId === (booking as Record<string, unknown>).salesId as string;
+    currentUser.profileId === booking.salesId;
 
   const totalSteps = isSalesPIC ? 5 : 4;
   const [currentStep, setCurrentStep] = useState(1);
@@ -184,6 +185,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [originalDiscountAmount, setOriginalDiscountAmount] = useState(0);
   // Serialized initial category toggles for takeout change detection (JSON string)
   const [originalToggles, setOriginalToggles] = useState("");
+  // Serialized initial terms for TOP change detection (JSON string) — mirrors server logic
+  const [originalTermsKey, setOriginalTermsKey] = useState("");
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
@@ -283,16 +286,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     const initialBookingDate = booking.bookingDate ? new Date(booking.bookingDate).toISOString() : "";
     setBookingDate(initialBookingDate);
     setOriginalBookingDate(initialBookingDate);
-    setOriginalDiscountName((booking as Record<string, unknown>).discountName as string ?? "Discount");
-    setOriginalDiscountAmount(Number((booking as Record<string, unknown>).discountAmount) || 0);
+    setOriginalDiscountName(booking.discountName ?? "Discount");
+    setOriginalDiscountAmount(Number(booking.discountAmount) || 0);
     setWeddingSession(booking.weddingSession ?? "");
     setWeddingType(booking.weddingType ?? "");
     setSourceOfInformationId(booking.sourceOfInformationId ?? "");
-    setSalesId((booking as Record<string, unknown>).salesId as string ?? null);
+    setSalesId(booking.salesId ?? null);
     setPaymentMethodId(booking.paymentMethodId ?? "");
     setSigningLocation(booking.signingLocation ?? "");
-    setSpecialBonusName((booking as Record<string, unknown>).discountName as string ?? "Discount");
-    setSpecialBonusAmount(Number((booking as Record<string, unknown>).discountAmount) || 0);
+    setSpecialBonusName(booking.discountName ?? "Discount");
+    setSpecialBonusAmount(Number(booking.discountAmount) || 0);
     setSignatureSales("");
     sigSalesRef.current?.clear();
     setCategoryToggles({});
@@ -318,7 +321,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       { name: "Booking Fee", amount: 5_000_000, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
       { name: "DP", amount: 10_000_000, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
     ];
-    setTerms(bTerms.length > 0 ? bTerms : defaultTerms);
+    const initialTerms = bTerms.length > 0 ? bTerms : defaultTerms;
+    setTerms(initialTerms);
+    // Snapshot for TOP change detection — mirrors server: count, name, amount, sortOrder
+    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder }))));
     setLastAllocatedPrice(0);
     setCollapsedTerms(new Set());
     setUnlockedTerms(new Set());
@@ -478,12 +484,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     p: takeoutPrices,
   });
   const takeoutChanged = originalToggles !== "" && currentTogglesKey !== originalToggles;
+  // TOP change detection — mirrors server: count, name, amount, sortOrder per index
+  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder })));
+  const topChanged = originalTermsKey !== "" && currentTermsKey !== originalTermsKey;
   const hasSignificantChange =
     venueId !== originalVenueId ||
     packageId !== originalPackageId ||
     eventDateChanged ||
     discountChanged ||
-    takeoutChanged;
+    takeoutChanged ||
+    topChanged;
 
   // ── Completeness per step ──
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0);
@@ -1399,9 +1409,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 </div>
               </div>
               {hasSignificantChange && (
-                <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-orange-700">Perhatian</p>
-                  <p className="text-xs text-orange-600">Menyimpan perubahan ini akan mereset seluruh approval. Manager dan Client harus menandatangani ulang PO ini.</p>
+                <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-destructive">Perhatian</p>
+                  <p className="text-xs text-destructive/80">Menyimpan perubahan ini akan mereset seluruh approval. Manager dan Client harus menandatangani ulang PO ini.</p>
                 </div>
               )}
             </div>
