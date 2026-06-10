@@ -1888,69 +1888,45 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <div className="space-y-2">
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Complimentary (Bonus)</FormLabel>
 
-                    {/* Mode selector — muncul saat mode = "none" */}
-                    {complimentaryMode === "none" && (
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="flex-1 rounded-xl border-dashed text-sm"
-                          onClick={() => setComplimentaryMode("picker")}
-                        >
-                          <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-                          Pilih dari Daftar
-                        </Button>
+                    {/* Pilih dari daftar (dropdown inline) + tombol Tambah */}
+                    {complimentaryMode !== "create-new" && (
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <SearchableSelect
+                            options={complimentaryOptions
+                              .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+                              .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price) }))}
+                            value=""
+                            onChange={(selectedId) => {
+                              const found = complimentaryOptions.find((x) => x.id === selectedId);
+                              if (found) {
+                                setComplimentaries((prev) => [...prev, {
+                                  id: crypto.randomUUID(),
+                                  complimentaryId: found.id,
+                                  name: found.name,
+                                  price: found.price,
+                                  isShowPrice: found.isShowPrice,
+                                  description: found.description ?? "",
+                                  qty: 1,
+                                }]);
+                              }
+                            }}
+                            placeholder="Pilih dari daftar complimentary..."
+                            searchPlaceholder="Cari complimentary..."
+                            emptyText="Tidak ada complimentary"
+                          />
+                        </div>
                         {canCreateComplimentary && (
                           <Button
                             type="button"
                             variant="outline"
-                            className="flex-1 rounded-xl border-dashed text-sm"
+                            className="shrink-0 rounded-xl"
                             onClick={() => { setComplimentaryMode("create-new"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); }}
                           >
                             <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-                            Buat Baru
+                            Tambah
                           </Button>
                         )}
-                      </div>
-                    )}
-
-                    {/* Mode: pilih dari daftar */}
-                    {complimentaryMode === "picker" && (
-                      <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-muted-foreground">Pilih dari daftar master</p>
-                          <button
-                            type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => setComplimentaryMode("none")}
-                          >
-                            Batal
-                          </button>
-                        </div>
-                        <SearchableSelect
-                          options={complimentaryOptions
-                            .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                            .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price) }))}
-                          value=""
-                          onChange={(selectedId) => {
-                            const found = complimentaryOptions.find((x) => x.id === selectedId);
-                            if (found) {
-                              setComplimentaries((prev) => [...prev, {
-                                id: crypto.randomUUID(),
-                                complimentaryId: found.id,
-                                name: found.name,
-                                price: found.price,
-                                isShowPrice: found.isShowPrice,
-                                description: found.description ?? "",
-                                qty: 1,
-                              }]);
-                              setComplimentaryMode("none");
-                            }
-                          }}
-                          placeholder="Cari complimentary..."
-                          searchPlaceholder="Cari complimentary..."
-                          emptyText="Tidak ada complimentary"
-                        />
                       </div>
                     )}
 

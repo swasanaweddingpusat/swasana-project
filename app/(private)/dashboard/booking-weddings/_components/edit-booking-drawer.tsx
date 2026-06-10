@@ -981,43 +981,31 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               <div className="space-y-2">
                 <label className={LBL}>Complimentary</label>
 
-                {complimentaryMode === "none" && (
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" className="flex-1 rounded-xl border-dashed text-sm" onClick={() => setComplimentaryMode("picker")}>
-                      <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-                      Pilih dari Daftar
-                    </Button>
+                {complimentaryMode !== "create-new" && (
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <SearchableSelect
+                        options={complimentaryOptions
+                          .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+                          .map((opt) => ({ id: opt.id, name: opt.name }))}
+                        value=""
+                        onChange={(cId) => {
+                          const opt = complimentaryOptions.find((c) => c.id === cId);
+                          if (opt) {
+                            setComplimentaries((prev) => [...prev, { id: `new-${Date.now()}`, complimentaryId: opt.id, name: opt.name, price: opt.price, isShowPrice: opt.isShowPrice, description: "", qty: 1 }]);
+                          }
+                        }}
+                        placeholder="Pilih dari daftar complimentary..."
+                        searchPlaceholder="Cari complimentary..."
+                        emptyText="Tidak ada complimentary"
+                      />
+                    </div>
                     {canCreateComplimentary && (
-                      <Button type="button" variant="outline" className="flex-1 rounded-xl border-dashed text-sm" onClick={() => { setComplimentaryMode("create-new"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); }}>
+                      <Button type="button" variant="outline" className="shrink-0 rounded-xl" onClick={() => { setComplimentaryMode("create-new"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); }}>
                         <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-                        Buat Baru
+                        Tambah
                       </Button>
                     )}
-                  </div>
-                )}
-
-                {complimentaryMode === "picker" && (
-                  <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">Pilih dari daftar master</p>
-                      <button type="button" className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setComplimentaryMode("none")}>Batal</button>
-                    </div>
-                    <SearchableSelect
-                      options={complimentaryOptions
-                        .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                        .map((opt) => ({ id: opt.id, name: opt.name }))}
-                      value=""
-                      onChange={(cId) => {
-                        const opt = complimentaryOptions.find((c) => c.id === cId);
-                        if (opt) {
-                          setComplimentaries((prev) => [...prev, { id: `new-${Date.now()}`, complimentaryId: opt.id, name: opt.name, price: opt.price, isShowPrice: opt.isShowPrice, description: "", qty: 1 }]);
-                          setComplimentaryMode("none");
-                        }
-                      }}
-                      placeholder="Cari complimentary..."
-                      searchPlaceholder="Cari complimentary..."
-                      emptyText="Tidak ada complimentary"
-                    />
                   </div>
                 )}
 

@@ -640,11 +640,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       {/* Customer cell */}
                       <TableCell className={cn('px-2', 'py-2')}>
                         <div className="overflow-hidden max-w-0 min-w-full">
-                          <p className={cn('text-sm', 'font-medium', 'text-foreground', 'truncate')}>{booking.snapCustomer?.name ?? "—"}</p>
+                          <p className={cn('text-sm', 'font-medium', 'text-foreground', 'truncate')}>{booking.snapCustomer?.name ?? booking.customer?.name ?? "—"}</p>
                           <Tooltip>
                             <TooltipTrigger className="block truncate w-full text-left text-xs text-muted-foreground mt-0.5">
                               {(() => {
-                                const raw = booking.snapCustomer?.mobileNumber ?? "";
+                                const raw = booking.snapCustomer?.mobileNumber ?? (typeof booking.customer?.mobileNumber === "string" ? booking.customer.mobileNumber : JSON.stringify(booking.customer?.mobileNumber ?? "")) ?? "";
                                 try { const arr = JSON.parse(raw); if (Array.isArray(arr)) return arr.map((e: { name?: string; number: string }) => e.name ? `${e.name}: ${e.number}` : e.number).join(", "); } catch { /* not JSON */ }
                                 return raw;
                               })()}
@@ -652,7 +652,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             <TooltipContent side="bottom" align="start" className="max-w-72">
                               <ul className="space-y-1">
                                 {(() => {
-                                  const raw = booking.snapCustomer?.mobileNumber ?? "";
+                                  const raw = booking.snapCustomer?.mobileNumber ?? (typeof booking.customer?.mobileNumber === "string" ? booking.customer.mobileNumber : JSON.stringify(booking.customer?.mobileNumber ?? "")) ?? "";
                                   let nums: { name?: string; number: string }[] = [];
                                   try { const arr = JSON.parse(raw); if (Array.isArray(arr)) nums = arr; } catch { nums = raw.split(/[,\n]+/).map((s: string) => ({ number: s.trim() })).filter((e) => e.number); }
                                   return nums.map((e, i) => <li key={i} className="text-sm">{e.name ? <><span className="text-muted-foreground">{e.name}:</span> {e.number}</> : e.number}</li>);
@@ -796,7 +796,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     {/* Row 1: customer name + status badge */}
                     <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
                       <span className={cn('font-medium', 'text-foreground', 'truncate')}>
-                        {rowNumber}. {booking.snapCustomer?.name ?? "—"}
+                        {rowNumber}. {booking.snapCustomer?.name ?? booking.customer?.name ?? "—"}
                       </span>
                       <div className={cn('flex', 'items-center', 'gap-1', 'shrink-0')}>
                         {booking.recordStatus === "draft" && (
