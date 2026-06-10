@@ -146,8 +146,6 @@ export const navItems: NavItem[] = [
     permission: { module: "vendor", action: "view" },
   },
   {
-    // Finance is its own area with an internal secondary sidebar.
-    // Submenus live in finance/_components/finance-nav-config.ts, not here.
     name: "Finance",
     href: "/dashboard/finance",
     icon: Wallet,
@@ -164,7 +162,6 @@ export const navItems: NavItem[] = [
     href: "/dashboard/pengadaan-barang",
     icon: CartLarge,
     permission: { module: "procurement", action: "view" },
-    hidden: true,
   },
   {
     name: "Absensi",

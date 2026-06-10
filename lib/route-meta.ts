@@ -197,6 +197,12 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola purchase order vendor per booking",
   },
 
+  // ─── Pengadaan Barang ──────────────────────────────────────────────────────
+  "/dashboard/pengadaan-barang": {
+    title: "Pengadaan Barang",
+    subtitle: "Kelola pengajuan pengadaan dan pembelian barang",
+  },
+
   // ─── Maintenance ───────────────────────────────────────────────────────────
   "/dashboard/maintenance": {
     title: "Maintenance",
