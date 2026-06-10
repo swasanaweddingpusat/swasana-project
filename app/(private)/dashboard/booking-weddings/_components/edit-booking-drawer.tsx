@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
@@ -149,6 +150,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [bookingDate, setBookingDate] = useState("");
   const [weddingSession, setWeddingSession] = useState("");
   const [weddingType, setWeddingType] = useState("");
+  const [time, setTime] = useState("");
+  const [noteDateEvent, setNoteDateEvent] = useState("");
   // Vendor bonus UI sudah di-deprecate (diganti Complimentary). State ini hanya
   // mempreserve snapBonuses lama agar data tidak hilang saat booking lama di-edit.
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
@@ -290,6 +293,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setOriginalDiscountAmount(Number(booking.discountAmount) || 0);
     setWeddingSession(booking.weddingSession ?? "");
     setWeddingType(booking.weddingType ?? "");
+    setTime(booking.eventTime ?? "");
+    setNoteDateEvent(booking.notes ?? "");
     setSourceOfInformationId(booking.sourceOfInformationId ?? "");
     setSalesId(booking.salesId ?? null);
     setPaymentMethodId(booking.paymentMethodId ?? "");
@@ -621,6 +626,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       weddingSession: (weddingSession as "morning" | "evening" | "fullday") || null,
       weddingType: weddingType || null,
       signingLocation: signingLocation || null,
+      eventTime: time || null,
+      notes: noteDateEvent || null,
       customerName,
       contactNumbers: JSON.stringify(contactNumbers),
       contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId,
@@ -944,6 +951,30 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                     })()}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Time */}
+              <div>
+                <label className={LBL}>Time (Jam Acara)</label>
+                <div className="mt-1">
+                  <TimeRangePicker
+                    value={time}
+                    onChange={setTime}
+                    placeholder="Pilih waktu (bisa rentang)..."
+                  />
+                </div>
+              </div>
+
+              {/* Note Date Event */}
+              <div>
+                <label className={LBL}>Note Date Event</label>
+                <Textarea
+                  placeholder="Add note for date event"
+                  value={noteDateEvent}
+                  onChange={(e) => setNoteDateEvent(e.target.value)}
+                  rows={3}
+                  className="mt-1"
+                />
               </div>
 
               {/* Complimentary */}
