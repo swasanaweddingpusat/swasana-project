@@ -36,6 +36,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-quotation-templates": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
+  "settings-complimentary": ["view", "create", "edit", "delete"],
   // CRM modules
   leads: ["view", "create", "edit", "delete"],
   "settings-lead-status": ["view", "create", "edit", "delete"],
@@ -76,6 +77,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
+    "settings-complimentary": ["view", "create", "edit", "delete"],
   },
   // Manager: full access to everything EXCEPT settings-* modules.
   manager: {
@@ -90,6 +92,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     leads: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
+    "settings-complimentary": ["view", "create", "edit", "delete"],
     maintenance: ["view", "create", "edit", "delete"],
     "settings-maintenance-category": ["view", "create", "edit", "delete"],
     "settings-maintenance-priority": ["view", "create", "edit", "delete"],
@@ -124,6 +127,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     leads: ["view", "create", "edit"],
     // quotations intentionally removed — sales role no longer has quotation access.
+    // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
+    // but master data management (edit/delete) is reserved for direktur-sales and above.
+    "settings-complimentary": ["view", "create"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -141,6 +147,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     quotations: ["view", "create", "edit"],
     leads: ["view", "create", "edit", "delete"],
+    // view+create only: same rationale as sales — operational access to pick/create
+    // complimentary entries, master data management stays with direktur-sales and above.
+    "settings-complimentary": ["view", "create"],
   },
   // MICE manager: MICE features (leads, quotations, booking-mice) + groups,
   // customers, and event-types settings. No wedding booking, no finance/package/vendor.
@@ -198,6 +207,12 @@ export async function seedRolesPermissions(): Promise<void> {
     const existing = await prisma.role.findUnique({ where: { name: data.name } });
     if (!existing) await prisma.role.create({ data });
   }
+
+  // 1b. Ensure super-admin always has isSystemRole = true (migration guard)
+  await prisma.role.update({
+    where: { name: "super-admin" },
+    data: { isSystemRole: true },
+  });
 
   // 2. Seed permissions
   const permissionData = buildPermissionData();
