@@ -167,7 +167,7 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
       db.booking.create({
         data: {
           id: draftId,
-          bookingDate: new Date(input.bookingDate),
+          bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
           recordStatus: "draft",
           bookingStatus: "Pending",
           category: "MICE",
@@ -343,7 +343,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
           venueId: draft.venueId,
           bookingDate: bookingDateObj,
           recordStatus: "saved",
-          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
           OR: sessionOrConditions,
         },
         select: { id: true },
@@ -384,6 +384,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
       creatorProfileId: session!.user.profileId!,
       signatureSales: input.signatureSales ?? draft.salesSignature,
       decidedAt: new Date(),
+      includeClientStep: false, // MICE: no client TTD step, manager+finance → Confirmed
     });
 
     const ops: Prisma.PrismaPromise<unknown>[] = [];

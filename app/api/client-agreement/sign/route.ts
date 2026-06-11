@@ -39,7 +39,13 @@ export async function POST(req: Request) {
       }),
     ]);
 
-    // Auto-approve client step in ApprovalRecord
+    // Auto-approve client step in ApprovalRecord.
+    // Fetch booking first to get currentRevisionId.
+    const booking = await db.booking.findUnique({
+      where: { id: agreement.bookingId },
+      select: { currentRevisionId: true },
+    });
+
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: agreement.bookingId } },
       include: { steps: { orderBy: { stepOrder: "asc" } } },
@@ -47,53 +53,53 @@ export async function POST(req: Request) {
 
     if (approvalRecord) {
       const allSteps = approvalRecord.steps;
-      let latestRoundSteps = allSteps;
-      if (allSteps.length > 0) {
-        const first = allSteps[0];
-        let roundSize = allSteps.length;
-        for (let i = 1; i < allSteps.length; i++) {
-          if (allSteps[i].approverType === first.approverType &&
-              allSteps[i].approverRoleId === first.approverRoleId &&
-              allSteps[i].approverUserId === first.approverUserId) {
-            roundSize = i;
-            break;
-          }
-        }
-        latestRoundSteps = allSteps.slice(-roundSize);
-      }
 
-      const clientStep = latestRoundSteps.find(
+      // Filter by currentRevisionId when available (snapshot approach).
+      // Fallback for legacy bookings without currentRevisionId: use all steps that
+      // have no revisionId (pre-snapshot data), or all steps if no revisioned data exists.
+      const currentRevisionId = booking?.currentRevisionId ?? null;
+      const hasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+
+      const revisionSteps = (currentRevisionId && hasRevisionedSteps)
+        ? allSteps.filter((s) => s.revisionId === currentRevisionId)
+        : allSteps;
+
+      // Find pending client step within this revision's steps.
+      const clientStep = revisionSteps.find(
         (s) => s.approverType === "client" && s.status === "pending"
       );
 
       if (clientStep) {
-        const allOtherApproved = latestRoundSteps
+        // All OTHER steps in this revision must be approved before confirming the booking.
+        const allOtherApproved = revisionSteps
           .filter((s) => s.id !== clientStep.id)
           .every((s) => s.status === "approved");
 
-          await db.$transaction([
-            db.approvalRecordStep.update({
-              where: { id: clientStep.id },
-              data: {
-                status: "approved",
-                signature: signatureData,
-                decidedAt: new Date(),
-              },
-            }),
-            ...(allOtherApproved
-              ? [
-                  db.approvalRecord.update({
-                    where: { id: approvalRecord.id },
-                    data: { status: "approved" },
-                  }),
-                  db.booking.update({
-                    where: { id: agreement.bookingId },
-                    data: { bookingStatus: "Confirmed" },
-                  }),
-                ]
-              : []),
-          ]);
+        await db.$transaction([
+          db.approvalRecordStep.update({
+            where: { id: clientStep.id },
+            data: {
+              status: "approved",
+              signature: signatureData,
+              decidedAt: new Date(),
+            },
+          }),
+          ...(allOtherApproved
+            ? [
+                db.approvalRecord.update({
+                  where: { id: approvalRecord.id },
+                  data: { status: "approved" },
+                }),
+                db.booking.update({
+                  where: { id: agreement.bookingId },
+                  data: { bookingStatus: "Confirmed" },
+                }),
+              ]
+            : []),
+        ]);
       }
+      // If clientStep not found (legacy booking without client step) — signing still
+      // updates clientAgreement above. No crash; log the audit and return success.
     }
 
     await logAudit({
@@ -102,34 +108,6 @@ export async function POST(req: Request) {
       entityId: agreement.bookingId,
       description: `Client agreement ditandatangani oleh ${signerName ?? "Client"}`,
     });
-
-    // Update signatures in the latest revision's snapshotData
-    const latestRevision = await db.bookingRevision.findFirst({
-      where: { bookingId: agreement.bookingId },
-      orderBy: { revisionNumber: "desc" },
-      select: { id: true, snapshotData: true },
-    });
-
-    if (latestRevision) {
-      const snap = (latestRevision.snapshotData as Record<string, unknown>) ?? {};
-      await db.bookingRevision.update({
-        where: { id: latestRevision.id },
-        data: {
-          snapshotData: {
-            ...snap,
-            signatures: {
-              ...((snap.signatures as Record<string, unknown>) ?? {}),
-              client: {
-                name: signerName ?? "",
-                role: "client",
-                signature: signatureData,
-                signatureDate: new Date().toISOString(),
-              },
-            },
-          },
-        },
-      });
-    }
 
     return NextResponse.json({ success: true });
   } catch {

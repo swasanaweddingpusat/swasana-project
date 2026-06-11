@@ -105,12 +105,19 @@ export async function POST(req: Request) {
           ? { sn: approvalRecord.emateraiSn, qrBase64: approvalRecord.emateraiQrBase64 }
           : null;
 
-      const steps = approvalRecord.steps;
-      const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
-      const latestRound = steps.slice(-roundSize);
-      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
+      const allSteps = approvalRecord.steps;
+
+      // Filter steps by currentRevisionId (snapshot approach).
+      // Fallback: if no steps have revisionId (legacy data) → use all steps.
+      const currentRevisionId = booking.currentRevisionId ?? null;
+      const hasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+      const revisionSteps = (currentRevisionId && hasRevisionedSteps)
+        ? allSteps.filter((s) => s.revisionId === currentRevisionId)
+        : allSteps;
+
+      const clientStep = revisionSteps.find((s) => s.approverType === "client" && s.signature) ?? null;
       // PO signers = Sales (approverType "user") + Manager only. Finance excluded.
-      const signerSteps = latestRound
+      const signerSteps = revisionSteps
         .filter((s) => s.approverType === "user" || (s.approverType === "role" && s.approverRole?.name === "manager"))
         .sort((a, b) => a.stepOrder - b.stepOrder);
       pdfBooking.signatures = {
