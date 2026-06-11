@@ -1,0 +1,33 @@
+name: CD — Staging
+
+# Deploy ke Dokploy (staging) saat ada push ke `main`.
+# Build + migrate dilakukan oleh Dokploy (Dockerfile + entrypoint), workflow ini
+# hanya men-trigger webhook deploy. Validasi kode sudah lewat ci.yml di PR.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
+
+jobs:
+  trigger-deploy:
+    name: Trigger Dokploy deploy (staging)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Dokploy deploy webhook
+        run: |
+          if [ -z "${{ secrets.DOKPLOY_WEBHOOK_STAGING }}" ]; then
+            echo "::error::DOKPLOY_WEBHOOK_STAGING secret is not set"
+            exit 1
+          fi
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "${{ secrets.DOKPLOY_WEBHOOK_STAGING }}")
+          echo "Webhook responded with HTTP $code"
+          # Dokploy returns 2xx on accepted trigger
+          case "$code" in
+            2*) echo "✅ Staging deploy triggered" ;;
+            *)  echo "::error::Webhook failed (HTTP $code)"; exit 1 ;;
+          esac

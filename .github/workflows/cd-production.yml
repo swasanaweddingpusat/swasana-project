@@ -1,0 +1,32 @@
+name: CD — Production
+
+# Deploy ke Dokploy (production) saat ada push ke `live`.
+# Build + migrate dilakukan oleh Dokploy (Dockerfile + entrypoint), workflow ini
+# hanya men-trigger webhook deploy. Validasi kode sudah lewat ci.yml di PR.
+
+on:
+  push:
+    branches:
+      - live
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  trigger-deploy:
+    name: Trigger Dokploy deploy (production)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Dokploy deploy webhook
+        run: |
+          if [ -z "${{ secrets.DOKPLOY_WEBHOOK_PRODUCTION }}" ]; then
+            echo "::error::DOKPLOY_WEBHOOK_PRODUCTION secret is not set"
+            exit 1
+          fi
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "${{ secrets.DOKPLOY_WEBHOOK_PRODUCTION }}")
+          echo "Webhook responded with HTTP $code"
+          case "$code" in
+            2*) echo "✅ Production deploy triggered" ;;
+            *)  echo "::error::Webhook failed (HTTP $code)"; exit 1 ;;
+          esac
