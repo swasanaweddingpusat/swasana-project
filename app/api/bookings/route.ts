@@ -22,6 +22,13 @@ export async function GET(request: Request) {
     rawRecordStatus === "saved" ? "saved" :
     undefined;
 
+  // dateFrom/dateTo arrive as full ISO instants (the client sends local day
+  // start/end via toISOString) so they line up with how bookingDate is stored.
+  const rawDateFrom = searchParams.get("dateFrom") ?? undefined;
+  const rawDateTo = searchParams.get("dateTo") ?? undefined;
+  const dateFrom = rawDateFrom && !Number.isNaN(Date.parse(rawDateFrom)) ? rawDateFrom : undefined;
+  const dateTo = rawDateTo && !Number.isNaN(Date.parse(rawDateTo)) ? rawDateTo : undefined;
+
   const profileId = session.user.profileId ?? undefined;
   let dataScope: DataScope = "own";
   if (profileId) {
@@ -29,7 +36,7 @@ export async function GET(request: Request) {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus });
+  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo });
 
   const transformed = {
     ...result,

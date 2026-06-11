@@ -153,7 +153,7 @@ export async function isSequentialFlow(module: string): Promise<boolean> {
 /** A fully-resolved approval step ready to be persisted as an ApprovalRecordStep row. */
 export interface BuiltApprovalStep {
   stepOrder: number;
-  approverType: "role" | "user";
+  approverType: "role" | "user" | "client";
   approverRoleId: string | null;
   approverUserId: string | null;
   status: "pending" | "approved";
@@ -182,6 +182,8 @@ export async function buildBookingApprovalSteps(opts: {
   creatorProfileId: string;
   signatureSales: string | null | undefined;
   decidedAt: Date;
+  /** Whether to append a client-TTD step at the end. True for Wedding, false for MICE. Default: true. */
+  includeClientStep?: boolean;
 }): Promise<BuiltApprovalStep[] | null> {
   const roleSteps = await resolveApprovalSteps("booking");
   if (!roleSteps || roleSteps.length === 0) return null;
@@ -210,6 +212,23 @@ export async function buildBookingApprovalSteps(opts: {
       stepOrder: s.sortOrder,
       approverType: "role",
       approverRoleId: s.approverRoleId,
+      approverUserId: null,
+      status: "pending",
+      decidedById: null,
+      decidedAt: null,
+      signature: null,
+    });
+  }
+
+  // Client step — Wedding only. Always last, always pending. Never auto-approved.
+  // stepOrder = max stepOrder so far + 1.
+  const includeClient = opts.includeClientStep !== false;
+  if (includeClient) {
+    const maxStepOrder = steps.reduce((max, s) => Math.max(max, s.stepOrder), 0);
+    steps.push({
+      stepOrder: maxStepOrder + 1,
+      approverType: "client",
+      approverRoleId: null,
       approverUserId: null,
       status: "pending",
       decidedById: null,

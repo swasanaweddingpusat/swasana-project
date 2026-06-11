@@ -127,22 +127,44 @@ export async function POST(req: Request) {
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
-    // Fetch signatures from ApprovalRecordStep (latest round)
+    // Fetch signatures from ApprovalRecordStep, filtered by revision.
+    // When a specific revisionId was requested (preview historic revision) → use that.
+    // Otherwise use booking.currentRevisionId.
+    // Fallback for legacy bookings without revisionId on steps → use all steps.
     let emateraiData: { sn: string; qrBase64: string } | null = null;
+
+    // Determine which revisionId to filter by for signatures
+    let sigRevisionId: string | null = null;
+    if (revisionId) {
+      sigRevisionId = revisionId as string;
+    } else {
+      const sigBooking = await db.booking.findUnique({
+        where: { id: bookingId },
+        select: { currentRevisionId: true },
+      });
+      sigRevisionId = sigBooking?.currentRevisionId ?? null;
+    }
+
     const approvalRecord = await db.approvalRecord.findUnique({
       where: { module_entityId: { module: "booking", entityId: bookingId } },
       include: { steps: { orderBy: { stepOrder: "asc" }, include: { approverRole: { select: { name: true } }, approverUser: { select: { fullName: true } }, decidedBy: { select: { fullName: true } } } } },
     });
     if (approvalRecord) {
-      const steps = approvalRecord.steps;
-      const roundSize = (() => { const first = steps[0]; for (let i = 1; i < steps.length; i++) { if (steps[i].approverType === first?.approverType && steps[i].approverRoleId === first?.approverRoleId) return i; } return steps.length; })();
-      const latestRound = steps.slice(-roundSize);
+      const allSteps = approvalRecord.steps;
+
+      // Filter steps by revision — explicit revisionId param or currentRevisionId.
+      // Fallback: if no steps have revisionId (legacy data) → use all steps.
+      const hasRevisionedSteps = allSteps.some((s) => s.revisionId !== null);
+      const revisionSteps = (sigRevisionId && hasRevisionedSteps)
+        ? allSteps.filter((s) => s.revisionId === sigRevisionId)
+        : allSteps;
+
       // PO signers = Sales (approverType "user") + Manager (role "manager") only.
       // Finance approves in-system but is intentionally excluded from the PO.
-      const signerSteps = latestRound
+      const signerSteps = revisionSteps
         .filter((s) => s.approverType === "user" || (s.approverType === "role" && s.approverRole?.name === "manager"))
         .sort((a, b) => a.stepOrder - b.stepOrder);
-      const clientStep = latestRound.find((s) => s.approverType === "client" && s.signature) ?? null;
+      const clientStep = revisionSteps.find((s) => s.approverType === "client" && s.signature) ?? null;
       pdfBooking.signatures = {
         ...(clientStep ? { client: { signature: clientStep.signature! } } : {}),
         roles: signerSteps.map((step) => ({

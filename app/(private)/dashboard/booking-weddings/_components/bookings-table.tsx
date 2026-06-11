@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ const RefreshCw = Refresh;
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useTransferBookingManager } from "@/hooks/use-bookings";
 import { useManagers } from "@/hooks/use-managers";
@@ -124,6 +125,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
   const [recordStatusFilter, setRecordStatusFilter] = useState<"saved" | "draft" | "all">("saved");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [dateFromOpen, setDateFromOpen] = useState(false);
+  const [dateToOpen, setDateToOpen] = useState(false);
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
@@ -142,7 +147,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
     initialData,
   );
   const bookings = result.data;
@@ -414,7 +419,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
   const hasVenueFilter = venueFilter !== "" && venueFilter !== "all";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0);
+  const hasDateFilter = dateFrom !== "" || dateTo !== "";
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
@@ -430,7 +436,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -463,6 +469,93 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           emptyText="Status tidak ditemukan"
           className="h-9"
         />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Event Date</label>
+        <div className="flex items-center gap-2">
+          {/* Date From */}
+          <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    "flex-1 h-9 px-3 text-xs rounded-md border border-input bg-background text-left",
+                    "hover:bg-accent transition-colors",
+                    dateFrom ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {dateFrom ? format(new Date(dateFrom), "dd MMM yyyy") : "Dari"}
+                </button>
+              }
+            />
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateFrom ? new Date(dateFrom) : undefined}
+                onSelect={(day) => {
+                  if (day) {
+                    // Send the local day-start as a UTC instant so it matches how
+                    // bookingDate is stored (local date → toISOString); avoids an
+                    // off-by-one for non-UTC timezones.
+                    setDateFrom(startOfDay(day).toISOString());
+                    setCurrentPage(1);
+                  } else {
+                    setDateFrom("");
+                    setCurrentPage(1);
+                  }
+                  setDateFromOpen(false);
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+          <span className="text-xs text-muted-foreground shrink-0">—</span>
+          {/* Date To */}
+          <Popover open={dateToOpen} onOpenChange={setDateToOpen}>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    "flex-1 h-9 px-3 text-xs rounded-md border border-input bg-background text-left",
+                    "hover:bg-accent transition-colors",
+                    dateTo ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {dateTo ? format(new Date(dateTo), "dd MMM yyyy") : "Sampai"}
+                </button>
+              }
+            />
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={dateTo ? new Date(dateTo) : undefined}
+                onSelect={(day) => {
+                  if (day) {
+                    // Local day-end as a UTC instant — inclusive upper bound.
+                    setDateTo(endOfDay(day).toISOString());
+                    setCurrentPage(1);
+                  } else {
+                    setDateTo("");
+                    setCurrentPage(1);
+                  }
+                  setDateToOpen(false);
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        {hasDateFilter && (
+          <button
+            type="button"
+            onClick={() => { setDateFrom(""); setDateTo(""); setCurrentPage(1); }}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+          >
+            Hapus filter tanggal
+          </button>
+        )}
       </div>
     </div>
   );

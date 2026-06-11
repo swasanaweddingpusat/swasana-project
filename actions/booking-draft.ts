@@ -283,6 +283,38 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
       if (existing.recordStatus !== "draft") {
         return { success: false, error: "Booking dengan ID tersebut sudah difinalisasi." };
       }
+      // Resume + edit: the draft already exists, so persist any step-1/step-2
+      // changes (event date, venue, package, session, type, time, note, discount)
+      // instead of the previous no-op early return that silently dropped edits.
+      await db.$transaction([
+        db.booking.update({
+          where: { id: draftId },
+          data: {
+            bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
+            salesId,
+            managerId,
+            customerId,
+            venueId: input.venueId,
+            packageId: input.packageId ?? null,
+            sourceOfInformationId: input.sourceOfInformationId ?? null,
+            weddingSession: input.weddingSession ?? null,
+            weddingType: input.weddingType ?? null,
+            eventTime: input.eventTime ?? null,
+            notes: input.notes ?? null,
+            discountName: input.specialBonusName ?? null,
+            discountAmount: input.specialBonusAmount ?? 0,
+          },
+        }),
+      ]);
+      await logAudit({
+        userId: session!.user.id,
+        action: "booking.draft_updated",
+        entityType: "booking",
+        entityId: draftId,
+        changes: { venueId: input.venueId, bookingDate: input.bookingDate },
+        description: `Updated booking draft for ${input.customerName ?? customerId}`,
+      });
+      revalidateTag("bookings", "max");
       return { success: true, draftId };
     }
 
@@ -600,7 +632,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
           venueId: draft.venueId,
           bookingDate: bookingDateObj,
           recordStatus: "saved",
-          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
           OR:
             draft.weddingSession === "fullday"
               ? [
@@ -649,6 +681,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       creatorProfileId: session!.user.profileId!,
       signatureSales: input.signatureSales ?? draft.salesSignature,
       decidedAt: new Date(),
+      includeClientStep: true, // Wedding: client TTD step included
     });
 
     // Build categoryToggles map from input (for snap creation)
@@ -943,17 +976,23 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       description: `Finalized booking draft for ${draft.customer?.name ?? draft.customerId}`,
     });
 
-    // Create initial revision
+    // Create initial revision (WEDDINGS + package required for revision snapshot)
     if (draft.category === "WEDDINGS" && pkg) {
       const revisionId = await createBookingRevision(
         draftId,
         session!.user.profileId!,
         "Initial booking"
       );
-      await db.approvalRecordStep.updateMany({
-        where: { record: { module: "booking", entityId: draftId } },
-        data: { revisionId },
-      });
+      await db.$transaction([
+        db.approvalRecordStep.updateMany({
+          where: { record: { module: "booking", entityId: draftId } },
+          data: { revisionId },
+        }),
+        db.booking.update({
+          where: { id: draftId },
+          data: { currentRevisionId: revisionId },
+        }),
+      ]);
     }
 
     revalidateTag("bookings", "max");
@@ -1190,7 +1229,9 @@ export async function getDraftBookingDetail(
     eventTime: draft.eventTime ?? null,
     notes: draft.notes ?? null,
     sourceOfInformationId: draft.sourceOfInformationId ?? null,
-    bookingDate: draft.bookingDate ? draft.bookingDate.toISOString() : null,
+    bookingDate: draft.bookingDate
+      ? `${draft.bookingDate.getUTCFullYear()}-${String(draft.bookingDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.bookingDate.getUTCDate()).padStart(2, "0")}`
+      : null,
     paymentMethodId: draft.paymentMethodId ?? null,
     discountName: draft.discountName ?? null,
     discountAmount: draft.discountAmount ?? 0,

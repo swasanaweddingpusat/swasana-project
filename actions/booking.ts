@@ -146,7 +146,7 @@ export async function createBooking(data: unknown) {
 
     // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
     if (input.weddingSession) {
-      const bookingDateObj = new Date(input.bookingDate);
+      const bookingDateObj = new Date(`${input.bookingDate}T00:00:00.000Z`);
       const conflictingBooking = await db.booking.findFirst({
         where: {
           venueId: input.venueId,
@@ -268,7 +268,7 @@ export async function createBooking(data: unknown) {
     }
 
     if (input.withMaterai) {
-      emateraiResult = await generateEmaterai(poNumber, new Date(input.bookingDate));
+      emateraiResult = await generateEmaterai(poNumber, new Date(`${input.bookingDate}T00:00:00.000Z`));
     }
 
     // Approval steps: conditional Sales step + Manager → Finance.
@@ -278,6 +278,7 @@ export async function createBooking(data: unknown) {
       creatorProfileId: session!.user.profileId!,
       signatureSales: input.signatureSales,
       decidedAt: new Date(),
+      includeClientStep: true, // Wedding: client TTD step included
     });
 
     // Build array-form transaction — customer create/update included for atomicity
@@ -354,7 +355,7 @@ export async function createBooking(data: unknown) {
       db.booking.create({
         data: {
           id: bookingId,
-          bookingDate: new Date(input.bookingDate),
+          bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
           salesId,
           managerId: await resolveManagerId(salesId),
           customerId,
@@ -720,7 +721,7 @@ export async function updateBooking(data: unknown) {
 
   try {
     const updateData: Record<string, unknown> = {};
-    if (rest.bookingDate) updateData.bookingDate = new Date(rest.bookingDate);
+    if (rest.bookingDate) updateData.bookingDate = new Date(`${rest.bookingDate}T00:00:00.000Z`);
     if (rest.bookingStatus !== undefined) updateData.bookingStatus = rest.bookingStatus;
     if (rest.paymentStatus !== undefined) updateData.paymentStatus = rest.paymentStatus;
     if (rest.weddingSession !== undefined) updateData.weddingSession = rest.weddingSession;
@@ -1028,7 +1029,7 @@ export async function editBooking(data: unknown) {
     // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
     // Exclude the current booking so it doesn't conflict with itself.
     if (rest.weddingSession) {
-      const bookingDateObj = new Date(rest.bookingDate);
+      const bookingDateObj = new Date(`${rest.bookingDate}T00:00:00.000Z`);
       const conflictingBooking = await db.booking.findFirst({
         where: {
           id: { not: id },
@@ -1059,8 +1060,11 @@ export async function editBooking(data: unknown) {
 
     // ── Material change detection ─────────────────────────────────────────────
     // Compare event date (bookingDate field = event date in wedding bookings)
-    const newBookingDate = new Date(rest.bookingDate).toISOString().split("T")[0];
-    const oldBookingDate = booking.bookingDate.toISOString().split("T")[0];
+    // rest.bookingDate is "yyyy-MM-dd"; booking.bookingDate is stored as UTC midnight.
+    // Compare as date strings using UTC getters so the check is timezone-independent.
+    const newBookingDate = rest.bookingDate; // already "yyyy-MM-dd"
+    const bd = booking.bookingDate;
+    const oldBookingDate = `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`;
     const eventDateChanged = newBookingDate !== oldBookingDate;
 
     // Compare discount
@@ -1136,7 +1140,7 @@ export async function editBooking(data: unknown) {
       db.booking.update({
         where: { id },
         data: {
-          bookingDate: new Date(rest.bookingDate),
+          bookingDate: new Date(`${rest.bookingDate}T00:00:00.000Z`),
           venueId: rest.venueId,
           packageId: rest.packageId,
           paymentMethodId: rest.paymentMethodId ?? null,
@@ -1411,6 +1415,7 @@ export async function editBooking(data: unknown) {
           creatorProfileId: session!.user.profileId!,
           signatureSales: rest.signatureSales,
           decidedAt: new Date(),
+          includeClientStep: true, // Wedding: client TTD step included
         });
 
         if (editApprovalSteps && editApprovalSteps.length > 0) {
