@@ -21,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
-import { cn, formatRupiah } from "@/lib/utils";
+import { cn, formatRupiah, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { safeRandomUUID } from "@/lib/uuid";
 import {
   idbClearAllEvidence,
@@ -541,7 +541,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           if (prefillLead.package?.id) { form.setValue("packageId", prefillLead.package.id); setSelectedPackageId(prefillLead.package.id); }
           if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
           if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
-          if (prefillLead.eventDate) form.setValue("bookingDate", new Date(prefillLead.eventDate).toISOString());
+          if (prefillLead.eventDate) form.setValue("bookingDate", toDateOnly(new Date(prefillLead.eventDate)));
         }
         // Jump to step 3 (Takeout) — draft already persisted by Deal flow in leads-table,
         // and lead prefill already includes venue + package from the lead record.
@@ -575,7 +575,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         if (prefillLead.package?.id) { form.setValue("packageId", prefillLead.package.id); setSelectedPackageId(prefillLead.package.id); }
         if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
         if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
-        if (prefillLead.eventDate) form.setValue("bookingDate", new Date(prefillLead.eventDate).toISOString());
+        if (prefillLead.eventDate) form.setValue("bookingDate", toDateOnly(new Date(prefillLead.eventDate)));
         return;
       }
 
@@ -1800,7 +1800,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           >
                             <CalendarIcon weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4')} />
                             {selectedVenueId
-                              ? (field.value ? format(new Date(field.value), "PPP") : "Pilih tanggal event")
+                              ? (field.value ? format(parseDateOnly(field.value), "PPP") : "Pilih tanggal event")
                               : "Pilih venue terlebih dahulu"}
                           </Button>
                         } />
@@ -1808,12 +1808,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           <Calendar
                             mode="single"
                             captionLayout="dropdown"
-                            selected={field.value ? new Date(field.value) : undefined}
-                            onSelect={(date) => { field.onChange(date ? date.toISOString() : ""); form.setValue("weddingSession", null); }}
+                            selected={field.value ? parseDateOnly(field.value) : undefined}
+                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); form.setValue("weddingSession", null); }}
                             disabled={(d) => getDateStatus(d) === "unavailable"}
                             fromYear={new Date().getFullYear() - 10}
                             toYear={new Date().getFullYear() + 10}
-                            defaultMonth={field.value ? new Date(field.value) : new Date()}
+                            defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
                             onMonthChange={setVisibleMonth}
                             modifiers={{
                               available: (d) => !!selectedVenueId && getDateStatus(d) === "available",
@@ -1835,7 +1835,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
                   {/* Event Session */}
                   <FormField control={form.control} name="weddingSession" render={({ field }) => {
-                    const dateStr = wBookingDate ? format(new Date(wBookingDate), "yyyy-MM-dd") : null;
+                    // wBookingDate is stored as "yyyy-MM-dd" — use it directly as the key.
+                    const dateStr = wBookingDate || null;
                     const sessions = dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"];
                     const SESSION_LABELS: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
                     return (

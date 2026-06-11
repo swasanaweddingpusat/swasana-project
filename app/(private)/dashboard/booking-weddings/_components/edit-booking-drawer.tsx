@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
-import { cn } from "@/lib/utils";
+import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
 import { createComplimentary } from "@/actions/complimentary";
 import { computeFullPrice } from "@/lib/package-prices";
@@ -286,7 +286,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setPackageId(booking.packageId ?? "");
     setOriginalVenueId(booking.venueId ?? "");
     setOriginalPackageId(booking.packageId ?? "");
-    const initialBookingDate = booking.bookingDate ? new Date(booking.bookingDate).toISOString() : "";
+    // Store bookingDate as "yyyy-MM-dd" using UTC getters — bookingDate is stored
+    // as UTC midnight in the DB, so UTC getters always return the correct calendar date.
+    const bd = booking.bookingDate ? new Date(booking.bookingDate) : null;
+    const initialBookingDate = bd
+      ? `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`
+      : "";
     setBookingDate(initialBookingDate);
     setOriginalBookingDate(initialBookingDate);
     setOriginalDiscountName(booking.discountName ?? "Discount");
@@ -477,9 +482,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   };
 
   // ── Change detection — mirrors server-side hasMaterialChange ──
+  // Both bookingDate and originalBookingDate are "yyyy-MM-dd" strings — direct comparison is safe.
   const eventDateChanged =
     bookingDate && originalBookingDate
-      ? new Date(bookingDate).toISOString().split("T")[0] !== new Date(originalBookingDate).toISOString().split("T")[0]
+      ? bookingDate !== originalBookingDate
       : false;
   const discountChanged =
     specialBonusName !== originalDiscountName ||
@@ -619,7 +625,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (!booking) return;
     const r = await mut.mutateAsync({
       id: booking.id,
-      bookingDate: bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : "",
+      // bookingDate is already stored as "yyyy-MM-dd" — pass directly to action.
+      bookingDate: bookingDate,
       venueId, packageId,
       paymentMethodId: paymentMethodId || null,
       sourceOfInformationId: sourceOfInformationId || null,
@@ -906,23 +913,24 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   <PopoverTrigger render={
                     <Button variant="outline" disabled={!venueId} className={cn("w-full mt-1 justify-start text-left font-normal", !bookingDate && "text-muted-foreground")}>
                       <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                      {bookingDate ? format(new Date(bookingDate), "PPP") : "Pilih tanggal event"}
+                      {bookingDate ? format(parseDateOnly(bookingDate), "PPP") : "Pilih tanggal event"}
                     </Button>
                   } />
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
                       captionLayout="dropdown"
-                      selected={bookingDate ? new Date(bookingDate) : undefined}
-                      onSelect={(date) => { setBookingDate(date ? date.toISOString() : ""); setWeddingSession(""); }}
+                      selected={bookingDate ? parseDateOnly(bookingDate) : undefined}
+                      onSelect={(date) => { setBookingDate(date ? toDateOnly(date) : ""); setWeddingSession(""); }}
                       fromYear={new Date().getFullYear() - 10}
                       toYear={new Date().getFullYear() + 10}
-                      defaultMonth={bookingDate ? new Date(bookingDate) : new Date()}
+                      defaultMonth={bookingDate ? parseDateOnly(bookingDate) : new Date()}
                       onMonthChange={setVisibleMonth}
                       disabled={(d) => {
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
-                        const isExistingDate = bookingDate && format(d, "yyyy-MM-dd") === format(new Date(bookingDate), "yyyy-MM-dd");
+                        // bookingDate is "yyyy-MM-dd" — use toDateOnly for consistent comparison
+                        const isExistingDate = bookingDate && toDateOnly(d) === bookingDate;
                         if (isExistingDate) return false;
                         return d < today || (!!venueId && getDateStatus(d) === "unavailable");
                       }}
@@ -944,7 +952,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger>
                   <SelectContent>
                     {(() => {
-                      const dateStr = bookingDate ? format(new Date(bookingDate), "yyyy-MM-dd") : null;
+                      // bookingDate is already "yyyy-MM-dd" — use directly as availability key.
+                      const dateStr = bookingDate || null;
                       return (dateStr ? getAvailableSessions(dateStr) : ["morning", "evening", "fullday"]).map((s) => (
                         <SelectItem key={s} value={s}>{sessionLabels[s] ?? s}</SelectItem>
                       ));
@@ -1356,6 +1365,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                               <div>
                                 {t.paymentEvidence ? (
                                   <div className="flex items-center gap-2">
+                                    {/\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(t.paymentEvidence) && (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={t.paymentEvidence} alt="Bukti pembayaran" className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-border object-cover" onClick={() => { if (t.paymentEvidence) window.open(t.paymentEvidence, "_blank"); }} />
+                                    )}
                                     <a href={t.paymentEvidence} target="_blank" rel="noopener noreferrer" className={cn("flex flex-1 items-center gap-2 px-3 py-2 rounded-xl border border-border", "bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors min-w-0")}>
                                       <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
                                       <span className="flex-1 truncate">Lihat bukti pembayaran</span>
