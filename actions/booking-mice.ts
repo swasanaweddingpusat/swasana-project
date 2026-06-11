@@ -128,8 +128,8 @@ export async function createMiceBooking(
         data: {
           id: bookingId,
           category: "MICE",
-          bookingDate: new Date(input.bookingDate),
-          eventDate: new Date(input.eventDate),
+          bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
+          eventDate: new Date(`${input.eventDate}T00:00:00.000Z`),
           salesId,
           managerId,
           customerId,
@@ -220,8 +220,8 @@ export async function updateMiceBooking(
 
     // Update booking fields
     const bookingUpdate: Record<string, unknown> = {};
-    if (input.bookingDate !== undefined) bookingUpdate.bookingDate = new Date(input.bookingDate);
-    if (input.eventDate !== undefined) bookingUpdate.eventDate = new Date(input.eventDate);
+    if (input.bookingDate !== undefined) bookingUpdate.bookingDate = new Date(`${input.bookingDate}T00:00:00.000Z`);
+    if (input.eventDate !== undefined) bookingUpdate.eventDate = new Date(`${input.eventDate}T00:00:00.000Z`);
     if (input.venueId !== undefined) bookingUpdate.venueId = input.venueId;
     if (input.sourceOfInformationId !== undefined)
       bookingUpdate.sourceOfInformationId = input.sourceOfInformationId ?? null;

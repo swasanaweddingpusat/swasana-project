@@ -68,3 +68,34 @@ export function generatePoNumber(prefix: string = "PO"): string {
   const random = Math.floor(Math.random() * 9000) + 1000;
   return `${prefix}/${year}${month}${day}/${random}`;
 }
+
+/**
+ * Converts a Date object to a "yyyy-MM-dd" string using LOCAL calendar getters.
+ * This is the canonical way to encode a user-picked date-only value.
+ * The date the user sees in the calendar (June 15) is what gets stored,
+ * regardless of the client's timezone offset.
+ *
+ * Use this for bookingDate (wedding/MICE event date) — NOT for timestamps or dueDates
+ * that legitimately need a full datetime.
+ */
+export function toDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Parses a "yyyy-MM-dd" date-only string to a Date object using LOCAL noon (12:00:00).
+ * Avoids the UTC-midnight parse ambiguity where `new Date("2026-06-15")` returns
+ * UTC midnight, which in WIB/UTC+7 still shows June 15 but in UTC-X timezones could
+ * appear as June 14.
+ *
+ * Use this to feed a "yyyy-MM-dd" string into a Calendar component's `selected` prop
+ * or `defaultMonth` so the displayed date always matches the stored date string.
+ */
+export function parseDateOnly(dateOnly: string): Date {
+  // Split into parts and construct using local clock, not UTC parse
+  const [y, mo, d] = dateOnly.split("-").map(Number);
+  return new Date(y, (mo ?? 1) - 1, d ?? 1, 12, 0, 0, 0);
+}

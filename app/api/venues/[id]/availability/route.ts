@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export type VenueAvailability = Record<string, { morning: boolean; evening: boolean; fullday: boolean }>;
 
@@ -15,9 +14,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const monthParam = searchParams.get("month"); // YYYY-MM
 
   try {
-    const base = monthParam ? new Date(`${monthParam}-01`) : new Date();
-    const start = startOfMonth(base);
-    const end = endOfMonth(base);
+    // Build UTC-based start/end for the queried month.
+    // monthParam = "YYYY-MM"; parse as UTC so the range is timezone-independent.
+    // bookingDate is stored as UTC midnight — the DB range query must also be UTC.
+    const year = monthParam
+      ? parseInt(monthParam.split("-")[0] ?? "0", 10)
+      : new Date().getUTCFullYear();
+    const month = monthParam
+      ? parseInt(monthParam.split("-")[1] ?? "1", 10)
+      : new Date().getUTCMonth() + 1;
+    // First day of month at UTC midnight
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    // Last day: day 0 of next month = last day of this month
+    const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
     const excludeId = searchParams.get("exclude"); // booking ID to exclude (for edit mode)
 
@@ -29,18 +38,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         venueId: id,
         recordStatus: "saved",
         bookingDate: { gte: start, lte: end },
-        bookingStatus: { notIn: ["Canceled", "Lost"] },
+        bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
       select: { bookingDate: true, weddingSession: true },
     });
 
-    // Init all dates in month as fully available
+    // Init all dates in month as fully available.
+    // Use UTC getters so the key is the same on any server timezone.
     const availability: VenueAvailability = {};
     const cur = new Date(start);
     while (cur <= end) {
-      availability[format(cur, "yyyy-MM-dd")] = { morning: true, evening: true, fullday: true };
-      cur.setDate(cur.getDate() + 1);
+      const key = `${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, "0")}-${String(cur.getUTCDate()).padStart(2, "0")}`;
+      availability[key] = { morning: true, evening: true, fullday: true };
+      cur.setUTCDate(cur.getUTCDate() + 1);
     }
 
     // Mark booked sessions.
@@ -48,7 +59,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // MICE: if weddingSession is set (morning/evening) → block that session only (granular).
     //       if weddingSession is null (legacy MICE without session) → block fullday (conservative fallback).
     for (const b of bookings) {
-      const key = format(new Date(b.bookingDate), "yyyy-MM-dd");
+      // bookingDate is stored as UTC midnight — use UTC getters to derive the key
+      // so it's consistent regardless of the server's local timezone.
+      const bd = b.bookingDate;
+      const key = `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`;
       if (!availability[key]) continue;
       if (b.weddingSession === "morning") {
         availability[key].morning = false;

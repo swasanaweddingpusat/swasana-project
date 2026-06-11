@@ -55,7 +55,7 @@ import { createMiceBookingSchema } from "@/lib/validations/booking-mice";
 import { createMiceDraftStep1Schema } from "@/lib/validations/booking-mice-draft";
 import type { MiceBookingItem } from "./types";
 import type { BookingPrefillLead } from "@/types/lead";
-import { cn } from "@/lib/utils";
+import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { safeRandomUUID } from "@/lib/uuid";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 
@@ -412,7 +412,8 @@ export function MiceBookingDrawer({
           clientPhone: booking.customer.phone,
           venueId: booking.venue.id,
           eventTypeId: "",
-          eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().split("T")[0] : "",
+          // bookingDate is stored as UTC midnight — use UTC getters to recover the date string.
+          eventDate: booking.eventDate ? (() => { const d = new Date(booking.eventDate!); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; })() : "",
           time: "",
           estimatedPax: "",
           salesId: booking.sales?.id ?? "",
@@ -437,7 +438,8 @@ export function MiceBookingDrawer({
           clientPhone: clientPhonePrefill,
           venueId: prefillLead.venue?.id ?? "",
           eventTypeId: prefillLead.eventType?.id ?? "",
-          eventDate: prefillLead.eventDate ? new Date(prefillLead.eventDate).toISOString().split("T")[0] : "",
+          // Use toDateOnly with local getters: lead eventDate may not be UTC midnight.
+          eventDate: prefillLead.eventDate ? toDateOnly(new Date(prefillLead.eventDate)) : "",
           time: prefillLead.time ?? "",
           estimatedPax: prefillLead.estimatedPax != null ? String(prefillLead.estimatedPax) : "",
           salesId: autoSalesId,
@@ -841,7 +843,7 @@ export function MiceBookingDrawer({
                             >
                               <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
                               {watchedVenueId
-                                ? (field.value ? format(new Date(field.value), "dd MMM yyyy") : "Pilih tanggal event")
+                                ? (field.value ? format(parseDateOnly(field.value), "dd MMM yyyy") : "Pilih tanggal event")
                                 : "Pilih venue terlebih dahulu"}
                             </Button>
                           } />
@@ -849,15 +851,15 @@ export function MiceBookingDrawer({
                             <Calendar
                               mode="single"
                               captionLayout="dropdown"
-                              selected={field.value ? new Date(field.value) : undefined}
+                              selected={field.value ? parseDateOnly(field.value) : undefined}
                               onSelect={(date) => {
-                                field.onChange(date ? date.toISOString().split("T")[0] : "");
+                                field.onChange(date ? toDateOnly(date) : "");
                                 setEventDatePopoverOpen(false);
                               }}
                               disabled={(d) => getDateStatus(d) === "unavailable"}
                               fromYear={new Date().getFullYear() - 2}
                               toYear={new Date().getFullYear() + 5}
-                              defaultMonth={field.value ? new Date(field.value) : new Date()}
+                              defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
                               onMonthChange={setVisibleMonth}
                               modifiers={{
                                 available: (d) => !!watchedVenueId && getDateStatus(d) === "available",
