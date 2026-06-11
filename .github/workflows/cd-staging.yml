@@ -24,9 +24,11 @@ jobs:
             echo "::error::DOKPLOY_WEBHOOK_STAGING secret is not set"
             exit 1
           fi
-          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "${{ secrets.DOKPLOY_WEBHOOK_STAGING }}")
+          # -L follows redirects (Dokploy may 301 http→https); --post301/302
+          # keep the request as POST across the redirect instead of downgrading
+          # to GET. %{http_code} reports the FINAL status after redirects.
+          code=$(curl -sS -L --post301 --post302 -o /dev/null -w "%{http_code}" -X POST "${{ secrets.DOKPLOY_WEBHOOK_STAGING }}")
           echo "Webhook responded with HTTP $code"
-          # Dokploy returns 2xx on accepted trigger
           case "$code" in
             2*) echo "✅ Staging deploy triggered" ;;
             *)  echo "::error::Webhook failed (HTTP $code)"; exit 1 ;;
