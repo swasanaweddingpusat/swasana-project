@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Self-contained build output for Docker/Dokploy — bundles only the files the
+  // server needs into .next/standalone, so the runtime image stays small.
+  output: "standalone",
   cacheComponents: true,
   allowedDevOrigins: ["192.168.1.4"],
   async redirects() {

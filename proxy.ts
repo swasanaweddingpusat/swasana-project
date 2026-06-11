@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   "/api/auth/",
   "/api/send-email/",
   "/api/client-agreement/",
+  "/api/health", // container/Dokploy liveness probe — must bypass auth redirect
 ];
 
 function isPublicPath(pathname: string): boolean {
