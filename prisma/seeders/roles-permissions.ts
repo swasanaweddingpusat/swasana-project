@@ -50,6 +50,8 @@ const moduleActions: Record<string, string[]> = {
   "settings-maintenance-status": ["view", "create", "edit", "delete"],
   promo: ["view", "create", "edit", "delete"],
   procurement: ["view", "create", "edit", "delete", "approve"],
+  // HR & Payroll module
+  hr: ["view", "create", "edit", "delete", "approve"],
 };
 
 // Modules removed (not used in code):
@@ -60,7 +62,6 @@ const moduleActions: Record<string, string[]> = {
 // - dashboard: gak pake requirePagePermission
 // - decoration: actions pake booking.edit
 // - finance_ap: gak ada page/action yang cek
-// - hr: fitur belum ada
 // - notification: gak pake permission check
 // - user_management: redundant, pake settings
 // - venue_management: redundant, pake settings
@@ -96,6 +97,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     complimentary: ["view", "create", "edit", "delete"],
     promo: ["view"],
     procurement: ["view", "create", "edit", "delete", "approve"],
+    hr: ["view", "create", "edit", "delete", "approve"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -166,8 +168,9 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
   },
   "human-resource": {
-    "settings-users": ["view"],
-    "settings-education-level": ["view"],
+    hr: ["view", "create", "edit", "delete", "approve"],
+    "settings-users": ["view", "create", "edit", "delete"],
+    "settings-education-level": ["view", "create", "edit", "delete"],
   },
   "sales-mice": {
     "booking-mice": ["view", "create", "edit", "comment", "client-agreement"],
@@ -203,7 +206,7 @@ function buildPermissionData(): { module: string; action: string }[] {
 // Modules that were removed — clean up stale permissions from DB
 const REMOVED_MODULES = [
   "attendance", "brand_management", "calendar_event", "catering",
-  "dashboard", "decoration", "finance", "finance_ap", "finance_ar", "hr", "notification",
+  "dashboard", "decoration", "finance", "finance_ap", "finance_ar", "notification",
   "user_management", "venue_management", "client_agreement", "settlement",
   "settings", "payment_methods", "role_permission", "source_of_information",
   "settings-groups", // renamed → "groups" (code uses module "groups", not "settings-groups")
