@@ -16,6 +16,7 @@ const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useTransferBookingManager } from "@/hooks/use-bookings";
 import { useManagers } from "@/hooks/use-managers";
@@ -127,8 +128,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [recordStatusFilter, setRecordStatusFilter] = useState<"saved" | "draft" | "all">("saved");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [dateFromOpen, setDateFromOpen] = useState(false);
-  const [dateToOpen, setDateToOpen] = useState(false);
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
@@ -473,74 +473,50 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Event Date</label>
         <div className="flex items-center gap-2">
-          {/* Date From */}
-          <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
+          <Popover open={dateRangeOpen} onOpenChange={setDateRangeOpen}>
             <PopoverTrigger
               render={
                 <button
                   type="button"
                   className={cn(
-                    "flex-1 h-9 px-3 text-xs rounded-md border border-input bg-background text-left",
+                    "flex w-full items-center gap-2 h-9 px-3 text-xs rounded-md border border-input bg-background text-left",
                     "hover:bg-accent transition-colors",
-                    dateFrom ? "text-foreground" : "text-muted-foreground",
+                    dateFrom || dateTo ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
-                  {dateFrom ? format(new Date(dateFrom), "dd MMM yyyy") : "Dari"}
+                  <CalendarDays weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate">
+                    {dateFrom && dateTo
+                      ? `${format(new Date(dateFrom), "dd MMM yyyy")} — ${format(new Date(dateTo), "dd MMM yyyy")}`
+                      : dateFrom
+                        ? format(new Date(dateFrom), "dd MMM yyyy")
+                        : "Pilih rentang tanggal"}
+                  </span>
                 </button>
               }
             />
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
-                mode="single"
-                selected={dateFrom ? new Date(dateFrom) : undefined}
-                onSelect={(day) => {
-                  if (day) {
-                    // Send the local day-start as a UTC instant so it matches how
-                    // bookingDate is stored (local date → toISOString); avoids an
-                    // off-by-one for non-UTC timezones.
-                    setDateFrom(startOfDay(day).toISOString());
-                    setCurrentPage(1);
+                mode="range"
+                numberOfMonths={2}
+                selected={
+                  dateFrom
+                    ? { from: new Date(dateFrom), to: dateTo ? new Date(dateTo) : undefined }
+                    : undefined
+                }
+                onSelect={(range: DateRange | undefined) => {
+                  if (range?.from) {
+                    // Local day-start as a UTC instant — matches how bookingDate is
+                    // stored (local date → toISOString); avoids off-by-one in non-UTC TZ.
+                    setDateFrom(startOfDay(range.from).toISOString());
+                    // Single date (no `to` yet): filter that day only — local day-end
+                    // of the SAME date as inclusive upper bound.
+                    setDateTo(endOfDay(range.to ?? range.from).toISOString());
                   } else {
                     setDateFrom("");
-                    setCurrentPage(1);
-                  }
-                  setDateFromOpen(false);
-                }}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-          <span className="text-xs text-muted-foreground shrink-0">—</span>
-          {/* Date To */}
-          <Popover open={dateToOpen} onOpenChange={setDateToOpen}>
-            <PopoverTrigger
-              render={
-                <button
-                  type="button"
-                  className={cn(
-                    "flex-1 h-9 px-3 text-xs rounded-md border border-input bg-background text-left",
-                    "hover:bg-accent transition-colors",
-                    dateTo ? "text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {dateTo ? format(new Date(dateTo), "dd MMM yyyy") : "Sampai"}
-                </button>
-              }
-            />
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                mode="single"
-                selected={dateTo ? new Date(dateTo) : undefined}
-                onSelect={(day) => {
-                  if (day) {
-                    // Local day-end as a UTC instant — inclusive upper bound.
-                    setDateTo(endOfDay(day).toISOString());
-                    setCurrentPage(1);
-                  } else {
                     setDateTo("");
-                    setCurrentPage(1);
                   }
-                  setDateToOpen(false);
+                  setCurrentPage(1);
                 }}
                 initialFocus
               />
