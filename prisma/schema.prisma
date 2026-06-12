@@ -200,6 +200,8 @@ model Profile {
   procurementItemsApproved   ProcurementItem[]   @relation("ProcurementApprover")
   procurementAnnouncements   ProcurementAnnouncement[] @relation("ProcurementAnnouncementCreator")
   attendances                Attendance[]
+  leaveRequests              LeaveRequest[]
+  leaveBalances              LeaveBalance[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2491,4 +2493,52 @@ model Attendance {
   @@index([profileId])
   @@index([clockIn])
   @@map("attendances")
+}
+
+enum LeaveType {
+  CUTI_TAHUNAN
+  SAKIT
+  IZIN
+  CUTI_BERSAMA
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model LeaveRequest {
+  id        String      @id @default(cuid())
+  profileId String
+  startDate DateTime
+  endDate   DateTime
+  leaveType LeaveType
+  status    LeaveStatus @default(PENDING)
+  daysCount Int
+  reason    String
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  profile   Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("leave_requests")
+}
+
+model LeaveBalance {
+  id        String    @id @default(cuid())
+  profileId String
+  year      Int
+  leaveType LeaveType
+  total     Int       @default(0)
+  used      Int       @default(0)
+  remaining Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, year, leaveType])
+  @@map("leave_balances")
 }
