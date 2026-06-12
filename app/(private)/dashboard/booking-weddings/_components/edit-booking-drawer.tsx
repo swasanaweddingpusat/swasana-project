@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
+import { discardEditDraft } from "@/actions/booking-edit-draft";
 import { createComplimentary } from "@/actions/complimentary";
 import { computeFullPrice } from "@/lib/package-prices";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
@@ -506,6 +507,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     takeoutChanged ||
     topChanged;
 
+
+  // Drawer terkunci saat ada perubahan material yang belum di-commit.
+  const isLocked = hasSignificantChange;
+  const [isDiscarding, setIsDiscarding] = useState(false);
   // ── Completeness per step ──
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0);
   const isStep2Complete = !!(venueId && packageId && bookingDate && weddingSession && weddingType);
@@ -590,6 +595,46 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (currentStep > 1) {
       if (currentStep === 5) { sigSalesRef.current?.clear(); setSignatureSales(""); }
       setCurrentStep(currentStep - 1);
+    }
+  }
+
+  function revertToOriginal() {
+ if (!booking) return;
+    setVenueId(originalVenueId);
+    setPackageId(originalPackageId);
+    setBookingDate(originalBookingDate);
+    setSpecialBonusName(originalDiscountName ?? "Discount");
+    setSpecialBonusAmount(originalDiscountAmount);
+    setCategoryToggles({});
+    setTakeoutPrices({});
+    const bTerms = (booking.termOfPayments ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: Number(t.amount),
+      dueDate: new Date(t.dueDate).toISOString(),
+      sortOrder: t.sortOrder,
+      paymentStatus: (t.paymentStatus ?? "unpaid") as TermPaymentStatus,
+      ackStatus: (t as Record<string, unknown>).ackStatus as string | undefined ?? undefined,
+      paymentEvidence: (t as Record<string, unknown>).paymentEvidence as string | null ?? null,
+    }));
+    setTerms(bTerms);
+    setSignatureSales("");
+    sigSalesRef.current?.clear();
+    setCurrentStep(1);
+  }
+
+  async function handleDiscard() {
+    if (!booking) return;
+    setIsDiscarding(true);
+    try {
+      const r = await discardEditDraft({ bookingId: booking.id });
+      if (!r.success) { toast.error(r.error ?? "Gagal membuang perubahan."); return; }
+      revertToOriginal();
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      toast.success("Perubahan dibuang.");
+      onOpenChange(false);
+    } finally {
+      setIsDiscarding(false);
     }
   }
 
@@ -681,10 +726,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   return (
     <Drawer
       isOpen={open}
-      onClose={() => onOpenChange(false)}
+      onClose={() => { if (!isLocked) onOpenChange(false); }}
       title="Edit Booking"
       maxWidth="sm:max-w-xl"
-      isCloseButton
+      isCloseButton={!isLocked}
+      disableEscapeDismissal={isLocked}
       headerActions={
         <span className="text-sm text-muted-foreground">
           Step {currentStep} / {totalSteps}
@@ -1465,14 +1511,25 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             ) : (
               /* Steps 2-5: Previous + Continue/Update */
               <>
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={mut.isPending}
-                  className="flex-[40%] cursor-pointer"
-                >
-                  Previous
-                </Button>
+                {isLocked ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleDiscard}
+                    disabled={isDiscarding || mut.isPending}
+                    className="flex-[40%] cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10"
+                  >
+                    {isDiscarding ? "Membuang..." : "Discard"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevious}
+                    disabled={mut.isPending}
+                    className="flex-[40%] cursor-pointer"
+                  >
+                    Previous
+                  </Button>
+                )}
                 <Button
                   onClick={currentStep < totalSteps ? handleNext : handleSubmit}
                   disabled={isContinueDisabled}
