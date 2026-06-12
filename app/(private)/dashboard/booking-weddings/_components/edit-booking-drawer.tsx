@@ -447,12 +447,19 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           if (cp.isTakeout) nominalMap[cp.categoryName] = Number(cp.takeoutNominal) || Number(cp.basePrice);
         }
       }
-      setCategoryToggles(toggleMap);
-      setTakeoutPrices(nominalMap);
-      // Snapshot initial toggles for change detection
+      // originalToggles MUST always reflect the saved snapshot (the baseline for
+      // change detection) — set it unconditionally.
       const toggleKey = (t: Record<string, boolean>, p: Record<string, number>) =>
         JSON.stringify({ t, p });
       setOriginalToggles(toggleKey(toggleMap, nominalMap));
+      // Current toggles/prices: only seed from snapshot when there is NO uncommitted
+      // edit-draft. When a draft exists, the [open, booking] effect already applied the
+      // draft's takeout state — overwriting it here would wipe the user's pending change
+      // and (because originalToggles still holds the snapshot) wrongly unlock the drawer.
+      if (!booking?.editDraft?.formState) {
+        setCategoryToggles(toggleMap);
+        setTakeoutPrices(nominalMap);
+      }
     }
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -645,7 +652,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   }
 
   function revertToOriginal() {
- if (!booking) return;
+    if (!booking) return;
     setVenueId(originalVenueId);
     setPackageId(originalPackageId);
     setBookingDate(originalBookingDate);
