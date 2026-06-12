@@ -503,21 +503,21 @@ Data required in all environments (roles, permissions, reference data):
 .github/workflows/
 ├── ci.yml              → PR validation (generate → lint → typecheck → build)
 ├── cd-staging.yml      → Push main: migrate → build → deploy
-└── cd-production.yml   → Push live: migrate → build → deploy (concurrency locked)
+└── cd-production.yml   → Push production: migrate → build → deploy (concurrency locked)
 ```
 
 ### Deploy Flow
 - Push to `main` → auto migrate staging DB → build → deploy staging
-- Push to `live` → auto migrate prod DB → build → deploy prod
+- Push to `production` → auto migrate prod DB → build → deploy prod
 - Migration failure = deploy blocked (separate jobs)
 - `prisma generate` explicit in every job
 - No lint/typecheck in CD (already validated in CI)
 
 ### Branch Strategy
 - `main` = staging
-- `live` = production
+- `production` = production
 - Feature branches: `feat/<name>`, `fix/<name>`
-- PR required to merge into `main` or `live`
+- PR required to merge into `main` or `production`
 
 ---
 
