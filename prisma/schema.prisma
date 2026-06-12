@@ -204,6 +204,8 @@ model Profile {
   leaveBalances              LeaveBalance[]
   payrollRecords             PayrollRecord[]
   onboardings                EmployeeOnboarding[]
+  developments               EmployeeDevelopment[]
+  certifications             EmployeeCertification[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2743,4 +2745,73 @@ model EmployeeOnboarding {
 
   @@index([profileId])
   @@map("employee_onboardings")
+}
+
+// ─── HR Development ───────────────────────────────────────────────────────────
+
+enum TrainingStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum DevelopmentLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum CertificationStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+}
+
+model TrainingProgram {
+  id                   String         @id @default(cuid())
+  name                 String
+  description          String?
+  startDate            DateTime
+  endDate              DateTime
+  status               TrainingStatus @default(SCHEDULED)
+  participantsCount    Int            @default(0)
+  completionPercentage Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@map("training_programs")
+}
+
+model EmployeeDevelopment {
+  id                   String           @id @default(cuid())
+  profileId            String
+  skill                String
+  level                DevelopmentLevel
+  startDate            DateTime
+  targetCompletionDate DateTime?
+  progressPercentage   Int              @default(0)
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  profile              Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_developments")
+}
+
+model EmployeeCertification {
+  id                String              @id @default(cuid())
+  profileId         String
+  certificationName String
+  issueDate         DateTime
+  expiryDate        DateTime?
+  status            CertificationStatus @default(ACTIVE)
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  profile           Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_certifications")
 }
