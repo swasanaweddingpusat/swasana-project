@@ -39,11 +39,36 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  // Base URL so relative OG/Twitter image paths resolve to absolute URLs.
+  // Falls back to localhost in dev / when the env var is unset (build-safe).
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: {
     default: "Swasana Wedding",
     template: "%s | Swasana Wedding",
   },
   description: "Sistem Manajemen Wedding Swasana",
+  // Default OG/Twitter card — inherited by every public & internal route unless a
+  // page sets its own openGraph. Uses the shared brand image in /public for now.
+  openGraph: {
+    type: "website",
+    siteName: "Swasana Wedding",
+    title: "Swasana Wedding",
+    description: "Sistem Manajemen Wedding Swasana",
+    images: [
+      {
+        url: "/swasana-weddings.png",
+        width: 1536,
+        height: 1024,
+        alt: "Swasana Wedding",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Swasana Wedding",
+    description: "Sistem Manajemen Wedding Swasana",
+    images: ["/swasana-weddings.png"],
+  },
 };
 
 export default function RootLayout({
