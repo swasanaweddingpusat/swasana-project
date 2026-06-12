@@ -26,6 +26,7 @@ const bookingListInclude = {
     },
     orderBy: { sortOrder: "asc" as const },
   },
+  editDraft: { select: { id: true, editorProfileId: true, formState: true, pendingUploads: true, updatedAt: true } },
 } as const;
 
 const bookingDetailInclude = {
