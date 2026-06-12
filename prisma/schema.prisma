@@ -206,6 +206,7 @@ model Profile {
   onboardings                EmployeeOnboarding[]
   developments               EmployeeDevelopment[]
   certifications             EmployeeCertification[]
+  performanceReviews         PerformanceReview[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2814,4 +2815,47 @@ model EmployeeCertification {
 
   @@index([profileId])
   @@map("employee_certifications")
+}
+
+// ─── HR Performance Management ────────────────────────────────────────────────
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+model PerformanceReview {
+  id              String       @id @default(cuid())
+  profileId       String
+  periodStartDate DateTime
+  periodEndDate   DateTime
+  rating          Float
+  strengths       String?
+  comments        String?
+  status          ReviewStatus @default(PENDING)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  profile         Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("performance_reviews")
+}
+
+model KPI {
+  id                 String   @id @default(cuid())
+  name               String
+  description        String?
+  department         String?
+  targetValue        Float
+  achievedValue      Float    @default(0)
+  unit               String
+  periodStartDate    DateTime
+  periodEndDate      DateTime
+  progressPercentage Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("kpis")
 }
