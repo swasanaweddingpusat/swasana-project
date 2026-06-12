@@ -199,6 +199,7 @@ model Profile {
   procurementItemsCreated    ProcurementItem[]   @relation("ProcurementCreator")
   procurementItemsApproved   ProcurementItem[]   @relation("ProcurementApprover")
   procurementAnnouncements   ProcurementAnnouncement[] @relation("ProcurementAnnouncementCreator")
+  attendances                Attendance[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2460,4 +2461,34 @@ model ProcurementAnnouncement {
   @@index([isActive])
   @@index([createdById])
   @@map("procurement_announcements")
+}
+
+// ─── HR & Payroll ─────────────────────────────────────────────────────────────
+
+enum GeofenceStatus {
+  IN_RANGE
+  OUT_OF_RANGE
+  UNKNOWN
+}
+
+model Attendance {
+  id               String         @id @default(cuid())
+  profileId        String
+  clockIn          DateTime
+  clockOut         DateTime?
+  photoCheckInUrl  String?
+  photoCheckOutUrl String?
+  latitude         Float?
+  longitude        Float?
+  accuracy         Float?
+  geofenceStatus   GeofenceStatus @default(UNKNOWN)
+  isLate           Boolean        @default(false)
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  profile          Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([clockIn])
+  @@map("attendances")
 }
