@@ -203,6 +203,7 @@ model Profile {
   leaveRequests              LeaveRequest[]
   leaveBalances              LeaveBalance[]
   payrollRecords             PayrollRecord[]
+  onboardings                EmployeeOnboarding[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2585,4 +2586,161 @@ model TaxConfig {
   updatedAt        DateTime @updatedAt
 
   @@map("tax_configs")
+}
+
+enum PositionType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+}
+
+enum ApplicantStatus {
+  NEW
+  REVIEWED
+  INTERVIEWED
+  OFFERED
+  HIRED
+  REJECTED
+}
+
+enum InterviewType {
+  PHONE_SCREENING
+  TECHNICAL
+  HR_ROUND
+  FINAL
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum OnboardingStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model JobPosting {
+  id                  String       @id @default(cuid())
+  title               String
+  department          String
+  positionType        PositionType
+  description         String
+  location            String
+  salaryRangeMin      Decimal?     @db.Decimal(15, 2)
+  salaryRangeMax      Decimal?     @db.Decimal(15, 2)
+  status              JobStatus    @default(OPEN)
+  applicationDeadline DateTime?
+  maxApplicants       Int?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  applicants          Applicant[]
+
+  @@map("job_postings")
+}
+
+model Applicant {
+  id              String          @id @default(cuid())
+  jobPostingId    String
+  fullName        String
+  email           String
+  phoneNumber     String?
+  position        String
+  applicationDate DateTime        @default(now())
+  status          ApplicantStatus @default(NEW)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  jobPosting      JobPosting      @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  interviews      Interview[]
+  jobOffers       JobOffer[]
+
+  @@index([jobPostingId])
+  @@map("applicants")
+}
+
+model Interview {
+  id                       String          @id @default(cuid())
+  applicantId              String
+  interviewerId            String?
+  scheduledDate            DateTime
+  interviewType            InterviewType
+  interviewLocation        String?
+  interviewDurationMinutes Int             @default(60)
+  status                   InterviewStatus @default(SCHEDULED)
+  interviewNotes           String?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  applicant                Applicant       @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("interviews")
+}
+
+model JobOffer {
+  id            String      @id @default(cuid())
+  applicantId   String
+  positionTitle String
+  salary        Decimal     @db.Decimal(15, 2)
+  startDate     DateTime
+  status        OfferStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  applicant     Applicant   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@map("job_offers")
+}
+
+model OnboardingTemplate {
+  id          String                   @id @default(cuid())
+  name        String
+  description String?
+  department  String?
+  isActive    Boolean                  @default(true)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  items       OnboardingTemplateItem[]
+  onboardings EmployeeOnboarding[]
+
+  @@map("onboarding_templates")
+}
+
+model OnboardingTemplateItem {
+  id         String             @id @default(cuid())
+  templateId String
+  title      String
+  order      Int
+  template   OnboardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("onboarding_template_items")
+}
+
+model EmployeeOnboarding {
+  id                 String              @id @default(cuid())
+  profileId          String
+  templateId         String?
+  startDate          DateTime
+  status             OnboardingStatus    @default(IN_PROGRESS)
+  progressPercentage Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  profile            Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  template           OnboardingTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([profileId])
+  @@map("employee_onboardings")
 }
