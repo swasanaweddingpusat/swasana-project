@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, UploadMinimalistic, Pen } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen } from "@solar-icons/react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -43,7 +43,7 @@ interface PackageOption { id: string; packageName: string; pax: number; margin: 
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 type TermPaymentStatus = "unpaid" | "paid" | "partial" | "refund";
-interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: string | null }
+interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: File | string | null }
 
 /** A locked term cannot have its amount/name redistributed or overwritten.
  *  Matches the server-side guard in actions/booking.ts. */
@@ -74,6 +74,31 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Request failed (${res.status}): ${url}`);
   return res.json();
+}
+
+/** Renders an object-URL preview from a freshly-picked File. The URL is created
+ *  inside useEffect so create/revoke stay balanced (StrictMode-safe). */
+function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing object-URL preview from the file prop */
+  useEffect(() => {
+    if (!file.type.startsWith("image/")) { setUrl(null); return; }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
+}
+
+/** Renders a preview from an already-saved string URL (R2 or CDN). */
+function UrlPreview({ url, onOpen }: { url: string; onOpen: () => void }) {
+  const isImage = /\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(url);
+  if (!isImage) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
 
 function fmtRp(n: number) {
@@ -174,7 +199,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
   const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
   const [unlockedTerms, setUnlockedTerms] = useState<Set<number>>(new Set());
-  const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
 
   // ── Step 5: Signing ──
   const [signingLocation, setSigningLocation] = useState("");
@@ -666,7 +690,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       venueId, packageId, bookingDate, weddingSession, weddingType,
       eventTime: time, noteDateEvent,
       specialBonusName, specialBonusAmount, paymentMethodId,
-      terms,
+      // Strip File instances — they can't be JSON-serialised. Worst case: a
+      // pending file selection is lost on refresh; that's acceptable per spec.
+      terms: terms.map((t) => ({ ...t, paymentEvidence: t.paymentEvidence instanceof File ? null : t.paymentEvidence })),
       categoryToggles, takeoutPrices,
       complimentaries,
       signingLocation,
@@ -699,25 +725,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       qc.invalidateQueries({ queryKey: ["booking-approvals"] });
     },
   });
-
-  async function handleUploadEvidence(termId: string, file: File) {
-    if (!termId || termId.startsWith("new-")) return;
-    setUploadingEvidenceId(termId);
-    const fd = new FormData();
-    fd.set("termId", termId);
-    fd.set("file", file);
-    try {
-      const res = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-      if (!res.ok) throw new Error();
-      const { filePath } = await res.json() as { filePath: string };
-      setTerms((prev) => prev.map((x) => x.id === termId ? { ...x, paymentEvidence: filePath } : x));
-      toast.success("Bukti pembayaran berhasil diupload");
-    } catch {
-      toast.error("Gagal upload bukti pembayaran");
-    } finally {
-      setUploadingEvidenceId(null);
-    }
-  }
 
   async function handleSubmit() {
     if (!booking) return;
@@ -758,6 +765,21 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       }),
     });
     if (!r.success) { toast.error(r.error); return; }
+    // Upload payment evidence yang masih berupa File (belum diupload) — hanya untuk
+    // term yang sudah punya id nyata. Term baru (id diawali "new-" atau tanpa id)
+    // tidak didukung untuk evidence (sama seperti batasan sebelumnya). Endpoint
+    // upload-evidence menangani penghapusan file R2 lama yang digantikan.
+    const termsWithNewFiles = terms.filter((t) => t.id && !t.id.startsWith("new-") && t.paymentEvidence instanceof File);
+    if (termsWithNewFiles.length > 0) {
+      await Promise.allSettled(
+        termsWithNewFiles.map((t) => {
+          const fd = new FormData();
+          fd.append("termId", t.id!);
+          fd.append("file", t.paymentEvidence as File);
+          return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+        })
+      );
+    }
     toast.success("Booking berhasil diupdate.");
     onOpenChange(false);
   }
@@ -1459,35 +1481,39 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                               </div>
                             </div>
 
-                            {/* Bukti pembayaran */}
+                            {/* Bukti pembayaran — deferred: file only uploaded at commit */}
                             {isPaid && (
                               <div>
-                                {t.paymentEvidence ? (
-                                  <div className="flex items-center gap-2">
-                                    {/\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(t.paymentEvidence) && (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={t.paymentEvidence} alt="Bukti pembayaran" className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-border object-cover" onClick={() => { if (t.paymentEvidence) window.open(t.paymentEvidence, "_blank"); }} />
-                                    )}
-                                    <a href={t.paymentEvidence} target="_blank" rel="noopener noreferrer" className={cn("flex flex-1 items-center gap-2 px-3 py-2 rounded-xl border border-border", "bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors min-w-0")}>
-                                      <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="flex-1 truncate">Lihat bukti pembayaran</span>
-                                    </a>
-                                    {t.id && !t.id.startsWith("new-") && (
-                                      <label className={cn("relative shrink-0 flex items-center justify-center h-9 w-9 rounded-xl border border-border", "bg-background text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors", uploadingEvidenceId === t.id && "pointer-events-none opacity-50")}>
-                                        <UploadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
-                                        <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const file = e.target.files?.[0]; if (file && t.id) { void handleUploadEvidence(t.id, file); } e.target.value = ""; }} />
-                                      </label>
-                                    )}
-                                  </div>
-                                ) : (
-                                  t.id && !t.id.startsWith("new-") ? (
-                                    <label className={cn("relative flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-border", "bg-muted/20 text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer transition-colors", uploadingEvidenceId === t.id && "pointer-events-none opacity-50")}>
-                                      <UploadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="flex-1 truncate">{uploadingEvidenceId === t.id ? "Mengupload..." : "Upload bukti pembayaran"}</span>
-                                      <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const file = e.target.files?.[0]; if (file && t.id) { void handleUploadEvidence(t.id, file); } e.target.value = ""; }} />
-                                    </label>
-                                  ) : null
-                                )}
+                                <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs transition-colors">
+                                  {/* Preview: File (object URL) or string URL from DB */}
+                                  {t.paymentEvidence instanceof File ? (
+                                    <FilePreview file={t.paymentEvidence} onOpen={() => { const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }} />
+                                  ) : typeof t.paymentEvidence === "string" ? (
+                                    <UrlPreview url={t.paymentEvidence} onOpen={() => { window.open(t.paymentEvidence as string, "_blank"); }} />
+                                  ) : (
+                                    <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                                  )}
+                                  {/* Label / filename */}
+                                  {t.paymentEvidence instanceof File ? (
+                                    <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }}>
+                                      {(t.paymentEvidence as File).name}
+                                    </button>
+                                  ) : typeof t.paymentEvidence === "string" ? (
+                                    <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); window.open(t.paymentEvidence as string, "_blank"); }}>
+                                      {(t.paymentEvidence as string).split("/").pop()}
+                                    </button>
+                                  ) : (
+                                    <span className="flex-1 truncate">Upload bukti pembayaran</span>
+                                  )}
+                                  {/* Remove button — only when evidence present */}
+                                  {t.paymentEvidence && (
+                                    <button type="button" className="shrink-0 hover:text-destructive z-10 relative" onClick={(e) => { e.stopPropagation(); setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x)); }}>
+                                      <CloseCircle weight="BoldDuotone" className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                  {/* File input — covers entire row; picking a file only updates state */}
+                                  <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
+                                </div>
                               </div>
                             )}
                           </div>
