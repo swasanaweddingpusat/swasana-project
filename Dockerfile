@@ -8,6 +8,8 @@
 # ── deps: install node_modules (postinstall runs `prisma generate`) ──────────
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
+# Pin npm to the latest release (base image ships an older 10.x).
+RUN npm install -g npm@11.17.0
 # openssl + ca-certificates: Prisma engine runtime needs them
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -20,6 +22,8 @@ RUN npm ci
 # ── builder: compile Next.js standalone output ───────────────────────────────
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
+# Pin npm to the latest release (base image ships an older 10.x).
+RUN npm install -g npm@11.17.0
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
@@ -45,6 +49,8 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0
+# Pin npm to the latest release (base image ships an older 10.x).
+RUN npm install -g npm@11.17.0
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
