@@ -207,6 +207,8 @@ model Profile {
   developments               EmployeeDevelopment[]
   certifications             EmployeeCertification[]
   performanceReviews         PerformanceReview[]
+  healthRecords              HealthRecord[]
+  insurances                 EmployeeInsurance[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2858,4 +2860,54 @@ model KPI {
   updatedAt          DateTime @updatedAt
 
   @@map("kpis")
+}
+
+// ─── HR Health Management ─────────────────────────────────────────────────────
+
+enum HealthStatus {
+  NORMAL
+  SELESAI
+  PERLU_TINDAK_LANJUT
+  URGENT
+}
+
+enum InsuranceStatus {
+  AKTIF
+  BERAKHIR
+  EXPIRED
+  PENDING
+  NON_AKTIF
+}
+
+model HealthRecord {
+  id          String       @id @default(cuid())
+  profileId   String
+  checkupType String
+  checkupDate DateTime
+  doctorName  String?
+  findings    String?
+  status      HealthStatus @default(NORMAL)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  profile     Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("health_records")
+}
+
+model EmployeeInsurance {
+  id             String          @id @default(cuid())
+  profileId      String
+  insuranceType  String
+  provider       String
+  policyNumber   String
+  coverageAmount Decimal         @db.Decimal(15, 2) @default(0)
+  expiryDate     DateTime?
+  status         InsuranceStatus @default(AKTIF)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_insurances")
 }
