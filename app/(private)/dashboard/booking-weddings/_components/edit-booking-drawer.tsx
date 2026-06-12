@@ -784,11 +784,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     onOpenChange(false);
   }
 
+  const isOnFinalStep = currentStep === totalSteps;
   const isContinueDisabled =
     (currentStep === 2 && !isStep2Complete) ||
     (currentStep === 3 && !isStep3Complete) ||
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && isSalesPIC && !isStep5Complete) ||
+    (isOnFinalStep && !hasSignificantChange) ||
     mut.isPending;
 
   const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
