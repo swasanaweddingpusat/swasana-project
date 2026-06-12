@@ -209,6 +209,10 @@ model Profile {
   performanceReviews         PerformanceReview[]
   healthRecords              HealthRecord[]
   insurances                 EmployeeInsurance[]
+  reimbursements             Reimbursement[]
+  loans                      EmployeeLoan[]
+  laborDisputes              LaborDispute[]
+  grievances                 EmployeeGrievance[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2910,4 +2914,96 @@ model EmployeeInsurance {
 
   @@index([profileId])
   @@map("employee_insurances")
+}
+
+// ─── HR Industrial Relations, Reimbursement & Loan ───────────────────────────
+
+enum ReimbursementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LoanStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum DisputeType {
+  INDIVIDUAL
+  COLLECTIVE
+  PROCEDURAL
+}
+
+enum DisputeStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  IN_REVIEW
+  UNDER_INVESTIGATION
+  ESCALATED
+  REJECTED
+}
+
+model Reimbursement {
+  id          String              @id @default(cuid())
+  profileId   String
+  description String
+  amount      Decimal             @db.Decimal(15, 2)
+  date        DateTime
+  status      ReimbursementStatus @default(PENDING)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  profile     Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("reimbursements")
+}
+
+model EmployeeLoan {
+  id                 String     @id @default(cuid())
+  profileId          String
+  amount             Decimal    @db.Decimal(15, 2)
+  tenor              Int
+  monthlyInstallment Decimal    @db.Decimal(15, 2)
+  status             LoanStatus @default(PENDING)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  profile            Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_loans")
+}
+
+model LaborDispute {
+  id          String        @id @default(cuid())
+  profileId   String
+  disputeType DisputeType
+  dateFiled   DateTime
+  description String
+  status      DisputeStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  profile     Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("labor_disputes")
+}
+
+model EmployeeGrievance {
+  id          String        @id @default(cuid())
+  profileId   String
+  subject     String
+  description String
+  dateFiled   DateTime
+  status      DisputeStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  profile     Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_grievances")
 }
