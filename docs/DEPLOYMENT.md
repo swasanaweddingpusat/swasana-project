@@ -11,14 +11,16 @@ Buka PR ke main/live
    └─ ci.yml: lint + typecheck + build  ← GATE (wajib lulus sebelum merge)
 
 Merge → push ke main (staging) / live (production)
-   └─ cd-staging.yml / cd-production.yml → curl webhook Dokploy
-        └─ Dokploy: clone → build Dockerfile → container start
+   └─ GitHub native webhook (Settings → Webhooks) → Dokploy /api/deploy/<token>
+        └─ Dokploy cek branch dari payload → match → build Dockerfile → container start
              └─ entrypoint: prisma migrate deploy → node server.js
 ```
 
-Alur: **PR → CI lulus → merge → GitHub Action panggil webhook Dokploy → deploy**.
-Webhook dipanggil dari GitHub Action (bukan webhook GitHub native) supaya deploy
-hanya jalan saat merge ke `main`/`live`, bukan di setiap push branch lain.
+Alur: **PR → CI lulus → merge → GitHub webhook → Dokploy deploy**.
+Deploy dipicu oleh **GitHub native webhook** (Settings → Webhooks), bukan GitHub
+Action. Dokploy webhook (`/api/deploy/<token>`) butuh payload push GitHub yang
+berisi info branch untuk mencocokkan branch yang di-watch app (mis. `main`).
+`curl` polos tanpa payload akan ditolak dengan `{"message":"Branch Not Match"}`.
 
 - **Branch:** `main` = staging, `live` = production.
 - **Container dipisah:** App (Dockerfile) + Postgres (service Database Dokploy) terpisah.
@@ -140,26 +142,37 @@ PERURI_ENV=staging   # atau production
 
 ## 5. CI/CD — gate PR + auto-deploy via webhook
 
-Alur: **PR → CI lulus → merge → GitHub Action panggil webhook Dokploy → deploy.**
+Alur: **PR → CI lulus → merge → GitHub native webhook → Dokploy deploy.**
+
+Deploy dipicu **GitHub native webhook** (bukan GitHub Action). Webhook Dokploy
+mencocokkan branch dari payload push GitHub dengan branch yang di-watch app,
+jadi push ke `main` hanya men-deploy app staging (branch `main`), push ke `live`
+hanya men-deploy app production. `curl` polos ditolak `{"message":"Branch Not Match"}`
+karena tidak membawa payload branch — itulah kenapa pakai webhook native, bukan Action.
 
 ### a. Ambil webhook URL dari Dokploy
 Tiap Application punya deploy webhook sendiri. Di Dokploy → Application →
-**Deployments / Webhook** → copy URL, formatnya:
+**Deployments** (atau tab Webhook) → copy URL, formatnya:
 ```
 http://<vps-ip>:3000/api/deploy/<token>
 ```
-Ada **dua** URL berbeda: satu untuk app staging, satu untuk app production.
+Ada **dua** URL berbeda: satu untuk app staging (branch `main`), satu untuk app
+production (branch `live`).
 
-### b. Simpan sebagai GitHub Secrets
-Repo → **Settings → Secrets and variables → Actions → New repository secret**:
+### b. Daftarkan sebagai GitHub Webhook (native)
+Repo → **Settings → Webhooks → Add webhook**, untuk MASING-MASING URL:
 
-| Secret name | Isi |
+| Field | Isi |
 |---|---|
-| `DOKPLOY_WEBHOOK_STAGING` | webhook URL app **staging** |
-| `DOKPLOY_WEBHOOK_PRODUCTION` | webhook URL app **production** |
+| **Payload URL** | webhook URL dari Dokploy (staging / production) |
+| **Content type** | `application/json` |
+| **Secret** | kosongkan (kecuali Dokploy memintanya) |
+| **Which events** | **Just the push event** |
+| **Active** | ✅ |
 
-> Workflow `cd-staging.yml` (push `main`) dan `cd-production.yml` (push `live`)
-> memanggil webhook ini via `curl`. URL tidak di-hardcode → token deploy aman.
+Dokploy app staging watch `main` → hanya push ke `main` yang ter-deploy ke staging.
+App production watch `live` → hanya push ke `live` yang ter-deploy ke production.
+Branch lain (mis. `feat/*`) otomatis ditolak Dokploy (branch tidak match) — aman.
 
 ### c. Branch protection (jadikan CI sebagai gate wajib)
 Repo → **Settings → Branches → Add branch ruleset / protection rule** untuk `main`
@@ -168,18 +181,15 @@ Repo → **Settings → Branches → Add branch ruleset / protection rule** untu
 - ✅ **Require status checks to pass** → pilih check **`Validate (lint + typecheck + build)`** (dari `ci.yml`)
 - (opsional) Require branches up to date before merging
 
-Dengan ini, PR **tidak bisa di-merge** kalau CI gagal. Setelah merge ke `main`/`live`,
-`cd-*.yml` otomatis trigger deploy ke Dokploy.
-
-> **Auto-deploy Dokploy native:** matikan "Auto Deploy" / webhook GitHub native di
-> Dokploy app kalau ada — supaya deploy hanya dipicu oleh GitHub Action (`cd-*.yml`),
-> bukan di setiap push branch. Ini mencegah branch fitur ikut men-deploy.
+Dengan ini, PR **tidak bisa di-merge** (tombol Merge disabled) sampai CI lulus.
+Setelah merge ke `main`/`live`, GitHub webhook men-trigger Dokploy deploy.
 
 ---
 
 ## 6. Operasional
 
-- **Deploy berikutnya:** merge PR ke `main`/`live` → `cd-*.yml` panggil webhook → Dokploy build & deploy. Migration jalan otomatis di entrypoint.
+- **Deploy berikutnya:** merge PR ke `main`/`live` → GitHub webhook → Dokploy build & deploy. Migration jalan otomatis di entrypoint.
+- **Deploy manual:** kapan saja lewat tombol **Deploy** / **Redeploy** di Dokploy UI (tidak butuh push).
 - **Migration baru:** commit file migrasi seperti biasa → terbawa saat deploy (entrypoint apply otomatis).
 - **Akses DB dari laptop:** karena internal-only, pakai Dokploy terminal atau SSH
   tunnel. Jangan expose Postgres production ke internet.
