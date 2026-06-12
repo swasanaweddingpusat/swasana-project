@@ -148,6 +148,7 @@ model Profile {
   termOfPaymentsAcknowledged TermOfPayment[] @relation("TOPAcknowledger")
   maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignee")
   maintenanceTicketsCreated  MaintenanceTicket[] @relation("MaintenanceCreator")
+  bookingEditDrafts          BookingEditDraft[]
 
   @@index([roleId])
   @@index([managerId])
@@ -606,6 +607,7 @@ model Booking {
   commentReads      BookingCommentRead[]
   revisions         BookingRevision[]
   convertedFromLeads Lead[]                    @relation("LeadConvertedBooking")
+  editDraft         BookingEditDraft?
 
   @@index([salesId])
   @@index([managerId])
@@ -654,6 +656,22 @@ model BookingRevision {
   @@index([bookingId])
   @@index([createdById])
   @@map("booking_revisions")
+}
+
+model BookingEditDraft {
+  id              String   @id @default(uuid())
+  bookingId       String   @unique
+  editorProfileId String
+  formState       Json
+  pendingUploads  Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  editor  Profile @relation(fields: [editorProfileId], references: [id], onDelete: Cascade)
+
+  @@index([editorProfileId])
+  @@map("booking_edit_drafts")
 }
 
 // ─── Snapshot Tables ─────────────────────────────────────────────────────────
