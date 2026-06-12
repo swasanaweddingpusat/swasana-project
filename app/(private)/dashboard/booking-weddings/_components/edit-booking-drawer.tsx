@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, UploadMinimalistic, Pen } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen } from "@solar-icons/react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -21,6 +21,7 @@ import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
+import { saveEditDraft, discardEditDraft } from "@/actions/booking-edit-draft";
 import { createComplimentary } from "@/actions/complimentary";
 import { computeFullPrice } from "@/lib/package-prices";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
@@ -42,7 +43,7 @@ interface PackageOption { id: string; packageName: string; pax: number; margin: 
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 type TermPaymentStatus = "unpaid" | "paid" | "partial" | "refund";
-interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: string | null }
+interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: File | string | null }
 
 /** A locked term cannot have its amount/name redistributed or overwritten.
  *  Matches the server-side guard in actions/booking.ts. */
@@ -73,6 +74,31 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Request failed (${res.status}): ${url}`);
   return res.json();
+}
+
+/** Renders an object-URL preview from a freshly-picked File. The URL is created
+ *  inside useEffect so create/revoke stay balanced (StrictMode-safe). */
+function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing object-URL preview from the file prop */
+  useEffect(() => {
+    if (!file.type.startsWith("image/")) { setUrl(null); return; }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
+}
+
+/** Renders a preview from an already-saved string URL (R2 or CDN). */
+function UrlPreview({ url, onOpen }: { url: string; onOpen: () => void }) {
+  const isImage = /\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(url);
+  if (!isImage) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
 
 function fmtRp(n: number) {
@@ -173,7 +199,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
   const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
   const [unlockedTerms, setUnlockedTerms] = useState<Set<number>>(new Set());
-  const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
 
   // ── Step 5: Signing ──
   const [signingLocation, setSigningLocation] = useState("");
@@ -339,6 +364,28 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setCollapsedTerms(new Set());
     setUnlockedTerms(new Set());
     setSelectedPackagePrice(Number(booking.snapPackagePricing?.price ?? 0));
+
+    // ── Reopen: jika ada edit-draft belum-commit, timpa state step 2-5 dengannya ──
+    const draft = booking.editDraft;
+    if (draft?.formState) {
+      const fs = draft.formState as Record<string, unknown>;
+      if (typeof fs.venueId === "string") setVenueId(fs.venueId);
+      if (typeof fs.packageId === "string") setPackageId(fs.packageId);
+      if (typeof fs.bookingDate === "string") setBookingDate(fs.bookingDate);
+      if (typeof fs.weddingSession === "string") setWeddingSession(fs.weddingSession);
+      if (typeof fs.weddingType === "string") setWeddingType(fs.weddingType);
+      if (typeof fs.eventTime === "string") setTime(fs.eventTime);
+      if (typeof fs.noteDateEvent === "string") setNoteDateEvent(fs.noteDateEvent);
+      if (typeof fs.specialBonusName === "string") setSpecialBonusName(fs.specialBonusName);
+      if (typeof fs.specialBonusAmount === "number") setSpecialBonusAmount(fs.specialBonusAmount);
+      if (typeof fs.paymentMethodId === "string") setPaymentMethodId(fs.paymentMethodId);
+      if (typeof fs.signingLocation === "string") setSigningLocation(fs.signingLocation);
+      if (Array.isArray(fs.terms)) setTerms(fs.terms as TermRow[]);
+      if (fs.categoryToggles && typeof fs.categoryToggles === "object") setCategoryToggles(fs.categoryToggles as Record<string, boolean>);
+      if (fs.takeoutPrices && typeof fs.takeoutPrices === "object") setTakeoutPrices(fs.takeoutPrices as Record<string, number>);
+      if (Array.isArray(fs.complimentaries)) setComplimentaries(fs.complimentaries as ComplimentaryRow[]);
+      if (typeof fs.currentStep === "number") setCurrentStep(fs.currentStep);
+    }
   }, [open, booking]);
 
   // ── Init detail fields (email, NIK, address, bitrix, bonuses, complimentaries) ──
@@ -400,12 +447,19 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           if (cp.isTakeout) nominalMap[cp.categoryName] = Number(cp.takeoutNominal) || Number(cp.basePrice);
         }
       }
-      setCategoryToggles(toggleMap);
-      setTakeoutPrices(nominalMap);
-      // Snapshot initial toggles for change detection
+      // originalToggles MUST always reflect the saved snapshot (the baseline for
+      // change detection) — set it unconditionally.
       const toggleKey = (t: Record<string, boolean>, p: Record<string, number>) =>
         JSON.stringify({ t, p });
       setOriginalToggles(toggleKey(toggleMap, nominalMap));
+      // Current toggles/prices: only seed from snapshot when there is NO uncommitted
+      // edit-draft. When a draft exists, the [open, booking] effect already applied the
+      // draft's takeout state — overwriting it here would wipe the user's pending change
+      // and (because originalToggles still holds the snapshot) wrongly unlock the drawer.
+      if (!booking?.editDraft?.formState) {
+        setCategoryToggles(toggleMap);
+        setTakeoutPrices(nominalMap);
+      }
     }
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -506,6 +560,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     takeoutChanged ||
     topChanged;
 
+
+  // Drawer terkunci saat ada perubahan material yang belum di-commit.
+  const isLocked = hasSignificantChange;
+  const [isDiscarding, setIsDiscarding] = useState(false);
   // ── Completeness per step ──
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0);
   const isStep2Complete = !!(venueId && packageId && bookingDate && weddingSession && weddingType);
@@ -593,6 +651,79 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     }
   }
 
+  function revertToOriginal() {
+    if (!booking) return;
+    setVenueId(originalVenueId);
+    setPackageId(originalPackageId);
+    setBookingDate(originalBookingDate);
+    setSpecialBonusName(originalDiscountName ?? "Discount");
+    setSpecialBonusAmount(originalDiscountAmount);
+    setCategoryToggles({});
+    setTakeoutPrices({});
+    const bTerms = (booking.termOfPayments ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      amount: Number(t.amount),
+      dueDate: new Date(t.dueDate).toISOString(),
+      sortOrder: t.sortOrder,
+      paymentStatus: (t.paymentStatus ?? "unpaid") as TermPaymentStatus,
+      ackStatus: (t as Record<string, unknown>).ackStatus as string | undefined ?? undefined,
+      paymentEvidence: (t as Record<string, unknown>).paymentEvidence as string | null ?? null,
+    }));
+    setTerms(bTerms);
+    setSignatureSales("");
+    sigSalesRef.current?.clear();
+    setCurrentStep(1);
+  }
+
+  async function handleDiscard() {
+    if (!booking) return;
+    setIsDiscarding(true);
+    try {
+      const r = await discardEditDraft({ bookingId: booking.id });
+      if (!r.success) { toast.error(r.error ?? "Gagal membuang perubahan."); return; }
+      revertToOriginal();
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      toast.success("Perubahan dibuang.");
+      onOpenChange(false);
+    } finally {
+      setIsDiscarding(false);
+    }
+  }
+
+  function buildFormState() {
+    return {
+      currentStep,
+      venueId, packageId, bookingDate, weddingSession, weddingType,
+      eventTime: time, noteDateEvent,
+      specialBonusName, specialBonusAmount, paymentMethodId,
+      // Strip File instances — they can't be JSON-serialised. Worst case: a
+      // pending file selection is lost on refresh; that's acceptable per spec.
+      terms: terms.map((t) => ({ ...t, paymentEvidence: t.paymentEvidence instanceof File ? null : t.paymentEvidence })),
+      categoryToggles, takeoutPrices,
+      complimentaries,
+      signingLocation,
+    };
+  }
+
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!booking || !open) return;
+    if (!hasSignificantChange) return; // hanya persist saat material change
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      void saveEditDraft({
+        bookingId: booking.id,
+        formState: buildFormState(),
+        pendingUploads: [],
+      });
+    }, 800);
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, booking, hasSignificantChange, venueId, packageId, bookingDate, JSON.stringify(terms), JSON.stringify(categoryToggles), JSON.stringify(takeoutPrices), specialBonusName, specialBonusAmount]);
+
   // ── Full submit (steps 2-5: approval may trigger) ──
   const mut = useMutation({
     mutationFn: (data: Parameters<typeof editBooking>[0]) => editBooking(data),
@@ -601,25 +732,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       qc.invalidateQueries({ queryKey: ["booking-approvals"] });
     },
   });
-
-  async function handleUploadEvidence(termId: string, file: File) {
-    if (!termId || termId.startsWith("new-")) return;
-    setUploadingEvidenceId(termId);
-    const fd = new FormData();
-    fd.set("termId", termId);
-    fd.set("file", file);
-    try {
-      const res = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-      if (!res.ok) throw new Error();
-      const { filePath } = await res.json() as { filePath: string };
-      setTerms((prev) => prev.map((x) => x.id === termId ? { ...x, paymentEvidence: filePath } : x));
-      toast.success("Bukti pembayaran berhasil diupload");
-    } catch {
-      toast.error("Gagal upload bukti pembayaran");
-    } finally {
-      setUploadingEvidenceId(null);
-    }
-  }
 
   async function handleSubmit() {
     if (!booking) return;
@@ -660,15 +772,32 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       }),
     });
     if (!r.success) { toast.error(r.error); return; }
+    // Upload payment evidence yang masih berupa File (belum diupload) — hanya untuk
+    // term yang sudah punya id nyata. Term baru (id diawali "new-" atau tanpa id)
+    // tidak didukung untuk evidence (sama seperti batasan sebelumnya). Endpoint
+    // upload-evidence menangani penghapusan file R2 lama yang digantikan.
+    const termsWithNewFiles = terms.filter((t) => t.id && !t.id.startsWith("new-") && t.paymentEvidence instanceof File);
+    if (termsWithNewFiles.length > 0) {
+      await Promise.allSettled(
+        termsWithNewFiles.map((t) => {
+          const fd = new FormData();
+          fd.append("termId", t.id!);
+          fd.append("file", t.paymentEvidence as File);
+          return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+        })
+      );
+    }
     toast.success("Booking berhasil diupdate.");
     onOpenChange(false);
   }
 
+  const isOnFinalStep = currentStep === totalSteps;
   const isContinueDisabled =
     (currentStep === 2 && !isStep2Complete) ||
     (currentStep === 3 && !isStep3Complete) ||
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && isSalesPIC && !isStep5Complete) ||
+    (isOnFinalStep && !hasSignificantChange) ||
     mut.isPending;
 
   const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
@@ -681,10 +810,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   return (
     <Drawer
       isOpen={open}
-      onClose={() => onOpenChange(false)}
+      onClose={() => { if (!isLocked) onOpenChange(false); }}
       title="Edit Booking"
       maxWidth="sm:max-w-xl"
-      isCloseButton
+      isCloseButton={!isLocked}
+      disableEscapeDismissal={isLocked}
       headerActions={
         <span className="text-sm text-muted-foreground">
           Step {currentStep} / {totalSteps}
@@ -1360,35 +1490,39 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                               </div>
                             </div>
 
-                            {/* Bukti pembayaran */}
+                            {/* Bukti pembayaran — deferred: file only uploaded at commit */}
                             {isPaid && (
                               <div>
-                                {t.paymentEvidence ? (
-                                  <div className="flex items-center gap-2">
-                                    {/\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(t.paymentEvidence) && (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={t.paymentEvidence} alt="Bukti pembayaran" className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-border object-cover" onClick={() => { if (t.paymentEvidence) window.open(t.paymentEvidence, "_blank"); }} />
-                                    )}
-                                    <a href={t.paymentEvidence} target="_blank" rel="noopener noreferrer" className={cn("flex flex-1 items-center gap-2 px-3 py-2 rounded-xl border border-border", "bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors min-w-0")}>
-                                      <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="flex-1 truncate">Lihat bukti pembayaran</span>
-                                    </a>
-                                    {t.id && !t.id.startsWith("new-") && (
-                                      <label className={cn("relative shrink-0 flex items-center justify-center h-9 w-9 rounded-xl border border-border", "bg-background text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors", uploadingEvidenceId === t.id && "pointer-events-none opacity-50")}>
-                                        <UploadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
-                                        <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const file = e.target.files?.[0]; if (file && t.id) { void handleUploadEvidence(t.id, file); } e.target.value = ""; }} />
-                                      </label>
-                                    )}
-                                  </div>
-                                ) : (
-                                  t.id && !t.id.startsWith("new-") ? (
-                                    <label className={cn("relative flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-border", "bg-muted/20 text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer transition-colors", uploadingEvidenceId === t.id && "pointer-events-none opacity-50")}>
-                                      <UploadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="flex-1 truncate">{uploadingEvidenceId === t.id ? "Mengupload..." : "Upload bukti pembayaran"}</span>
-                                      <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const file = e.target.files?.[0]; if (file && t.id) { void handleUploadEvidence(t.id, file); } e.target.value = ""; }} />
-                                    </label>
-                                  ) : null
-                                )}
+                                <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs transition-colors">
+                                  {/* Preview: File (object URL) or string URL from DB */}
+                                  {t.paymentEvidence instanceof File ? (
+                                    <FilePreview file={t.paymentEvidence} onOpen={() => { const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }} />
+                                  ) : typeof t.paymentEvidence === "string" ? (
+                                    <UrlPreview url={t.paymentEvidence} onOpen={() => { window.open(t.paymentEvidence as string, "_blank"); }} />
+                                  ) : (
+                                    <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+                                  )}
+                                  {/* Label / filename */}
+                                  {t.paymentEvidence instanceof File ? (
+                                    <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }}>
+                                      {(t.paymentEvidence as File).name}
+                                    </button>
+                                  ) : typeof t.paymentEvidence === "string" ? (
+                                    <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); window.open(t.paymentEvidence as string, "_blank"); }}>
+                                      {(t.paymentEvidence as string).split("/").pop()}
+                                    </button>
+                                  ) : (
+                                    <span className="flex-1 truncate">Upload bukti pembayaran</span>
+                                  )}
+                                  {/* Remove button — only when evidence present */}
+                                  {t.paymentEvidence && (
+                                    <button type="button" className="shrink-0 hover:text-destructive z-10 relative" onClick={(e) => { e.stopPropagation(); setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x)); }}>
+                                      <CloseCircle weight="BoldDuotone" className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                  {/* File input — covers entire row; picking a file only updates state */}
+                                  <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1465,14 +1599,25 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             ) : (
               /* Steps 2-5: Previous + Continue/Update */
               <>
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={mut.isPending}
-                  className="flex-[40%] cursor-pointer"
-                >
-                  Previous
-                </Button>
+                {isLocked ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleDiscard}
+                    disabled={isDiscarding || mut.isPending}
+                    className="flex-[40%] cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10"
+                  >
+                    {isDiscarding ? "Membuang..." : "Discard"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevious}
+                    disabled={mut.isPending}
+                    className="flex-[40%] cursor-pointer"
+                  >
+                    Previous
+                  </Button>
+                )}
                 <Button
                   onClick={currentStep < totalSteps ? handleNext : handleSubmit}
                   disabled={isContinueDisabled}

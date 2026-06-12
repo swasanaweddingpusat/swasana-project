@@ -762,6 +762,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 Draft
                               </span>
                             )}
+                            {/* Edit-in-progress badge — booking has uncommitted material changes */}
+                            {booking.editDraft && (
+                              <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-secondary', 'text-secondary-foreground', 'text-[10px]', 'font-semibold')}>
+                                Sedang diedit
+                              </span>
+                            )}
                             {/* Status badge */}
                             <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
                               <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
@@ -895,6 +901,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         {booking.recordStatus === "draft" && (
                           <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-secondary', 'text-secondary-foreground', 'text-[10px]', 'font-semibold')}>
                             Draft
+                          </span>
+                        )}
+                        {booking.editDraft && (
+                          <span className={cn('inline-flex', 'items-center', 'px-1.5', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-secondary', 'text-secondary-foreground', 'text-[10px]', 'font-semibold')}>
+                            Sedang diedit
                           </span>
                         )}
                         <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>

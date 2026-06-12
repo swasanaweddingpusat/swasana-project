@@ -1389,6 +1389,12 @@ export async function editBooking(data: unknown) {
       );
     }
 
+    // Edit selesai di-commit → buang buffer edit-draft jika ada, ATOMIK bersama
+    // write utama. Ditaruh di dalam transaksi (bukan sequential setelahnya) supaya
+    // jika langkah approval/revisi di bawah gagal, draft tetap terhapus dan badge
+    // "Sedang diedit" tidak nyangkut. deleteMany = idempotent (no-op kalau tidak ada).
+    ops.push(db.bookingEditDraft.deleteMany({ where: { bookingId: id } }));
+
     await db.$transaction(ops);
 
     // Snapshot approval + create revision — when any material change detected
