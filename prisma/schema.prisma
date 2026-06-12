@@ -202,6 +202,7 @@ model Profile {
   attendances                Attendance[]
   leaveRequests              LeaveRequest[]
   leaveBalances              LeaveBalance[]
+  payrollRecords             PayrollRecord[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2541,4 +2542,47 @@ model LeaveBalance {
 
   @@unique([profileId, year, leaveType])
   @@map("leave_balances")
+}
+
+enum PayrollStatus {
+  DRAFT
+  REVIEWED
+  APPROVED
+  PUBLISHED
+  REJECTED
+}
+
+model PayrollRecord {
+  id               String        @id @default(cuid())
+  profileId        String
+  periodMonth      Int
+  periodYear       Int
+  baseSalary       Decimal       @db.Decimal(15, 2)
+  allowances       Decimal       @db.Decimal(15, 2) @default(0)
+  grossSalary      Decimal       @db.Decimal(15, 2)
+  totalDeductions  Decimal       @db.Decimal(15, 2) @default(0)
+  netSalary        Decimal       @db.Decimal(15, 2)
+  workingDays      Int
+  actualDaysWorked Int
+  status           PayrollStatus @default(DRAFT)
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  profile          Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, periodMonth, periodYear])
+  @@map("payroll_records")
+}
+
+model TaxConfig {
+  id               String   @id @default(cuid())
+  ptkpCategory     String
+  ptkpAmount       Decimal  @db.Decimal(15, 2)
+  bpjsHealthRate   Float
+  bpjsEmployeeRate Float
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("tax_configs")
 }
