@@ -14,6 +14,8 @@ interface DrawerProps {
   isOpen: boolean;
   onClose?: () => void;
   isCloseButton?: boolean;
+  /** When true, pressing Escape will NOT close the drawer (used for lockable flows). */
+  disableEscapeDismissal?: boolean;
   title: string;
   children: React.ReactNode;
   steps?: number;
@@ -36,6 +38,7 @@ export function Drawer({
   isOpen,
   onClose,
   isCloseButton = true,
+  disableEscapeDismissal = false,
   title,
   steps,
   totalSteps = 2,
@@ -49,7 +52,19 @@ export function Drawer({
   childrenClassName,
 }: DrawerProps) {
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose?.(); }} disablePointerDismissal>
+    <Sheet
+      open={isOpen}
+      onOpenChange={(open, eventDetails) => {
+        // base-ui Dialog: `disablePointerDismissal` only blocks outside-click, not Escape.
+        // When locked, cancel the Escape-key close so the drawer cannot be dismissed.
+        if (!open && disableEscapeDismissal && eventDetails.reason === "escape-key") {
+          eventDetails.cancel();
+          return;
+        }
+        if (!open) onClose?.();
+      }}
+      disablePointerDismissal
+    >
       <SheetContent
         className={cn(
           `flex py-6 px-5 flex-col gap-6`,
