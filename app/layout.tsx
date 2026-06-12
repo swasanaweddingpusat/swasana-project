@@ -40,8 +40,9 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   // Base URL so relative OG/Twitter image paths resolve to absolute URLs.
-  // Falls back to localhost in dev / when the env var is unset (build-safe).
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  // Use `||` (not `??`) so an empty-string env (e.g. unset in Docker build) also
+  // falls back to localhost — `new URL("")` throws ERR_INVALID_URL otherwise.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
   title: {
     default: "Swasana Wedding",
     template: "%s | Swasana Wedding",
