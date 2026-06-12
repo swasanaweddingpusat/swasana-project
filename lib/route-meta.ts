@@ -203,6 +203,77 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola pengajuan pengadaan dan pembelian barang",
   },
 
+  // ─── HR & Payroll ──────────────────────────────────────────────────────────
+  "/dashboard/hr": {
+    title: "HR & Payroll",
+    subtitle: "Kelola SDM, penggajian, dan administrasi karyawan",
+  },
+  "/dashboard/hr/database-karyawan": {
+    title: "Database Karyawan",
+    subtitle: "Data lengkap seluruh karyawan",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/manajemen-kehadiran": {
+    title: "Manajemen Kehadiran",
+    subtitle: "Monitoring kehadiran real-time",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/absensi": {
+    title: "Absensi",
+    subtitle: "Catat kehadiran dengan foto dan lokasi",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/sistem-cuti": {
+    title: "Sistem Cuti",
+    subtitle: "Pengajuan dan saldo cuti karyawan",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/penggajian-perpajakan": {
+    title: "Penggajian & Perpajakan",
+    subtitle: "Proses penggajian dan konfigurasi pajak",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/slip-gaji": {
+    title: "Slip Gaji",
+    subtitle: "Lihat dan unduh slip gaji",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/rekrutmen-onboarding": {
+    title: "Rekrutmen & Onboarding",
+    subtitle: "Pipeline rekrutmen hingga onboarding",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/pengembangan-sdm": {
+    title: "Pengembangan SDM",
+    subtitle: "Pelatihan, pengembangan, dan sertifikasi",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/manajemen-kinerja": {
+    title: "Manajemen Kinerja",
+    subtitle: "Review kinerja dan KPI karyawan",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/manajemen-kesehatan": {
+    title: "Manajemen Kesehatan",
+    subtitle: "Rekam medis dan asuransi karyawan",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/reimbursement-loan": {
+    title: "Reimbursement & Loan",
+    subtitle: "Klaim biaya dan pinjaman karyawan",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/hubungan-industrial": {
+    title: "Hubungan Industrial",
+    subtitle: "SP tracking dan pengaduan karyawan",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/analitik-laporan": {
+    title: "Analitik & Laporan",
+    subtitle: "Dashboard metrik HR dan laporan",
+    parent: "/dashboard/hr",
+  },
+
   // ─── Maintenance ───────────────────────────────────────────────────────────
   "/dashboard/maintenance": {
     title: "Maintenance",
