@@ -21,7 +21,7 @@ import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
-import { discardEditDraft } from "@/actions/booking-edit-draft";
+import { saveEditDraft, discardEditDraft } from "@/actions/booking-edit-draft";
 import { createComplimentary } from "@/actions/complimentary";
 import { computeFullPrice } from "@/lib/package-prices";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
@@ -637,6 +637,37 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       setIsDiscarding(false);
     }
   }
+
+  function buildFormState() {
+    return {
+      currentStep,
+      venueId, packageId, bookingDate, weddingSession, weddingType,
+      eventTime: time, noteDateEvent,
+      specialBonusName, specialBonusAmount, paymentMethodId,
+      terms,
+      categoryToggles, takeoutPrices,
+      complimentaries,
+      signingLocation,
+    };
+  }
+
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!booking || !open) return;
+    if (!hasSignificantChange) return; // hanya persist saat material change
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      void saveEditDraft({
+        bookingId: booking.id,
+        formState: buildFormState(),
+        pendingUploads: [],
+      });
+    }, 800);
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, booking, hasSignificantChange, venueId, packageId, bookingDate, JSON.stringify(terms), JSON.stringify(categoryToggles), JSON.stringify(takeoutPrices), specialBonusName, specialBonusAmount]);
 
   // ── Full submit (steps 2-5: approval may trigger) ──
   const mut = useMutation({
