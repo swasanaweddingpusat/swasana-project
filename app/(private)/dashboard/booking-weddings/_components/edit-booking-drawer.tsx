@@ -340,6 +340,28 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setCollapsedTerms(new Set());
     setUnlockedTerms(new Set());
     setSelectedPackagePrice(Number(booking.snapPackagePricing?.price ?? 0));
+
+    // ── Reopen: jika ada edit-draft belum-commit, timpa state step 2-5 dengannya ──
+    const draft = booking.editDraft;
+    if (draft?.formState) {
+      const fs = draft.formState as Record<string, unknown>;
+      if (typeof fs.venueId === "string") setVenueId(fs.venueId);
+      if (typeof fs.packageId === "string") setPackageId(fs.packageId);
+      if (typeof fs.bookingDate === "string") setBookingDate(fs.bookingDate);
+      if (typeof fs.weddingSession === "string") setWeddingSession(fs.weddingSession);
+      if (typeof fs.weddingType === "string") setWeddingType(fs.weddingType);
+      if (typeof fs.eventTime === "string") setTime(fs.eventTime);
+      if (typeof fs.noteDateEvent === "string") setNoteDateEvent(fs.noteDateEvent);
+      if (typeof fs.specialBonusName === "string") setSpecialBonusName(fs.specialBonusName);
+      if (typeof fs.specialBonusAmount === "number") setSpecialBonusAmount(fs.specialBonusAmount);
+      if (typeof fs.paymentMethodId === "string") setPaymentMethodId(fs.paymentMethodId);
+      if (typeof fs.signingLocation === "string") setSigningLocation(fs.signingLocation);
+      if (Array.isArray(fs.terms)) setTerms(fs.terms as TermRow[]);
+      if (fs.categoryToggles && typeof fs.categoryToggles === "object") setCategoryToggles(fs.categoryToggles as Record<string, boolean>);
+      if (fs.takeoutPrices && typeof fs.takeoutPrices === "object") setTakeoutPrices(fs.takeoutPrices as Record<string, number>);
+      if (Array.isArray(fs.complimentaries)) setComplimentaries(fs.complimentaries as ComplimentaryRow[]);
+      if (typeof fs.currentStep === "number") setCurrentStep(fs.currentStep);
+    }
   }, [open, booking]);
 
   // ── Init detail fields (email, NIK, address, bitrix, bonuses, complimentaries) ──
