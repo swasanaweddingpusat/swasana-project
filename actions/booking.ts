@@ -1455,6 +1455,12 @@ export async function editBooking(data: unknown) {
       }
     } // end if hasMaterialChange
 
+    // Edit selesai di-commit → buang buffer edit-draft jika ada.
+    // pendingUploads yang sudah dipakai (mengganti file lama) tidak dihapus di sini;
+    // penghapusan file lama yang digantikan ditangani oleh logika upload-evidence/swap
+    // saat user mengupload. Di sini cukup hapus buffer-nya.
+    await db.bookingEditDraft.deleteMany({ where: { bookingId: id } });
+
     await logAudit({
       userId: session!.user.id,
       action: "updated",
