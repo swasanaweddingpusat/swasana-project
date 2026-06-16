@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Drawer } from "@/components/shared/drawer";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -23,7 +32,6 @@ import {
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { SalesDetailModal } from "./SalesDetailModal";
 import { ChangeLeaderDialog } from "./ChangeLeaderDialog";
 import { GroupSalesMasterDetail } from "./GroupSalesMasterDetail";
 import type { SalesListMember } from "./GroupSalesListItem";
@@ -113,13 +121,11 @@ export function GroupDetailClient({
   type MemberRow = { profileId: string; name: string; target: number };
   const [editTargetMember, setEditTargetMember] = useState<MemberRow | null>(null);
   const [targetInput, setTargetInput] = useState("");
-  const [targetFrom, setTargetFrom] = useState("");
-  const [targetTo, setTargetTo] = useState("");
 
   const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
 
-  // SalesDetailModal state
-  const [detailMemberId, setDetailMemberId] = useState<string | null>(null);
+  // Master-detail selection state
+  const [selectedSalesId, setSelectedSalesId] = useState<string | null>(null);
 
   // ── Derived data ─────────────────────────────────────────────────────────────
 
@@ -134,8 +140,6 @@ export function GroupDetailClient({
       roleName: m.profile.role?.name ?? null,
       avatarUrl: m.profile.avatarUrl ?? undefined,
       target: perf?.target ?? 0,
-      targetStartDate: perf?.targetStartDate ?? null,
-      targetEndDate: perf?.targetEndDate ?? null,
       actual: perf?.actual ?? 0,
       bookings: perf?.bookings ?? 0,
       confirmed: perf?.confirmed ?? 0,
@@ -220,14 +224,13 @@ export function GroupDetailClient({
         groupId: group.id,
         profileId: editTargetMember.profileId,
         amount: Number(targetInput) || 0,
-        startDate: targetFrom,
-        endDate: targetTo,
       },
       {
         onSuccess: (res) => {
           if (res.success) {
             toast.success("Target berhasil disimpan");
             setEditTargetMember(null);
+            void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
           } else {
             toast.error(res.error ?? "Terjadi kesalahan");
@@ -241,6 +244,21 @@ export function GroupDetailClient({
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/dashboard/groups" />}>
+              Groups
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{teamName}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       {/* Group Header */}
       <div className="flex items-center gap-3">
         {leaderMember && (
@@ -322,6 +340,8 @@ export function GroupDetailClient({
       <GroupSalesMasterDetail
         members={salesListMembers}
         canManage={canManage}
+        selectedSalesId={selectedSalesId}
+        onSelectSales={setSelectedSalesId}
         onAddMember={() => setAddOpen(true)}
         onEditTarget={(member) => {
           setEditTargetMember({
@@ -330,8 +350,6 @@ export function GroupDetailClient({
             target: member.target,
           });
           setTargetInput(member.target.toString());
-          setTargetFrom(member.targetStartDate?.slice(0, 10) ?? "");
-          setTargetTo(member.targetEndDate?.slice(0, 10) ?? "");
         }}
         onRemoveMember={(member) =>
           setDeleteMember({
@@ -340,19 +358,6 @@ export function GroupDetailClient({
             target: member.target,
           })
         }
-        onViewAllBookings={(member) => setDetailMemberId(member.profileId)}
-      />
-
-      {/* Sales Detail Modal (full history) */}
-      <SalesDetailModal
-        memberId={detailMemberId}
-        memberName={sorted.find((m) => m.profileId === detailMemberId)?.name ?? ""}
-        memberAvatarUrl={
-          sorted.find((m) => m.profileId === detailMemberId)?.avatarUrl ?? null
-        }
-        memberTarget={sorted.find((m) => m.profileId === detailMemberId)?.target ?? 0}
-        memberActual={sorted.find((m) => m.profileId === detailMemberId)?.actual ?? 0}
-        onClose={() => setDetailMemberId(null)}
       />
 
       {/* Change Leader Dialog */}
@@ -478,26 +483,6 @@ export function GroupDetailClient({
             <DialogTitle>Edit Target — {editTargetMember?.name}</DialogTitle>
             <div className="space-y-3 mt-2">
               <div>
-                <Label htmlFor="target-from" className="text-sm">Periode</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Input
-                    id="target-from"
-                    type="date"
-                    className="flex-1 text-base sm:text-sm"
-                    value={targetFrom}
-                    onChange={(e) => setTargetFrom(e.target.value)}
-                  />
-                  <span className="text-xs text-muted-foreground shrink-0">s/d</span>
-                  <Input
-                    id="target-to"
-                    type="date"
-                    className="flex-1 text-base sm:text-sm"
-                    value={targetTo}
-                    onChange={(e) => setTargetTo(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div>
                 <Label htmlFor="target-amount" className="text-sm">Target Penjualan</Label>
                 <div className="relative mt-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
@@ -524,7 +509,7 @@ export function GroupDetailClient({
               </Button>
               <Button
                 className="flex-1"
-                disabled={isPending || !targetFrom || !targetTo}
+                disabled={isPending}
                 onClick={handleSaveTarget}
               >
                 Simpan

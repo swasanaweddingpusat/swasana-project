@@ -200,12 +200,9 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
           where: {
             profileId,
             type: "sales",
-            ...(startDate && endDate
-              ? { startDate: { lte: endDate }, endDate: { gte: startDate } }
-              : {}),
           },
-          orderBy: { endDate: "desc" },
-          select: { amount: true, startDate: true, endDate: true },
+          orderBy: { createdAt: "desc" },
+          select: { amount: true },
         }),
       ]);
 
@@ -221,8 +218,6 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
         avatarUrl: profile.avatarUrl,
         actual,
         target: targetAmount,
-        targetStartDate: target?.startDate?.toISOString() ?? null,
-        targetEndDate: target?.endDate?.toISOString() ?? null,
         achievement,
         bookings: bookingRevenues.length,
         confirmed: confirmed.length,
@@ -306,11 +301,8 @@ export async function getGroupsWithPerformance(
     where: {
       profileId: { in: allSalesIds },
       type: "sales",
-      ...(startDate && endDate
-        ? { startDate: { lte: endDate }, endDate: { gte: startDate } }
-        : {}),
     },
-    orderBy: { endDate: "desc" },
+    orderBy: { createdAt: "desc" },
     select: { profileId: true, amount: true },
   });
 
@@ -373,7 +365,7 @@ export async function getGroupsWithPerformance(
     bookingsBySalesId.set(b.salesId, list);
   }
 
-  // Map target by profileId — first-write-wins because allTargets is ordered by endDate desc
+  // Map target by profileId — first-write-wins because allTargets is ordered by createdAt desc
   // so the first entry per profileId is the latest (most recent) target
   const targetBySalesId = new Map<string, number>();
   for (const t of allTargets) {
@@ -404,8 +396,10 @@ export async function getGroupsWithPerformance(
       totalAchievement += achievement;
       memberCount += 1;
 
-      // Finance metrics: only Confirmed bookings (recordStatus=saved already filtered)
-      for (const booking of confirmed) {
+      // Finance metrics: all active bookings (non-draft, non-Canceled — already filtered upstream)
+      // Piutang dihitung dari semua booking aktif, bukan hanya Confirmed.
+      // Revenue (totalRevenue) hanya dari booking yang TOPnya paid+acknowledged — perhitungan ada di computeTopFinancials.
+      for (const booking of bookings) {
         const fin = computeTopFinancials(booking.tops);
         piutang += fin.piutang;
         totalRevenue += fin.totalRevenue;
@@ -429,31 +423,6 @@ export async function getGroupsWithPerformance(
 }
 
 // ─── Member management helpers ────────────────────────────────────────────────
-
-export async function getSalesBookings(salesId: string, take = 100, skip = 0) {
-  "use cache";
-  cacheTag("groups", "bookings");
-  cacheLife("minutes");
-
-  return db.booking.findMany({
-    where: { salesId, recordStatus: "saved" },
-    select: {
-      id: true,
-      bookingStatus: true,
-      poNumber: true,
-      weddingSession: true,
-      bookingDate: true,
-      snapCustomer: { select: { name: true, mobileNumber: true } },
-      snapVenue: { select: { venueName: true } },
-      snapPackage: { select: { packageName: true } },
-      snapPackagePricing: { select: { price: true } },
-      paymentMethod: { select: { bankName: true } },
-    },
-    orderBy: { bookingDate: "desc" },
-    take,
-    skip,
-  });
-}
 
 export async function getAvailableSalesProfiles(excludeIds: string[]) {
   "use cache";
@@ -498,6 +467,5 @@ export type GroupCard = Awaited<ReturnType<typeof getAllGroups>>[number];
 export type GroupDetail = Awaited<ReturnType<typeof getGroupDetail>>;
 export type GroupPerformanceItem = Awaited<ReturnType<typeof getGroupPerformance>>[number];
 export type GroupWithPerformance = Awaited<ReturnType<typeof getGroupsWithPerformance>>[number];
-export type SalesBookingItem = Awaited<ReturnType<typeof getSalesBookings>>[number];
 export type AvailableSalesProfile = Awaited<ReturnType<typeof getAvailableSalesProfiles>>[number];
 export type EligibleLeader = Awaited<ReturnType<typeof getEligibleLeaders>>[number];

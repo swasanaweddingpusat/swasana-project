@@ -60,6 +60,7 @@ export function useAddGroupMember() {
       addGroupMember(groupId, userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
     },
   });
 }
@@ -71,6 +72,7 @@ export function useRemoveGroupMember() {
       removeGroupMember(groupId, userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
     },
   });
 }
@@ -81,6 +83,7 @@ export function useSetMemberTarget() {
     mutationFn: (data: SetMemberTargetInput) => setMemberTarget(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
     },
   });
 }
@@ -92,6 +95,7 @@ export function useUpdateGroupLeader() {
       updateGroupLeader(groupId, leaderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
     },
   });
 }
