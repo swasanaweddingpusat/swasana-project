@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
@@ -136,10 +137,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: result = initialData, refetch, isFetching } = useBookings(
+  const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
     { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
     initialData,
   );
+  // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
+  // keeps the old rows mounted, so isPlaceholderData is the signal for that transition).
+  const isTableLoading = isLoading || isPlaceholderData;
   const bookings = result.data;
   const totalBookings = result.total;
   const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
@@ -662,7 +666,80 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </div>
 
           {/* Table */}
-          {bookings.length === 0 ? (
+          {isTableLoading ? (
+            <>
+              {/* Desktop skeleton — mirrors the real table columns/visibility */}
+              <div className={cn('hidden', 'sm:block', 'w-full', 'overflow-x-auto')}>
+                <Table className={cn('w-full', 'text-sm')}>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'w-[3%]', 'hidden', 'sm:table-cell')}>No</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground')}>Customer</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
+                      <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: ROWS_PER_PAGE }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className={cn('px-2', 'py-2', 'text-center', 'hidden', 'sm:table-cell')}>
+                          <Skeleton className="h-4 w-5 mx-auto" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2')}>
+                          <Skeleton className="h-4 w-32 mb-1.5" />
+                          <Skeleton className="h-3 w-24" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
+                          <Skeleton className="h-4 w-24 mb-1.5" />
+                          <Skeleton className="h-3 w-20" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
+                          <Skeleton className="h-4 w-24" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
+                          <Skeleton className="h-4 w-20" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
+                          <Skeleton className="h-4 w-12" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </TableCell>
+                        <TableCell className={cn('px-1', 'py-2')}>
+                          <div className={cn('flex', 'items-center', 'justify-end', 'gap-1.5', 'pr-4')}>
+                            <Skeleton className="h-7 w-7 rounded-md" />
+                            <Skeleton className="h-7 w-7 rounded-md" />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile skeleton — mirrors the card layout */}
+              <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
+                {Array.from({ length: ROWS_PER_PAGE }).map((_, i) => (
+                  <div key={i} className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2')}>
+                    <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-5 w-14 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-24" />
+                    <div className={cn('flex', 'items-center', 'justify-end', 'gap-1.5', 'pt-1')}>
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : bookings.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
               <CalendarDays weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : recordStatusFilter === "draft" ? "Tidak ada draft booking." : "Belum ada booking."}</p>

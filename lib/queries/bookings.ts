@@ -83,6 +83,38 @@ export interface PaginatedBookings {
   total: number;
 }
 
+/** Parse a PO number into a sortable key. Format: "001/BRAND/VENUE/TYPE/dd-mm-yyyy".
+ *  The sequence counter resets every year, so the true chronological order is
+ *  (year DESC, sequence DESC). Returns null for drafts (no PO yet) so they can be
+ *  pushed to the end. */
+function parsePoSortKey(poNumber: string | null): { year: number; seq: number } | null {
+  if (!poNumber) return null;
+  const parts = poNumber.split("/");
+  if (parts.length < 5) return null;
+  const seq = parseInt(parts[0], 10);
+  const year = parseInt(parts[4].split("-")[2], 10);
+  if (Number.isNaN(seq) || Number.isNaN(year)) return null;
+  return { year, seq };
+}
+
+/** Sort by true PO order: newest PO first (year DESC, then sequence DESC).
+ *  Drafts (no PO) sink to the bottom, ordered among themselves by createdAt DESC. */
+function comparePoDesc(
+  a: { poNumber: string | null; createdAt: Date },
+  b: { poNumber: string | null; createdAt: Date },
+): number {
+  const ka = parsePoSortKey(a.poNumber);
+  const kb = parsePoSortKey(b.poNumber);
+  if (ka && kb) {
+    if (ka.year !== kb.year) return kb.year - ka.year;
+    if (ka.seq !== kb.seq) return kb.seq - ka.seq;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  }
+  if (ka && !kb) return -1; // a has a PO, b is a draft → a first
+  if (!ka && kb) return 1;
+  return b.createdAt.getTime() - a.createdAt.getTime(); // both drafts
+}
+
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
@@ -104,16 +136,26 @@ export async function getBookings(
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
 
-  const [data, total] = await Promise.all([
-    db.booking.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: bookingListInclude,
-    }),
-    db.booking.count({ where }),
-  ]);
+  // Sort by true PO order (year DESC, sequence DESC; drafts last). The sequence is a
+  // substring of poNumber that resets yearly, which Prisma's orderBy cannot express.
+  // So we fetch only the lightweight ordering keys for ALL matching rows, sort + paginate
+  // in-app, then hydrate the page with the full include. Reuses the exact same `where`
+  // (scope/search/filters) — no SQL duplication.
+  const keys = await db.booking.findMany({
+    where,
+    select: { id: true, poNumber: true, createdAt: true },
+  });
+  const total = keys.length;
+  keys.sort(comparePoDesc);
+  const pageIds = keys.slice((page - 1) * pageSize, page * pageSize).map((k) => k.id);
+
+  const rows = await db.booking.findMany({
+    where: { id: { in: pageIds } },
+    include: bookingListInclude,
+  });
+  // findMany ignores the order of `in`, so re-order to match the paginated key order.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const data = pageIds.map((id) => byId.get(id)!).filter(Boolean);
 
   return { data, total };
 }
