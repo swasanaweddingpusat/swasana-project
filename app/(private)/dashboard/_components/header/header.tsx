@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Book, UserPlus, CalendarAdd, Buildings, DocumentAdd, AltArrowDown } from "@solar-icons/react";
@@ -34,6 +35,15 @@ export function Header() {
   const { can, isLoading: permLoading } = usePermissions();
   usePoll();
 
+  // Permissions come from a client-only fetch (/api/me/permissions), so the
+  // "Tambah Baru" dropdown can only be known after hydration. Gate it behind a
+  // mounted flag so the server and first client render produce identical markup
+  // — otherwise the sibling order in this flex row differs (server starts with
+  // the Tutorial <a>, client with the dropdown <button>) → hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydration flag, intentional
+  useEffect(() => setMounted(true), []);
+
   const canCreateLead = can("leads", "create");
   const canCreateWedding = can("booking", "create");
   const canCreateMice = can("booking-mice", "create");
@@ -60,7 +70,7 @@ export function Header() {
       <div className={cn("flex items-center gap-2")}>
         {action}
 
-        {!permLoading && hasAnyCreatePermission && (
+        {mounted && !permLoading && hasAnyCreatePermission && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
