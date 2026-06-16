@@ -79,23 +79,15 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
   },
-  // Manager: full access to everything EXCEPT settings-* modules.
+  // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
+  // package, complimentary, vendors, and customers.
+  // (dashboard has no permission module; calendar-event is gated by booking:view.)
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement"],
-    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     customers: ["view", "create", "edit", "delete"],
-    "finance-ar": ["view", "create", "edit", "delete"],
-    groups: ["view", "view-all", "create", "edit", "delete"],
+    groups: ["view", "create", "edit", "delete"],
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
-    "vendor-specialist": ["view", "create", "edit", "delete"],
-    leads: ["view", "create", "edit", "delete"],
-    quotations: ["view", "create", "edit", "delete"],
-    "settings-quotation-templates": ["view", "create", "edit", "delete"],
-    maintenance: ["view", "create", "edit", "delete"],
-    "settings-maintenance-category": ["view", "create", "edit", "delete"],
-    "settings-maintenance-priority": ["view", "create", "edit", "delete"],
-    "settings-maintenance-status": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
   },
   "direktur-operational": {
@@ -157,7 +149,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
     leads: ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
-    groups: ["view", "view-all", "create", "edit", "delete"],
+    groups: ["view", "create", "edit", "delete"],
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
