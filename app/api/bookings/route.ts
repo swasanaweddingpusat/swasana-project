@@ -1,5 +1,5 @@
 import { getBookings } from "@/lib/queries/bookings";
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { requirePermissionForRoute, canViewSalesBookings } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { getPublicUrl } from "@/lib/r2";
@@ -36,7 +36,36 @@ export async function GET(request: Request) {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
-  const result = await getBookings(profileId, dataScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo });
+  const rawSalesId = searchParams.get("salesId") ?? undefined;
+  const salesId = rawSalesId?.trim() || undefined;
+
+  // Scope guard: when salesId is requested, verify the caller shares a group
+  // with that sales profile (or is super admin / has groups:view-all).
+  // On denial we return an empty result with the same shape — no error detail
+  // exposed to the client.
+  if (salesId) {
+    if (!profileId) {
+      return new Response(
+        JSON.stringify({ data: [], total: 0 }, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+    const allowed = await canViewSalesBookings(profileId, session.user.roleId, salesId);
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ data: [], total: 0 }, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+  }
+
+  // When salesId is present, use "all" scope so the caller (e.g. a group
+  // leader whose own dataScope is "own") can still see the target sales'
+  // bookings — the canViewSalesBookings guard above already confirmed they
+  // share a group, so visibility is intentional.
+  const effectiveScope: DataScope = salesId ? "all" : dataScope;
+
+  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, salesId });
 
   const transformed = {
     ...result,
