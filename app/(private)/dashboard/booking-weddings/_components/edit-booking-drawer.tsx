@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen, Copy } from "@solar-icons/react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -213,8 +213,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [originalDiscountAmount, setOriginalDiscountAmount] = useState(0);
   // Serialized initial category toggles for takeout change detection (JSON string)
   const [originalToggles, setOriginalToggles] = useState("");
-  // Serialized initial terms for TOP change detection (JSON string) — mirrors server logic
+  // Serialized initial terms for TOP change detection (JSON string) — mirrors server logic.
+  // originalTermsKey includes paymentStatus (any change); originalStructuralKey excludes it
+  // (structural-only, for the approval-reset warning). originalTermStatuses maps id→status
+  // so a paid→unpaid reversal can be detected per-term.
   const [originalTermsKey, setOriginalTermsKey] = useState("");
+  const [originalStructuralKey, setOriginalStructuralKey] = useState("");
+  const [originalTermStatuses, setOriginalTermStatuses] = useState<Record<string, TermPaymentStatus>>({});
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
@@ -358,8 +363,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     ];
     const initialTerms = bTerms.length > 0 ? bTerms : defaultTerms;
     setTerms(initialTerms);
-    // Snapshot for TOP change detection — mirrors server: count, name, amount, sortOrder
-    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder }))));
+    // Snapshot for TOP change detection — mirrors server: count, name, amount, sortOrder, paymentStatus
+    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus }))));
+    setOriginalStructuralKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder }))));
+    setOriginalTermStatuses(Object.fromEntries(initialTerms.filter((t) => t.id).map((t) => [t.id as string, t.paymentStatus])));
     setLastAllocatedPrice(0);
     setCollapsedTerms(new Set());
     setUnlockedTerms(new Set());
@@ -549,9 +556,23 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     p: takeoutPrices,
   });
   const takeoutChanged = originalToggles !== "" && currentTogglesKey !== originalToggles;
-  // TOP change detection — mirrors server: count, name, amount, sortOrder per index
-  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder })));
+  // TOP change detection — split into two signals (mirrors server):
+  //  • topChanged       — ANY change incl. payment status. Enables Save & locks the wizard.
+  //  • topApprovalReset — structural change OR a paid→unpaid reversal. Drives the step-5
+  //                       "approval will reset" warning. A plain unpaid→paid does NOT reset.
+  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })));
   const topChanged = originalTermsKey !== "" && currentTermsKey !== originalTermsKey;
+  const currentStructuralKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder })));
+  const topStructuralChanged = originalStructuralKey !== "" && currentStructuralKey !== originalStructuralKey;
+  // paid→unpaid reversal — original status was paid/refund, now unpaid (compared by id).
+  const paidReversed = terms.some((t) => {
+    if (!t.id) return false;
+    const orig = originalTermStatuses[t.id];
+    return (orig === "paid" || orig === "refund") && t.paymentStatus === "unpaid";
+  });
+  const topApprovalReset = topStructuralChanged || paidReversed;
+
+  // hasSignificantChange = any uncommitted change → enables Save, locks the wizard.
   const hasSignificantChange =
     venueId !== originalVenueId ||
     packageId !== originalPackageId ||
@@ -560,6 +581,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     takeoutChanged ||
     topChanged;
 
+  // willResetApproval = the subset that re-triggers the approval revision on the server.
+  // A plain unpaid→paid is intentionally excluded.
+  const willResetApproval =
+    venueId !== originalVenueId ||
+    packageId !== originalPackageId ||
+    eventDateChanged ||
+    discountChanged ||
+    takeoutChanged ||
+    topApprovalReset;
 
   // Drawer terkunci saat ada perubahan material yang belum di-commit.
   const isLocked = hasSignificantChange;
@@ -604,6 +634,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // ── Navigation ──
   function handleGoToStep(step: number) {
     if (step === currentStep) return;
+    // Locked = uncommitted material change present. Tab jumps are blocked; the user
+    // must Continue/Discard first. The tab buttons are also visually disabled.
+    if (isLocked) return;
     // When going back from step 5, clear signature
     if (currentStep === 5 && step < 5) {
       sigSalesRef.current?.clear();
@@ -825,22 +858,30 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         {/* ─── Tab/Step Navigator ─── */}
         <div className="mb-3 shrink-0 overflow-x-auto border-b scrollbar-none">
           <div className="flex w-max min-w-full gap-1">
-            {([1, 2, 3, 4] as number[]).concat(isSalesPIC ? [5] : []).map((step) => (
-              <button
-                key={step}
-                type="button"
-                onClick={() => handleGoToStep(step)}
-                className={cn(
-                  "relative shrink-0 whitespace-nowrap px-3 py-2 text-xs font-medium transition-colors",
-                  "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:transition-colors",
-                  currentStep === step
-                    ? "text-foreground after:bg-primary"
-                    : "text-muted-foreground after:bg-transparent hover:text-foreground",
-                )}
-              >
-                {STEP_LABELS[step]}
-              </button>
-            ))}
+            {([1, 2, 3, 4] as number[]).concat(isSalesPIC ? [5] : []).map((step) => {
+              // While there's an uncommitted material change, the wizard is locked to a
+              // linear flow: the user must Continue through to commit (or Discard). Jumping
+              // to another tab is disabled so partial edits can't be abandoned silently.
+              const isTabDisabled = isLocked && step !== currentStep;
+              return (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => handleGoToStep(step)}
+                  disabled={isTabDisabled}
+                  className={cn(
+                    "relative shrink-0 whitespace-nowrap px-3 py-2 text-xs font-medium transition-colors",
+                    "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:transition-colors",
+                    currentStep === step
+                      ? "text-foreground after:bg-primary"
+                      : "text-muted-foreground after:bg-transparent hover:text-foreground",
+                    isTabDisabled && "opacity-40 cursor-not-allowed hover:text-muted-foreground",
+                  )}
+                >
+                  {STEP_LABELS[step]}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1428,12 +1469,18 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                                   className={cn("border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto", isInputDisabled && "opacity-60 cursor-not-allowed")}
                                 />
                               </div>
-                              {isPaid ? (
+                              {isInputDisabled ? (
                                 <span className="shrink-0 inline-flex items-center rounded-xl px-2.5 py-1 text-xs font-semibold bg-primary/10 text-primary">{statusLabel}</span>
                               ) : (
                                 <Select
                                   value={t.paymentStatus}
-                                  onValueChange={(v) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentStatus: v as TermPaymentStatus } : x))}
+                                  onValueChange={(v) => setTerms((prev) => prev.map((x, i) => {
+                                    if (i !== idx) return x;
+                                    // paid → unpaid: drop the payment evidence locally; server also
+                                    // nulls the DB field + deletes the R2 object on commit.
+                                    if (v === "unpaid") return { ...x, paymentStatus: "unpaid", paymentEvidence: null };
+                                    return { ...x, paymentStatus: v as TermPaymentStatus };
+                                  }))}
                                 >
                                   <SelectTrigger className="w-32 h-8 bg-background shrink-0">
                                     <span className="text-xs font-semibold text-muted-foreground">{statusLabel}</span>
@@ -1444,6 +1491,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                                     ))}
                                     {t.paymentStatus === "partial" && (
                                       <SelectItem value="partial" disabled>{PAYMENT_STATUS_LABELS.partial}</SelectItem>
+                                    )}
+                                    {t.paymentStatus === "refund" && (
+                                      <SelectItem value="refund" disabled>{PAYMENT_STATUS_LABELS.refund}</SelectItem>
                                     )}
                                   </SelectContent>
                                 </Select>
@@ -1574,7 +1624,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-destructive hover:text-destructive underline ml-auto">Hapus tanda tangan</button>
                 </div>
               </div>
-              {hasSignificantChange && (
+              {willResetApproval && (
                 <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 space-y-1">
                   <p className="text-xs font-semibold text-destructive">Perhatian</p>
                   <p className="text-xs text-destructive/80">Menyimpan perubahan ini akan mereset seluruh approval. Manager dan Client harus menandatangani ulang PO ini.</p>
@@ -1586,6 +1636,38 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
         {/* ─── Footer ─── */}
         <div className="bg-background sticky bottom-0 z-10">
+          {/* Mini price summary — visible only on Step 4 (Term of Payments) */}
+          {currentStep === 4 && (
+            <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Input User</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getTotalTerms())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Selisih</span>
+                <span
+                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getDifference() !== 0 ? "text-destructive cursor-pointer" : "text-foreground")}
+                  onClick={() => {
+                    if (getDifference() !== 0) {
+                      navigator.clipboard.writeText(fmtRp(Math.abs(getDifference())));
+                      toast.success("Selisih disalin");
+                    }
+                  }}
+                >
+                  {getDifference() === 0 ? "Sesuai" : (
+                    <>
+                      {`${getDifference() < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(getDifference()))}`}
+                      <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="flex py-4 gap-2">
             {currentStep === 1 ? (
               /* Step 1: Save & Publish (no Cancel, no Previous) */

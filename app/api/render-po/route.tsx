@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         termOfPayments: (snap.termOfPayments ?? []) as POPdfBooking["termOfPayments"],
         paymentMethod: snap.paymentMethod as POPdfBooking["paymentMethod"],
         sales: snap.sales as POPdfBooking["sales"],
+        manager: (snap.manager as POPdfBooking["manager"]) ?? null,
         signatures: null, // Will be populated from ApprovalRecordStep below
         createdAt: revision.createdAt,
         discountName: snap.discountName as string | null,
@@ -89,6 +90,7 @@ export async function POST(req: Request) {
           termOfPayments: { orderBy: { sortOrder: "asc" } },
           paymentMethod: true,
           sales: true,
+          manager: { select: { fullName: true } },
         },
       });
 
@@ -114,6 +116,7 @@ export async function POST(req: Request) {
         termOfPayments: booking.termOfPayments,
         paymentMethod: booking.paymentMethod,
         sales: booking.sales ? { fullName: booking.sales.fullName ?? "" } : null,
+        manager: booking.manager ? { fullName: booking.manager.fullName } : null,
         signatures: null, // Will be populated from ApprovalRecordStep below
         createdAt: booking.createdAt,
         discountName: booking.discountName,

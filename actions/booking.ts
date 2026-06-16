@@ -17,6 +17,7 @@ import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
+import { deleteFromR2 } from "@/lib/r2";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -1137,12 +1138,18 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    // Compare term of payments (count, names, amounts, order)
+    // Compare term of payments. Three distinct signals:
+    //  • topChanged       — structural change (count, names, amounts, order). Material.
+    //  • topStatusChanged — any payment-status delta (either direction). Forces a write.
+    //  • paidReversed      — a paid/refund term sent back as unpaid. Material (re-approval)
+    //                        AND its payment proof must be cleared.
     let topChanged = false;
+    let topStatusChanged = false;
+    let paidReversed = false;
     if (rest.termOfPayments && rest.termOfPayments.length > 0) {
       const currentTerms = await db.termOfPayment.findMany({
         where: { bookingId: id },
-        select: { id: true, name: true, amount: true, sortOrder: true },
+        select: { id: true, name: true, amount: true, sortOrder: true, paymentStatus: true, ackStatus: true },
         orderBy: { sortOrder: "asc" },
       });
       const newTerms = rest.termOfPayments;
@@ -1162,15 +1169,37 @@ export async function editBooking(data: unknown) {
           }
         }
       }
+      // Payment-status deltas — compared by term id (robust to ordering). Finance-
+      // acknowledged terms are locked and excluded; only unpaid/paid from the client
+      // are honoured (partial/refund are managed by the finance flows, not here).
+      const dbById = new Map(currentTerms.map((t) => [t.id, t]));
+      for (const nw of newTerms) {
+        if (!nw.id) continue; // new term — covered by the structural path
+        const cur = dbById.get(nw.id);
+        if (!cur || cur.ackStatus === "acknowledged") continue;
+        const clientStatus = nw.paymentStatus;
+        if (clientStatus !== "paid" && clientStatus !== "unpaid") continue;
+        if (clientStatus !== cur.paymentStatus) {
+          topStatusChanged = true;
+          if ((cur.paymentStatus === "paid" || cur.paymentStatus === "refund") && clientStatus === "unpaid") {
+            paidReversed = true;
+          }
+        }
+      }
     }
 
+    // unpaid→paid persists WITHOUT resetting approval; a paid→unpaid reversal IS
+    // material (paidReversed) and re-triggers the approval revision flow below.
     const hasMaterialChange =
       venueChanged ||
       packageChanged ||
       eventDateChanged ||
       discountChanged ||
       takeoutChanged ||
-      topChanged;
+      topChanged ||
+      paidReversed;
+    // Terms must be re-written whenever structure OR any status changed.
+    const termsNeedWrite = topChanged || topStatusChanged;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
@@ -1383,17 +1412,24 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    // Term of payments — upsert atomically within transaction when material change
-    if (hasMaterialChange && rest.termOfPayments && rest.termOfPayments.length > 0) {
+    // R2 keys of payment proofs to delete AFTER the transaction commits (paid→unpaid).
+    // Collected here, deleted best-effort post-commit so a failed delete never rolls
+    // back the booking update.
+    const evidenceKeysToDelete: string[] = [];
+
+    // Term of payments — re-write when structure OR payment status changed.
+    if (termsNeedWrite && rest.termOfPayments && rest.termOfPayments.length > 0) {
       // Re-fetch existing terms from DB to detect locked terms server-side.
       // We NEVER trust client-sent paymentStatus / ackStatus for authorization.
       const dbTerms = await db.termOfPayment.findMany({
         where: { bookingId: id },
-        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true },
+        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true, paymentEvidence: true },
       });
+      const dbTermById = new Map(dbTerms.map((t) => [t.id, t]));
 
       // A term is locked when it has been paid, refunded, or acknowledged by finance.
-      // Locked terms must NOT have their amount/name overwritten by client data.
+      // Locked terms must NOT be silently deleted; their data may still be updated via
+      // the explicit pencil-click gesture (the authorization signal).
       const isLockedTerm = (t: { paymentStatus: string; ackStatus: string }) =>
         t.paymentStatus === "paid" ||
         t.paymentStatus === "refund" ||
@@ -1415,19 +1451,48 @@ export async function editBooking(data: unknown) {
         db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: [...keepIds] } } }),
         ...rest.termOfPayments.map((t) => {
           if (t.id) {
-            // Locked and unlocked terms both allow full update — the explicit pencil-click
-            // gesture on the client is the authorization signal. Server preserves the
-            // invariant that locked terms cannot be silently deleted (see keepIds above),
-            // but their data (amount, name, dueDate) may be updated when the user sends
-            // new values. sortOrder is always updated regardless.
+            const cur = dbTermById.get(t.id);
+            // Resolve the status to persist. Finance-acknowledged terms are immutable —
+            // keep their stored status. Otherwise honour client unpaid/paid only;
+            // partial/refund are owned by the finance flows, so fall back to stored.
+            let nextStatus = cur?.paymentStatus;
+            if (cur && cur.ackStatus !== "acknowledged") {
+              if (t.paymentStatus === "paid" || t.paymentStatus === "unpaid") {
+                nextStatus = t.paymentStatus;
+              }
+            }
+            // paid/refund → unpaid: clear the proof and queue the R2 object for deletion.
+            const reversedToUnpaid =
+              !!cur &&
+              cur.ackStatus !== "acknowledged" &&
+              (cur.paymentStatus === "paid" || cur.paymentStatus === "refund") &&
+              nextStatus === "unpaid";
+            if (reversedToUnpaid && cur?.paymentEvidence) {
+              evidenceKeysToDelete.push(cur.paymentEvidence);
+            }
             return db.termOfPayment.update({
               where: { id: t.id },
-              data: { name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder },
+              data: {
+                name: t.name,
+                amount: t.amount,
+                dueDate: new Date(t.dueDate),
+                sortOrder: t.sortOrder,
+                ...(nextStatus !== undefined && { paymentStatus: nextStatus }),
+                ...(reversedToUnpaid && { paymentEvidence: null }),
+              },
             });
           }
-          // New term (no id) — always allowed.
+          // New term (no id) — always allowed. New terms can only be created as unpaid;
+          // marking paid requires a real id + evidence upload via the dedicated endpoint.
           return db.termOfPayment.create({
-            data: { bookingId: id, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder },
+            data: {
+              bookingId: id,
+              name: t.name,
+              amount: t.amount,
+              dueDate: new Date(t.dueDate),
+              sortOrder: t.sortOrder,
+              paymentStatus: t.paymentStatus === "paid" ? "paid" : "unpaid",
+            },
           });
         })
       );
@@ -1441,6 +1506,20 @@ export async function editBooking(data: unknown) {
 
     await db.$transaction(ops);
 
+    // Best-effort: delete payment-proof objects for terms reverted paid→unpaid.
+    // Runs post-commit so an R2 failure never rolls back the booking write.
+    if (evidenceKeysToDelete.length > 0) {
+      await Promise.allSettled(
+        evidenceKeysToDelete.map(async (key) => {
+          try {
+            await deleteFromR2(key);
+          } catch (err) {
+            console.error("[editBooking] Failed to delete reverted payment evidence", key, err);
+          }
+        })
+      );
+    }
+
     // Snapshot approval + create revision — when any material change detected
     if (hasMaterialChange) {
       const reasons: string[] = [];
@@ -1450,6 +1529,7 @@ export async function editBooking(data: unknown) {
       if (discountChanged) reasons.push("discount");
       if (takeoutChanged) reasons.push("takeout");
       if (topChanged) reasons.push("terms of payment");
+      if (paidReversed) reasons.push("payment reversed to unpaid");
       const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
       const approvalRecord = await db.approvalRecord.findUnique({

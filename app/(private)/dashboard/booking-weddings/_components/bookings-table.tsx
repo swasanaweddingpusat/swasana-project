@@ -5,12 +5,13 @@ import { toast } from "sonner";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,6 +34,7 @@ import { BookingDetailModal } from "./booking-detail-modal";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "./booking-po-preview-modal";
 import { BookingCommentPanel } from "./booking-comment-panel";
+import { BookingTCDrawer } from "./booking-tc-drawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
@@ -135,10 +137,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: result = initialData, refetch, isFetching } = useBookings(
+  const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
     { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
     initialData,
   );
+  // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
+  // keeps the old rows mounted, so isPlaceholderData is the signal for that transition).
+  const isTableLoading = isLoading || isPlaceholderData;
   const bookings = result.data;
   const totalBookings = result.total;
   const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
@@ -159,6 +164,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string; initialTC: string | null } | null>(null);
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
     queryFn: async () => {
@@ -356,6 +362,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
+            {can("booking", "term-&-condition") && (
+            <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer", initialTC: booking.snapPackagePricing?.termAndCondition ?? null }); }}>
+              <DocumentText weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term & Condition
+            </DropdownMenuItem>
+            )}
             {can("booking", "transfer") && (
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
               <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Booking
@@ -655,7 +666,80 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </div>
 
           {/* Table */}
-          {bookings.length === 0 ? (
+          {isTableLoading ? (
+            <>
+              {/* Desktop skeleton — mirrors the real table columns/visibility */}
+              <div className={cn('hidden', 'sm:block', 'w-full', 'overflow-x-auto')}>
+                <Table className={cn('w-full', 'text-sm')}>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'text-center', 'w-[3%]', 'hidden', 'sm:table-cell')}>No</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground')}>Customer</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[15%]')}>Venue & PO</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[14%]')}>Package</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'sm:table-cell', 'w-[10%]')}>Event Date</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Activity</TableHead>
+                      <TableHead className={cn('px-2', 'py-2', 'text-muted-foreground', 'hidden', 'lg:table-cell', 'w-[8%]')}>Approval</TableHead>
+                      <TableHead className={cn('px-1', 'py-2', 'text-muted-foreground', 'text-right', 'pr-5', 'w-[15%]')}>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: ROWS_PER_PAGE }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className={cn('px-2', 'py-2', 'text-center', 'hidden', 'sm:table-cell')}>
+                          <Skeleton className="h-4 w-5 mx-auto" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2')}>
+                          <Skeleton className="h-4 w-32 mb-1.5" />
+                          <Skeleton className="h-3 w-24" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
+                          <Skeleton className="h-4 w-24 mb-1.5" />
+                          <Skeleton className="h-3 w-20" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
+                          <Skeleton className="h-4 w-24" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
+                          <Skeleton className="h-4 w-20" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
+                          <Skeleton className="h-4 w-12" />
+                        </TableCell>
+                        <TableCell className={cn('px-2', 'py-2', 'hidden', 'lg:table-cell')}>
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </TableCell>
+                        <TableCell className={cn('px-1', 'py-2')}>
+                          <div className={cn('flex', 'items-center', 'justify-end', 'gap-1.5', 'pr-4')}>
+                            <Skeleton className="h-7 w-7 rounded-md" />
+                            <Skeleton className="h-7 w-7 rounded-md" />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile skeleton — mirrors the card layout */}
+              <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
+                {Array.from({ length: ROWS_PER_PAGE }).map((_, i) => (
+                  <div key={i} className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2')}>
+                    <div className={cn('flex', 'items-start', 'justify-between', 'gap-2')}>
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-5 w-14 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-24" />
+                    <div className={cn('flex', 'items-center', 'justify-end', 'gap-1.5', 'pt-1')}>
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : bookings.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
               <CalendarDays weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
               <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : recordStatusFilter === "draft" ? "Tidak ada draft booking." : "Belum ada booking."}</p>
@@ -1101,6 +1185,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
+
+      {/* Term & Condition Drawer */}
+      {tcTarget && (
+        <BookingTCDrawer
+          open={!!tcTarget}
+          onClose={() => setTcTarget(null)}
+          bookingId={tcTarget.bookingId}
+          customerName={tcTarget.customerName}
+          initialTC={tcTarget.initialTC}
+        />
+      )}
 
       {/* PO Preview (modal — works before approval, no new tab) */}
       <BookingPOPreviewModal
