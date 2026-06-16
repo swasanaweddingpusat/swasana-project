@@ -103,13 +103,33 @@ export async function inviteUser(formData: FormData) {
 
     return { success: true, message: "Undangan berhasil dikirim." };
   } catch (error) {
-    // P2002 = unique constraint violation — email already exists (catches race condition)
+    // P2002 = unique constraint violation. Inspect meta.target to report the
+    // right cause — not every P2002 is a duplicate email. The Profile table also
+    // has unique constraints on `employeeNumber` (autoincrement) and `email`, so
+    // an out-of-sync sequence surfaces here as employeeNumber, not email.
     if (
       error instanceof Error &&
       "code" in error &&
       (error as { code: string }).code === "P2002"
     ) {
-      return { success: false, error: "Email sudah terdaftar." };
+      const target = (error as { meta?: { target?: unknown } }).meta?.target;
+      const fields = Array.isArray(target)
+        ? target.map(String)
+        : typeof target === "string"
+          ? [target]
+          : [];
+      const hit = (name: string) => fields.some((f) => f.toLowerCase().includes(name));
+
+      if (hit("email")) {
+        return { success: false, error: "Email sudah terdaftar." };
+      }
+      // employeeNumber collision = sequence out of sync at the DB level, not a
+      // user-input problem. Surface it explicitly so it isn't misread as a dup email.
+      console.error("[inviteUser] P2002 on non-email constraint:", fields);
+      return {
+        success: false,
+        error: "Gagal membuat pengguna karena konflik data internal. Hubungi administrator.",
+      };
     }
     console.error("[inviteUser] Error:", error);
     return { success: false, error: "Terjadi kesalahan saat mengundang pengguna." };
@@ -199,36 +219,85 @@ export async function deleteUser(userId: string) {
   try {
     const profile = await db.profile.findUnique({
       where: { id: userId },
-      select: { id: true, userId: true, email: true, fullName: true },
+      select: { id: true, userId: true, email: true, fullName: true, status: true },
     });
     if (!profile) {
       return { success: false, error: "Pengguna tidak ditemukan." };
     }
 
-    // Invalidate active sessions first, then delete the user.
-    // Cascades from User → Profile (onDelete: Cascade) handle
-    // EmailVerificationToken, PasswordResetToken, UserGroupMember, Notification etc.
-    // ActivityLog rows are kept (onDelete: SetNull nullifies their userId).
-    await db.$transaction([
-      db.session.deleteMany({ where: { userId: profile.userId } }),
-      db.user.delete({ where: { id: profile.userId } }),
-    ]);
-
-    revalidateTag("users", "max");
-
     const h = await headers();
-    await logAudit({
-      userId: session!.user.profileId,
-      action: "user.deleted",
-      entityType: "profile",
-      entityId: userId,
-      description: `Pengguna ${profile.email} dihapus`,
-      changes: { before: { email: profile.email, fullName: profile.fullName } },
-      ipAddress: h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? undefined,
-      userAgent: h.get("user-agent") ?? undefined,
-    });
+    const ipAddress = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? undefined;
+    const userAgent = h.get("user-agent") ?? undefined;
 
-    return { success: true, message: "Pengguna berhasil dihapus." };
+    // A Profile can be referenced by booking.salesId, quotation.salesId,
+    // lead.createdById, approvalRecord, bookingRevision, bookingComment,
+    // userTarget and maintenanceTicket — all with `onDelete: Restrict`. Those
+    // rows are business records that must not be orphaned, so a hard delete is
+    // refused by Postgres (FK violation, P2003).
+    //
+    // Strategy: try the hard delete; if any Restrict relation blocks it, fall
+    // back to a soft delete (status → inactive) so the account is disabled
+    // without destroying the linked business data. Sessions are cleared in both
+    // paths so the user can no longer authenticate.
+    try {
+      // Cascades from User → Profile (onDelete: Cascade) handle
+      // EmailVerificationToken, PasswordResetToken, UserGroupMember, Notification etc.
+      // ActivityLog rows are kept (onDelete: SetNull nullifies their userId).
+      await db.$transaction([
+        db.session.deleteMany({ where: { userId: profile.userId } }),
+        db.user.delete({ where: { id: profile.userId } }),
+      ]);
+
+      revalidateTag("users", "max");
+      await logAudit({
+        userId: session!.user.profileId,
+        action: "user.deleted",
+        entityType: "profile",
+        entityId: userId,
+        description: `Pengguna ${profile.email} dihapus`,
+        changes: { before: { email: profile.email, fullName: profile.fullName } },
+        ipAddress,
+        userAgent,
+      });
+
+      return { success: true, message: "Pengguna berhasil dihapus." };
+    } catch (err) {
+      // P2003 = foreign key constraint violation → user has linked business
+      // records. Soft delete instead of failing.
+      const isFkViolation =
+        err instanceof Error && "code" in err && (err as { code: string }).code === "P2003";
+      if (!isFkViolation) throw err;
+
+      if (profile.status === "inactive") {
+        return {
+          success: true,
+          message: "Pengguna memiliki data terkait dan sudah dinonaktifkan sebelumnya.",
+        };
+      }
+
+      await db.$transaction([
+        db.profile.update({ where: { id: profile.id }, data: { status: "inactive" } }),
+        db.session.deleteMany({ where: { userId: profile.userId } }),
+      ]);
+
+      revalidateTag("users", "max");
+      await logAudit({
+        userId: session!.user.profileId,
+        action: "user.deactivated",
+        entityType: "profile",
+        entityId: userId,
+        description: `Pengguna ${profile.email} dinonaktifkan (punya data terkait, tidak bisa dihapus permanen)`,
+        changes: { before: { status: profile.status }, after: { status: "inactive" } },
+        ipAddress,
+        userAgent,
+      });
+
+      return {
+        success: true,
+        message:
+          "Pengguna memiliki data terkait (booking/quotation/lead) sehingga tidak bisa dihapus permanen. Akun dinonaktifkan dan tidak bisa login lagi.",
+      };
+    }
   } catch (error) {
     console.error("[deleteUser] Error:", error);
     return { success: false, error: "Terjadi kesalahan saat menghapus pengguna." };

@@ -19,7 +19,23 @@ import {
   TrashBinTrash,
   CloseCircle,
   CheckCircle,
+  MenuDots,
 } from "@solar-icons/react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { updateTermOfPayments } from "@/actions/term-of-payment";
 import { deletePartialPayment } from "@/actions/partial-payment";
@@ -34,6 +50,37 @@ import {
   type FinanceTerm,
   type PartialPayment,
 } from "./edit-finance-shared";
+
+/* ─── Sortable Term wrapper ───────────────────────────────────────────────────
+ * Provides the draggable container + drag-handle props for one TOP row. The row
+ * body stays inline in TopContent (render-prop) so it keeps access to all the
+ * local state closures without threading dozens of props through.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+type DragHandleProps = {
+  attributes: ReturnType<typeof useSortable>["attributes"];
+  listeners: ReturnType<typeof useSortable>["listeners"];
+};
+
+function SortableTermItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (drag: DragHandleProps) => React.ReactNode;
+}): React.ReactElement {
+  const { setNodeRef, transform, transition, isDragging, attributes, listeners } =
+    useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("space-y-2", isDragging && "opacity-50 relative z-10")}
+    >
+      {children({ attributes, listeners })}
+    </div>
+  );
+}
 
 /* ─── TOP Content ─────────────────────────────────────────────────────────── */
 
@@ -131,6 +178,19 @@ function TopContent({
     });
   }, [terms, initialTerms, discountName, initialDiscountName, discountAmount, initialDiscountAmount]);
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setTerms((prev) => {
+      const oldIdx = prev.findIndex((t) => t.id === active.id);
+      const newIdx = prev.findIndex((t) => t.id === over.id);
+      if (oldIdx === -1 || newIdx === -1) return prev;
+      return arrayMove(prev, oldIdx, newIdx);
+    });
+  };
+
   const handleFieldChange = (id: string, field: keyof FinanceTerm, value: unknown) => {
     setTerms((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
   };
@@ -191,22 +251,32 @@ function TopContent({
       setUploading(null);
     }
 
-    // Refund terms are system-managed — never send them back as updates.
-    const editableTerms = terms.filter((t) => t.paymentStatus !== "refund");
-    const existingTerms = editableTerms.filter((t) => !t.id.startsWith("new-"));
-    const newTerms = editableTerms.filter((t) => t.id.startsWith("new-"));
+    // Refund terms are system-managed — never send them back as updates. We tag
+    // each remaining term with its current position in the on-screen list so the
+    // server persists the post-drag order as sortOrder (display-only, no approval).
+    const orderedEditable = terms
+      .map((t, i) => ({ term: t, sortOrder: i }))
+      .filter((x) => x.term.paymentStatus !== "refund");
+    const existingTerms = orderedEditable.filter((x) => !x.term.id.startsWith("new-"));
+    const newTerms = orderedEditable.filter((x) => x.term.id.startsWith("new-"));
 
     const result = await updateTermOfPayments(
       bookingId,
-      existingTerms.map((t) => ({
+      existingTerms.map(({ term: t, sortOrder }) => ({
         id: t.id,
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate,
         paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
         notes: t.notes,
+        sortOrder,
       })),
-      newTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate })),
+      newTerms.map(({ term: t, sortOrder }) => ({
+        name: t.name,
+        amount: t.amount,
+        dueDate: t.dueDate,
+        sortOrder,
+      })),
       { discountName, discountAmount },
     );
 
@@ -267,6 +337,8 @@ function TopContent({
         {/* Terms */}
         <div>
           <span className="text-sm font-medium text-foreground mb-2 block">Term of Payments</span>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={terms.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-4">
             {terms.map((term, idx) => {
               const locked = lockedIds.includes(term.id);
@@ -276,9 +348,21 @@ function TopContent({
               const isDP = term.name.trim().toUpperCase() === "DP";
               const isDPInvalid = isDP && (!term.amount || term.amount <= 0);
               return (
-                <div key={term.id} className="space-y-2">
+                <SortableTermItem key={term.id} id={term.id}>
+                  {({ attributes, listeners }) => (
+                <>
                   {/* Term name — inline editable */}
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      {...attributes}
+                      {...listeners}
+                      className="shrink-0 p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+                      tabIndex={-1}
+                      aria-label="Drag to reorder"
+                    >
+                      <MenuDots weight="BoldDuotone" className="h-3.5 w-3.5" />
+                    </button>
                     <div className="flex items-center gap-0.5 flex-1 min-w-0">
                       <Input
                         value={term.name}
@@ -399,7 +483,7 @@ function TopContent({
                               handleFieldChange(
                                 term.id,
                                 "dueDate",
-                                date ? date.toISOString() : "",
+                                date ? toLocalISO(date) : "",
                               )
                             }
                             fromYear={new Date().getFullYear() - 10}
@@ -855,10 +939,14 @@ function TopContent({
                   )}
                   {/* Divider */}
                   {idx < terms.length - 1 && <div className="border-b border-border pt-1" />}
-                </div>
+                </>
+                  )}
+                </SortableTermItem>
               );
             })}
           </div>
+            </SortableContext>
+          </DndContext>
 
           {/* Add button */}
           <div className={cn("flex", "gap-2", "mt-4")}>

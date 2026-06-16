@@ -15,12 +15,16 @@ interface TermUpdate {
   dueDate: string;
   paymentStatus: "unpaid" | "paid" | "partial";
   notes?: string | null;
+  /** Display order after drag-drop. Index in the on-screen list. */
+  sortOrder?: number;
 }
 
 interface NewTerm {
   name: string;
   amount: number;
   dueDate: string;
+  /** Display order after drag-drop. Index in the on-screen list. */
+  sortOrder?: number;
 }
 
 interface DiscountUpdate {
@@ -52,29 +56,45 @@ export async function updateTermOfPayments(
     });
     const ackMap = new Map(existingTerms.map((t) => [t.id, t.ackStatus]));
 
-    const ops: Prisma.PrismaPromise<unknown>[] = terms
-      .filter((t) => ackMap.get(t.id) !== "acknowledged")
-      .map((t) =>
-        db.termOfPayment.update({
+    // Reordering (sortOrder) is purely a display concern — it never touches
+    // amount/status, so it is allowed even for acknowledged terms. For
+    // acknowledged terms we therefore update ONLY sortOrder; for the rest we
+    // update the full editable payload (including sortOrder when provided).
+    const ops: Prisma.PrismaPromise<unknown>[] = terms.map((t) => {
+      if (ackMap.get(t.id) === "acknowledged") {
+        return db.termOfPayment.update({
           where: { id: t.id },
-          data: {
-            name: t.name,
-            amount: t.amount,
-            dueDate: new Date(t.dueDate),
-            paymentStatus: t.paymentStatus,
-            notes: t.notes ?? null,
-          },
-        })
-      );
+          data: t.sortOrder !== undefined ? { sortOrder: t.sortOrder } : {},
+        });
+      }
+      return db.termOfPayment.update({
+        where: { id: t.id },
+        data: {
+          name: t.name,
+          amount: t.amount,
+          dueDate: new Date(t.dueDate),
+          paymentStatus: t.paymentStatus,
+          notes: t.notes ?? null,
+          ...(t.sortOrder !== undefined && { sortOrder: t.sortOrder }),
+        },
+      });
+    });
 
-    // Add new terms
+    // Add new terms. Use the explicit sortOrder from the reordered list when
+    // provided; otherwise append after the current max (legacy behavior).
     if (newTerms && newTerms.length > 0) {
       const maxSort = await db.termOfPayment.findFirst({ where: { bookingId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
       let nextSort = (maxSort?.sortOrder ?? -1) + 1;
       for (const t of newTerms) {
         ops.push(
           db.termOfPayment.create({
-            data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: nextSort++ },
+            data: {
+              bookingId,
+              name: t.name,
+              amount: t.amount,
+              dueDate: new Date(t.dueDate),
+              sortOrder: t.sortOrder ?? nextSort++,
+            },
           })
         );
       }

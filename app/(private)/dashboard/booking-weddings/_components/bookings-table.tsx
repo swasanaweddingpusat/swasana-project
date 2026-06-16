@@ -10,20 +10,23 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, CloseCircle as X, FileText as FileSignature, Copy, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
-const RefreshCw = Refresh;
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
-import { useBookings, useDeleteBooking, useUpdateBooking, useTransferBooking, useTransferBookingManager } from "@/hooks/use-bookings";
-import { useManagers } from "@/hooks/use-managers";
+import { useBookings, useDeleteBooking } from "@/hooks/use-bookings";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { generateAgreementToken } from "@/actions/client-agreement";
+import { AgreementModal } from "@/components/shared/booking/agreement-modal";
+import { RejectBookingModal } from "@/components/shared/booking/reject-booking-modal";
+import { MarkLostDialog } from "@/components/shared/booking/mark-lost-dialog";
+import { RestoreBookingDialog } from "@/components/shared/booking/restore-booking-dialog";
+import { TransferBookingModal } from "@/components/shared/booking/transfer-booking-modal";
+import { TransferManagerModal } from "@/components/shared/booking/transfer-manager-modal";
 import { UploadDocumentModal } from "./upload-document-modal";
 import { ActivityLogModal } from "./activity-log-modal";
 import { BookingDetailModal } from "./booking-detail-modal";
@@ -67,16 +70,6 @@ const SESSION_LABEL: Record<string, string> = {
   fullday: "Fullday",
 };
 
-function copyText(text: string) {
-  const el = document.createElement("textarea");
-  el.value = text;
-  el.style.position = "fixed";
-  el.style.opacity = "0";
-  document.body.appendChild(el);
-  el.select();
-  document.execCommand("copy");
-  document.body.removeChild(el);
-}
 
 function fmtRp(n: unknown) {
   return `Rp ${new Intl.NumberFormat("id-ID").format(Number(n))}`;
@@ -113,10 +106,6 @@ const ROWS_PER_PAGE = 10;
 export function BookingsTable({ initialData, salesProfiles }: { initialData: BookingsResult; salesProfiles: SalesProfile[] }) {
   const qc = useQueryClient();
   const deleteMut = useDeleteBooking();
-  const updateMut = useUpdateBooking();
-  const transferMut = useTransferBooking();
-  const transferManagerMut = useTransferBookingManager();
-  const { managers } = useManagers();
   const { can, isAdmin } = usePermissions();
   const { openBookingDrawer } = useBookingDrawer();
   const { user } = useCurrentUser();
@@ -159,14 +148,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
   const [editTarget, setEditTarget] = useState<BookingListItem | null>(null);
   const [rejectTarget, setRejectTarget] = useState<BookingListItem | null>(null);
-  const [rejectNotes, setRejectNotes] = useState("");
   const [lostTarget, setLostTarget] = useState<BookingListItem | null>(null);
-  const [lostReason, setLostReason] = useState("");
   const [transferTarget, setTransferTarget] = useState<BookingListItem | null>(null);
   const [uploadDocTarget, setUploadDocTarget] = useState<BookingListItem | null>(null);
-  const [transferSalesId, setTransferSalesId] = useState("");
   const [managerTarget, setManagerTarget] = useState<BookingListItem | null>(null);
-  const [selectedManagerId, setSelectedManagerId] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
@@ -1041,271 +1026,39 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       </AlertDialog>
 
       {/* Reject */}
-      {rejectTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
-          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
-            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
-              <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Reject Booking</h2>
-                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
-                  Reject booking <span className={cn('font-semibold', 'text-foreground')}>{rejectTarget.snapCustomer?.name}</span>?
-                </p>
-              </div>
-              <button
-                type="button"
-                className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')}
-                onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
-                aria-label="Tutup"
-              >
-                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
-              </button>
-            </div>
+      <RejectBookingModal
+        open={!!rejectTarget}
+        booking={rejectTarget}
+        onClose={() => setRejectTarget(null)}
+      />
 
-            <div className="mb-4">
-              <label className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Alasan Penolakan</label>
-              <Input placeholder="Alasan penolakan (opsional)..." value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} />
-            </div>
-
-            <div className={cn('flex', 'gap-3')}>
-              <button
-                type="button"
-                className={cn('flex-1', 'bg-destructive', 'text-destructive-foreground', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-destructive/90', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
-                disabled={updateMut.isPending}
-                onClick={async () => {
-                  const r = await updateMut.mutateAsync({ id: rejectTarget.id, bookingStatus: "Rejected", rejectionNotes: rejectNotes || null });
-                  if (!r.success) toast.error(r.error); else { toast.success("Booking di-reject."); refetch(); }
-                  setRejectTarget(null); setRejectNotes("");
-                }}
-              >
-                {updateMut.isPending ? "Memproses..." : "Reject"}
-              </button>
-              <button
-                type="button"
-                className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-accent', 'transition')}
-                onClick={() => { setRejectTarget(null); setRejectNotes(""); }}
-              >
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <AlertDialog open={!!lostTarget} onOpenChange={(open) => { if (!open) { setLostTarget(null); setLostReason(""); } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Lost Booking</AlertDialogTitle>
-            <AlertDialogDescription>Tandai booking <strong>{lostTarget?.snapCustomer?.name}</strong> sebagai Lost?</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className={cn('px-6', 'pb-2')}>
-            <Input placeholder="Alasan lost (opsional)..." value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={async () => {
-              if (!lostTarget) return;
-              const r = await updateMut.mutateAsync({ id: lostTarget.id, bookingStatus: "Lost", lostReason: lostReason || null });
-              if (!r.success) toast.error(r.error); else { toast.success("Booking ditandai Lost."); refetch(); }
-              setLostTarget(null); setLostReason("");
-            }} className={cn('bg-primary', 'text-primary-foreground', 'hover:bg-primary/90')}>Lost Booking</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <MarkLostDialog
+        open={!!lostTarget}
+        booking={lostTarget}
+        onClose={() => setLostTarget(null)}
+      />
 
       {/* Restore Booking Modal */}
-      {restoreTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
-          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
-            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-4')}>
-              <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Restore Booking</h2>
-                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
-                  Restore booking <span className={cn('font-semibold', 'text-foreground')}>{restoreTarget.snapCustomer?.name}</span> ke status Pending?
-                </p>
-              </div>
-              <button type="button" className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')} onClick={() => setRestoreTarget(null)} aria-label="Tutup">
-                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
-              </button>
-            </div>
-            <div className={cn('flex', 'gap-3')}>
-              <button
-                type="button"
-                className={cn('flex-1', 'bg-primary', 'text-primary-foreground', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-primary/90', 'transition', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
-                disabled={updateMut.isPending}
-                onClick={async () => {
-                  const r = await updateMut.mutateAsync({ id: restoreTarget.id, bookingStatus: "Pending" });
-                  if (!r.success) toast.error(r.error); else { toast.success("Booking di-restore ke Pending."); refetch(); }
-                  setRestoreTarget(null);
-                }}
-              >
-                {updateMut.isPending ? "Memproses..." : "Restore"}
-              </button>
-              <button type="button" className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'text-sm', 'hover:bg-accent', 'transition')} onClick={() => setRestoreTarget(null)}>
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RestoreBookingDialog
+        open={!!restoreTarget}
+        booking={restoreTarget}
+        onClose={() => setRestoreTarget(null)}
+      />
 
       {/* Transfer Booking Modal */}
-      {transferTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
-          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
-            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-6')}>
-              <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Transfer Booking</h2>
-                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
-                  Memindahkan kepemilikan data booking dari sales sebelumnya ke sales yang dipilih.
-                </p>
-              </div>
-              <button
-                className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')}
-                onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
-                type="button"
-                aria-label="Tutup"
-              >
-                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Sales saat ini</p>
-              <div className={cn('flex', 'items-center', 'gap-2')}>
-                <span className={cn('text-sm', 'font-medium', 'text-foreground')}>
-                  {transferTarget.sales?.fullName ?? <span className={cn('text-muted-foreground', 'italic')}>Tidak ada</span>}
-                </span>
-                {transferTarget.sales?.fullName && (
-                  <span className={cn('text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground')}>sales</span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Pilih Sales</p>
-              <SearchableSelect
-                options={salesProfiles
-                  .filter((s) => s.id !== transferTarget.salesId)
-                  .map((s) => ({ id: s.id, name: s.fullName ?? s.id, badge: "sales" }))}
-                value={transferSalesId}
-                onChange={setTransferSalesId}
-                placeholder="Pilih sales tujuan..."
-                searchPlaceholder="Cari nama sales..."
-                emptyText="Sales tidak ditemukan"
-                className="w-full"
-              />
-            </div>
-
-            <div className={cn('flex', 'gap-3', 'mt-6')}>
-              <button
-                className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-accent', 'transition', 'text-sm')}
-                onClick={() => { setTransferTarget(null); setTransferSalesId(""); }}
-                disabled={transferMut.isPending}
-                type="button"
-              >
-                Batal
-              </button>
-              <button
-                className={cn('flex-1', 'bg-primary', 'text-primary-foreground', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-primary/90', 'transition', 'text-sm', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
-                disabled={!transferSalesId || transferMut.isPending}
-                type="button"
-                onClick={async () => {
-                  const result = await transferMut.mutateAsync({ bookingId: transferTarget.id, targetSalesId: transferSalesId });
-                  if (!result.success) toast.error(result.error);
-                  else {
-                    toast.success("Booking berhasil ditransfer");
-                    refetch();
-                    setTransferTarget(null);
-                    setTransferSalesId("");
-                  }
-                }}
-              >
-                {transferMut.isPending ? "Mentransfer..." : "Transfer Booking"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TransferBookingModal
+        open={!!transferTarget}
+        booking={transferTarget}
+        salesProfiles={salesProfiles}
+        onClose={() => setTransferTarget(null)}
+      />
 
       {/* Transfer Manager Modal */}
-      {managerTarget && (
-        <div className={cn('fixed', 'inset-0', 'z-50', 'flex', 'items-center', 'justify-center', 'bg-black/40', 'p-4')}>
-          <div className={cn('bg-card', 'rounded-2xl', 'shadow-xl', 'w-full', 'max-w-md', 'p-4', 'sm:p-6', 'relative')}>
-            <div className={cn('flex', 'items-start', 'justify-between', 'gap-4', 'mb-6')}>
-              <div>
-                <h2 className={cn('text-lg', 'font-bold', 'text-foreground')}>Transfer Manager</h2>
-                <p className={cn('text-sm', 'text-muted-foreground', 'mt-1')}>
-                  Memindahkan penugasan manager pada booking ini ke manager yang dipilih.
-                </p>
-              </div>
-              <button
-                className={cn('rounded-full', 'bg-muted', 'hover:bg-muted/80', 'p-1.5', 'shrink-0')}
-                onClick={() => { setManagerTarget(null); setSelectedManagerId(""); }}
-                type="button"
-                aria-label="Tutup"
-              >
-                <X weight="BoldDuotone" className={cn('h-5', 'w-5', 'text-foreground')} />
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Manager saat ini</p>
-              <div className={cn('flex', 'items-center', 'gap-2')}>
-                <span className={cn('text-sm', 'font-medium', 'text-foreground')}>
-                  {managerTarget.manager?.fullName ?? <span className={cn('text-muted-foreground', 'italic')}>Belum ada</span>}
-                </span>
-                {managerTarget.manager?.fullName && (
-                  <span className={cn('text-xs', 'px-2', 'py-0.5', 'rounded-full', 'border', 'border-border', 'bg-muted', 'text-muted-foreground')}>manager</span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <p className={cn('text-xs', 'text-muted-foreground', 'mb-1')}>Pilih Manager</p>
-              <SearchableSelect
-                options={managers
-                  .filter((m) => m.role?.name === "manager" && m.id !== managerTarget.manager?.id)
-                  .map((m) => ({ id: m.id, name: m.fullName ?? m.id, badge: "manager" }))}
-                value={selectedManagerId}
-                onChange={setSelectedManagerId}
-                placeholder="Pilih manager tujuan..."
-                searchPlaceholder="Cari nama manager..."
-                emptyText="Manager tidak ditemukan"
-                className="w-full"
-              />
-            </div>
-
-            <div className={cn('flex', 'gap-3', 'mt-6')}>
-              <button
-                className={cn('flex-1', 'border', 'border-border', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-accent', 'transition', 'text-sm')}
-                onClick={() => { setManagerTarget(null); setSelectedManagerId(""); }}
-                disabled={transferManagerMut.isPending}
-                type="button"
-              >
-                Batal
-              </button>
-              <button
-                className={cn('flex-1', 'bg-primary', 'text-primary-foreground', 'rounded-lg', 'py-2', 'font-medium', 'hover:bg-primary/90', 'transition', 'text-sm', 'disabled:opacity-50', 'disabled:cursor-not-allowed')}
-                disabled={!selectedManagerId || transferManagerMut.isPending}
-                type="button"
-                onClick={async () => {
-                  const result = await transferManagerMut.mutateAsync({ bookingId: managerTarget.id, targetManagerId: selectedManagerId });
-                  if (!result.success) {
-                    toast.error(result.error);
-                  } else {
-                    toast.success("Manager berhasil ditransfer");
-                    refetch();
-                    setManagerTarget(null);
-                    setSelectedManagerId("");
-                  }
-                }}
-              >
-                {transferManagerMut.isPending ? "Mentransfer..." : "Transfer Manager"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TransferManagerModal
+        open={!!managerTarget}
+        booking={managerTarget}
+        onClose={() => setManagerTarget(null)}
+      />
       {/* Activity Log Modal */}
       <ActivityLogModal
         open={!!activityLogTarget}
@@ -1388,95 +1141,3 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   );
 }
 
-/* ─── AgreementModal ──────────────────────────────────────────────────────── */
-
-interface AgreementModalProps {
-  bookingId: string;
-  customerName: string;
-  onClose: () => void;
-}
-
-function AgreementModal({ bookingId, customerName, onClose }: AgreementModalProps) {
-  const [agreement, setAgreement] = React.useState<{ token: string; accessCode: string; status?: string } | null>(null);
-  const [bookingStatus, setBookingStatus] = React.useState<string>("");
-  const [isPending, startTransition] = React.useTransition();
-
-  const agreementUrl = agreement ? `${window.location.origin}/client-agreement?token=${agreement.token}` : null;
-
-  const generate = React.useCallback(() => {
-    startTransition(async () => {
-      const result = await generateAgreementToken(bookingId);
-      if (!result.success) { toast.error(result.error); return; }
-      setAgreement({ token: result.agreement.token, accessCode: result.agreement.accessCode, status: result.agreement.status });
-    });
-  }, [bookingId]);
-
-  React.useEffect(() => {
-    startTransition(async () => {
-      const res = await fetch(`/api/bookings/${bookingId}`);
-      if (!res.ok) return;
-      const data = await res.json() as { bookingStatus?: string; clientAgreement?: { token: string; accessCode: string; status: string } | null };
-      if (data.bookingStatus) setBookingStatus(data.bookingStatus);
-      // Only show existing agreement if booking is Confirmed or agreement is genuinely pending/sent
-      if (data.clientAgreement && (data.bookingStatus === "Confirmed" || data.clientAgreement.status !== "Signed")) {
-        setAgreement({ token: data.clientAgreement.token, accessCode: data.clientAgreement.accessCode, status: data.clientAgreement.status });
-      }
-    });
-   
-  }, [bookingId]);
-
-  return (
-    <AlertDialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <AlertDialogContent className="sm:max-w-md!" style={{ width: "min(calc(100vw - 2rem), 28rem)" }} onClick={(e) => e.stopPropagation()}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Client Agreement</AlertDialogTitle>
-          <AlertDialogDescription>{customerName}</AlertDialogDescription>
-        </AlertDialogHeader>
-
-        {isPending ? (
-          <div className={cn('flex', 'items-center', 'justify-center', 'py-8', 'gap-2', 'text-sm', 'text-muted-foreground')}>
-            <RefreshCw weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin')} /> Loading...
-          </div>
-        ) : !agreement ? (
-          <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-8', 'gap-3', 'text-center')}>
-            <p className={cn('text-sm', 'text-muted-foreground')}>Belum ada link agreement untuk booking ini.</p>
-            <Button size="sm" onClick={generate} disabled={isPending}>Generate Link</Button>
-          </div>
-        ) : (
-          <div className={cn('space-y-3', 'py-1')}>
-            {agreement.status === "Pending" && (
-              <div className="rounded-lg border border-border bg-muted/50 p-2.5">
-                <p className="text-xs text-muted-foreground font-medium">Link dan kode akses baru sudah otomatis di-generate. Silakan kirimkan ke client untuk menandatangani ulang PO terbaru.</p>
-              </div>
-            )}
-            <div className="space-y-1">
-              <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Link Agreement</p>
-              <div className={cn('flex', 'items-center', 'gap-2', 'overflow-hidden')}>
-                <code className={cn('min-w-0', 'flex-1', 'text-xs', 'bg-muted', 'rounded', 'px-2', 'py-1.5', 'block', 'break-all')}>{agreementUrl}</code>
-                <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreementUrl!); toast.success("Link disalin"); }}>
-                  <Copy weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className={cn('text-xs', 'text-muted-foreground', 'font-medium')}>Kode Akses</p>
-              <div className={cn('flex', 'items-center', 'gap-2')}>
-                <code className={cn('flex-1', 'text-lg', 'font-mono', 'font-bold', 'tracking-widest', 'bg-muted', 'rounded', 'px-2', 'py-1.5')}>{agreement.accessCode}</code>
-                <Button variant="outline" size="icon-sm" onClick={() => { copyText(agreement.accessCode); toast.success("Kode disalin"); }}>
-                  <Copy weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <AlertDialogFooter>
-          {agreement?.status === "Signed" && bookingStatus === "Confirmed" ? (
-            <p className={cn('text-xs', 'text-muted-foreground', 'mr-auto')}>✓ Sudah ditandatangani</p>
-          ) : null}
-          <AlertDialogCancel onClick={onClose}>Tutup</AlertDialogCancel>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}

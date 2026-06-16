@@ -477,20 +477,55 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 )}
               />
 
-              {/* Instansi */}
+              {/* Tipe Booking */}
               <FormField
                 control={form.control}
-                name="instansi"
+                name="category"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Instansi</FormLabel>
+                    <FormLabel>Tipe Booking *</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. PT Maju Bersama (opsional)" />
+                      <SearchableSelect
+                        options={[
+                          { id: "WEDDINGS", name: "Wedding" },
+                          { id: "MICE", name: "MICE" },
+                        ]}
+                        value={field.value}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          form.setValue("eventTypeId", "");
+                          if (v === "MICE") {
+                            form.setValue("weddingSession", "fullday");
+                          } else {
+                            form.setValue("instansi", "");
+                          }
+                        }}
+                        placeholder="Pilih tipe booking..."
+                        searchPlaceholder="Cari tipe booking..."
+                        emptyText="Tidak ada opsi"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Instansi — hanya tampil untuk MICE */}
+              {!isWeddings && (
+                <FormField
+                  control={form.control}
+                  name="instansi"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Instansi</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g. PT Maju Bersama (opsional)" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Contact Person (multi) */}
               <div>
@@ -569,36 +604,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                         {...field}
                         rows={2}
                         placeholder="Alamat lengkap (opsional)..."
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Tipe Booking */}
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipe Booking *</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={[
-                          { id: "WEDDINGS", name: "Wedding" },
-                          { id: "MICE", name: "MICE" },
-                        ]}
-                        value={field.value}
-                        onChange={(v) => {
-                          field.onChange(v);
-                          form.setValue("eventTypeId", "");
-                          // MICE defaults to a full-day session (still editable).
-                          if (v === "MICE") form.setValue("weddingSession", "fullday");
-                        }}
-                        placeholder="Pilih tipe booking..."
-                        searchPlaceholder="Cari tipe booking..."
-                        emptyText="Tidak ada opsi"
                       />
                     </FormControl>
                     <FormMessage />

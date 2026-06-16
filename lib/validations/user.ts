@@ -72,8 +72,6 @@ export const setMemberTargetSchema = z.object({
   groupId: z.string().min(1),
   profileId: z.string().min(1),
   amount: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
-  startDate: z.string().min(1, "Tanggal mulai wajib diisi"),
-  endDate: z.string().min(1, "Tanggal selesai wajib diisi"),
 });
 
 export const updateGroupLeaderSchema = z.object({
