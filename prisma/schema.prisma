@@ -1288,8 +1288,6 @@ model UserTarget {
   profileId String
   type      String   @default("sales") // sales, collection, revenue, etc.
   amount    BigInt
-  startDate DateTime
-  endDate   DateTime
   setById   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1299,7 +1297,7 @@ model UserTarget {
 
   @@index([profileId])
   @@index([setById])
-  @@index([type, startDate, endDate])
+  @@index([type])
   @@map("user_targets")
 }
 
