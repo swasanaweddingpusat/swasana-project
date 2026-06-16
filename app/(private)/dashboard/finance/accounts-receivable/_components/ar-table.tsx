@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { acknowledgePayment } from "@/actions/payment-ack";
 import type {
   ARBooking,
+  ARBookingStatus,
   ARTermin,
   ARInvoiceStatus,
   ARTerminStatus,
@@ -181,6 +182,54 @@ function getAckBadge(status: ARTerminAckStatus): BadgeConfig {
   return map[status] ?? map.pending;
 }
 
+function getBookingStatusBadge(status: ARBookingStatus): BadgeConfig {
+  const map: Record<ARBookingStatus, BadgeConfig> = {
+    Confirmed: {
+      label: "Confirmed",
+      bg: "bg-primary",
+      border: "border-primary",
+      text: "text-primary-foreground",
+      Icon: CheckCircle,
+    },
+    Uploaded: {
+      label: "Uploaded",
+      bg: "bg-secondary",
+      border: "border-primary/20",
+      text: "text-primary",
+      Icon: FileSend,
+    },
+    Pending: {
+      label: "Pending",
+      bg: "bg-secondary",
+      border: "border-border",
+      text: "text-muted-foreground",
+      Icon: MinusCircle,
+    },
+    Rejected: {
+      label: "Rejected",
+      bg: "bg-destructive/10",
+      border: "border-destructive/20",
+      text: "text-destructive",
+      Icon: Forbidden,
+    },
+    Canceled: {
+      label: "Canceled",
+      bg: "bg-secondary",
+      border: "border-border",
+      text: "text-muted-foreground",
+      Icon: MinusCircle,
+    },
+    Lost: {
+      label: "Lost",
+      bg: "bg-destructive/10",
+      border: "border-destructive/20",
+      text: "text-destructive",
+      Icon: Forbidden,
+    },
+  };
+  return map[status] ?? map.Pending;
+}
+
 function StatusBadge({ config }: { config: BadgeConfig }) {
   const { label, bg, border, text, Icon } = config;
   return (
@@ -242,6 +291,7 @@ export function ARTable({
                 "Total Price",
                 "Outstanding",
                 "Jatuh Tempo",
+                "Status Booking",
                 "Status Termin",
                 "Actions",
               ].map((h) => (
@@ -254,7 +304,7 @@ export function ARTable({
           <TableBody>
             {Array.from({ length: 6 }).map((_, i) => (
               <TableRow key={i} className="h-18">
-                {Array.from({ length: 7 }).map((_, j) => (
+                {Array.from({ length: 8 }).map((_, j) => (
                   <TableCell key={j}>
                     <Skeleton className="h-4 w-full" />
                   </TableCell>
@@ -291,6 +341,9 @@ export function ARTable({
                 Jatuh Tempo
               </TableHead>
               <TableHead className="h-11 w-35 min-w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
+                Status Booking
+              </TableHead>
+              <TableHead className="h-11 w-35 min-w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
                 Status Termin
               </TableHead>
               <TableHead className="h-11 min-w-28.25 flex-1 px-6 py-3 text-xs font-semibold text-muted-foreground">
@@ -302,7 +355,7 @@ export function ARTable({
             {bookings.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   Tidak ada data piutang.
@@ -404,6 +457,7 @@ function BookingRow({
   canAck: boolean;
   canEditKeuangan: boolean;
 }) {
+  const bookingStatusBadge = getBookingStatusBadge(booking.bookingStatus);
   const terminBadge = getTerminBadge(booking.statusTermin);
 
   return (
@@ -443,6 +497,9 @@ function BookingRow({
         </TableCell>
         <TableCell className="px-6 py-4 text-sm text-foreground">
           {fmtDate(booking.jatuhTempo)}
+        </TableCell>
+        <TableCell className="px-6 py-4">
+          <StatusBadge config={bookingStatusBadge} />
         </TableCell>
         <TableCell className="px-6 py-4">
           <StatusBadge config={terminBadge} />
@@ -488,7 +545,7 @@ function BookingRow({
 
       {isExpanded && booking.termins.length > 0 && (
         <TableRow className="bg-secondary/30 hover:bg-secondary/30">
-          <TableCell colSpan={7} className="p-0">
+          <TableCell colSpan={8} className="p-0">
             <div>
               <Table>
                 <TableHeader>

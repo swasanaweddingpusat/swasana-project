@@ -261,9 +261,7 @@ export async function setMemberTarget(data: unknown) {
   const parsed = setMemberTargetSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { profileId, amount, startDate, endDate } = parsed.data;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const { profileId, amount } = parsed.data;
 
   try {
     await db.$transaction([
@@ -271,8 +269,6 @@ export async function setMemberTarget(data: unknown) {
         where: {
           profileId,
           type: "sales",
-          startDate: { lte: end },
-          endDate: { gte: start },
         },
       }),
       db.userTarget.create({
@@ -280,8 +276,6 @@ export async function setMemberTarget(data: unknown) {
           profileId,
           type: "sales",
           amount: BigInt(amount),
-          startDate: start,
-          endDate: end,
           setById: session!.user.profileId,
         },
       }),
@@ -294,7 +288,7 @@ export async function setMemberTarget(data: unknown) {
       entityType: "UserTarget",
       entityId: profileId,
       description: `Target sales anggota ditetapkan`,
-      changes: { after: { profileId, amount, startDate, endDate } },
+      changes: { after: { profileId, amount } },
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });

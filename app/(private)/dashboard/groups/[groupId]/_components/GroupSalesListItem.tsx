@@ -18,8 +18,6 @@ export interface SalesListMember {
   roleName?: string | null;
   avatarUrl?: string;
   target: number;
-  targetStartDate?: string | null;
-  targetEndDate?: string | null;
   actual: number;
   pendingApproval: number;
   rank: number;

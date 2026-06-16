@@ -88,6 +88,59 @@ export async function requirePermissionForRoute(
 }
 
 /**
+ * Scope guard for salesId-filtered booking queries in the groups panel.
+ *
+ * Returns true when the caller is allowed to see bookings of a specific sales
+ * profile (salesId = a Profile.id).
+ *
+ * Allowed when:
+ *   1. Super admin (isSystemRole)
+ *   2. Has groups:view-all permission
+ *   3. The salesId belongs to a group where the caller (myProfileId) is also
+ *      a leader or member — they share group membership.
+ *
+ * Param signature mirrors what the route handler already has: roleId and
+ * profileId come from session.user, isSuperAdmin is cached in the JWT.
+ */
+export async function canViewSalesBookings(
+  myProfileId: string,
+  roleId: string | null | undefined,
+  salesId: string,
+): Promise<boolean> {
+  // 1. Super admin bypasses everything
+  if (await isSuperAdmin(roleId)) return true;
+
+  // 2. Explicit groups:view-all permission
+  if (await hasPermission(roleId, "groups", "view-all")) return true;
+
+  // 3. Share at least one group with the salesId target
+  //    Find all groups where caller is leader OR member
+  const myGroups = await db.userGroup.findMany({
+    where: {
+      OR: [
+        { leaderId: myProfileId },
+        { members: { some: { userId: myProfileId } } },
+      ],
+    },
+    select: {
+      leaderId: true,
+      members: { select: { userId: true } },
+    },
+  });
+
+  if (myGroups.length === 0) return false;
+
+  // Collect all profile IDs reachable through those groups
+  const reachableIds = new Set<string>();
+  for (const g of myGroups) {
+    if (g.leaderId) reachableIds.add(g.leaderId);
+    for (const m of g.members) reachableIds.add(m.userId);
+  }
+
+  return reachableIds.has(salesId);
+}
+
+/**
  * Route guard that passes when the user satisfies ANY of the given checks.
  * Use for shared reference endpoints (e.g. event types) consumed across
  * multiple features — a user with leads OR booking OR quotations access

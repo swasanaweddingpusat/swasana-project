@@ -111,10 +111,8 @@ export async function getTopSalesByRecentBooking(
       where: {
         profileId: { in: candidateSalesIds },
         type: "sales",
-        startDate: { lte: endDate },
-        endDate: { gte: startDate },
       },
-      orderBy: { endDate: "desc" },
+      orderBy: { createdAt: "desc" },
       select: { profileId: true, amount: true },
     }),
   ]);
@@ -122,7 +120,7 @@ export async function getTopSalesByRecentBooking(
   // Step 3: Build lookup maps.
   const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
-  // First-write-wins = latest target (because ordered by endDate desc).
+  // First-write-wins = latest target (because ordered by createdAt desc).
   const targetMap = new Map<string, number>();
   const hasTargetMap = new Map<string, boolean>();
   for (const t of targets) {

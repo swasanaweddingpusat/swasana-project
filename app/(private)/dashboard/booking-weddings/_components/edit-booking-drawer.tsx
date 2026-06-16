@@ -1348,7 +1348,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               {/* Payment Method */}
               <div>
                 <label className={LBL}>Pembayaran Melalui <span className="text-destructive">*</span></label>
-                <BankAccountSelect value={paymentMethodId} onChange={setPaymentMethodId} placeholder={venueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!venueId} venueId={venueId} />
+                <BankAccountSelect value={paymentMethodId} onChange={setPaymentMethodId} placeholder={venueId ? "Pilih metode pembayaran" : "Pilih venue dulu"} disabled={!venueId} venueId={venueId} disableAdd />
               </div>
 
               {/* Term of Payments */}
@@ -1480,7 +1480,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                                         mode="single"
                                         captionLayout="dropdown"
                                         selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                                        onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
+                                        onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? `${toDateOnly(date)}T00:00:00.000Z` : "" } : x))}
                                         fromYear={new Date().getFullYear() - 10}
                                         toYear={new Date().getFullYear() + 10}
                                       />

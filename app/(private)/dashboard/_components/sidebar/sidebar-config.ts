@@ -84,6 +84,12 @@ export const navItems: NavItem[] = [
     icon: Widget,
   },
   {
+    name: "Calendar Events",
+    href: "/dashboard/calendar-events",
+    icon: CalendarDate,
+    permission: { module: "booking", action: "view" },
+  },
+  {
     name: "Groups",
     href: "/dashboard/groups",
     icon: UsersGroupRounded,
@@ -114,16 +120,28 @@ export const navItems: NavItem[] = [
     permission: { module: "booking-mice", action: "view" },
   },
   {
-    name: "Calendar Events",
-    href: "/dashboard/calendar-events",
-    icon: CalendarDate,
-    permission: { module: "booking", action: "view" },
-  },
-  {
     name: "Purchase Order",
     href: "/dashboard/purchase-order",
     icon: Bill,
     permission: { module: "vendor-specialist", action: "view" },
+  },
+  {
+    name: "Package",
+    href: "/dashboard/packages",
+    icon: Documents,
+    permission: { module: "package", action: "view" },
+  },
+  {
+    name: "Complimentary",
+    href: "/dashboard/complimentary",
+    icon: Gift,
+    permission: { module: "complimentary", action: "view" },
+  },
+  {
+    name: "Vendor",
+    href: "/dashboard/vendors",
+    icon: ShopMinimalistic,
+    permission: { module: "vendor", action: "view" },
   },
   {
     name: "Finance",
@@ -170,24 +188,6 @@ export const navItems: NavItem[] = [
     href: "/dashboard/maintenance",
     icon: Sledgehammer,
     permission: { module: "maintenance", action: "view" },
-  },
-  {
-    name: "Package",
-    href: "/dashboard/packages",
-    icon: Documents,
-    permission: { module: "package", action: "view" },
-  },
-  {
-    name: "Complimentary",
-    href: "/dashboard/complimentary",
-    icon: Gift,
-    permission: { module: "complimentary", action: "view" },
-  },
-  {
-    name: "Vendor",
-    href: "/dashboard/vendors",
-    icon: ShopMinimalistic,
-    permission: { module: "vendor", action: "view" },
   },
   {
     name: "Procurement",
