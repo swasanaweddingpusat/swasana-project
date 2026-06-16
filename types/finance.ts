@@ -69,9 +69,12 @@ export interface ARTermin {
   acknowledgedByName: string | null;
 }
 
+export type ARBookingStatus = "Pending" | "Uploaded" | "Confirmed" | "Rejected" | "Canceled" | "Lost";
+
 export interface ARBooking {
   id: string;
   noPo: string;
+  bookingStatus: ARBookingStatus;
   customerEvent: string;
   customerEmail: string;
   customerPhone: string;

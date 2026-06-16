@@ -30,7 +30,6 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
 
   const where = {
     recordStatus: "saved" as const,
-    bookingStatus: "Confirmed" as const,
     termOfPayments: { some: {} },
   };
 
@@ -43,6 +42,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
       id: true,
       poNumber: true,
       bookingDate: true,
+      bookingStatus: true,
       salesId: true,
       venueId: true,
       sales: { select: { fullName: true, nickName: true } },
@@ -132,6 +132,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
     return {
       id: b.id,
       noPo: b.poNumber ?? "-",
+      bookingStatus: b.bookingStatus,
       customerEvent: b.snapCustomer?.name ?? "-",
       customerEmail: b.snapCustomer?.emailCpp ?? b.snapCustomer?.emailCpw ?? "",
       customerPhone: b.snapCustomer?.mobileNumber ?? "",
