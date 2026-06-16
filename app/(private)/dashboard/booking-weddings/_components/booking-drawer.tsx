@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, MenuDots } from "@solar-icons/react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, MenuDots, Copy } from "@solar-icons/react";
 import {
   DndContext,
   closestCenter,
@@ -2607,6 +2607,38 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         </div>
         {/* Footer — hidden when showing resume prompt */}
         <div className={cn('bg-background', 'sticky', 'bottom-0', 'z-10', showResumePrompt ? 'hidden' : '')}>
+          {/* Mini price summary — visible only on Step 4 (Term of Payments) */}
+          {currentStep === 4 && (
+            <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Input User</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getTotalTerms())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Selisih</span>
+                <span
+                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getDifference() !== 0 ? "text-destructive cursor-pointer" : "text-foreground")}
+                  onClick={() => {
+                    if (getDifference() !== 0) {
+                      navigator.clipboard.writeText(fmtRp(Math.abs(getDifference())));
+                      toast.success("Selisih disalin");
+                    }
+                  }}
+                >
+                  {getDifference() === 0 ? "Sesuai" : (
+                    <>
+                      {`${getDifference() < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(getDifference()))}`}
+                      <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
           {/* Background-save error banner — shown when a step save failed after retry */}
           {hasPendingWriteError && pendingWriteErrorMsg && (
             <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">

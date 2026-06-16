@@ -18,7 +18,7 @@ const roleData = [
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement"],
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -316,6 +316,25 @@ export async function seedRolesPermissions(): Promise<void> {
         });
         if (!perm) continue;
         await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      }
+    }
+  }
+
+  // 7. Force-grant booking:term-&-condition to ALL roles.
+  // This permission is intentionally universal — every role can edit a booking's
+  // Term & Condition. It runs AFTER the per-role matrix wipe-and-replace (step 6)
+  // so the grant is not removed for roles whose matrix omits it.
+  const bookingTcPerm = await prisma.permission.findUnique({
+    where: { module_action: { module: "booking", action: "term-&-condition" } },
+  });
+  if (bookingTcPerm) {
+    const everyRole = await prisma.role.findMany({ select: { id: true } });
+    for (const role of everyRole) {
+      const existing = await prisma.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: bookingTcPerm.id } },
+      });
+      if (!existing) {
+        await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: bookingTcPerm.id } });
       }
     }
   }
