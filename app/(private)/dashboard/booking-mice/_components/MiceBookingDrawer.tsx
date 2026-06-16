@@ -1082,7 +1082,7 @@ export function MiceBookingDrawer({
                                         mode="single"
                                         captionLayout="dropdown"
                                         selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                                        onSelect={(date) => updateTerm(idx, "dueDate", date ? date.toISOString().split("T")[0] : "")}
+                                        onSelect={(date) => updateTerm(idx, "dueDate", date ? toDateOnly(date) : "")}
                                         fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
                                       />
                                     </PopoverContent>

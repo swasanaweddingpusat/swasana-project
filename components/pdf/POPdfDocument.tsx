@@ -389,7 +389,7 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
     venue: booking.snapVenue?.brandName ?? "",
     venue_location: booking.snapVenue?.venueName ?? "",
     customer_name: booking.snapCustomer?.name ?? "",
-    booking_date: new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+    booking_date: new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }),
     po_number: booking.poNumber ?? "",
     wedding_type: booking.weddingType ? booking.weddingType.replace(/\b\w/g, (c) => c.toUpperCase()) : "",
     package_name: booking.snapPackage?.packageName ?? "",
@@ -405,7 +405,7 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
   // Replace {term_of_payment} with formatted list: "Nama sebesar Rp X,- (Terbilang)"
   if (html.includes("{term_of_payment}")) {
     const topHtml = booking.termOfPayments.map((t) => {
-      const due = t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}` : "";
+      const due = t.dueDate ? ` - jatuh tempo ${new Date(t.dueDate).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" })}` : "";
       return `<li>${t.name} sebesar ${fmtRpTerbilang(t.amount)}${due}</li>`;
     }).join("");
 
@@ -513,7 +513,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception";
               })();
               const jam = booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "-";
-              const tanggal = new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+              const tanggal = new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
               const items: { label: string; value: string }[] = [
                 { label: "Nama", value: booking.snapCustomer?.name ?? "-" },
                 { label: "No. Telp", value: phone },
@@ -639,7 +639,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 </>
               )}
               <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}</Text></View>
+                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" })}</Text></View>
                 <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
               </View>
               <View style={s.paymentRow}>
@@ -655,7 +655,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               Demikian Surat Purchase Order ini dibuat oleh pihak penyewa dan penyelenggara dengan keadaan sehat, tanpa paksaan dari pihak manapun. Serta mempunyai kekuatan mengikat satu dengan lainnya. Apabila dikemudian hari salah satu pihak melanggar sesuai dengan ketentuan diatas, maka perjanjian ini menjadi bukti yang sah dan sempurna di mata hukum.
             </Text>
             <Text style={{ fontSize: 7, fontWeight: "bold", marginTop: 10, marginLeft: 20 }}>
-              {booking.signingLocation ?? "_______________"}, {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" })}
+              {booking.signingLocation ?? "_______________"}, {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" })}
             </Text>
             <View wrap={false} style={{ flexDirection: "row", marginTop: 12, marginBottom: 6 }}>
               {/* E-Meterai QR — hanya jika ada */}

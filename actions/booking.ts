@@ -826,7 +826,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
   try {
     const booking = await db.booking.findUnique({
       where: { id: bookingId },
-      select: { salesId: true, sales: { select: { fullName: true } } },
+      select: { salesId: true, currentRevisionId: true, sales: { select: { fullName: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
@@ -836,7 +836,51 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
     });
     if (!targetSales) return { success: false, error: "Sales tujuan tidak ditemukan." };
 
-    await db.$transaction([db.booking.update({ where: { id: bookingId }, data: { salesId: targetSalesId } })]);
+    // Reassign the Sales approval step (approverType "user") to the new sales.
+    // The step gates on approverUserId, so without this the old sales would keep
+    // the ability to approve and the new sales could not. Reset it to pending and
+    // clear any signature/decision the old sales had made — the new sales must
+    // sign/approve fresh. Only touch the step(s) of the active revision snapshot.
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: bookingId } },
+      select: { id: true, status: true },
+    });
+    const salesStep = approvalRecord
+      ? await db.approvalRecordStep.findFirst({
+          where: {
+            recordId: approvalRecord.id,
+            approverType: "user",
+            ...(booking.currentRevisionId ? { revisionId: booking.currentRevisionId } : {}),
+          },
+          select: { id: true },
+        })
+      : null;
+
+    await db.$transaction([
+      db.booking.update({ where: { id: bookingId }, data: { salesId: targetSalesId } }),
+      ...(salesStep
+        ? [
+            db.approvalRecordStep.update({
+              where: { id: salesStep.id },
+              data: {
+                approverUserId: targetSalesId,
+                status: "pending",
+                signature: null,
+                decidedById: null,
+                decidedAt: null,
+              },
+            }),
+          ]
+        : []),
+      // A previously fully-approved record is no longer valid: the new sales hasn't
+      // approved yet. Send the record (and booking) back to pending.
+      ...(approvalRecord && approvalRecord.status === "approved"
+        ? [
+            db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
+            db.booking.update({ where: { id: bookingId }, data: { bookingStatus: "Pending" } }),
+          ]
+        : []),
+    ]);
 
     await logAudit({
       userId: session!.user.id,

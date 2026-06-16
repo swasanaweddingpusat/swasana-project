@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown } from "@solar-icons/react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, MenuDots } from "@solar-icons/react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -101,6 +116,8 @@ interface PackageData {
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 interface TermRow {
+  /** Stable client-side id for React keys + drag-drop. Never persisted. */
+  uid: string;
   name: string;
   amount: number;
   dueDate: string;
@@ -176,13 +193,13 @@ const DP_DEFAULT = 10_000_000;
 
 function makeDefaultTerms(): TermRow[] {
   return [
-    { name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
-    { name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
-    { name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
-    { name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
-    { name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
-    { name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5, paymentStatus: "unpaid" },
-    { name: "Final", amount: 0, dueDate: "", sortOrder: 6, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
+    { uid: safeRandomUUID(), name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Final", amount: 0, dueDate: "", sortOrder: 6, paymentStatus: "unpaid" },
   ];
 }
 
@@ -215,6 +232,34 @@ function clearLocalDraftArtifacts() {
   try { localStorage.removeItem("booking_draft"); } catch { /* noop */ }
   // Fire-and-forget — IndexedDB cleanup is async but non-critical.
   void idbClearAllEvidence();
+}
+
+/* ─── Sortable Term wrapper ───────────────────────────────────────────────────
+ * Wraps one TOP Collapsible with drag-drop. The row body stays inline in the
+ * main component (render-prop) so it keeps access to all the local closures.
+ * The drag handle props are passed through to the caller.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function SortableTermWrapper({
+  uid,
+  children,
+}: {
+  uid: string;
+  children: (drag: {
+    attributes: ReturnType<typeof useSortable>["attributes"];
+    listeners: ReturnType<typeof useSortable>["listeners"];
+  }) => ReactNode;
+}) {
+  const { setNodeRef, transform, transition, isDragging, attributes, listeners } =
+    useSortable({ id: uid });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(isDragging && "opacity-50 relative z-10")}
+    >
+      {children({ attributes, listeners })}
+    </div>
+  );
 }
 
 /** Map a lead's wedding eventType.name back to the drawer's weddingType code. */
@@ -437,8 +482,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
 
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
-  // Track COLLAPSED terms — default empty = semua kebuka
-  const [collapsedTerms, setCollapsedTerms] = useState<Set<number>>(new Set());
+  // Track COLLAPSED terms by uid (stable across drag-reorder) — default empty = semua kebuka
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
   // Guard: user has manually edited term amounts in step 3.
   // When true, allocatePrice will NOT override amounts[0] and [1] with the
   // BOOKING_FEE_DEFAULT / DP_DEFAULT constants — it preserves whatever the user typed.
@@ -453,11 +498,26 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // the deleteMany+create race that causes duplicate termOfPayment rows).
   const step3SaveInFlightRef = useRef<Promise<void> | null>(null);
 
-  function toggleTerm(idx: number) {
+  function toggleTerm(uid: string) {
     setCollapsedTerms((prev) => {
       const next = new Set(prev);
-      if (next.has(idx)) { next.delete(idx); } else { next.add(idx); }
+      if (next.has(uid)) { next.delete(uid); } else { next.add(uid); }
       return next;
+    });
+  }
+
+  const termSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleTermDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setTerms((prev) => {
+      const oldIdx = prev.findIndex((t) => t.uid === active.id);
+      const newIdx = prev.findIndex((t) => t.uid === over.id);
+      if (oldIdx === -1 || newIdx === -1) return prev;
+      // Renumber sortOrder to match the new visual order — the save/upload flow
+      // matches terms to DB rows by sortOrder, so it must equal the array index.
+      return arrayMove(prev, oldIdx, newIdx).map((t, i) => ({ ...t, sortOrder: i }));
     });
   }
 
@@ -848,6 +908,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     // ── Step 3: term of payments from DB ──
     if (resumeDraftDetail.termOfPayments.length > 0) {
       setTerms(resumeDraftDetail.termOfPayments.map((t) => ({
+        uid: safeRandomUUID(),
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate,
@@ -2252,22 +2313,35 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   {/* Term of Payments */}
                   <div>
                     <FormLabel className="text-sm font-medium text-foreground mb-2 block">Term of Payments</FormLabel>
+                    <DndContext sensors={termSensors} collisionDetection={closestCenter} onDragEnd={handleTermDragEnd}>
+                    <SortableContext items={terms.map((t) => t.uid)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-2">
                       {terms.map((t, idx) => {
                         const isFirstTerm = idx === 0;
                         const isFirstInvalid = isFirstTerm && (!t.amount || t.amount <= 0);
-                        const isOpen = !collapsedTerms.has(idx);
+                        const isOpen = !collapsedTerms.has(t.uid);
                         const payStatus = t.paymentStatus ?? "unpaid";
                         const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
                         return (
+                          <SortableTermWrapper key={t.uid} uid={t.uid}>
+                          {({ attributes, listeners }) => (
                           <Collapsible
-                            key={idx}
                             open={isOpen}
-                            onOpenChange={() => toggleTerm(idx)}
+                            onOpenChange={() => toggleTerm(t.uid)}
                             className="rounded-xl border border-border bg-muted/30 overflow-hidden"
                           >
-                            {/* ── Collapsible header — trigger area + hapus sebagai sibling ── */}
+                            {/* ── Collapsible header — drag handle + trigger area + hapus sebagai sibling ── */}
                             <div className="flex items-center gap-1 px-3 py-2.5">
+                              <button
+                                type="button"
+                                {...attributes}
+                                {...listeners}
+                                aria-label="Drag untuk mengurutkan"
+                                tabIndex={-1}
+                                className="shrink-0 p-1 -ml-1 rounded-lg text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+                              >
+                                <MenuDots weight="BoldDuotone" className="h-4 w-4" />
+                              </button>
                               <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
                                 <AltArrowDown
                                   weight="BoldDuotone"
@@ -2301,10 +2375,19 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setTerms((prev) => recalcTermDates(prev.filter((_, i) => i !== idx), wBookingDate));
+                                    // Drop this term, renumber sortOrder to the new positions
+                                    // (save/upload matches DB rows by sortOrder = index).
+                                    setTerms((prev) =>
+                                      recalcTermDates(
+                                        prev
+                                          .filter((x) => x.uid !== t.uid)
+                                          .map((x, i) => ({ ...x, sortOrder: i })),
+                                        wBookingDate,
+                                      ),
+                                    );
                                     setCollapsedTerms((prev) => {
-                                      const next = new Set<number>();
-                                      prev.forEach((n) => { if (n < idx) { next.add(n); } else if (n > idx) { next.add(n - 1); } });
+                                      const next = new Set(prev);
+                                      next.delete(t.uid);
                                       return next;
                                     });
                                   }}
@@ -2379,7 +2462,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                           mode="single"
                                           captionLayout="dropdown"
                                           selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                                          onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? date.toISOString() : "" } : x))}
+                                          onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? toLocalISO(date) : "" } : x))}
                                           fromYear={new Date().getFullYear() - 10}
                                           toYear={new Date().getFullYear() + 10}
                                         />
@@ -2432,9 +2515,13 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                               </div>
                             </CollapsibleContent>
                           </Collapsible>
+                          )}
+                          </SortableTermWrapper>
                         );
                       })}
                     </div>
+                    </SortableContext>
+                    </DndContext>
 
                     {/* Add button */}
                     <div className="flex gap-2 mt-3">
@@ -2443,7 +2530,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         variant="outline"
                         className="flex-1 border-dashed gap-1.5 text-muted-foreground"
                         onClick={() => {
-                          setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], wBookingDate));
+                          setTerms((prev) => recalcTermDates([...prev, { uid: safeRandomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], wBookingDate));
                           // term baru otomatis kebuka (default open)
                         }}
                       >
