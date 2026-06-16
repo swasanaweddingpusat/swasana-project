@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen, Copy } from "@solar-icons/react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -1636,6 +1636,38 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
         {/* ─── Footer ─── */}
         <div className="bg-background sticky bottom-0 z-10">
+          {/* Mini price summary — visible only on Step 4 (Term of Payments) */}
+          {currentStep === 4 && (
+            <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Input User</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getTotalTerms())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Selisih</span>
+                <span
+                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getDifference() !== 0 ? "text-destructive cursor-pointer" : "text-foreground")}
+                  onClick={() => {
+                    if (getDifference() !== 0) {
+                      navigator.clipboard.writeText(fmtRp(Math.abs(getDifference())));
+                      toast.success("Selisih disalin");
+                    }
+                  }}
+                >
+                  {getDifference() === 0 ? "Sesuai" : (
+                    <>
+                      {`${getDifference() < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(getDifference()))}`}
+                      <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="flex py-4 gap-2">
             {currentStep === 1 ? (
               /* Step 1: Save & Publish (no Cancel, no Previous) */
