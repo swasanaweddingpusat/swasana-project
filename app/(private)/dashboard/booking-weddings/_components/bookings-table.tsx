@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,6 +33,7 @@ import { BookingDetailModal } from "./booking-detail-modal";
 import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "./booking-po-preview-modal";
 import { BookingCommentPanel } from "./booking-comment-panel";
+import { BookingTCDrawer } from "./booking-tc-drawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
@@ -159,6 +160,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string; initialTC: string | null } | null>(null);
   const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
     queryKey: ["booking-approvals"],
     queryFn: async () => {
@@ -356,6 +358,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <DropdownMenuItem className="cursor-pointer" onClick={() => setUploadDocTarget(booking)}>
               <FileUp weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Upload Dokumen
             </DropdownMenuItem>
+            {can("booking", "term-&-condition") && (
+            <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer", initialTC: booking.snapPackagePricing?.termAndCondition ?? null }); }}>
+              <DocumentText weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term & Condition
+            </DropdownMenuItem>
+            )}
             {can("booking", "transfer") && (
             <DropdownMenuItem className="cursor-pointer" onClick={() => setTransferTarget(booking)}>
               <ArrowLeftRight weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Transfer Booking
@@ -1101,6 +1108,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
+
+      {/* Term & Condition Drawer */}
+      {tcTarget && (
+        <BookingTCDrawer
+          open={!!tcTarget}
+          onClose={() => setTcTarget(null)}
+          bookingId={tcTarget.bookingId}
+          customerName={tcTarget.customerName}
+          initialTC={tcTarget.initialTC}
+        />
+      )}
 
       {/* PO Preview (modal — works before approval, no new tab) */}
       <BookingPOPreviewModal

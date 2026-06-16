@@ -23,6 +23,7 @@ export interface POPdfBooking {
   termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
+  manager?: { fullName: string | null } | null;
   signatures: { client?: { signature: string }; roles?: { signature?: string; name: string; title: string }[] } | null;
   createdAt?: Date;
   discountName?: string | null;
@@ -399,6 +400,7 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
     total_paid: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0)),
     remaining_balance: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus !== "paid").reduce((sum, t) => sum + t.amount, 0)),
     sales_name: booking.sales?.fullName ?? "",
+    manager_name: booking.manager?.fullName ?? "",
     brand_name: booking.snapVenue?.brandName ?? "",
   };
 
@@ -512,7 +514,10 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 const map: Record<string, string> = { R: "Resepsi", AR: "Akad & Resepsi", TR: "Teapai & Resepsi", PR: "Pemberkatan Resepsi", VO: "Venue Only" };
                 return booking.weddingType ? (map[booking.weddingType] ?? booking.weddingType) : "Wedding Reception";
               })();
-              const jam = booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "-";
+              // Prefer the user-entered eventTime (e.g. "07.30 - 13.00"); only fall back to
+              // the session default when no explicit time was provided.
+              const sessionJam = booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "-";
+              const jam = booking.eventTime?.trim() ? booking.eventTime.trim() : sessionJam;
               const tanggal = new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
               const items: { label: string; value: string }[] = [
                 { label: "Nama", value: booking.snapCustomer?.name ?? "-" },
