@@ -10,6 +10,15 @@ const PUBLIC_EXACT = new Set<string>([
   "/client-agreement",
 ]);
 
+// Auth pages that are redundant once logged in — redirect to dashboard.
+// /auth/reset-password and /auth/verify are intentionally excluded: AuthGate
+// sends mustChangePassword / unverified users there, so bouncing them back to
+// /dashboard would create an infinite redirect loop.
+const BOUNCE_TO_DASHBOARD = new Set<string>([
+  "/auth/login",
+  "/auth/forgot-password",
+]);
+
 // API roots that carry dynamic segments — allow anything beneath them
 const PUBLIC_PREFIXES = [
   "/api/auth/",
@@ -32,8 +41,10 @@ export function proxy(request: NextRequest) {
     request.cookies.get("__Secure-authjs.session-token")?.value;
 
   if (isPublicPath(pathname)) {
-    // Already-logged-in users never see /auth/* — bounce to dashboard
-    if (sessionToken && PUBLIC_EXACT.has(pathname) && pathname.startsWith("/auth/")) {
+    // Already-logged-in users don't need login/forgot-password — bounce to dashboard.
+    // reset-password and verify are intentionally allowed through: AuthGate redirects
+    // mustChangePassword / unverified users there, and bouncing them would loop.
+    if (sessionToken && BOUNCE_TO_DASHBOARD.has(pathname)) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();
