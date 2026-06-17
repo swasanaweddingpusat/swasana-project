@@ -644,7 +644,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 </>
               )}
               <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" })}</Text></View>
+                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {(() => { const bf = booking.termOfPayments[0]; const d = bf?.dueDate ?? createdAt; return new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }); })()}</Text></View>
                 <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
               </View>
               <View style={s.paymentRow}>
