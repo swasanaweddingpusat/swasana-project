@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer, Filter } from "@solar-icons/react";
+import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer, Filter, CloseCircle } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -414,7 +414,7 @@ export function PackagesTable() {
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
         )}
-        {(can("package", "view") || can("package", "delete")) && (
+        {(can("package", "view") || can("package", "delete") || (can("package", "set-status") && pkg.approvalStatus === "approved")) && (
           <DropdownMenu>
             <Tooltip>
               <DropdownMenuTrigger asChild>
@@ -446,6 +446,23 @@ export function PackagesTable() {
                   Preview PO
                 </DropdownMenuItem>
               )}
+              {can("package", "set-status") && pkg.approvalStatus === "approved" && (
+                <>
+                  {can("package", "view") && <DropdownMenuSeparator />}
+                  <DropdownMenuItem
+                    disabled={unverifyMutation.isPending}
+                    onSelect={async () => {
+                      const res = await unverifyMutation.mutateAsync(pkg.id);
+                      if (!res.success) toast.error(res.error ?? "Gagal unverify");
+                      else toast.success("Approval dibatalkan, paket kembali ke draft.");
+                    }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                    Batalkan Approval
+                  </DropdownMenuItem>
+                </>
+              )}
               {can("package", "delete") && (
                 <>
                   {can("package", "view") && <DropdownMenuSeparator />}
@@ -476,8 +493,9 @@ export function PackagesTable() {
     const hasApproval = !!approvalRecord &&
       approvalRecord.status !== "approved" &&
       pkg.approvalStatus !== "approved";
+    const hasUnverify = can("package", "set-status") && pkg.approvalStatus === "approved";
 
-    const hasAnySecondary = hasTc || hasSetHarga || hasPreview || hasDelete || hasApproval;
+    const hasAnySecondary = hasTc || hasSetHarga || hasPreview || hasDelete || hasApproval || hasUnverify;
     if (!hasAnySecondary) return null;
 
     return (
@@ -565,9 +583,26 @@ export function PackagesTable() {
               Preview PO
             </DropdownMenuItem>
           )}
-          {hasDelete && (
+          {hasUnverify && (
             <>
               {(hasTc || hasSetHarga || hasApproval || hasPreview) && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                disabled={unverifyMutation.isPending}
+                onSelect={async () => {
+                  const res = await unverifyMutation.mutateAsync(pkg.id);
+                  if (!res.success) toast.error(res.error ?? "Gagal unverify");
+                  else toast.success("Approval dibatalkan, paket kembali ke draft.");
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <CloseCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
+                Batalkan Approval
+              </DropdownMenuItem>
+            </>
+          )}
+          {hasDelete && (
+            <>
+              {(hasTc || hasSetHarga || hasApproval || hasPreview || hasUnverify) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                 className="text-destructive focus:text-destructive"
@@ -774,34 +809,21 @@ export function PackagesTable() {
                           )}
                         </TableCell>
                         <TableCell className={cn('hidden', 'sm:table-cell')}>
-                          {pkg.approvalStatus !== "approved" ? (
-                            <button
-                              type="button"
-                              onClick={() => setApprovalPkg(pkg)}
-                              className={cn(
-                                "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                                pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
-                                pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
-                                pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
-                              )}
-                            >
-                              {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
-                            </button>
-                          ) : can("package", "set-status") ? (
-                            <button
-                              type="button"
-                              disabled={unverifyMutation.isPending}
-                              onClick={async () => {
-                                const res = await unverifyMutation.mutateAsync(pkg.id);
-                                if (!res.success) toast.error(res.error ?? "Gagal unverify");
-                              }}
-                              className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity")}
-                            >
-                              Approved
-                            </button>
-                          ) : (
-                            <span className={cn("inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground")}>Approved</span>
-                          )}
+                          {/* Status badge — always opens the read-only approval dialog
+                              (incl. Approved). Unverify lives in the "..." menu. */}
+                          <button
+                            type="button"
+                            onClick={() => setApprovalPkg(pkg)}
+                            className={cn(
+                              "inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                              pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
+                              pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
+                              pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
+                              pkg.approvalStatus === "approved" && "bg-primary text-primary-foreground",
+                            )}
+                          >
+                            {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : pkg.approvalStatus === "approved" ? "Approved" : "Draft"}
+                          </button>
                         </TableCell>
                         <TableCell>
                           <div className={cn('flex', 'items-center', 'gap-1', 'justify-end')}>
@@ -883,34 +905,21 @@ export function PackagesTable() {
 
                       {/* Row 3: approval badge */}
                       <div className={cn('flex', 'items-center', 'gap-1.5', 'flex-wrap', 'text-xs')}>
-                        {pkg.approvalStatus !== "approved" ? (
-                          <button
-                            type="button"
-                            onClick={() => setApprovalPkg(pkg)}
-                            className={cn(
-                              "inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                              pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
-                              pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
-                              pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
-                            )}
-                          >
-                            {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : "Draft"}
-                          </button>
-                        ) : can("package", "set-status") ? (
-                          <button
-                            type="button"
-                            disabled={unverifyMutation.isPending}
-                            onClick={async () => {
-                              const res = await unverifyMutation.mutateAsync(pkg.id);
-                              if (!res.success) toast.error(res.error ?? "Gagal unverify");
-                            }}
-                            className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground cursor-pointer hover:opacity-80 transition-opacity")}
-                          >
-                            Approved
-                          </button>
-                        ) : (
-                          <span className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground")}>Approved</span>
-                        )}
+                        {/* Status badge — always opens the read-only approval dialog
+                            (incl. Approved). Unverify lives in the "..." menu. */}
+                        <button
+                          type="button"
+                          onClick={() => setApprovalPkg(pkg)}
+                          className={cn(
+                            "inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                            pkg.approvalStatus === "pending" && "bg-muted text-muted-foreground",
+                            pkg.approvalStatus === "rejected" && "bg-destructive/10 text-destructive",
+                            pkg.approvalStatus === "draft" && "bg-secondary text-muted-foreground",
+                            pkg.approvalStatus === "approved" && "bg-primary text-primary-foreground",
+                          )}
+                        >
+                          {pkg.approvalStatus === "pending" ? "Pending" : pkg.approvalStatus === "rejected" ? "Rejected" : pkg.approvalStatus === "approved" ? "Approved" : "Draft"}
+                        </button>
                       </div>
 
                       {/* Footer: action buttons — primary CTAs + compact secondary dropdown */}
