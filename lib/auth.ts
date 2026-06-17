@@ -192,6 +192,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           });
           if (profile) {
+            // Profile found — clear any stale profileMissing flag so token self-heals.
+            // Without this, a token that was once marked missing (e.g. transient DB
+            // race at login time) would stay stuck in the force-logout loop forever.
+            token.profileMissing = false;
             token.profileId = profile.id;
             token.roleId = profile.roleId;
             token.roleName = profile.role?.name ?? null;
