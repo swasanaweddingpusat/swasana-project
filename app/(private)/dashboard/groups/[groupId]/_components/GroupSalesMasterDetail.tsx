@@ -106,19 +106,20 @@ export function GroupSalesMasterDetail({
   return (
     <>
       {/* ── Desktop: side-by-side ── */}
-      <div className="hidden md:flex border border-border rounded-2xl overflow-hidden bg-background min-h-96">
+      <div className="hidden md:flex border border-border rounded-3xl overflow-hidden bg-card shadow-sm min-h-96">
         {/* Left master pane */}
-        <div className="w-80 shrink-0 border-r border-border flex flex-col">
+        <div className="w-80 shrink-0 border-r border-border flex flex-col bg-secondary/20">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-            <span className="text-sm font-semibold text-foreground">
-              Sales ({members.length})
-            </span>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold text-foreground">Sales</span>
+              <span className="text-xs font-medium text-muted-foreground tabular-nums">{members.length}</span>
+            </div>
             {canManage && (
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 gap-1 text-xs"
+                className="h-8 gap-1 text-xs rounded-full"
                 onClick={onAddMember}
               >
                 <AddCircle weight="BoldDuotone" className="h-3 w-3" /> Tambah
@@ -144,14 +145,15 @@ export function GroupSalesMasterDetail({
       </div>
 
       {/* ── Mobile: stacked with swap ── */}
-      <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-background">
+      <div className="md:hidden border border-border rounded-3xl overflow-hidden bg-card shadow-sm">
         {mobileView === "list" ? (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-              <span className="text-sm font-semibold text-foreground">
-                Sales ({members.length})
-              </span>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-sm font-semibold text-foreground">Sales</span>
+                <span className="text-xs font-medium text-muted-foreground tabular-nums">{members.length}</span>
+              </div>
               {canManage && (
                 <Button
                   size="sm"

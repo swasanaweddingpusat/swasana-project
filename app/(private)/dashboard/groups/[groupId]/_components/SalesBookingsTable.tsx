@@ -28,6 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Magnifer as Search,
   Calendar as CalendarDays,
@@ -229,8 +230,10 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
     staleTime: 5 * 60 * 1000,
   });
 
-  // Booking approvals
-  const { data: bookingApprovals = [] } = useQuery<ApprovalRecord[]>({
+  // Booking approvals — fetched alongside bookings. We gate the first list render on
+  // BOTH this and the bookings query so approval badges paint together with the rows
+  // instead of flashing in a beat later.
+  const { data: bookingApprovals = [], isLoading: approvalsLoading } = useQuery<ApprovalRecord[]>({
     queryKey: ["booking-approvals"],
     queryFn: async () => {
       const res = await fetch("/api/approval-records?module=booking");
@@ -351,8 +354,89 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
       (can("booking", "mark-lost") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Confirmed") ||
       (can("booking", "restore") && (booking.bookingStatus === "Lost" || booking.bookingStatus === "Confirmed"));
 
+    // Quick approve — pending non-client steps the current user can act on.
+    const actableSteps = nonClientSteps.filter((step) => {
+      const isPending = step.status === "pending";
+      return isPending && (
+        isAdmin ||
+        (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
+        (step.approverType === "user" && step.approverUserId === user?.profileId)
+      );
+    });
+
     return (
-      <DropdownMenu>
+      <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+        {/* Quick: Client Agreement — once manager + finance approved, before signing */}
+        {can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8" onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }} />}>
+                <FileSignature weight="BoldDuotone" className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="top"><p className="text-xs">Client Agreement</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        {/* Quick: Approval — dropdown of non-client steps (mirrors booking-weddings table) */}
+        {!allInternalApproved && approvalMap.has(booking.id) && nonClientSteps.length > 0 && (
+          <DropdownMenu>
+            <TooltipProvider delay={200}>
+              <Tooltip>
+                <DropdownMenuTrigger className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")}>
+                  <TooltipTrigger render={<span />}>
+                    <ClipboardCheck weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                  </TooltipTrigger>
+                </DropdownMenuTrigger>
+                <TooltipContent side="top"><p className="text-xs">Approval</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <DropdownMenuContent align="end">
+              {nonClientSteps.map((step) => {
+                const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
+                const isApproved = step.status === "approved";
+                const isRejected = step.status === "rejected";
+                const isPending = step.status === "pending";
+                const canAct = isPending && actableSteps.some((s) => s.id === step.id);
+                return (
+                  <DropdownMenuItem
+                    key={step.id}
+                    className="cursor-pointer"
+                    disabled={isApproved || isRejected || (isPending && !canAct)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (canAct) {
+                        setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", bookingName: booking.snapCustomer?.name ?? "Booking" });
+                      }
+                    }}
+                  >
+                    {isApproved ? `✓ ${label}` : isRejected ? `✗ ${label}` : `Approve ${label}`}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* Quick: Comment */}
+        {can("booking", "comment") && (
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8 relative" onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }} />}>
+                <MessageSquare weight="BoldDuotone" className="h-4 w-4" />
+                {(unreadCounts[booking.id] ?? 0) > 0 && (
+                  <span className={cn("absolute", "-top-0.5", "-right-0.5", "min-w-4", "h-4", "rounded-full", "bg-destructive", "text-destructive-foreground", "text-[9px]", "font-bold", "flex", "items-center", "justify-center", "px-0.5")}>
+                    {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
+                  </span>
+                )}
+              </TooltipTrigger>
+              <TooltipContent side="top"><p className="text-xs">Komentar</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        {/* More actions */}
+        <DropdownMenu>
         <DropdownMenuTrigger className={cn("p-1.5", "rounded-md", "hover:bg-muted", "cursor-pointer")}>
           <EllipsisVertical weight="BoldDuotone" className={cn("h-4", "w-4", "text-muted-foreground")} />
         </DropdownMenuTrigger>
@@ -445,33 +529,6 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
             </DropdownMenuItem>
           )}
 
-          {/* Comment */}
-          {can("booking", "comment") && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }}
-            >
-              <MessageSquare weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Komentar
-              {(unreadCounts[booking.id] ?? 0) > 0 && (
-                <span className={cn("ml-auto", "inline-flex", "h-4", "min-w-4", "items-center", "justify-center", "rounded-full", "bg-destructive", "text-destructive-foreground", "text-[9px]", "font-bold", "px-0.5")}>
-                  {unreadCounts[booking.id] > 9 ? "9+" : unreadCounts[booking.id]}
-                </span>
-              )}
-            </DropdownMenuItem>
-          )}
-
-          {/* Client Agreement */}
-          {can("booking", "client-agreement") && internalApproved && booking.clientAgreement?.status !== "Signed" && (
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); setAgreementModal({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Client" }); }}
-            >
-              <FileSignature weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-              Client Agreement
-            </DropdownMenuItem>
-          )}
-
           {/* Activity Log */}
           {can("booking", "view") && (
             <DropdownMenuItem
@@ -483,7 +540,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
             </DropdownMenuItem>
           )}
 
-          {/* Approval dialog */}
+          {/* Approval dialog (read-only view of full timeline) */}
           {approvalMap.has(booking.id) && (
             <DropdownMenuItem
               className="cursor-pointer"
@@ -493,35 +550,6 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
               Lihat Approval
             </DropdownMenuItem>
           )}
-
-          {/* Approve step — visible only if there are pending non-client steps user can act on */}
-          {!allInternalApproved && approvalMap.has(booking.id) && (() => {
-            const actableSteps = nonClientSteps.filter((step) => {
-              const isPending = step.status === "pending";
-              return isPending && (
-                isAdmin ||
-                (step.approverType === "role" && step.approverRoleId === user?.roleId) ||
-                (step.approverType === "user" && step.approverUserId === user?.profileId)
-              );
-            });
-            if (actableSteps.length === 0) return null;
-            return actableSteps.map((step) => {
-              const label = step.approverType === "role" ? step.approverRole?.name : step.approverUser?.fullName;
-              return (
-                <DropdownMenuItem
-                  key={step.id}
-                  className="cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setApproveModal({ stepId: step.id, stepLabel: label ?? "Unknown", bookingName: booking.snapCustomer?.name ?? "Booking" });
-                  }}
-                >
-                  <ClipboardCheck weight="BoldDuotone" className={cn("mr-2", "h-4", "w-4", "text-primary")} />
-                  Approve {label}
-                </DropdownMenuItem>
-              );
-            });
-          })()}
 
           {showSeparatorStatus && <DropdownMenuSeparator />}
 
@@ -569,7 +597,8 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
-      </DropdownMenu>
+        </DropdownMenu>
+      </div>
     );
   }
 
@@ -743,10 +772,12 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
 
       {/* Booking list — compact card layout, overflow-x-hidden */}
       <div className="overflow-x-hidden w-full">
-        {isFetching && bookings.length === 0 ? (
+        {(isFetching && bookings.length === 0) || (approvalsLoading && bookings.length > 0) ? (
+          // Hold the skeleton until BOTH bookings and approvals have resolved on first
+          // load — otherwise rows paint first and approval badges pop in a frame later.
           <div className="space-y-2">
             {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-xl" />
+              <Skeleton key={i} className="h-24 w-full rounded-2xl" />
             ))}
           </div>
         ) : bookings.length === 0 ? (
@@ -766,19 +797,14 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
               const approvalRecord = approvalMap.get(booking.id);
               const isDraft = booking.recordStatus === "draft";
 
+              const eventDate = new Date(booking.bookingDate);
               return (
                 <div
                   key={booking.id}
                   className={cn(
-                    "rounded-xl",
-                    "border",
-                    "border-border",
-                    "bg-card",
-                    "p-3",
-                    "cursor-pointer",
-                    "hover:bg-accent/40",
-                    "transition-colors",
-                    "select-none",
+                    "group flex gap-3 rounded-2xl border border-border bg-card p-3",
+                    "cursor-pointer select-none transition-all",
+                    "hover:shadow-md hover:border-border/80",
                   )}
                   onClick={() => {
                     if (isDraft) {
@@ -788,114 +814,102 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
                     }
                   }}
                 >
-                  {/* Row 1: customer name + action */}
-                  <div className="flex items-start justify-between gap-2 min-w-0">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground truncate leading-snug">
+                  {/* Date anchor — the most actionable info for a sales rep */}
+                  <div className="shrink-0 flex flex-col items-center justify-center w-14 rounded-xl bg-secondary/60 px-1 py-2 text-center">
+                    <span className="text-lg font-bold font-heading text-foreground leading-none tabular-nums">
+                      {format(eventDate, "dd")}
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-0.5">
+                      {format(eventDate, "MMM")}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {format(eventDate, "yyyy")}
+                    </span>
+                  </div>
+
+                  {/* Content */}
+                  <div className="min-w-0 flex-1">
+                    {/* Row 1: name + actions */}
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate leading-snug min-w-0 flex-1">
                         {booking.snapCustomer?.name ?? booking.customer?.name ?? "—"}
                       </p>
-                      {/* Mobile: show at most one phone number */}
-                      {(() => {
-                        const raw = booking.snapCustomer?.mobileNumber ?? (typeof booking.customer?.mobileNumber === "string" ? booking.customer.mobileNumber : JSON.stringify(booking.customer?.mobileNumber ?? "")) ?? "";
-                        let display = raw;
-                        try {
-                          const arr = JSON.parse(raw);
-                          if (Array.isArray(arr) && arr.length > 0) {
-                            const first = arr[0] as { name?: string; number: string };
-                            display = first.name ? `${first.name}: ${first.number}` : first.number;
-                            if (arr.length > 1) display += ` +${arr.length - 1}`;
-                          }
-                        } catch { /* not JSON */ }
-                        return display ? (
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">{display}</p>
-                        ) : null;
-                      })()}
+                      <div onClick={(e) => e.stopPropagation()} className="shrink-0 -mt-1 -mr-1">
+                        {renderActions(booking)}
+                      </div>
                     </div>
 
-                    {/* Action dropdown — stop click propagation */}
-                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                      {renderActions(booking)}
-                    </div>
-                  </div>
-
-                  {/* Row 2: badges */}
-                  <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                    {isDraft && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground text-[10px] font-semibold">
-                        Draft
+                    {/* Row 2: status-line — status + venue, the two signals that matter */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      {isDraft && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground text-[10px] font-semibold">
+                          Draft
+                        </span>
+                      )}
+                      {booking.editDraft && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground text-[10px] font-semibold">
+                          Sedang diedit
+                        </span>
+                      )}
+                      {/* Status — the primary signal */}
+                      <span className={cn("inline-flex items-center text-[11px] font-semibold", STATUS_TEXT[booking.bookingStatus]?.split(" ")[0] ?? "text-muted-foreground")}>
+                        <span className={cn("w-1.5 h-1.5 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
+                        {booking.bookingStatus}
                       </span>
-                    )}
-                    {booking.editDraft && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground text-[10px] font-semibold">
-                        Sedang diedit
-                      </span>
-                    )}
-                    {/* Status badge */}
-                    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
-                      <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
-                      {booking.bookingStatus}
-                    </span>
-                    {/* Payment method */}
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-border bg-muted text-muted-foreground text-[10px] font-medium">
-                      {booking.paymentMethod?.bankName ?? "N/A"}
-                    </span>
-                    {/* Session */}
-                    {booking.weddingSession && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-muted text-foreground/70 text-[10px] font-medium">
-                        {SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}
-                      </span>
-                    )}
-                    {/* Approval */}
-                    {approvalRecord && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setApprovalDialogTarget(booking); }}
-                        className={cn(
-                          "inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
-                          approvalRecord.status === "approved" && "bg-primary text-primary-foreground",
-                          approvalRecord.status === "pending" && "bg-muted text-muted-foreground",
-                          approvalRecord.status === "rejected" && "bg-destructive/10 text-destructive",
-                        )}
-                      >
-                        {approvalRecord.status === "approved" ? "Approved" : approvalRecord.status === "pending" ? "Pending" : "Rejected"}
-                      </button>
-                    )}
-                    {/* Unread comment indicator */}
-                    {(unreadCounts[booking.id] ?? 0) > 0 && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
-                        {unreadCounts[booking.id]} baru
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Row 3: event date + venue */}
-                  <div className="flex items-center gap-2 flex-wrap mt-1.5 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1 shrink-0">
-                      <CalendarDays weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                      {format(new Date(booking.bookingDate), "dd MMM yyyy")}
-                    </span>
-                    {booking.snapVenue?.venueName && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span className="truncate">{booking.snapVenue.venueName}</span>
-                      </>
-                    )}
-                    {booking.poNumber && (
-                      <>
-                        <span aria-hidden="true">·</span>
+                      {booking.snapVenue?.venueName && (
+                        <>
+                          <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                          <span className="text-[11px] text-muted-foreground truncate">{booking.snapVenue.venueName}</span>
+                        </>
+                      )}
+                      {/* Approval — kept as a tappable pill (opens timeline) */}
+                      {approvalRecord && (
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigator.clipboard.writeText(booking.poNumber!).catch(() => {});
-                            toast.success("PO Number copied!", { duration: 1500 });
-                          }}
-                          className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 transition-colors cursor-pointer truncate max-w-32"
+                          onClick={(e) => { e.stopPropagation(); setApprovalDialogTarget(booking); }}
+                          className={cn(
+                            "inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                            approvalRecord.status === "approved" && "bg-primary text-primary-foreground",
+                            approvalRecord.status === "pending" && "bg-muted text-muted-foreground",
+                            approvalRecord.status === "rejected" && "bg-destructive/10 text-destructive",
+                          )}
                         >
-                          {booking.poNumber}
+                          {approvalRecord.status === "approved" ? "Approved" : approvalRecord.status === "pending" ? "Pending" : "Rejected"}
                         </button>
-                      </>
-                    )}
+                      )}
+                      {(unreadCounts[booking.id] ?? 0) > 0 && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+                          {unreadCounts[booking.id]} baru
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Row 3: quiet meta — bank · session · PO */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1.5 text-[11px] text-muted-foreground">
+                      <span>{booking.paymentMethod?.bankName ?? "N/A"}</span>
+                      {booking.weddingSession && (
+                        <>
+                          <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                          <span>{SESSION_LABEL[booking.weddingSession] ?? booking.weddingSession}</span>
+                        </>
+                      )}
+                      {booking.poNumber && (
+                        <>
+                          <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(booking.poNumber!).catch(() => {});
+                              toast.success("Nomor PO disalin", { duration: 1500 });
+                            }}
+                            className="font-mono bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 transition-colors cursor-pointer truncate max-w-36"
+                          >
+                            {booking.poNumber}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

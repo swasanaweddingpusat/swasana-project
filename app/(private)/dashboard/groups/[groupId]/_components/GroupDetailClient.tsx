@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Input } from "@/components/ui/input";
@@ -23,7 +22,6 @@ import { Drawer } from "@/components/shared/drawer";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
-  Target,
   UsersGroupRounded,
   Dollar,
   CalendarMark,
@@ -127,11 +125,23 @@ export function GroupDetailClient({
   // Master-detail selection state
   const [selectedSalesId, setSelectedSalesId] = useState<string | null>(null);
 
+  // ── Local members mirror ───────────────────────────────────────────────────
+  // The list, the member counter, and the hero all read from `members`. We mirror
+  // the server prop into local state so add/remove reflect instantly (optimistic),
+  // then re-sync whenever the server prop changes (after router.refresh() lands).
+  // Reset-on-prop-change is done during render (React's "adjust state while rendering"
+  // pattern) instead of an effect, so there is no extra render pass.
+  type GroupMember = Props["group"]["members"][number];
+  const [members, setMembers] = useState<GroupMember[]>(group.members);
+  const [syncedMembers, setSyncedMembers] = useState(group.members);
+  if (syncedMembers !== group.members) {
+    setSyncedMembers(group.members);
+    setMembers(group.members);
+  }
+
   // ── Derived data ─────────────────────────────────────────────────────────────
 
-  const leaderMember = group.members.find((m) => m.userId === group.leaderId);
-
-  const memberRows = group.members.map((m) => {
+  const memberRows = members.map((m) => {
     const perf = performance.find((p) => p.profileId === m.userId);
     return {
       profileId: m.userId,
@@ -181,6 +191,7 @@ export function GroupDetailClient({
   }
 
   function handleAddMember(profileId: string) {
+    const profile = availableProfiles.find((p) => p.id === profileId);
     addMemberMutation.mutate(
       { groupId: group.id, userId: profileId },
       {
@@ -188,6 +199,27 @@ export function GroupDetailClient({
           if (res.success) {
             toast.success("Anggota berhasil ditambahkan");
             setAddOpen(false);
+            // Optimistic: show the new member immediately, then re-sync from the server
+            // prop once router.refresh() lands.
+            if (profile) {
+              setMembers((prev) =>
+                prev.some((m) => m.userId === profileId)
+                  ? prev
+                  : [
+                      ...prev,
+                      {
+                        userId: profile.id,
+                        profile: {
+                          id: profile.id,
+                          fullName: profile.fullName,
+                          email: profile.email,
+                          avatarUrl: profile.avatarUrl,
+                          role: null,
+                        },
+                      } as GroupMember,
+                    ],
+              );
+            }
             void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
           } else {
@@ -206,7 +238,11 @@ export function GroupDetailClient({
         onSuccess: (res) => {
           if (res.success) {
             toast.success(`${deleteMember.name} dihapus dari grup`);
+            const removedId = deleteMember.profileId;
             setDeleteMember(null);
+            // Optimistic: drop the member immediately; the server prop re-syncs after refresh.
+            setMembers((prev) => prev.filter((m) => m.userId !== removedId));
+            if (selectedSalesId === removedId) setSelectedSalesId(null);
             void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
           } else {
@@ -244,41 +280,22 @@ export function GroupDetailClient({
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/dashboard/groups" />}>
-              Groups
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{teamName}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      {/* Breadcrumb + actions — single row, team name lives in the breadcrumb */}
+      <div className="flex items-center justify-between gap-3">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/dashboard/groups" />}>
+                Groups
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{teamName}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
 
-      {/* Group Header */}
-      <div className="flex items-center gap-3">
-        {leaderMember && (
-          <ProfileAvatar
-            name={leaderMember.profile.fullName ?? leaderMember.userId}
-            src={leaderMember.profile.avatarUrl ?? undefined}
-            size="md"
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <h1 className="text-base font-bold text-foreground truncate">{teamName}</h1>
-          {leaderMember && (
-            <p className="text-xs text-muted-foreground mt-0.5 truncate">
-              Leader: {leaderMember.profile.fullName ?? leaderMember.userId}
-            </p>
-          )}
-          {teamDesc && (
-            <p className="text-sm text-muted-foreground mt-0.5 truncate">{teamDesc}</p>
-          )}
-        </div>
         <div className="flex items-center gap-1 shrink-0">
           {isSuperAdmin && (
             <Button
@@ -307,34 +324,15 @@ export function GroupDetailClient({
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <OverviewCard
-          icon={Dollar}
-          label="Total Penjualan"
-          value={formatRp(totalSales)}
-          sub={`dari target ${formatRp(totalTarget)}`}
-        />
-        <OverviewCard
-          icon={Target}
-          label="Achievement"
-          value={`${overallPct}%`}
-          sub={overallPct >= 80 ? "On track" : "Below target"}
-          accent={overallPct >= 80}
-        />
-        <OverviewCard
-          icon={CalendarMark}
-          label="Booking Confirmed"
-          value={`${totalConfirmed}`}
-          sub={`dari ${totalBookings} total booking`}
-        />
-        <OverviewCard
-          icon={UsersGroupRounded}
-          label="Anggota Grup"
-          value={`${memberRows.length}`}
-          sub="Sales aktif"
-        />
-      </div>
+      {/* Team Pace — hero: achievement ring (gold) + supporting stats */}
+      <TeamPaceHero
+        pct={overallPct}
+        totalSales={totalSales}
+        totalTarget={totalTarget}
+        totalConfirmed={totalConfirmed}
+        totalBookings={totalBookings}
+        memberCount={memberRows.length}
+      />
 
       {/* Master-Detail split view */}
       <GroupSalesMasterDetail
@@ -536,40 +534,123 @@ export function GroupDetailClient({
   );
 }
 
-// ─── Overview Card ────────────────────────────────────────────────────────────
+// ─── Team Pace Hero ───────────────────────────────────────────────────────────
+// Bank Jago vibe: one hero number (team achievement) carried by a progress ring in
+// the brand gold, with the rest demoted to quiet supporting stats. The ring IS the
+// page's thesis — how close the team is to its collective target.
 
-function OverviewCard({
+function TeamPaceHero({
+  pct,
+  totalSales,
+  totalTarget,
+  totalConfirmed,
+  totalBookings,
+  memberCount,
+}: {
+  pct: number;
+  totalSales: number;
+  totalTarget: number;
+  totalConfirmed: number;
+  totalBookings: number;
+  memberCount: number;
+}) {
+  const onTrack = pct >= 80;
+  return (
+    <div className="rounded-3xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-stretch">
+        {/* Ring — the hero. Gold when on track, ink otherwise. */}
+        <div className="flex items-center gap-4 p-5 sm:p-6 sm:w-72 sm:shrink-0 sm:border-r border-b sm:border-b-0 border-border bg-gradient-to-br from-secondary/40 to-transparent">
+          <PaceRing pct={pct} onTrack={onTrack} />
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Pencapaian Tim
+            </p>
+            <p className="text-sm font-medium text-foreground mt-1 leading-snug">
+              {onTrack ? "Tim on track" : pct > 0 ? "Di bawah target" : "Belum ada penjualan"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {formatRp(totalSales)} dari {formatRp(totalTarget)}
+            </p>
+          </div>
+        </div>
+
+        {/* Supporting stats — quiet, demoted */}
+        <div className="grid grid-cols-3 flex-1 divide-x divide-border">
+          <PaceStat
+            icon={Dollar}
+            label="Penjualan"
+            value={`Rp ${formatRp(totalSales)}`}
+            sub={`target ${formatRp(totalTarget)}`}
+          />
+          <PaceStat
+            icon={CalendarMark}
+            label="Confirmed"
+            value={`${totalConfirmed}`}
+            sub={`dari ${totalBookings} booking`}
+          />
+          <PaceStat
+            icon={UsersGroupRounded}
+            label="Anggota"
+            value={`${memberCount}`}
+            sub="sales aktif"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaceRing({ pct, onTrack }: { pct: number; onTrack: boolean }) {
+  const r = 30;
+  const circ = 2 * Math.PI * r;
+  const filled = Math.min(pct, 100) / 100;
+  return (
+    <div className="relative h-20 w-20 shrink-0">
+      <svg viewBox="0 0 72 72" className="h-20 w-20 -rotate-90">
+        <circle cx="36" cy="36" r={r} fill="none" strokeWidth="7" className="text-muted/60" stroke="currentColor" />
+        <circle
+          cx="36"
+          cy="36"
+          r={r}
+          fill="none"
+          strokeWidth="7"
+          strokeLinecap="round"
+          stroke="currentColor"
+          className={cn("transition-all duration-700", onTrack ? "text-[var(--brand-gold)]" : "text-foreground")}
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - filled)}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-xl font-bold tabular-nums font-heading text-foreground leading-none">
+          {pct}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PaceStat({
   icon: Icon,
   label,
   value,
   sub,
-  accent,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   sub: string;
-  accent?: boolean;
 }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex items-center justify-center h-9 w-9 rounded-lg shrink-0",
-              accent ? "bg-primary text-primary-foreground" : "bg-secondary",
-            )}
-          >
-            <Icon weight="BoldDuotone" className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-lg font-bold text-foreground leading-tight">{value}</p>
-            <p className="text-[11px] text-muted-foreground">{sub}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="p-4 sm:p-5 min-w-0">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <Icon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+        <p className="text-[10px] font-semibold uppercase tracking-widest truncate">{label}</p>
+      </div>
+      <p className="text-lg sm:text-xl font-bold font-heading text-foreground leading-tight mt-1.5 truncate">
+        {value}
+      </p>
+      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sub}</p>
+    </div>
   );
 }
