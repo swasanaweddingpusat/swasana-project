@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, GraphUp, GraphDown, MenuDots, PenNewSquare, TrashBinTrash } from "@solar-icons/react";
+import { Crown, MenuDots, PenNewSquare, TrashBinTrash } from "@solar-icons/react";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -62,8 +62,10 @@ export function GroupSalesListItem({
         }
       }}
       className={cn(
-        "flex items-center gap-2.5 px-3 py-2.5 rounded-md cursor-pointer transition-colors min-h-11",
-        isSelected ? "bg-secondary" : "hover:bg-secondary/60",
+        "flex items-center gap-2.5 px-3 py-2.5 rounded-2xl cursor-pointer transition-all min-h-11",
+        isSelected
+          ? "bg-card shadow-sm ring-1 ring-[var(--brand-gold)]/40"
+          : "hover:bg-card/70 hover:shadow-sm ring-1 ring-transparent",
       )}
     >
       {/* Rank badge */}
@@ -128,11 +130,24 @@ export function GroupSalesListItem({
           </p>
         )}
 
-        {/* Row 3: Achievement % + trend */}
-        <div className="flex items-center gap-1 mt-0.5">
+        {/* Row 3: mini progress bar — visual achievement against target */}
+        <div className="flex items-center gap-2 mt-1">
+          <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                overTarget
+                  ? "bg-[var(--brand-gold)]"
+                  : pct >= 70
+                    ? "bg-foreground/60"
+                    : "bg-destructive",
+              )}
+              style={{ width: `${Math.min(Math.max(pct, 3), 100)}%` }}
+            />
+          </div>
           <span
             className={cn(
-              "text-[10px] font-semibold",
+              "text-[10px] font-bold tabular-nums shrink-0",
               pct >= 100
                 ? "text-foreground"
                 : pct >= 70
@@ -142,11 +157,6 @@ export function GroupSalesListItem({
           >
             {pct}%
           </span>
-          {overTarget ? (
-            <GraphUp weight="BoldDuotone" className="h-3 w-3 text-foreground" />
-          ) : (
-            <GraphDown weight="BoldDuotone" className="h-3 w-3 text-muted-foreground" />
-          )}
         </div>
       </div>
 
