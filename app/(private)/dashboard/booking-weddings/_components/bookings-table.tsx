@@ -1301,8 +1301,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-      {/* Edit Package Drawer */}
+      {/* Edit Package Drawer — key forces remount on booking change, resetting all local state cleanly */}
       <EditPackageDrawer
+        key={editPackageTarget?.bookingId ?? "none"}
         target={editPackageTarget}
         onClose={() => setEditPackageTarget(null)}
       />
