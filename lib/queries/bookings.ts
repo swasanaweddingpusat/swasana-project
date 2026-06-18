@@ -118,7 +118,7 @@ function comparePoDesc(
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; salesId?: string },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; salesId?: string; approvalStatus?: "pending" | "approved" },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
@@ -131,7 +131,19 @@ export async function getBookings(
     { recordStatus: "saved" };
   const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo);
   const salesIdFilter: Prisma.BookingWhereInput = options?.salesId ? { salesId: options.salesId } : {};
-  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...dateFilter, ...salesIdFilter };
+  let approvalStatusFilter: Prisma.BookingWhereInput = {};
+  if (options?.approvalStatus) {
+    const approvedRecords = await db.approvalRecord.findMany({
+      where: { module: "booking", status: "approved" },
+      select: { entityId: true },
+    });
+    const approvedIds = approvedRecords.map((r) => r.entityId);
+    approvalStatusFilter =
+      options.approvalStatus === "approved"
+        ? { id: { in: approvedIds } }
+        : { id: { notIn: approvedIds } };
+  }
+  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...dateFilter, ...salesIdFilter, ...approvalStatusFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
