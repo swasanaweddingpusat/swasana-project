@@ -3,14 +3,15 @@ import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { revalidateTag } from "next/cache";
-import { uploadToR2, deleteFromR2, extractKeyFromUrl } from "@/lib/r2";
+import { uploadToStorage, deleteFromStorage, extractKeyFromUrl, randomId12, getPublicUrl } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 // ─── POST /api/maintenance/upload ─────────────────────────────────────────────
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
     module: "maintenance",
     action: "create",
@@ -49,22 +50,19 @@ export async function POST(req: Request) {
       return Response.json({ error: "Tiket tidak ditemukan." }, { status: 404 });
     }
 
-    // Generate unique key and upload to R2
-    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-    const randomId = Array.from(crypto.getRandomValues(new Uint8Array(12)))
-      .map((b) => chars[b % chars.length])
-      .join("");
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const key = `maintenance/${ticketId}/${randomId}.${ext}`;
+    // Compress image and upload to storage under maintenance/{ticketId}/ folder
+    const raw = Buffer.from(await file.arrayBuffer());
+    const compressed = await compressToWebp(raw);
+    const key = `maintenance/${ticketId}/${randomId12()}.webp`;
+    await uploadToStorage(compressed, key, "image/webp");
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const url = await uploadToR2(buffer, key, file.type);
+    const resolvedUrl = getPublicUrl(key);
 
     const [image] = await db.$transaction([
       db.maintenanceImage.create({
         data: {
           ticketId,
-          url,
+          url: key,
           fileName: file.name,
         },
         select: { id: true, url: true, fileName: true },
@@ -81,7 +79,8 @@ export async function POST(req: Request) {
 
     revalidateTag("maintenance", "max");
 
-    return Response.json(image, { status: 201 });
+    // Return resolved URL so client can display immediately
+    return Response.json({ id: image.id, url: resolvedUrl, fileName: image.fileName }, { status: 201 });
   } catch {
     return Response.json({ error: "Gagal mengunggah gambar." }, { status: 500 });
   }
@@ -89,7 +88,7 @@ export async function POST(req: Request) {
 
 // ─── DELETE /api/maintenance/upload?imageId=xxx ──────────────────────────────
 
-export async function DELETE(req: Request) {
+export async function DELETE(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({
     module: "maintenance",
     action: "delete",
@@ -113,10 +112,11 @@ export async function DELETE(req: Request) {
   }
 
   try {
-    const r2Key = extractKeyFromUrl(image.url);
-    await deleteFromR2(r2Key);
+    // url field now stores key; fall back to extractKeyFromUrl for legacy full-URL rows
+    const storageKey = image.url.startsWith("http") ? extractKeyFromUrl(image.url) : image.url;
+    await deleteFromStorage(storageKey);
   } catch {
-    // R2 deletion is best-effort
+    // storage deletion is best-effort
   }
 
   await db.$transaction([

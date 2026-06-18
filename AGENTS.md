@@ -88,7 +88,7 @@ If any of these reveals a cascade, handle ALL affected files in the same change.
 | Forms | react-hook-form + Zod v4 | — | always validate with Zod schema |
 | Data fetching (client) | TanStack Query v5 | — | |
 | Email | Resend | — | templates in `emails/` |
-| Storage | Cloudflare R2 (S3 SDK) | — | `lib/r2.ts` |
+| Storage | MinIO / S3-compatible (S3 SDK) | — | `lib/storage.ts` |
 
 **Before writing code for any Next.js API, read** `node_modules/next/dist/docs/01-app/` **— especially:**
 - `02-guides/upgrading/version-16.md` (breaking changes)
@@ -583,10 +583,13 @@ AUTH_SECRET=                     # openssl rand -base64 32
 AUTH_URL=                        # https://app.swasana.com
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=               # noreply@yourdomain.com
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET=
+S3_ENDPOINT=                     # MinIO endpoint (e.g. https://minio.railway.app)
+S3_REGION=                       # auto
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_BUCKET_NAME=
+S3_PUBLIC_URL=                   # public base URL for objects
+NEXT_PUBLIC_S3_PUBLIC_URL=       # same as S3_PUBLIC_URL, inlined at build time
 APP_URL=                         # public base for emails/links
 CLEANUP_SECRET=                  # dedicated secret for /api/admin/cleanup-logs (do NOT reuse AUTH_SECRET)
 ```

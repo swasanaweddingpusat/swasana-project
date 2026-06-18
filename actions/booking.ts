@@ -17,7 +17,7 @@ import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
-import { deleteFromR2 } from "@/lib/r2";
+import { deleteFromStorage } from "@/lib/storage";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -765,7 +765,7 @@ export async function deleteBooking(id: string) {
   }
 
   try {
-    // Fetch R2 file keys before deleting records
+    // Fetch storage file keys before deleting records
     const docs = await db.bookingDocument.findMany({
       where: { bookingId: id },
       select: { filePath: true },
@@ -789,11 +789,11 @@ export async function deleteBooking(id: string) {
       db.booking.delete({ where: { id } }),
     ]);
 
-    // Delete R2 files (outside transaction — non-critical)
+    // Delete storage files (outside transaction — non-critical)
     if (docs.length > 0) {
-      const { deleteFromR2 } = await import("@/lib/r2");
+      const { deleteFromStorage } = await import("@/lib/storage");
       await Promise.all(
-        docs.map((d) => deleteFromR2(d.filePath).catch((e) => console.error("[deleteBooking] R2:", e)))
+        docs.map((d) => deleteFromStorage(d.filePath).catch((e) => console.error("[deleteBooking] storage:", e)))
       );
     }
 
@@ -1487,7 +1487,7 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    // R2 keys of payment proofs to delete AFTER the transaction commits (paid→unpaid).
+    // Storage keys of payment proofs to delete AFTER the transaction commits (paid→unpaid).
     // Collected here, deleted best-effort post-commit so a failed delete never rolls
     // back the booking update.
     const evidenceKeysToDelete: string[] = [];
@@ -1536,7 +1536,7 @@ export async function editBooking(data: unknown) {
                 nextStatus = t.paymentStatus;
               }
             }
-            // paid/refund → unpaid: clear the proof and queue the R2 object for deletion.
+            // paid/refund → unpaid: clear the proof and queue the storage object for deletion.
             const reversedToUnpaid =
               !!cur &&
               cur.ackStatus !== "acknowledged" &&
@@ -1582,12 +1582,12 @@ export async function editBooking(data: unknown) {
     await db.$transaction(ops);
 
     // Best-effort: delete payment-proof objects for terms reverted paid→unpaid.
-    // Runs post-commit so an R2 failure never rolls back the booking write.
+    // Runs post-commit so a storage failure never rolls back the booking write.
     if (evidenceKeysToDelete.length > 0) {
       await Promise.allSettled(
         evidenceKeysToDelete.map(async (key) => {
           try {
-            await deleteFromR2(key);
+            await deleteFromStorage(key);
           } catch (err) {
             console.error("[editBooking] Failed to delete reverted payment evidence", key, err);
           }

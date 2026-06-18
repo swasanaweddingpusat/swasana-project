@@ -4,7 +4,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
-import { deleteFromR2 } from "@/lib/r2";
+import { deleteFromStorage, resolveAvatarUrl } from "@/lib/storage";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { createNotifications } from "@/lib/notifications";
@@ -74,7 +74,11 @@ export async function createBookingComment(data: {
       );
     }
 
-    return { success: true as const, comment };
+    const resolvedComment = {
+      ...comment,
+      author: { ...comment.author, avatarUrl: resolveAvatarUrl(comment.author.avatarUrl) },
+    };
+    return { success: true as const, comment: resolvedComment };
   } catch (e) {
     console.error("[createBookingComment]", e);
     return { success: false as const, error: "Terjadi kesalahan." };
@@ -122,10 +126,10 @@ export async function deleteBookingComment(id: string) {
 
     await db.$transaction([db.bookingComment.delete({ where: { id } })]);
 
-    // Delete attachments from R2
+    // Delete attachments from storage
     if (Array.isArray(existing.attachments) && existing.attachments.length > 0) {
       const atts = existing.attachments as { path: string }[];
-      await Promise.all(atts.map((a) => deleteFromR2(a.path).catch((e) => console.error("[deleteBookingComment] R2:", e))));
+      await Promise.all(atts.map((a) => deleteFromStorage(a.path).catch((e) => console.error("[deleteBookingComment] storage:", e))));
     }
 
     revalidateTag(`booking-comments-${existing.bookingId}`, "max");

@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { uploadToR2, getPublicUrl, deleteFromR2 } from "@/lib/r2";
-import sharp from "sharp";
+import { uploadToStorage, getPublicUrl, deleteFromStorage, generateStorageKey } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
 export async function POST(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "edit" });
@@ -21,33 +21,32 @@ export async function POST(req: Request): Promise<Response> {
 
   let buffer: Buffer = Buffer.from(await file.arrayBuffer());
   let contentType = file.type;
-  let ext = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];
+  let key: string;
 
-  if (IMAGE_TYPES.includes(file.type)) {
-    buffer = await sharp(buffer).resize(1920, 1920, { fit: "inside", withoutEnlargement: true }).webp({ quality: 50 }).toBuffer();
+  if ((IMAGE_TYPES as readonly string[]).includes(file.type)) {
+    buffer = await compressToWebp(buffer);
     contentType = "image/webp";
-    ext = "webp";
+    key = generateStorageKey("payment-evidence", "webp");
+  } else {
+    const ext = file.name.split(".").pop() ?? "bin";
+    key = generateStorageKey("payment-evidence", ext);
   }
 
-  // Fetch existing evidence key so we can delete the old file from R2 after successful upload.
+  // Fetch existing evidence key to delete old file after successful upload
   const existing = await db.termOfPayment.findUnique({
     where: { id: termId },
     select: { paymentEvidence: true },
   });
   const oldKey = existing?.paymentEvidence ?? null;
 
-  const randomId = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, "0")).join("");
-  const key = `${randomId}.${ext}`;
-  await uploadToR2(buffer, key, contentType);
+  await uploadToStorage(buffer, key, contentType);
   await db.termOfPayment.update({ where: { id: termId }, data: { paymentEvidence: key } });
 
-  // Best-effort: delete old R2 object. Failure must NOT fail the whole request.
+  // Best-effort: delete old storage object
   if (oldKey && oldKey !== key) {
-    try {
-      await deleteFromR2(oldKey);
-    } catch (err) {
-      console.error("[upload-evidence] Failed to delete old R2 object", oldKey, err);
-    }
+    await deleteFromStorage(oldKey).catch((err: unknown) => {
+      console.error("[upload-evidence] Failed to delete old storage object", oldKey, err);
+    });
   }
 
   return NextResponse.json({ filePath: getPublicUrl(key) });

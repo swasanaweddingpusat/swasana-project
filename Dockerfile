@@ -32,10 +32,10 @@ COPY . .
 # NEXT_PUBLIC_* are inlined into the client bundle at build time, so they must
 # be present here. Dokploy passes these as build args/env. Defaults are empty.
 ARG NEXT_PUBLIC_APP_URL=""
-ARG NEXT_PUBLIC_R2_PUBLIC_URL=""
+ARG NEXT_PUBLIC_S3_PUBLIC_URL=""
 ARG NEXT_PUBLIC_SHOW_DEVTOOLS="false"
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
-    NEXT_PUBLIC_R2_PUBLIC_URL=$NEXT_PUBLIC_R2_PUBLIC_URL \
+    NEXT_PUBLIC_S3_PUBLIC_URL=$NEXT_PUBLIC_S3_PUBLIC_URL \
     NEXT_PUBLIC_SHOW_DEVTOOLS=$NEXT_PUBLIC_SHOW_DEVTOOLS \
     NEXT_TELEMETRY_DISABLED=1
 # Dummy URL so any build-time prisma access resolves; real URL injected at runtime.

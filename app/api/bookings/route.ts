@@ -2,7 +2,7 @@ import { getBookings } from "@/lib/queries/bookings";
 import { requirePermissionForRoute, canViewSalesBookings } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { getPublicUrl } from "@/lib/r2";
+import { getPublicUrl } from "@/lib/storage";
 import type { DataScope } from "@/types/user";
 
 export async function GET(request: Request) {

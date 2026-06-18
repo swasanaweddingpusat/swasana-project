@@ -1,6 +1,7 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { BookingStatus } from "@prisma/client";
+import { resolveAvatarUrl } from "@/lib/storage";
 import {
   getUserGroups,
   getAllGroups,
@@ -101,7 +102,7 @@ export async function getDashboardData(
         salesMap.set(m.profileId, {
           profileId: m.profileId,
           name: m.fullName ?? "—",
-          avatarUrl: m.avatarUrl ?? null,
+          avatarUrl: resolveAvatarUrl(m.avatarUrl),
           revenue: m.actual,
           confirmedBookings: m.confirmed,
           target: m.target,

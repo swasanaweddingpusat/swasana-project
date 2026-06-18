@@ -54,3 +54,7 @@ docs/superpowers/
 
 # DB backups / production data dumps — never commit (contains PII & tokens)
 /scripts/backups/
+
+# Throwaway/ad-hoc dev & migration scripts (DB clone, MinIO tests, investigations) — not for repo
+/scripts/_*
+/prisma/seeders/_*

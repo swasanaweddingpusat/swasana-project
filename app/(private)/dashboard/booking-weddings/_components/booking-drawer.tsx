@@ -1167,7 +1167,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     // Flow:
     //   1. Validate (first term, diff check).
     //   2. Save step-3 data to draft (background, awaited before advancing).
-    //   3. Upload any File evidence to R2 — refetch termIds from the freshly-saved
+    //   3. Upload any File evidence to storage — refetch termIds from the freshly-saved
     //      draft so IDs are stable. Set state to URL string on success.
     //   4. Advance to step 5.
     if (currentStep === 4) {

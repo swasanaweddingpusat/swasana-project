@@ -1,6 +1,7 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { BookingStatus, EventCategory } from "@prisma/client";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,7 +164,7 @@ export async function getTopSalesByRecentBooking(
     return {
       profileId,
       name: profile?.fullName ?? "—",
-      avatarUrl: profile?.avatarUrl ?? null,
+      avatarUrl: resolveAvatarUrl(profile?.avatarUrl),
       revenue,
       confirmedBookings,
       target,

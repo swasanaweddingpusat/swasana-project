@@ -1,6 +1,7 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import type { UserFilters } from "@/types/user";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 const PROFILE_SELECT = {
   id: true,
@@ -86,7 +87,12 @@ export async function getUsers(filters: UserFilters = {}) {
     db.user.count({ where }),
   ]);
 
-  return { users, total, page, limit };
+  const resolvedUsers = users.map((u) => ({
+    ...u,
+    profile: u.profile ? { ...u.profile, avatarUrl: resolveAvatarUrl(u.profile.avatarUrl) } : null,
+  }));
+
+  return { users: resolvedUsers, total, page, limit };
 }
 
 export async function getUserById(userId: string) {
@@ -94,7 +100,7 @@ export async function getUserById(userId: string) {
   cacheTag("users");
   cacheLife("minutes");
 
-  return db.user.findUnique({
+  const u = await db.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -105,6 +111,13 @@ export async function getUserById(userId: string) {
       profile: { select: PROFILE_SELECT },
     },
   });
+
+  if (!u) return null;
+
+  return {
+    ...u,
+    profile: u.profile ? { ...u.profile, avatarUrl: resolveAvatarUrl(u.profile.avatarUrl) } : null,
+  };
 }
 
 export type UsersQueryResult = Awaited<ReturnType<typeof getUsers>>;
@@ -125,7 +138,7 @@ export async function getManagerProfiles() {
 export type ManagerProfile = Awaited<ReturnType<typeof getManagerProfiles>>[number];
 
 export async function getMentionableUsers() {
-  return db.profile.findMany({
+  const profiles = await db.profile.findMany({
     where: { status: "active" },
     select: {
       id: true,
@@ -136,6 +149,8 @@ export async function getMentionableUsers() {
     orderBy: { fullName: "asc" },
     take: 200,
   });
+
+  return profiles.map((p) => ({ ...p, avatarUrl: resolveAvatarUrl(p.avatarUrl) }));
 }
 
 export type MentionableUser = Awaited<ReturnType<typeof getMentionableUsers>>[number];

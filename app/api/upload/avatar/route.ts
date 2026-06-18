@@ -1,52 +1,70 @@
 import { auth } from "@/lib/auth";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getSignedUploadUrl, getPublicUrl, deleteFromR2 } from "@/lib/r2";
+import { uploadToStorage, deleteFromStorage, generateStorageKey } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 import { db } from "@/lib/db";
 
-export async function POST(req: Request) {
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
+/** POST — receive multipart file, compress, upload to storage, return key */
+export async function POST(req: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!mutationLimiter.check(`avatar-upload:${session.user.id}`)) return rateLimitResponse();
 
   try {
-    const { contentType } = await req.json() as { contentType: string };
+    const fd = await req.formData();
+    const file = fd.get("file");
 
-    if (contentType !== "image/webp") {
-      return Response.json({ error: "Only WebP allowed" }, { status: 400 });
+    if (!(file instanceof File)) {
+      return Response.json({ error: "File wajib disertakan." }, { status: 400 });
     }
 
-    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-    const randomId = Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => chars[b % chars.length]).join("");
-    const key = `${randomId}.webp`;
-    const uploadUrl = await getSignedUploadUrl(key, contentType, 300); // 5 min expiry
-    const publicUrl = getPublicUrl(key);
+    if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+      return Response.json({ error: "Tipe file tidak didukung. Gunakan JPEG, PNG, atau WebP." }, { status: 400 });
+    }
 
-    return Response.json({ uploadUrl, publicUrl, key });
+    if (file.size > MAX_SIZE_BYTES) {
+      return Response.json({ error: "Ukuran file maksimal 5MB." }, { status: 400 });
+    }
+
+    const raw = Buffer.from(await file.arrayBuffer());
+    const compressed = await compressToWebp(raw);
+    const key = generateStorageKey("avatars", "webp");
+    await uploadToStorage(compressed, key, "image/webp");
+
+    return Response.json({ key });
   } catch {
-    return Response.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    return Response.json({ error: "Gagal upload foto." }, { status: 500 });
   }
 }
 
-export async function PATCH(req: Request) {
+/** PATCH — save key to DB, delete old avatar from storage */
+export async function PATCH(req: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!mutationLimiter.check(`avatar-save:${session.user.id}`)) return rateLimitResponse();
 
   try {
-    const { avatarUrl, oldKey } = await req.json() as { avatarUrl: string; oldKey?: string };
+    const { avatarKey, oldKey } = await req.json() as { avatarKey: string; oldKey?: string };
 
-    // Delete old avatar from R2 if exists
-    if (oldKey && oldKey.endsWith(".webp")) {
-      await deleteFromR2(oldKey).catch(() => {}); // non-blocking
+    if (typeof avatarKey !== "string" || !avatarKey) {
+      return Response.json({ error: "avatarKey wajib diisi." }, { status: 400 });
+    }
+
+    // Delete old avatar from storage (best-effort, non-blocking)
+    if (oldKey && oldKey !== avatarKey) {
+      await deleteFromStorage(oldKey).catch(() => {});
     }
 
     await db.profile.update({
       where: { userId: session.user.id },
-      data: { avatarUrl },
+      data: { avatarUrl: avatarKey },
     });
 
     return Response.json({ success: true });
   } catch {
-    return Response.json({ error: "Failed to save avatar" }, { status: 500 });
+    return Response.json({ error: "Gagal menyimpan foto profil." }, { status: 500 });
   }
 }

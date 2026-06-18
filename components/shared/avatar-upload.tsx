@@ -10,12 +10,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Camera, Gallery, Pen, MagniferZoomIn, MagniferZoomOut, Refresh } from "@solar-icons/react";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
-import { getCroppedBlob, compressToWebP } from "@/lib/image-utils";
+import { getCroppedBlob } from "@/lib/image-utils";
+
+const S3_PUBLIC_URL = process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "";
+
+function toFullUrl(key: string | null | undefined): string | null {
+  if (!key) return null;
+  if (key.startsWith("http")) return key;
+  return S3_PUBLIC_URL ? `${S3_PUBLIC_URL}/${key}` : key;
+}
 
 interface AvatarUploadProps {
   currentUrl: string | null;
   name: string;
-  onUploaded: (url: string) => void;
+  onUploaded: (key: string) => void;
 }
 
 export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps) {
@@ -28,7 +36,15 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
   const [zoom, setZoom] = useState(1);
   const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(currentUrl);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(() => toFullUrl(currentUrl));
+  // Derive the storage key from a URL (strip base) or use as-is if already a key
+  const [currentKey, setCurrentKey] = useState<string | null>(() => {
+    if (!currentUrl) return null;
+    if (currentUrl.startsWith("http") && S3_PUBLIC_URL) {
+      return currentUrl.replace(`${S3_PUBLIC_URL}/`, "");
+    }
+    return currentUrl;
+  });
 
   const onCropComplete = useCallback((_: Area, croppedPixels: Area) => {
     setCroppedArea(croppedPixels);
@@ -54,45 +70,35 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
     if (!imageSrc || !croppedArea) return;
     setUploading(true);
     try {
-      // 1. Crop
+      // 1. Crop to blob (canvas-based, client-side)
       const blob = await getCroppedBlob(imageSrc, croppedArea);
-      const rawFile = new File([blob], "avatar.webp", { type: "image/webp" });
 
-      // 2. Compress to WebP
-      const compressed = await compressToWebP(rawFile);
+      // 2. Send multipart to server (server will compress webp q50 1920)
+      const fd = new FormData();
+      fd.set("file", new File([blob], "avatar.webp", { type: "image/webp" }));
 
-      // 3. Get presigned URL
-      const res = await fetch("/api/upload/avatar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentType: "image/webp" }),
-      });
-      if (!res.ok) throw new Error("Failed to get upload URL");
-      const { uploadUrl, publicUrl } = await res.json() as { uploadUrl: string; publicUrl: string; key: string };
+      const uploadRes = await fetch("/api/upload/avatar", { method: "POST", body: fd });
+      if (!uploadRes.ok) {
+        const err = (await uploadRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Upload gagal");
+      }
+      const { key } = await uploadRes.json() as { key: string };
 
-      // 4. Upload to R2
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": "image/webp" },
-        body: compressed,
-      });
-      if (!uploadRes.ok) throw new Error("Upload failed");
-
-      // 5. Save to DB (delete old file if exists)
-      const oldKey = preview ? preview.replace(/^https?:\/\/[^/]+\//, "") : undefined;
+      // 3. Save key to DB (delete old key from storage if different)
       const saveRes = await fetch("/api/upload/avatar", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: publicUrl, oldKey }),
+        body: JSON.stringify({ avatarKey: key, oldKey: currentKey ?? undefined }),
       });
-      if (!saveRes.ok) throw new Error("Failed to save");
+      if (!saveRes.ok) throw new Error("Gagal menyimpan foto profil");
 
-      setPreview(publicUrl);
-      onUploaded(publicUrl);
+      setCurrentKey(key);
+      setPreviewUrl(toFullUrl(key));
+      onUploaded(key);
       setCropOpen(false);
       toast.success("Foto profil berhasil diupdate");
-    } catch {
-      toast.error("Gagal upload foto");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal upload foto");
     } finally {
       setUploading(false);
     }
@@ -102,7 +108,7 @@ export function AvatarUpload({ currentUrl, name, onUploaded }: AvatarUploadProps
     <>
       <div className="relative w-fit">
         <Avatar className="h-20 w-20">
-          <AvatarImage src={preview ?? ""} />
+          <AvatarImage src={previewUrl ?? ""} />
           <AvatarFallback className="text-xl">{getInitials(name)}</AvatarFallback>
         </Avatar>
 

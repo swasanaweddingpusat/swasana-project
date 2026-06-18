@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { deleteFromR2 } from "@/lib/r2";
+import { deleteFromStorage } from "@/lib/storage";
 import { saveEditDraftSchema, discardEditDraftSchema } from "@/lib/validations/booking-edit-draft";
 
 export interface EditDraftResult {
@@ -61,7 +61,7 @@ export async function saveEditDraft(data: unknown): Promise<EditDraftResult> {
 }
 
 /**
- * Buang buffer edit + hapus file R2 yang sempat diupload sesi ini (orphan cleanup).
+ * Buang buffer edit + hapus file storage yang sempat diupload sesi ini (orphan cleanup).
  * Tidak menyentuh data live booking.
  */
 export async function discardEditDraft(data: unknown): Promise<EditDraftResult> {
@@ -83,15 +83,15 @@ export async function discardEditDraft(data: unknown): Promise<EditDraftResult> 
     });
     if (!draft) return { success: true }; // idempotent: tidak ada yang dibuang
 
-    // Hapus row dulu (atomic), lalu cleanup R2 best-effort.
+    // Hapus row dulu (atomic), lalu cleanup storage best-effort.
     await db.bookingEditDraft.delete({ where: { bookingId } });
 
     const keys = Array.isArray(draft.pendingUploads) ? (draft.pendingUploads as string[]) : [];
     for (const key of keys) {
       try {
-        await deleteFromR2(key);
+        await deleteFromStorage(key);
       } catch {
-        // best-effort: orphan R2 tidak memblok discard
+        // best-effort: orphan storage tidak memblok discard
       }
     }
 
