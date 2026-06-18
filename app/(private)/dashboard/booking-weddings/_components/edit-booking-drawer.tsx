@@ -1644,7 +1644,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground">Harga Paket</span>
-                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getPriceAfterDiscount())}</span>
               </div>
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground">Input User</span>
