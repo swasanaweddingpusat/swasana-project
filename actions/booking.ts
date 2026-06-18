@@ -1377,6 +1377,81 @@ export async function editBooking(data: unknown) {
           });
         })
       );
+    } else if (takeoutChanged) {
+      // Takeout-only change (no package swap): update isTakeout flags on existing snapshot
+      // rows instead of deleting & recreating them. This preserves snapshot data (itemText,
+      // sortOrder, etc.) that was captured at booking-create time and may differ from the
+      // current master package.
+
+      const toggleMap = new Map(
+        (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.isTakeout])
+      );
+      const nominalMap = new Map(
+        (parsed.data.categoryToggles ?? []).map((t) => [t.categoryName, t.takeoutNominal ?? 0])
+      );
+
+      // Fetch existing snap category prices with id + categoryId so we can:
+      //  1. Build the takeoutCategoryIds set (for vendor item update).
+      //  2. Update each snapPackageCategoryPrice row individually.
+      const existingSnapCats = await db.snapPackageCategoryPrice.findMany({
+        where: { bookingId: id },
+        select: { id: true, categoryId: true, categoryName: true, basePrice: true, isShow: true },
+      });
+
+      const takeoutCategoryIds = new Set(
+        existingSnapCats
+          .filter((c) => c.isShow && (toggleMap.get(c.categoryName) ?? false) && c.categoryId)
+          .map((c) => c.categoryId as string),
+      );
+
+      // Re-compute the final price using the existing fullPrice anchor (unchanged).
+      const snapPricing = await db.snapPackagePricing.findUniqueOrThrow({
+        where: { bookingId: id },
+        select: { fullPrice: true },
+      });
+      const pkgPrice = calcFinalFromFullPrice(
+        existingSnapCats.map((c) => ({
+          isShow: c.isShow,
+          isTakeout: c.isShow ? (toggleMap.get(c.categoryName) ?? false) : false,
+          basePrice: c.basePrice,
+          takeoutNominal: nominalMap.get(c.categoryName) ?? 0,
+        })),
+        snapPricing.fullPrice,
+      );
+
+      // Fetch existing vendor item snap rows (we update isTakeout in-place).
+      const existingSnapVendorItems = await db.snapPackageVendorItem.findMany({
+        where: { bookingId: id },
+        select: { id: true, categoryId: true },
+      });
+
+      ops.push(
+        // Update the final price on snapPackagePricing (fullPrice stays the same).
+        db.snapPackagePricing.update({
+          where: { bookingId: id },
+          data: { price: pkgPrice },
+        }),
+        // Update isTakeout + takeoutNominal on each snapPackageCategoryPrice row.
+        ...existingSnapCats.map((cp) => {
+          const isTakeout = cp.isShow ? (toggleMap.get(cp.categoryName) ?? false) : false;
+          return db.snapPackageCategoryPrice.update({
+            where: { id: cp.id },
+            data: {
+              isTakeout,
+              takeoutNominal: isTakeout ? ((nominalMap.get(cp.categoryName) ?? 0) || cp.basePrice) : 0,
+            },
+          });
+        }),
+        // Update isTakeout on each snapPackageVendorItem row.
+        ...existingSnapVendorItems.map((item) =>
+          db.snapPackageVendorItem.update({
+            where: { id: item.id },
+            data: {
+              isTakeout: item.categoryId ? takeoutCategoryIds.has(item.categoryId) : false,
+            },
+          })
+        ),
+      );
     }
 
     // Bonuses (legacy) — replace existing atomically within transaction

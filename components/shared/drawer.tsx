@@ -129,7 +129,7 @@ export function Drawer({
           <Stepper currentStep={steps} steps={stepperSteps} />
         )}
 
-        <div className={cn("flex-1 overflow-y-auto", childrenClassName)}>{children}</div>
+        <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", childrenClassName)}>{children}</div>
       </SheetContent>
     </Sheet>
   );
