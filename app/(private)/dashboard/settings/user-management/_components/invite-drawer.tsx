@@ -187,6 +187,7 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
       fd.set("roleId", formData.roleId);
       if (formData.managerId) fd.set("managerId", formData.managerId);
       fd.set("dataScope", formData.dataScope);
+      selectedGroupIds.forEach((gid) => fd.append("groupIds", gid));
 
       const result = await inviteUser.mutateAsync(fd);
       if (!result.success) { toast.error(result.error); return; }
@@ -313,7 +314,6 @@ export function InviteDrawer({ open, onOpenChange, roles, editUser }: InviteDraw
 
             {formData.dataScope === "group" && (
               <div className="mt-3 space-y-2">
-                {!isEdit && <p className="text-[11px] text-amber-600">Group akan ditetapkan setelah user dibuat.</p>}
                 <p className="text-xs text-gray-500">Assign to groups:</p>
                 {selectedGroupIds.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
