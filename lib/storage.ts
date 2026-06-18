@@ -21,12 +21,33 @@ export function generateStorageKey(folder: string, ext: string): string {
 
 /**
  * Resolve an avatarUrl DB value (key or legacy full URL) to a displayable full URL.
- * Returns null when input is falsy.
+ *
+ * Rules:
+ * - Falsy input → null.
+ * - Relative key (no "http" prefix) → getPublicUrl(key) using current S3_PUBLIC_URL.
+ * - Full URL whose hostname matches current S3_PUBLIC_URL host → passthrough (valid MinIO URL).
+ * - Full URL from any other host (legacy R2, old domains, etc.) → null (file is gone).
+ *
+ * This guarantees resolveAvatarUrl never returns a URL for a host that is not
+ * registered in next.config.ts remotePatterns.
  */
 export function resolveAvatarUrl(value: string | null | undefined): string | null {
   if (!value) return null;
-  if (value.startsWith("http")) return value; // legacy full-URL rows
-  return getPublicUrl(value); // key → full URL
+
+  // Relative storage key — build full URL from current public base
+  if (!value.startsWith("http")) return getPublicUrl(value);
+
+  // Full URL: check if the hostname matches the current storage host
+  try {
+    const incomingHost = new URL(value).hostname;
+    const currentHost = new URL(PUBLIC_URL).hostname;
+    if (incomingHost === currentHost) return value;
+    // Legacy host (r2.dev, old domains) — file is gone, return null so UI falls back to initials
+    return null;
+  } catch {
+    // Malformed URL
+    return null;
+  }
 }
 
 function buildS3Config(): S3ClientConfig {

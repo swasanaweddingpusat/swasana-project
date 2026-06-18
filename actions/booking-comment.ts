@@ -4,7 +4,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
-import { deleteFromStorage } from "@/lib/storage";
+import { deleteFromStorage, resolveAvatarUrl } from "@/lib/storage";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { createNotifications } from "@/lib/notifications";
@@ -74,7 +74,11 @@ export async function createBookingComment(data: {
       );
     }
 
-    return { success: true as const, comment };
+    const resolvedComment = {
+      ...comment,
+      author: { ...comment.author, avatarUrl: resolveAvatarUrl(comment.author.avatarUrl) },
+    };
+    return { success: true as const, comment: resolvedComment };
   } catch (e) {
     console.error("[createBookingComment]", e);
     return { success: false as const, error: "Terjadi kesalahan." };
