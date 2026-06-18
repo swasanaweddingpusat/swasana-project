@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AddCircle, TrashBinTrash, MenuDots, AltArrowRight, Calculator, BranchingPathsDown } from "@solar-icons/react";
+import { AddCircle, TrashBinTrash, AlignVerticalSpacing, AltArrowRight, Calculator, BranchingPathsDown, MenuDots } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -284,8 +284,8 @@ function RowRenderer({ row, allRows, readOnly, paymentMethods = [], eligibleBook
 
   const dragHandle = !readOnly && (
     <td className="border border-gray-300 px-0.5 w-5 cursor-grab">
-      <div className="flex items-center justify-center opacity-0 group-hover:opacity-100" {...attributes} {...listeners}>
-        <MenuDots weight="BoldDuotone" className="h-3.5 w-3.5 text-gray-400" />
+      <div className="flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none" {...attributes} {...listeners}>
+        <AlignVerticalSpacing weight="BoldDuotone" className="h-3.5 w-3.5" />
       </div>
     </td>
   );

@@ -1,10 +1,13 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen, Copy } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, FileText, Pen, Copy, AlignVerticalSpacing } from "@solar-icons/react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -43,7 +46,7 @@ interface PackageOption { id: string; packageName: string; pax: number; margin: 
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 type TermPaymentStatus = "unpaid" | "paid" | "partial" | "refund";
-interface TermRow { id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: File | string | null }
+interface TermRow { uid: string; id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: File | string | null }
 
 /** A locked term cannot have its amount/name redistributed or overwritten.
  *  Matches the server-side guard in actions/booking.ts. */
@@ -138,6 +141,28 @@ function recalcTermDates(terms: TermRow[], eventDate: string, force = false): Te
 
 const LBL = "text-sm font-medium text-foreground";
 
+// ─── SortableTermRow ──────────────────────────────────────────────────────────
+// Render-prop approach: children receives dnd attributes/listeners/isDragging
+// so the drag handle button can be placed inline in the existing Collapsible header.
+type SortableRenderFn = (
+  attrs: ReturnType<typeof useSortable>["attributes"],
+  listeners: ReturnType<typeof useSortable>["listeners"],
+  isDragging: boolean,
+) => ReactNode;
+
+function SortableTermRow({ uid, children }: { uid: string; children: SortableRenderFn }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: uid });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(isDragging && "opacity-50 shadow-md")}
+    >
+      {children(attributes, listeners, isDragging)}
+    </div>
+  );
+}
+
 export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const { users: salesUsers } = useSalesUsers();
@@ -151,8 +176,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const isSalesPIC = !!currentUser?.profileId && !!booking?.salesId &&
     currentUser.profileId === booking.salesId;
 
-  const totalSteps = isSalesPIC ? 5 : 4;
   const [currentStep, setCurrentStep] = useState(1);
+
+  // ── DnD sensors (Step 4 TOP reorder) ──
+  const termSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // ── Step 1: Client info ──
   const [customerName, setCustomerName] = useState("");
@@ -296,6 +323,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // ── Initialize state from booking ──
   useEffect(() => {
     if (!open || !booking) return;
+    setIsSubmitting(false);
     setCurrentStep(1);
     setCustomerName(booking.snapCustomer?.name ?? "");
     const raw = booking.snapCustomer?.mobileNumber ?? "";
@@ -348,6 +376,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setBonuses([]);
 
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({
+      uid: t.id ?? crypto.randomUUID(),
       id: t.id,
       name: t.name,
       amount: Number(t.amount),
@@ -358,14 +387,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       paymentEvidence: (t as Record<string, unknown>).paymentEvidence as string | null ?? null,
     }));
     const defaultTerms: TermRow[] = [
-      { name: "Booking Fee", amount: 5_000_000, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
-      { name: "DP", amount: 10_000_000, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
+      { uid: crypto.randomUUID(), name: "Booking Fee", amount: 5_000_000, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
+      { uid: crypto.randomUUID(), name: "DP", amount: 10_000_000, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
     ];
     const initialTerms = bTerms.length > 0 ? bTerms : defaultTerms;
     setTerms(initialTerms);
     // Snapshot for TOP change detection — mirrors server: count, name, amount, sortOrder, paymentStatus
-    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus }))));
-    setOriginalStructuralKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder }))));
+    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus }))));
+    setOriginalStructuralKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder }))));
     setOriginalTermStatuses(Object.fromEntries(initialTerms.filter((t) => t.id).map((t) => [t.id as string, t.paymentStatus])));
     setLastAllocatedPrice(0);
     setCollapsedTerms(new Set());
@@ -387,7 +416,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       if (typeof fs.specialBonusAmount === "number") setSpecialBonusAmount(fs.specialBonusAmount);
       if (typeof fs.paymentMethodId === "string") setPaymentMethodId(fs.paymentMethodId);
       if (typeof fs.signingLocation === "string") setSigningLocation(fs.signingLocation);
-      if (Array.isArray(fs.terms)) setTerms(fs.terms as TermRow[]);
+      if (Array.isArray(fs.terms)) setTerms((fs.terms as TermRow[]).map((t) => ({ ...t, uid: t.uid ?? t.id ?? crypto.randomUUID() })));
       if (fs.categoryToggles && typeof fs.categoryToggles === "object") setCategoryToggles(fs.categoryToggles as Record<string, boolean>);
       if (fs.takeoutPrices && typeof fs.takeoutPrices === "object") setTakeoutPrices(fs.takeoutPrices as Record<string, number>);
       if (Array.isArray(fs.complimentaries)) setComplimentaries(fs.complimentaries as ComplimentaryRow[]);
@@ -563,9 +592,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   //  • topChanged       — ANY change incl. payment status. Enables Save & locks the wizard.
   //  • topApprovalReset — structural change OR a paid→unpaid reversal. Drives the step-5
   //                       "approval will reset" warning. A plain unpaid→paid does NOT reset.
-  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })));
+  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })));
   const topChanged = originalTermsKey !== "" && currentTermsKey !== originalTermsKey;
-  const currentStructuralKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, sortOrder: t.sortOrder })));
+  const currentStructuralKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })));
   const topStructuralChanged = originalStructuralKey !== "" && currentStructuralKey !== originalStructuralKey;
   // paid→unpaid reversal — original status was paid/refund, now unpaid (compared by id).
   const paidReversed = terms.some((t) => {
@@ -575,7 +604,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   });
   const topApprovalReset = topStructuralChanged || paidReversed;
 
-  // hasSignificantChange = any uncommitted change → enables Save, locks the wizard.
+  // hasSignificantChange = any uncommitted change (incl. payment-status only) →
+  // enables the final-step Save button. NOTE: locking/draft/Sign are driven by
+  // isMaterialChange (below), NOT this — a status-only change must not lock.
   const hasSignificantChange =
     venueId !== originalVenueId ||
     packageId !== originalPackageId ||
@@ -594,9 +625,25 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     takeoutChanged ||
     topApprovalReset;
 
-  // Drawer terkunci saat ada perubahan material yang belum di-commit.
-  const isLocked = hasSignificantChange;
+  // isMaterialChange = perubahan yang men-trigger revisi + reset approval di server
+  // (venue/package/tanggal/discount/takeout/struktur TOP/paid→unpaid). HANYA ini yang
+  // mengunci wizard, memicu autosave draft, dan memunculkan step Sign.
+  // Sebuah perubahan status-bayar saja (unpaid→paid + bukti) BUKAN material — boleh
+  // langsung Save dari step TOP tanpa masuk draft / step Sign.
+  const isMaterialChange = willResetApproval;
+  // Drawer terkunci hanya saat ada perubahan material yang belum di-commit.
+  const isLocked = isMaterialChange;
+  // Step Sign (5) hanya relevan saat ada material change yang perlu re-sign Sales PIC.
+  // Tanpa material change (mis. cuma update status bayar), wizard berhenti di step 4
+  // dan submit langsung lewat tombol Save — tidak dipaksa ke step tanda tangan.
+  const showSignStep = isSalesPIC && isMaterialChange;
+  const totalSteps = showSignStep ? 5 : 4;
   const [isDiscarding, setIsDiscarding] = useState(false);
+  // Stays true from the moment Update is pressed until the drawer closes (or an
+  // error lets the user retry). The mutation's isPending flips back to false
+  // *before* the post-submit evidence upload + close finishes, so relying on it
+  // alone briefly re-enables the button and allows a double submit.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // ── Completeness per step ──
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0);
   const isStep2Complete = !!(venueId && packageId && bookingDate && weddingSession && weddingType);
@@ -697,6 +744,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setCategoryToggles({});
     setTakeoutPrices({});
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({
+      uid: t.id ?? crypto.randomUUID(),
       id: t.id,
       name: t.name,
       amount: Number(t.amount),
@@ -745,7 +793,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!booking || !open) return;
-    if (!hasSignificantChange) return; // hanya persist saat material change
+    if (!isMaterialChange) return; // hanya persist (draft) saat material change — status-bayar saja tidak nge-draft
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     autosaveTimer.current = setTimeout(() => {
       void saveEditDraft({
@@ -758,7 +806,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, booking, hasSignificantChange, venueId, packageId, bookingDate, JSON.stringify(terms), JSON.stringify(categoryToggles), JSON.stringify(takeoutPrices), specialBonusName, specialBonusAmount]);
+  }, [open, booking, isMaterialChange, venueId, packageId, bookingDate, JSON.stringify(terms), JSON.stringify(categoryToggles), JSON.stringify(takeoutPrices), specialBonusName, specialBonusAmount]);
 
   // ── Full submit (steps 2-5: approval may trigger) ──
   const mut = useMutation({
@@ -769,8 +817,24 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     },
   });
 
+  function handleTermDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setTerms((prev) => {
+      const from = prev.findIndex((t) => t.uid === active.id);
+      const to = prev.findIndex((t) => t.uid === over.id);
+      if (from === -1 || to === -1) return prev;
+      const reordered = arrayMove(prev, from, to);
+      return reordered.map((t, i) => ({ ...t, sortOrder: i }));
+    });
+    // Reset index-based collapsed/unlocked state after reorder to avoid mismatches
+    setCollapsedTerms(new Set());
+    setUnlockedTerms(new Set());
+  }
+
   async function handleSubmit() {
     if (!booking) return;
+    setIsSubmitting(true);
     const r = await mut.mutateAsync({
       id: booking.id,
       // bookingDate is already stored as "yyyy-MM-dd" — pass directly to action.
@@ -807,7 +871,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         };
       }),
     });
-    if (!r.success) { toast.error(r.error); return; }
+    if (!r.success) { toast.error(r.error); setIsSubmitting(false); return; }
     // Upload payment evidence yang masih berupa File (belum diupload) — hanya untuk
     // term yang sudah punya id nyata. Term baru (id diawali "new-" atau tanpa id)
     // tidak didukung untuk evidence (sama seperti batasan sebelumnya). Endpoint
@@ -828,13 +892,19 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   }
 
   const isOnFinalStep = currentStep === totalSteps;
+  // Step 5 (Sign) only appears on a material change. When shown, it's the final
+  // step and the save button needs a complete signature. On the non-sign path the
+  // final step is step 4 (TOP) and any uncommitted change (incl. payment-status
+  // only) is enough to enable Save.
+  const isStep5Final = showSignStep && currentStep === 5;
   const isContinueDisabled =
     (currentStep === 2 && !isStep2Complete) ||
     (currentStep === 3 && !isStep3Complete) ||
     (currentStep === 4 && !isStep4Complete) ||
-    (currentStep === 5 && isSalesPIC && !isStep5Complete) ||
-    (isOnFinalStep && !hasSignificantChange) ||
-    mut.isPending;
+    (currentStep === 5 && showSignStep && !isStep5Complete) ||
+    (isOnFinalStep && !isStep5Final && !hasSignificantChange) ||
+    mut.isPending ||
+    isSubmitting;
 
   const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
 
@@ -861,7 +931,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         {/* ─── Tab/Step Navigator ─── */}
         <div className="mb-3 shrink-0 overflow-x-auto border-b scrollbar-none">
           <div className="flex w-max min-w-full gap-1">
-            {([1, 2, 3, 4] as number[]).concat(isSalesPIC ? [5] : []).map((step) => {
+            {([1, 2, 3, 4] as number[]).concat(showSignStep ? [5] : []).map((step) => {
               // While there's an uncommitted material change, the wizard is locked to a
               // linear flow: the user must Continue through to commit (or Discard). Jumping
               // to another tab is disabled so partial edits can't be abandoned silently.
@@ -1382,11 +1452,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Input
                   placeholder="IDR. 0"
                   value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
-                  onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
+                  onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); }}
                   inputMode="numeric"
                   className="rounded-none"
                 />
-                <p className={cn("text-xs", "text-muted-foreground")}>Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat discount diubah.</p>
+                <p className={cn("text-xs", "text-muted-foreground")}>Input ini akan ditampilkan di dokumen PO. Nilai termin yang sudah diinput tidak akan berubah saat discount diubah.</p>
               </div>
 
               {/* Payment Method */}
@@ -1398,7 +1468,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
               {/* Term of Payments */}
               <div>
                 <label className={cn(LBL, "mb-2 block")}>Term of Payments</label>
-                <div className="space-y-2">
+                <DndContext sensors={termSensors} collisionDetection={closestCenter} onDragEnd={handleTermDragEnd}>
+                  <SortableContext items={terms.map((t) => t.uid)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
                   {terms.map((t, idx) => {
                     const isPaid = isLockedTerm(t);
                     const isEditable = isPaid && unlockedTerms.has(idx);
@@ -1406,8 +1478,21 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                     const isOpen = !collapsedTerms.has(idx);
                     const statusLabel = PAYMENT_STATUS_LABELS[t.paymentStatus] ?? t.paymentStatus;
                     return (
-                      <Collapsible key={t.id ?? idx} open={isOpen} onOpenChange={() => toggleTerm(idx)} className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+                      <SortableTermRow key={t.uid} uid={t.uid}>
+                        {(dragAttrs, dragListeners) => (
+                        <Collapsible open={isOpen} onOpenChange={() => toggleTerm(idx)} className="rounded-xl border border-border bg-muted/30 overflow-hidden">
                         <div className="flex items-center gap-1 px-3 py-2.5">
+                          {/* Drag handle */}
+                          <button
+                            type="button"
+                            {...dragAttrs}
+                            {...dragListeners}
+                            className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing touch-none"
+                            tabIndex={-1}
+                            aria-label="Drag to reorder"
+                          >
+                            <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
+                          </button>
                           <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
                             <AltArrowDown weight="BoldDuotone" className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
                             <div className="flex-1 min-w-0">
@@ -1581,12 +1666,16 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
+                        )}
+                      </SortableTermRow>
                     );
                   })}
-                </div>
+                    </div>
+                  </SortableContext>
+                </DndContext>
 
                 <div className="mt-3">
-                  <Button type="button" variant="outline" className="w-full border-dashed gap-1.5 text-muted-foreground rounded-xl" onClick={() => { setTerms((prev) => recalcTermDates([...prev, { name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], bookingDate)); }}>
+                  <Button type="button" variant="outline" className="w-full border-dashed gap-1.5 text-muted-foreground rounded-xl" onClick={() => { setTerms((prev) => recalcTermDates([...prev, { uid: crypto.randomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], bookingDate)); }}>
                     <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                     Tambah Payment
                   </Button>
@@ -1610,8 +1699,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             </div>
           )}
 
-          {/* ─── Step 5: Signing (Sales PIC only) ─── */}
-          {currentStep === 5 && isSalesPIC && (
+          {/* ─── Step 5: Signing (Sales PIC, only on material change) ─── */}
+          {currentStep === 5 && showSignStep && (
             <div className="space-y-6">
               <div>
                 <label className={cn(LBL, "mb-2 block")}>Lokasi Tanda Tangan <span className="text-destructive">*</span></label>
@@ -1697,7 +1786,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   <Button
                     variant="outline"
                     onClick={handlePrevious}
-                    disabled={mut.isPending}
+                    disabled={mut.isPending || isSubmitting}
                     className="flex-[40%] cursor-pointer"
                   >
                     Previous
@@ -1710,9 +1799,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 >
                   {currentStep < totalSteps
                     ? "Continue"
-                    : mut.isPending
+                    : (mut.isPending || isSubmitting)
                       ? "Updating..."
-                      : hasSignificantChange
+                      : isMaterialChange
                         ? "Update Booking"
                         : "Save"}
                 </Button>

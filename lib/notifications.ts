@@ -7,6 +7,8 @@ interface CreateNotificationInput {
   type: string;
   entityType?: string;
   entityId?: string;
+  isMention?: boolean;
+  commentId?: string;
 }
 
 /**

@@ -8,6 +8,7 @@ export const inviteUserSchema = z.object({
   roleId: z.string().min(1, "Role wajib dipilih"),
   managerId: z.string().optional(),
   dataScope: z.enum(["own", "group", "all"]).default("own"),
+  groupIds: z.array(z.string().min(1)).optional(),
 });
 
 export const updateUserSchema = z.object({

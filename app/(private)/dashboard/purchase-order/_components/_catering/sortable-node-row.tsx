@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Input } from "@/components/ui/input";
-import { MenuDots, AltArrowRight, AltArrowDown, TrashBinTrash, AddCircle, FolderWithFiles } from "@solar-icons/react";
+import { AlignVerticalSpacing, AltArrowRight, AltArrowDown, TrashBinTrash, AddCircle, FolderWithFiles } from "@solar-icons/react";
 import { CurrencyInput } from "./helpers";
 import { EDITOR_OPERATION_STYLES } from "@/types/catering";
 import type { PaketNode, CateringSection, GroupOperationType, GroupMode } from "@/types/catering";
@@ -39,7 +39,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
   if (node.type === "item") {
     return (
       <div ref={setNodeRef} style={style} className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded px-1" {...attributes}>
-        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><MenuDots weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
+        {!isViewOnly && <button type="button" {...listeners} className="p-1 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none"><AlignVerticalSpacing weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           {!isViewOnly ? (
             <>
@@ -72,7 +72,7 @@ export function SortableNodeRow(props: SortableNodeRowProps) {
     <div ref={setNodeRef} style={style} {...attributes} className="border border-gray-200 rounded-lg overflow-hidden" >
       {/* Group header */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50">
-        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><MenuDots weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
+        {!isViewOnly && <button type="button" {...listeners} className="p-1 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none"><AlignVerticalSpacing weight="BoldDuotone" className="h-3.5 w-3.5" /></button>}
         <button type="button" onClick={() => setCollapsed(!collapsed)} className="shrink-0 text-gray-400">
           {collapsed ? <AltArrowRight weight="BoldDuotone" className="h-3.5 w-3.5" /> : <AltArrowDown weight="BoldDuotone" className="h-3.5 w-3.5" />}
         </button>

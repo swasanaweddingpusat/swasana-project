@@ -70,6 +70,8 @@ export async function createBookingComment(data: {
           message: `${authorName} menyebut kamu: "${contentPreview}${parsed.data.trim().length > 80 ? "..." : ""}"`,
           entityType: "booking",
           entityId: data.bookingId,
+          isMention: true,
+          commentId: comment.id,
         }))
       );
     }

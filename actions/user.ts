@@ -26,12 +26,15 @@ export async function inviteUser(formData: FormData) {
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
   if (!mutationLimiter.check(`invite:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
+  const rawGroupIds = formData.getAll("groupIds").map(String).filter(Boolean);
+
   const raw = {
     email: formData.get("email") as string,
     fullName: formData.get("fullName") as string,
     roleId: formData.get("roleId") as string,
     managerId: (formData.get("managerId") as string) || undefined,
     dataScope: (formData.get("dataScope") as string) || "own",
+    groupIds: rawGroupIds.length > 0 ? rawGroupIds : undefined,
   };
 
   const parsed = inviteUserSchema.safeParse(raw);
@@ -39,7 +42,7 @@ export async function inviteUser(formData: FormData) {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const { email, fullName, roleId, managerId, dataScope } = parsed.data;
+  const { email, fullName, roleId, managerId, dataScope, groupIds } = parsed.data;
 
   try {
     // Temp password — never sent plain text. User sets own password via token link.
@@ -77,6 +80,15 @@ export async function inviteUser(formData: FormData) {
 
     const profileId = user.profile!.id;
 
+    // Create group memberships if dataScope is "group" and groupIds were provided
+    if (groupIds && groupIds.length > 0) {
+      await db.$transaction(
+        groupIds.map((groupId, i) =>
+          db.userGroupMember.create({ data: { groupId, userId: profileId, sortOrder: i } })
+        )
+      );
+    }
+
     // Send invitation email — outside DB write so mail failure doesn't roll back user creation
     const baseUrl = await getBaseUrl();
     const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
@@ -96,7 +108,7 @@ export async function inviteUser(formData: FormData) {
       entityType: "profile",
       entityId: profileId,
       description: `Pengguna ${email} diundang`,
-      changes: { after: { email, fullName, roleId, dataScope } },
+      changes: { after: { email, fullName, roleId, dataScope, groupIds } },
       ipAddress: ip,
       userAgent: (await headers()).get("user-agent") ?? undefined,
     });

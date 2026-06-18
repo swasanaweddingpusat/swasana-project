@@ -178,9 +178,10 @@ interface Props {
   onClose: () => void;
   bookingId: string;
   customerName: string;
+  highlightCommentId?: string;
 }
 
-export function BookingCommentPanel({ open, onClose, bookingId, customerName }: Props) {
+export function BookingCommentPanel({ open, onClose, bookingId, customerName, highlightCommentId }: Props) {
   const { user } = useCurrentUser();
   const qc = useQueryClient();
   const { data: comments = [], isLoading } = useBookingComments(open ? bookingId : null);
@@ -195,6 +196,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
   // Mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -221,6 +223,20 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
   useEffect(() => {
     if (open && bookingId) { markCommentsRead(bookingId); lastMarkReadRef.current = Date.now(); }
   }, [open, bookingId]);
+
+  // Auto-scroll ke comment yang di-mention dari deep-link
+  useEffect(() => {
+    if (!open || !highlightCommentId || isLoading) return;
+    const timer = setTimeout(() => {
+      const el = messageRefs.current.get(highlightCommentId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedId(highlightCommentId);
+      const clearTimer = setTimeout(() => setHighlightedId(null), 2500);
+      return () => clearTimeout(clearTimer);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [open, highlightCommentId, isLoading]);
 
   // Scroll to bottom + throttled mark as read on new comments
   useEffect(() => {
@@ -477,7 +493,12 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName }: 
                         <div
                           key={comment.id}
                           ref={(el) => { if (el) messageRefs.current.set(comment.id, el); else messageRefs.current.delete(comment.id); }}
-                          className={`flex gap-2 group transition-colors rounded-lg ${isSelf ? "flex-row-reverse" : "flex-row"}`}
+                          className={cn(
+                            'flex', 'gap-2', 'group', 'transition-all', 'duration-300', 'rounded-lg',
+                            isSelf ? 'flex-row-reverse' : 'flex-row',
+                            highlightedId === comment.id ? 'bg-[var(--brand-gold)]/10 outline outline-2 outline-offset-2' : ''
+                          )}
+                          style={highlightedId === comment.id ? { outlineColor: "var(--brand-gold)" } : undefined}
                         >
                           {/* Avatar */}
                           <div className={cn('shrink-0', 'w-7', 'h-7', 'rounded-full', 'overflow-hidden', 'bg-secondary', 'flex', 'items-center', 'justify-center', 'text-[10px]', 'font-semibold', 'text-secondary-foreground', 'mt-0.5')}>

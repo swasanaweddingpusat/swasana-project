@@ -2,6 +2,7 @@ import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import type { LeadFilterInput } from "@/lib/validations/lead";
+import type { DataScope } from "@/types/user";
 
 const leadSelect = {
   id: true,
@@ -50,10 +51,59 @@ const leadSelect = {
   },
 } satisfies Prisma.LeadSelect;
 
-export async function getLeads(filter: LeadFilterInput) {
-  "use cache";
-  cacheTag("leads");
-  cacheLife("seconds");
+/**
+ * Resolve the set of profileIds the caller is allowed to see leads for,
+ * based on their dataScope. Returns null if scope = "all" (no restriction).
+ *
+ * This intentionally does NOT use "use cache" — the result is identity-specific
+ * and must not be shared across callers.
+ */
+async function resolveLeadScopeFilter(
+  callerProfileId: string,
+  dataScope: DataScope,
+): Promise<Prisma.LeadWhereInput> {
+  if (dataScope === "all") return {};
+  if (dataScope === "own") return { assignedToId: callerProfileId };
+
+  // dataScope === "group": find all groups where caller is a member
+  const myGroups = await db.userGroupMember.findMany({
+    where: { userId: callerProfileId },
+    select: { groupId: true },
+  });
+  if (myGroups.length === 0) return { assignedToId: callerProfileId };
+
+  const groupIds = myGroups.map((g) => g.groupId);
+
+  // Fetch all members + group leaders (defensive: covers legacy leaders who
+  // weren't added as members before the group-leader-sync fix was deployed)
+  const [members, groupLeaders] = await Promise.all([
+    db.userGroupMember.findMany({
+      where: { groupId: { in: groupIds } },
+      select: { userId: true },
+    }),
+    db.userGroup.findMany({
+      where: { id: { in: groupIds }, leaderId: { not: null } },
+      select: { leaderId: true },
+    }),
+  ]);
+
+  const allowedIds = new Set(members.map((m) => m.userId));
+  for (const g of groupLeaders) {
+    if (g.leaderId) allowedIds.add(g.leaderId);
+  }
+
+  return { assignedToId: { in: [...allowedIds] } };
+}
+
+export async function getLeads(
+  filter: LeadFilterInput,
+  caller?: { profileId: string; dataScope: DataScope },
+) {
+  // NOTE: "use cache" intentionally removed — this function may receive an
+  // identity-scoped filter (callerProfileId + dataScope). Caching a per-user
+  // result set without a per-user cache key would leak data across callers.
+  // The upstream cache (cacheLife("seconds")) also had near-zero TTL value.
+  // Callers that need caching should cache at a higher layer with identity in key.
 
   const { search, scope, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
 
@@ -67,8 +117,14 @@ export async function getLeads(filter: LeadFilterInput) {
     scopeWhere = { status: { isFinal: true, isSystem: false } };
   }
 
+  // Data-access scope filter (group/own/all) — enforced from server session, never from HTTP params
+  const dataScopeFilter = caller
+    ? await resolveLeadScopeFilter(caller.profileId, caller.dataScope)
+    : {};
+
   const where: Prisma.LeadWhereInput = {
     ...scopeWhere,
+    ...dataScopeFilter,
     ...(search?.trim() && {
       OR: [
         { name: { contains: search.trim(), mode: "insensitive" } },
@@ -79,6 +135,7 @@ export async function getLeads(filter: LeadFilterInput) {
     ...(statusId && scope === "active" && { statusId }),
     ...(venueId && { venueId }),
     ...(eventTypeId && { eventTypeId }),
+    // assignedToId from query param is an additional narrowing filter on top of dataScopeFilter
     ...(assignedToId && { assignedToId }),
   };
 

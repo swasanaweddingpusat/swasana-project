@@ -248,7 +248,8 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   );
 
   // Unread comment counts
-  const { data: unreadCounts = {} } = useUnreadCommentCounts(bookings.map((b) => b.id));
+  const { data: countData } = useUnreadCommentCounts(bookings.map((b) => b.id));
+  const unreadCounts = countData?.unreadCounts ?? {};
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function previewPO(booking: BookingListItem, revisionId?: string, revLabel?: string): void {

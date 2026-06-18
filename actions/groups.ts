@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { requirePermission, isSuperAdmin } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import type { Prisma } from "@prisma/client";
 import {
   createGroupSchema,
   updateGroupSchema,
@@ -24,17 +25,37 @@ export async function createGroup(data: unknown) {
   const parsed = createGroupSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
+  const newLeaderId = parsed.data.leaderId ?? null;
+
   try {
     const lastGroup = await db.userGroup.findFirst({ orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
+
+    // Create group first. We use a separate step for leader membership because
+    // the array-form transaction cannot pass the new group.id to sibling ops.
     const group = await db.userGroup.create({
       data: {
         name: parsed.data.name,
         description: parsed.data.description,
-        leaderId: parsed.data.leaderId ?? null,
+        leaderId: newLeaderId,
         createdBy: session!.user.id,
         sortOrder: (lastGroup?.sortOrder ?? 0) + 1,
       },
     });
+
+    // If leader is set, ensure they are a member and have dataScope = "group"
+    if (newLeaderId) {
+      // New group — leader can never be a member yet, so always create membership.
+      const leaderOps: Prisma.PrismaPromise<unknown>[] = [
+        db.userGroupMember.create({
+          data: { groupId: group.id, userId: newLeaderId, sortOrder: 1 },
+        }),
+        db.profile.update({
+          where: { id: newLeaderId },
+          data: { dataScope: "group" },
+        }),
+      ];
+      await db.$transaction(leaderOps);
+    }
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
@@ -46,7 +67,7 @@ export async function createGroup(data: unknown) {
       entityType: "group",
       entityId: group.id,
       description: `Grup "${group.name}" dibuat`,
-      changes: { after: { name: group.name } },
+      changes: { after: { name: group.name, leaderId: newLeaderId } },
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });
@@ -71,16 +92,72 @@ export async function updateGroup(data: unknown) {
   const { id, name, description, leaderId } = parsed.data;
 
   try {
+    // Read current group to know old leader before updating
+    const currentGroup = await db.userGroup.findUnique({
+      where: { id },
+      select: { leaderId: true },
+    });
+    if (!currentGroup) return { success: false, error: "Grup tidak ditemukan." };
+
+    const oldLeaderId = currentGroup.leaderId;
+    const newLeaderId = leaderId !== undefined ? (leaderId ?? null) : oldLeaderId;
+
+    // Update the group record
     const [group] = await db.$transaction([
       db.userGroup.update({
         where: { id },
         data: {
           ...(name !== undefined && { name }),
           ...(description !== undefined && { description }),
-          ...(leaderId !== undefined && { leaderId: leaderId ?? null }),
+          ...(leaderId !== undefined && { leaderId: newLeaderId }),
         },
       }),
     ]);
+
+    // Handle leader membership + dataScope changes when leaderId is being updated
+    if (leaderId !== undefined && newLeaderId !== oldLeaderId) {
+      const leaderOps: Prisma.PrismaPromise<unknown>[] = [];
+
+      // New leader: ensure membership + set dataScope "group"
+      if (newLeaderId) {
+        const existingMember = await db.userGroupMember.findUnique({
+          where: { groupId_userId: { groupId: id, userId: newLeaderId } },
+          select: { userId: true },
+        });
+        if (!existingMember) {
+          const lastMember = await db.userGroupMember.findFirst({
+            where: { groupId: id },
+            orderBy: { sortOrder: "desc" },
+            select: { sortOrder: true },
+          });
+          leaderOps.push(
+            db.userGroupMember.create({
+              data: { groupId: id, userId: newLeaderId, sortOrder: (lastMember?.sortOrder ?? 0) + 1 },
+            })
+          );
+        }
+        leaderOps.push(
+          db.profile.update({
+            where: { id: newLeaderId },
+            data: { dataScope: "group" },
+          })
+        );
+      }
+
+      // Old leader: keep membership, reset dataScope to "own"
+      if (oldLeaderId && oldLeaderId !== newLeaderId) {
+        leaderOps.push(
+          db.profile.update({
+            where: { id: oldLeaderId },
+            data: { dataScope: "own" },
+          })
+        );
+      }
+
+      if (leaderOps.length > 0) {
+        await db.$transaction(leaderOps);
+      }
+    }
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
@@ -92,6 +169,12 @@ export async function updateGroup(data: unknown) {
       entityType: "group",
       entityId: id,
       description: `Grup "${group.name}" diperbarui`,
+      changes: {
+        ...(leaderId !== undefined && newLeaderId !== oldLeaderId && {
+          before: { leaderId: oldLeaderId },
+          after: { leaderId: newLeaderId },
+        }),
+      },
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });
@@ -314,11 +397,72 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
   if (!mutationLimiter.check(`groups-leader:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
-    await db.$transaction([
-      db.userGroup.update({ where: { id: groupId }, data: { leaderId } }),
-    ]);
+    // Read current group to know the old leader
+    const currentGroup = await db.userGroup.findUnique({
+      where: { id: groupId },
+      select: { leaderId: true },
+    });
+    if (!currentGroup) return { success: false, error: "Grup tidak ditemukan." };
+
+    const oldLeaderId = currentGroup.leaderId;
+    const newLeaderId = leaderId; // updateGroupLeaderSchema guarantees non-empty string
+
+    // No-op if same leader
+    if (oldLeaderId === newLeaderId) {
+      return { success: true };
+    }
+
+    // Check if new leader is already a member
+    const existingMember = newLeaderId
+      ? await db.userGroupMember.findUnique({
+          where: { groupId_userId: { groupId, userId: newLeaderId } },
+          select: { userId: true },
+        })
+      : null;
+
+    const lastMember = newLeaderId && !existingMember
+      ? await db.userGroupMember.findFirst({
+          where: { groupId },
+          orderBy: { sortOrder: "desc" },
+          select: { sortOrder: true },
+        })
+      : null;
+
+    const txOps: Prisma.PrismaPromise<unknown>[] = [
+      db.userGroup.update({ where: { id: groupId }, data: { leaderId: newLeaderId } }),
+    ];
+
+    // New leader: ensure membership + set dataScope "group"
+    if (newLeaderId && !existingMember) {
+      txOps.push(
+        db.userGroupMember.create({
+          data: { groupId, userId: newLeaderId, sortOrder: (lastMember?.sortOrder ?? 0) + 1 },
+        })
+      );
+    }
+    if (newLeaderId) {
+      txOps.push(
+        db.profile.update({
+          where: { id: newLeaderId },
+          data: { dataScope: "group" },
+        })
+      );
+    }
+
+    // Old leader: keep membership, reset dataScope to "own"
+    if (oldLeaderId) {
+      txOps.push(
+        db.profile.update({
+          where: { id: oldLeaderId },
+          data: { dataScope: "own" },
+        })
+      );
+    }
+
+    await db.$transaction(txOps);
 
     revalidateTag("groups", "max");
+    revalidateTag("users", "max");
 
     const h = await headers();
     await logAudit({
@@ -326,7 +470,7 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
       action: "group.leader_changed",
       entityType: "group",
       entityId: groupId,
-      changes: { after: { leaderId } },
+      changes: { before: { leaderId: oldLeaderId }, after: { leaderId: newLeaderId } },
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });

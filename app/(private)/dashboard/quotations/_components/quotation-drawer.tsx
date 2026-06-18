@@ -54,7 +54,7 @@ import {
   ArrowRight,
   AltArrowDown,
   Calendar as CalendarSolarIcon,
-  MenuDots,
+  AlignVerticalSpacing,
 } from "@solar-icons/react";
 import {
   getWeddingTimeRange,
@@ -353,9 +353,9 @@ function SortableItemRow({
             type="button"
             {...listeners}
             aria-label="Drag to reorder"
-            className="shrink-0 cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground transition-colors p-0.5"
+            className="shrink-0 p-1.5 rounded-lg cursor-grab touch-none text-muted-foreground hover:bg-muted hover:text-foreground transition-colors active:cursor-grabbing"
           >
-            <MenuDots weight="BoldDuotone" className="h-4 w-4" />
+            <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
           </button>
 
           <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">

@@ -5,6 +5,7 @@ import { leadFilterSchema, createLeadSchema } from "@/lib/validations/lead";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { revalidateTag } from "next/cache";
+import type { DataScope } from "@/types/user";
 
 export async function GET(req: Request) {
   const { session, response } = await requirePermissionForRoute({
@@ -32,7 +33,17 @@ export async function GET(req: Request) {
   }
 
   try {
-    const result = await getLeads(parsed.data);
+    // dataScope is not stored in the JWT; fetch it from the profile row.
+    // This is a single lightweight SELECT — acceptable for per-request identity enforcement.
+    const profile = await db.profile.findUnique({
+      where: { id: session.user.profileId },
+      select: { dataScope: true },
+    });
+    const caller = {
+      profileId: session.user.profileId,
+      dataScope: (profile?.dataScope ?? "own") as DataScope,
+    };
+    const result = await getLeads(parsed.data, caller);
     return Response.json(result);
   } catch {
     return Response.json({ error: "Gagal mengambil data leads" }, { status: 500 });
