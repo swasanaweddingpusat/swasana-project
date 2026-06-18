@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
@@ -121,6 +122,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [approvalFilter, setApprovalFilter] = useState<string[]>([]);
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
@@ -178,6 +180,64 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     staleTime: 5 * 60 * 1000,
   });
   const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
+
+  // ── Approval filter helpers ──────────────────────────────────────────────
+  // Returns per-booking approval booleans for client-side filter.
+  // "pending" means NOT approved (either literally pending, rejected, or record missing).
+  function getApprovalStatusFlags(bookingId: string) {
+    const record = approvalMap.get(bookingId);
+    if (!record) {
+      return {
+        managerApproved: false,
+        managerPending: true,
+        financeApproved: false,
+        financePending: true,
+        clientApproved: false,
+        clientPending: true,
+      };
+    }
+    const steps = record.steps;
+    const managerStep = steps.find((s: { approverType: string; approverRole: { name: string } | null; status: string }) => s.approverType === "role" && s.approverRole?.name === "manager");
+    const financeStep = steps.find((s: { approverType: string; approverRole: { name: string } | null; status: string }) => s.approverType === "role" && s.approverRole?.name === "finance");
+    const clientStep = steps.find((s: { approverType: string; approverRole: { name: string } | null; status: string }) => s.approverType === "client");
+
+    const managerApproved = managerStep?.status === "approved";
+    const financeApproved = financeStep?.status === "approved";
+    const clientApproved = clientStep?.status === "approved";
+
+    return {
+      managerApproved,
+      managerPending: !managerApproved,
+      financeApproved,
+      financePending: !financeApproved,
+      clientApproved,
+      clientPending: !clientApproved,
+    };
+  }
+
+  const APPROVAL_FILTER_OPTIONS: { value: string; label: string }[] = [
+    { value: "manager_approved", label: "Manager: Disetujui" },
+    { value: "manager_pending", label: "Manager: Belum Disetujui" },
+    { value: "finance_approved", label: "Finance: Disetujui" },
+    { value: "finance_pending", label: "Finance: Belum Disetujui" },
+    { value: "client_approved", label: "Client: Sudah Setuju" },
+    { value: "client_pending", label: "Client: Belum Setuju" },
+  ];
+
+  const filteredBookings = approvalFilter.length === 0
+    ? bookings
+    : bookings.filter((booking: BookingListItem) => {
+        const flags = getApprovalStatusFlags(booking.id);
+        return approvalFilter.some((v) => {
+          if (v === "manager_approved") return flags.managerApproved;
+          if (v === "manager_pending") return flags.managerPending;
+          if (v === "finance_approved") return flags.financeApproved;
+          if (v === "finance_pending") return flags.financePending;
+          if (v === "client_approved") return flags.clientApproved;
+          if (v === "client_pending") return flags.clientPending;
+          return false;
+        });
+      });
 
   // Open the PO preview in a modal (no new tab). The modal fetches + renders
   // the PDF itself; here we just point it at the booking / revision.
@@ -423,7 +483,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const hasVenueFilter = venueFilter !== "" && venueFilter !== "all";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0);
+  const hasApprovalFilter = approvalFilter.length > 0;
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
@@ -439,7 +500,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setApprovalFilter([]); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -535,6 +596,42 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             Hapus filter tanggal
           </button>
         )}
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted-foreground">Status Approval</label>
+          {hasApprovalFilter && (
+            <button
+              type="button"
+              onClick={() => { setApprovalFilter([]); setCurrentPage(1); }}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          {APPROVAL_FILTER_OPTIONS.map((opt) => (
+            <label
+              key={opt.value}
+              className="flex items-center gap-2 cursor-pointer select-none"
+            >
+              <Checkbox
+                checked={approvalFilter.includes(opt.value)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setApprovalFilter((prev) => [...prev, opt.value]);
+                  } else {
+                    setApprovalFilter((prev) => prev.filter((v) => v !== opt.value));
+                  }
+                  setCurrentPage(1);
+                }}
+                className="shrink-0"
+              />
+              <span className="text-xs text-foreground">{opt.label}</span>
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -746,10 +843,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 ))}
               </div>
             </>
-          ) : bookings.length === 0 ? (
+          ) : filteredBookings.length === 0 ? (
             <div className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'py-16', 'text-muted-foreground')}>
               <CalendarDays weight="BoldDuotone" className={cn('h-10', 'w-10', 'mb-3', 'opacity-40')} />
-              <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : recordStatusFilter === "draft" ? "Tidak ada draft booking." : "Belum ada booking."}</p>
+              <p className="text-sm">{search ? `Tidak ada hasil untuk "${search}"` : hasApprovalFilter ? "Tidak ada booking yang cocok dengan filter approval." : recordStatusFilter === "draft" ? "Tidak ada draft booking." : "Belum ada booking."}</p>
             </div>
           ) : (
             <>
@@ -768,7 +865,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bookings.map((booking: BookingListItem, idx: number) => (
+                  {filteredBookings.map((booking: BookingListItem, idx: number) => (
                     <TableRow
                       key={booking.id}
                       className={cn('hover:bg-muted/40', 'cursor-pointer')}
@@ -929,7 +1026,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
             {/* Mobile (<sm): card list */}
             <div className={cn('block', 'sm:hidden', 'p-4', 'space-y-3')}>
-              {bookings.map((booking: BookingListItem, idx: number) => {
+              {filteredBookings.map((booking: BookingListItem, idx: number) => {
                 const rowNumber = (currentPage - 1) * ROWS_PER_PAGE + idx + 1;
                 const variant = booking.snapPackagePricing;
                 return (
