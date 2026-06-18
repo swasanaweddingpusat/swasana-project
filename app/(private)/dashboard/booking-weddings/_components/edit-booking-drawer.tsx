@@ -1382,11 +1382,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <Input
                   placeholder="IDR. 0"
                   value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
-                  onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); allocatePrice(getBasePrice(), num); }}
+                  onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); }}
                   inputMode="numeric"
                   className="rounded-none"
                 />
-                <p className={cn("text-xs", "text-muted-foreground")}>Input ini akan ditampilkan di dokumen PO. Terms otomatis di-recalculate saat discount diubah.</p>
+                <p className={cn("text-xs", "text-muted-foreground")}>Input ini akan ditampilkan di dokumen PO. Nilai termin yang sudah diinput tidak akan berubah saat discount diubah.</p>
               </div>
 
               {/* Payment Method */}
