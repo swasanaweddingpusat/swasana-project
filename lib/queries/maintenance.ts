@@ -2,6 +2,7 @@ import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import type { MaintenanceFilterInput } from "@/lib/validations/maintenance";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 const ticketSelect = {
   id: true,
@@ -72,8 +73,13 @@ export async function getMaintenanceTickets(filter: MaintenanceFilterInput) {
     db.maintenanceTicket.count({ where }),
   ]);
 
+  const resolvedItems = items.map((t) => ({
+    ...t,
+    images: t.images.map((img) => ({ ...img, url: resolveAvatarUrl(img.url) ?? img.url })),
+  }));
+
   return {
-    items,
+    items: resolvedItems,
     total,
     page,
     pageSize,
@@ -86,10 +92,17 @@ export async function getMaintenanceTicketById(id: string) {
   cacheTag("maintenance");
   cacheLife("seconds");
 
-  return db.maintenanceTicket.findUnique({
+  const t = await db.maintenanceTicket.findUnique({
     where: { id },
     select: ticketSelect,
   });
+
+  if (!t) return null;
+
+  return {
+    ...t,
+    images: t.images.map((img) => ({ ...img, url: resolveAvatarUrl(img.url) ?? img.url })),
+  };
 }
 
 export async function getMaintenanceReport(filter: {

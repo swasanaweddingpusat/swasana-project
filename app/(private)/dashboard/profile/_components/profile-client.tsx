@@ -202,7 +202,10 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
             <AvatarUpload
               currentUrl={profile?.avatarUrl ?? user.image ?? null}
               name={form.fullName || user.name}
-              onUploaded={(url) => { void updateSession({ image: url }); }}
+              onUploaded={(key) => {
+                const fullUrl = (process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "") + "/" + key;
+                void updateSession({ image: fullUrl });
+              }}
             />
             <div className={cn('flex-1', 'min-w-0')}>
               <h2 className={cn('text-lg', 'font-semibold', 'truncate')}>{form.fullName || user.name || "—"}</h2>

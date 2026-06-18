@@ -93,7 +93,7 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
 
-/** Renders a preview from an already-saved string URL (R2 or CDN). */
+/** Renders a preview from an already-saved string URL (storage or CDN). */
 function UrlPreview({ url, onOpen }: { url: string; onOpen: () => void }) {
   const isImage = /\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(url);
   if (!isImage) return null;
@@ -811,7 +811,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     // Upload payment evidence yang masih berupa File (belum diupload) — hanya untuk
     // term yang sudah punya id nyata. Term baru (id diawali "new-" atau tanpa id)
     // tidak didukung untuk evidence (sama seperti batasan sebelumnya). Endpoint
-    // upload-evidence menangani penghapusan file R2 lama yang digantikan.
+    // upload-evidence menangani penghapusan file storage lama yang digantikan.
     const termsWithNewFiles = terms.filter((t) => t.id && !t.id.startsWith("new-") && t.paymentEvidence instanceof File);
     if (termsWithNewFiles.length > 0) {
       await Promise.allSettled(
@@ -1480,7 +1480,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                                   onValueChange={(v) => setTerms((prev) => prev.map((x, i) => {
                                     if (i !== idx) return x;
                                     // paid → unpaid: drop the payment evidence locally; server also
-                                    // nulls the DB field + deletes the R2 object on commit.
+                                    // nulls the DB field + deletes the storage object on commit.
                                     if (v === "unpaid") return { ...x, paymentStatus: "unpaid", paymentEvidence: null };
                                     return { ...x, paymentStatus: v as TermPaymentStatus };
                                   }))}

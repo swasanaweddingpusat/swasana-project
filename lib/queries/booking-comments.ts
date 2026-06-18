@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 export async function getBookingComments(bookingId: string, page = 1, limit = 10) {
   const where = { bookingId };
@@ -30,7 +31,12 @@ export async function getBookingComments(bookingId: string, page = 1, limit = 10
     db.bookingComment.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  const resolved = data.map((c) => ({
+    ...c,
+    author: { ...c.author, avatarUrl: resolveAvatarUrl(c.author.avatarUrl) },
+  }));
+
+  return { data: resolved, total, page, limit };
 }
 
 export type BookingCommentsResult = Awaited<ReturnType<typeof getBookingComments>>;

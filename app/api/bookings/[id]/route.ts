@@ -1,7 +1,7 @@
 import { getBookingById } from "@/lib/queries/bookings";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getPublicUrl } from "@/lib/r2";
+import { getPublicUrl } from "@/lib/storage";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });

@@ -2,34 +2,37 @@ import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { uploadToR2 } from "@/lib/r2";
-import sharp from "sharp";
+import { uploadToStorage, generateStorageKey } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "edit" });
   if (response) return response;
   if (!mutationLimiter.check(`upload-pp-evidence:${session.user.id}`)) return rateLimitResponse();
 
   const fd = await req.formData();
   const paymentId = fd.get("paymentId") as string;
-  const file = fd.get("file") as File;
-  if (!paymentId || !file) return NextResponse.json({ error: "Missing data" }, { status: 400 });
+  const file = fd.get("file");
+  if (!paymentId || !(file instanceof File)) {
+    return NextResponse.json({ error: "Missing data" }, { status: 400 });
+  }
 
   let buffer: Buffer = Buffer.from(await file.arrayBuffer());
   let contentType = file.type;
-  let ext = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];
+  let key: string;
 
-  if (IMAGE_TYPES.includes(file.type)) {
-    buffer = await sharp(buffer).resize(1920, 1920, { fit: "inside", withoutEnlargement: true }).webp({ quality: 50 }).toBuffer();
+  if ((IMAGE_TYPES as readonly string[]).includes(file.type)) {
+    buffer = await compressToWebp(buffer);
     contentType = "image/webp";
-    ext = "webp";
+    key = generateStorageKey("payment-evidence/partial", "webp");
+  } else {
+    const ext = file.name.split(".").pop() ?? "bin";
+    key = generateStorageKey("payment-evidence/partial", ext);
   }
 
-  const randomId = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, "0")).join("");
-  const key = `pp-${randomId}.${ext}`;
-  await uploadToR2(buffer, key, contentType);
+  await uploadToStorage(buffer, key, contentType);
 
   await db.$transaction([
     db.partialPayment.update({ where: { id: paymentId }, data: { evidence: key } }),

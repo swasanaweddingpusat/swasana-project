@@ -19,7 +19,7 @@ inclusion: always
 | Forms | react-hook-form + Zod v4 | — | always validate with Zod schema |
 | Data fetching (client) | TanStack Query v5 | — | |
 | Email | Resend | — | templates in `emails/` |
-| Storage | Cloudflare R2 (S3 SDK) | — | `lib/r2.ts` |
+| Storage | MinIO / S3-compatible (S3 SDK) | — | `lib/storage.ts` |
 
 **Before writing code for any Next.js API, read** `node_modules/next/dist/docs/01-app/` **— especially:**
 - `02-guides/upgrading/version-16.md` (breaking changes)

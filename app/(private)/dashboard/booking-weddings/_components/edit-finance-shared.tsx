@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 
-export const R2_BASE = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "";
+export const STORAGE_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "";
 
 export function toFullUrl(raw: string): string {
   if (raw.startsWith("http")) return raw;
-  return R2_BASE ? `${R2_BASE}/${raw}` : raw;
+  return STORAGE_BASE ? `${STORAGE_BASE}/${raw}` : raw;
 }
 
 export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: () => void }) {

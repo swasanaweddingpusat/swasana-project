@@ -1,18 +1,4 @@
-import imageCompression from "browser-image-compression";
 import type { Area } from "react-easy-crop";
-
-export async function compressToWebP(file: File): Promise<File> {
-  const compressed = await imageCompression(file, {
-    maxSizeMB: 0.3,
-    maxWidthOrHeight: 400,
-    useWebWorker: true,
-    fileType: "image/webp",
-    initialQuality: 0.5,
-  });
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const randomId = Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => chars[b % chars.length]).join("");
-  return new File([compressed], `${randomId}.webp`, { type: "image/webp" });
-}
 
 export async function getCroppedBlob(imageSrc: string, cropArea: Area): Promise<Blob> {
   const image = new Image();

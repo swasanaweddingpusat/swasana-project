@@ -22,13 +22,14 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      // MinIO on Railway — wildcard covers *.up.railway.app and subdomains
       {
         protocol: "https",
-        hostname: "*.r2.dev",
+        hostname: "**.up.railway.app",
       },
       {
         protocol: "https",
-        hostname: "*.r2.cloudflarestorage.com",
+        hostname: "**.railway.app",
       },
     ],
   },

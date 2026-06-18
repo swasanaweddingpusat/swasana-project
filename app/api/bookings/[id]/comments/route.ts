@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getBookingComments } from "@/lib/queries/booking-comments";
-import { getPublicUrl } from "@/lib/r2";
+import { getPublicUrl } from "@/lib/storage";
 
 interface RawAttachment { path: string; name: string; size: number; type: string }
 
@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const result = await getBookingComments(id);
 
-  // Resolve R2 URLs server-side so client doesn't need env var
+  // Resolve storage URLs server-side so client doesn't need env var
   const resolved = result.data.map((c) => ({
     ...c,
     attachments: Array.isArray(c.attachments)
