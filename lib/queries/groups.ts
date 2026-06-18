@@ -1,6 +1,7 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { BookingStatus } from "@prisma/client";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 // ─── Paginated list (used by settings & API) ──────────────────────────────────
 
@@ -46,7 +47,16 @@ export async function getGroups(page = 1, limit = 10) {
     db.userGroup.count(),
   ]);
 
-  return { data, total, page, limit };
+  const resolved = data.map((g) => ({
+    ...g,
+    leader: g.leader ? { ...g.leader, avatarUrl: resolveAvatarUrl(g.leader.avatarUrl) } : null,
+    members: g.members.map((m) => ({
+      ...m,
+      profile: { ...m.profile, avatarUrl: resolveAvatarUrl(m.profile.avatarUrl) },
+    })),
+  }));
+
+  return { data: resolved, total, page, limit };
 }
 
 export async function getGroupById(groupId: string) {
@@ -54,7 +64,7 @@ export async function getGroupById(groupId: string) {
   cacheTag("groups");
   cacheLife("minutes");
 
-  return db.userGroup.findUnique({
+  const g = await db.userGroup.findUnique({
     where: { id: groupId },
     select: {
       id: true,
@@ -84,6 +94,17 @@ export async function getGroupById(groupId: string) {
       _count: { select: { members: true } },
     },
   });
+
+  if (!g) return null;
+
+  return {
+    ...g,
+    leader: g.leader ? { ...g.leader, avatarUrl: resolveAvatarUrl(g.leader.avatarUrl) } : null,
+    members: g.members.map((m) => ({
+      ...m,
+      profile: { ...m.profile, avatarUrl: resolveAvatarUrl(m.profile.avatarUrl) },
+    })),
+  };
 }
 
 // ─── Lightweight list (used by index page) ────────────────────────────────────
@@ -93,7 +114,7 @@ export async function getAllGroups() {
   cacheTag("groups");
   cacheLife("minutes");
 
-  return db.userGroup.findMany({
+  const groups = await db.userGroup.findMany({
     select: {
       id: true,
       name: true,
@@ -104,6 +125,11 @@ export async function getAllGroups() {
     },
     orderBy: { name: "asc" },
   });
+
+  return groups.map((g) => ({
+    ...g,
+    leader: g.leader ? { ...g.leader, avatarUrl: resolveAvatarUrl(g.leader.avatarUrl) } : null,
+  }));
 }
 
 export async function getUserGroups(profileId: string) {
@@ -111,7 +137,7 @@ export async function getUserGroups(profileId: string) {
   cacheTag("groups");
   cacheLife("minutes");
 
-  return db.userGroup.findMany({
+  const groups = await db.userGroup.findMany({
     where: {
       OR: [
         { leaderId: profileId },
@@ -128,6 +154,11 @@ export async function getUserGroups(profileId: string) {
     },
     orderBy: { name: "asc" },
   });
+
+  return groups.map((g) => ({
+    ...g,
+    leader: g.leader ? { ...g.leader, avatarUrl: resolveAvatarUrl(g.leader.avatarUrl) } : null,
+  }));
 }
 
 export async function getGroupDetail(groupId: string) {
@@ -135,7 +166,7 @@ export async function getGroupDetail(groupId: string) {
   cacheTag("groups");
   cacheLife("minutes");
 
-  return db.userGroup.findUnique({
+  const g = await db.userGroup.findUnique({
     where: { id: groupId },
     select: {
       id: true,
@@ -159,6 +190,16 @@ export async function getGroupDetail(groupId: string) {
       },
     },
   });
+
+  if (!g) return null;
+
+  return {
+    ...g,
+    members: g.members.map((m) => ({
+      ...m,
+      profile: { ...m.profile, avatarUrl: resolveAvatarUrl(m.profile.avatarUrl) },
+    })),
+  };
 }
 
 // ─── Performance queries ──────────────────────────────────────────────────────
@@ -215,7 +256,7 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
       return {
         profileId,
         fullName: profile.fullName,
-        avatarUrl: profile.avatarUrl,
+        avatarUrl: resolveAvatarUrl(profile.avatarUrl),
         actual,
         target: targetAmount,
         achievement,
@@ -412,6 +453,7 @@ export async function getGroupsWithPerformance(
     const { members: _members, ...groupBase } = g;
     return {
       ...groupBase,
+      leader: groupBase.leader ? { ...groupBase.leader, avatarUrl: resolveAvatarUrl(groupBase.leader.avatarUrl) } : null,
       revenue,
       target,
       avgAchievement,
@@ -429,7 +471,7 @@ export async function getAvailableSalesProfiles(excludeIds: string[]) {
   cacheTag("groups", "users");
   cacheLife("minutes");
 
-  return db.profile.findMany({
+  const profiles = await db.profile.findMany({
     where: {
       id: { notIn: excludeIds },
       status: "active",
@@ -438,6 +480,8 @@ export async function getAvailableSalesProfiles(excludeIds: string[]) {
     orderBy: { fullName: "asc" },
     take: 200,
   });
+
+  return profiles.map((p) => ({ ...p, avatarUrl: resolveAvatarUrl(p.avatarUrl) }));
 }
 
 export async function getEligibleLeaders() {
@@ -445,7 +489,7 @@ export async function getEligibleLeaders() {
   cacheTag("groups", "users");
   cacheLife("minutes");
 
-  return db.profile.findMany({
+  const profiles = await db.profile.findMany({
     where: { status: "active" },
     select: {
       id: true,
@@ -457,6 +501,8 @@ export async function getEligibleLeaders() {
     orderBy: { fullName: "asc" },
     take: 500,
   });
+
+  return profiles.map((p) => ({ ...p, avatarUrl: resolveAvatarUrl(p.avatarUrl) }));
 }
 
 // ─── Return types ─────────────────────────────────────────────────────────────

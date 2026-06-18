@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { loginSchema } from "@/lib/validations/auth";
 import { authLimiter } from "@/lib/rate-limit";
+import { resolveAvatarUrl } from "@/lib/storage";
 
 // Dummy hash ensures bcrypt always runs — timing-attack defense
 const DUMMY_HASH = "$2b$12$aaaaaaaaaaaaaaaaaaaaaOaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -148,7 +149,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.profile?.fullName ?? user.name,
-          image: user.profile?.avatarUrl ?? user.image,
+          image: resolveAvatarUrl(user.profile?.avatarUrl) ?? user.image,
           roleId: user.profile?.roleId ?? null,
           mustChangePassword: user.profile?.mustChangePassword ?? false,
           isEmailVerified: true, // If authorize() passes, user is verified
@@ -204,7 +205,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.isEmailVerified = profile.isEmailVerified;
             token.status = profile.status;
             token.name = profile.fullName;
-            token.picture = profile.avatarUrl;
+            token.picture = resolveAvatarUrl(profile.avatarUrl);
             token.profileCachedAt = Date.now();
           } else {
             // Profile row gone from DB — log for diagnosis, mark for clean logout.

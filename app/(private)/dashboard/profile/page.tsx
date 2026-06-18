@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { ProfileClient } from "./_components/profile-client"
+import { resolveAvatarUrl } from "@/lib/storage"
 
 export const metadata: Metadata = { title: "Profile - SWASANA" }
 
@@ -49,7 +50,7 @@ export default async function ProfilePage() {
         emergencyContactName: profile.emergencyContactName,
         emergencyContactRel: profile.emergencyContactRel,
         emergencyContactPhone: profile.emergencyContactPhone,
-        avatarUrl: profile.avatarUrl,
+        avatarUrl: resolveAvatarUrl(profile.avatarUrl),
       } : null}
       educationLevels={educationLevels}
     />

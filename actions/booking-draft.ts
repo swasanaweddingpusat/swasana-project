@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { deleteFromR2, getPublicUrl } from "@/lib/r2";
+import { deleteFromStorage, getPublicUrl } from "@/lib/storage";
 import { getNextSequence } from "@/lib/counter";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
@@ -91,7 +91,7 @@ export interface DraftBookingDetail {
     dueDate: string;
     sortOrder: number;
     paymentStatus: "unpaid" | "paid" | "partial" | "refund";
-    /** Stored R2 key. Caller should call getPublicUrl(key) to get a displayable URL. */
+    /** Stored storage key. Caller should call getPublicUrl(key) to get a displayable URL. */
     paymentEvidence: string | null;
   }>;
   draftCategoryToggles: Array<{
@@ -446,7 +446,7 @@ export async function updateDraftBookingStep3(
     // Upsert terms by sortOrder so IDs remain stable (evidence keys stay linked).
     // - Existing term with matching sortOrder → UPDATE (preserve paymentEvidence).
     // - New sortOrder in payload → CREATE.
-    // - Existing term whose sortOrder is gone from payload → DELETE (+ R2 cleanup).
+    // - Existing term whose sortOrder is gone from payload → DELETE (+ storage cleanup).
     const existingTerms = await db.termOfPayment.findMany({
       where: { bookingId: draftId },
       select: { id: true, sortOrder: true, paymentEvidence: true },
@@ -455,14 +455,14 @@ export async function updateDraftBookingStep3(
     const incomingOrders = new Set((input.termOfPayments ?? []).map((t, i) => t.sortOrder ?? i));
     const toDelete = existingTerms.filter((e) => !incomingOrders.has(e.sortOrder));
 
-    // Fire-and-forget: best-effort cleanup of R2 orphans for removed terms.
-    // We do this OUTSIDE the transaction because R2 is not transactional — a
-    // partial R2 failure must not rollback the DB writes.
+    // Fire-and-forget: best-effort cleanup of storage orphans for removed terms.
+    // We do this OUTSIDE the transaction because object storage is not transactional — a
+    // partial storage failure must not rollback the DB writes.
     void Promise.allSettled(
       toDelete
         .filter((e) => e.paymentEvidence)
-        .map((e) => deleteFromR2(e.paymentEvidence!).catch((err: unknown) => {
-          console.error("[updateDraftBookingStep3] Failed to delete R2 orphan", e.paymentEvidence, err);
+        .map((e) => deleteFromStorage(e.paymentEvidence!).catch((err: unknown) => {
+          console.error("[updateDraftBookingStep3] Failed to delete storage orphan", e.paymentEvidence, err);
         }))
     );
 
@@ -1252,7 +1252,7 @@ export async function getDraftBookingDetail(
       dueDate: t.dueDate.toISOString(),
       sortOrder: t.sortOrder,
       paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-      // Transform stored R2 key → public URL for the drawer to display.
+      // Transform stored storage key → public URL for the drawer to display.
       // Null when no evidence has been uploaded yet.
       paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
     })),

@@ -4,21 +4,26 @@ import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { uploadToR2, deleteFromR2 } from "@/lib/r2";
+import { uploadToStorage, deleteFromStorage, generateStorageKey } from "@/lib/storage";
+import { compressToWebp } from "@/lib/image";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
-import sharp from "sharp";
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB raw input
 
-async function processFile(buffer: Buffer, contentType: string, fileName: string): Promise<{ data: Buffer; type: string; name: string }> {
-  if (IMAGE_TYPES.includes(contentType)) {
-    const compressed = await sharp(buffer).resize(1920, 1920, { fit: "inside", withoutEnlargement: true }).webp({ quality: 50 }).toBuffer();
+async function processFile(
+  buffer: Buffer,
+  contentType: string,
+  fileName: string,
+): Promise<{ data: Buffer; type: string; name: string; ext: string }> {
+  if ((IMAGE_TYPES as readonly string[]).includes(contentType)) {
+    const compressed = await compressToWebp(buffer);
     const newName = fileName.replace(/\.[^.]+$/, ".webp");
-    return { data: compressed, type: "image/webp", name: newName };
+    return { data: compressed, type: "image/webp", name: newName, ext: "webp" };
   }
-  return { data: buffer, type: contentType, name: fileName };
+  const ext = fileName.split(".").pop() ?? "bin";
+  return { data: buffer, type: contentType, name: fileName, ext };
 }
 
 export async function uploadBookingDocument(formData: FormData) {
@@ -41,7 +46,7 @@ export async function uploadBookingDocument(formData: FormData) {
   }
 
   try {
-    const results: string[] = [];
+    let uploadCount = 0;
 
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
@@ -49,11 +54,9 @@ export async function uploadBookingDocument(formData: FormData) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const { data, type, name } = await processFile(buffer, file.type, file.name);
-      const ext = type.split("/")[1] === "jpeg" ? "jpg" : type.split("/")[1];
-      const randomId = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, "0")).join("");
-      const key = `${randomId}.${ext}`;
-      const url = await uploadToR2(data, key, type);
+      const { data, type, name, ext } = await processFile(buffer, file.type, file.name);
+      const key = generateStorageKey("booking-documents", ext);
+      await uploadToStorage(data, key, type);
 
       await db.bookingDocument.create({
         data: {
@@ -68,7 +71,7 @@ export async function uploadBookingDocument(formData: FormData) {
         },
       });
 
-      results.push(url);
+      uploadCount++;
     }
 
     await logAudit({
@@ -76,12 +79,12 @@ export async function uploadBookingDocument(formData: FormData) {
       action: "uploaded",
       entityType: "booking",
       entityId: bookingId,
-      description: `Uploaded ${results.length} file(s) — ${docName}`,
-      changes: { documentName: docName, fileCount: results.length },
+      description: `Uploaded ${uploadCount} file(s) — ${docName}`,
+      changes: { documentName: docName, fileCount: uploadCount },
     });
 
     revalidateTag("bookings", "max");
-    return { success: true, count: results.length };
+    return { success: true, count: uploadCount };
   } catch (e) {
     console.error("[uploadBookingDocument]", e);
     return { success: false, error: "Terjadi kesalahan." };
@@ -106,7 +109,7 @@ export async function deleteBookingDocument(docId: string) {
     }
 
     await db.$transaction([db.bookingDocument.delete({ where: { id: docId } })]);
-    await deleteFromR2(doc.filePath).catch((e) => console.error("[deleteBookingDocument] R2 delete failed:", e));
+    await deleteFromStorage(doc.filePath).catch((e) => console.error("[deleteBookingDocument] storage delete failed:", e));
 
     await logAudit({
       userId: session!.user.id,
@@ -149,7 +152,7 @@ export async function deleteBookingDocuments(ids: string[]) {
     }
 
     await db.$transaction([db.bookingDocument.deleteMany({ where: { id: { in: ids } } })]);
-    await Promise.all(docs.map((d: DocItem) => deleteFromR2(d.filePath).catch((e: unknown) => console.error("[deleteBookingDocuments] R2:", e))));
+    await Promise.all(docs.map((d: DocItem) => deleteFromStorage(d.filePath).catch((e: unknown) => console.error("[deleteBookingDocuments] storage:", e))));
 
     const bookingId = docs[0].bookingId;
     const names = docs.map((d: DocItem) => d.name).join(", ");

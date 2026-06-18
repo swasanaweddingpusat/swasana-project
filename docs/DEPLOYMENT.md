@@ -92,13 +92,14 @@ NEXT_PUBLIC_APP_URL=https://<domain-env-ini>
 RESEND_API_KEY=re_xxx
 RESEND_FROM_EMAIL=Swasana Wedding <noreply@yourdomain.com>
 
-# Storage (Cloudflare R2)
-R2_ACCOUNT_ID=xxx
-R2_ACCESS_KEY_ID=xxx
-R2_SECRET_ACCESS_KEY=xxx
-R2_BUCKET_NAME=swasana-<env>
-R2_PUBLIC_URL=https://pub-xxx.r2.dev
-NEXT_PUBLIC_R2_PUBLIC_URL=https://pub-xxx.r2.dev
+# Storage (MinIO / S3-compatible)
+S3_ENDPOINT=https://your-minio-host.railway.app
+S3_REGION=auto
+S3_ACCESS_KEY_ID=xxx
+S3_SECRET_ACCESS_KEY=xxx
+S3_BUCKET_NAME=swasana-<env>
+S3_PUBLIC_URL=https://your-minio-host.railway.app/swasana-<env>
+NEXT_PUBLIC_S3_PUBLIC_URL=https://your-minio-host.railway.app/swasana-<env>
 
 # Admin
 CLEANUP_SECRET=<random>                    # staging ≠ production, jangan = AUTH_SECRET
@@ -113,7 +114,7 @@ PERURI_PASSWORD=
 PERURI_ENV=staging   # atau production
 ```
 
-> **Build-time:** `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_R2_PUBLIC_URL`,
+> **Build-time:** `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_S3_PUBLIC_URL`,
 > `NEXT_PUBLIC_SHOW_DEVTOOLS` di-embed ke client bundle saat build. Kalau kosong saat
 > build, nilainya kosong di browser. Pastikan terisi sebelum trigger build, dan
 > redeploy kalau diubah.
