@@ -3,29 +3,27 @@
 import { useState } from "react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import {
-  DownloadMinimalistic,
-  CalendarDate,
-} from "@solar-icons/react";
+import { DownloadMinimalistic, CalendarDate } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { KpiCards } from "./_components/KpiCards";
+import { FinanceSummaryCards } from "./_components/FinanceSummaryCards";
+import { GroupFinanceTable } from "./_components/GroupFinanceTable";
 import { CollectionTrendChart } from "./_components/CollectionTrendChart";
 import { AgingBreakdownChart } from "./_components/AgingBreakdownChart";
 import { InvoiceDueDateTable } from "./_components/InvoiceDueDateTable";
 import { ActionRequiredPanel } from "./_components/ActionRequiredPanel";
-import type { FinanceKpi } from "./_components/KpiCards";
+import { useFinanceOverview } from "@/hooks/useFinanceOverview";
 
-// ─── Dummy KPI data ───────────────────────────────────────────────────────────
+// ─── Fallback empty summary ────────────────────────────────────────────────────
 
-const MOCK_KPI: FinanceKpi = {
-  totalAR: 2_120_000_000,
-  sudahTertagih: 1_450_000_000,
-  outstanding: 670_000_000,
-  overdue: 180_000_000,
-  collectionRate: 68.4,
-  invoiceBelumTerbit: 4,
+const EMPTY_SUMMARY = {
+  kasDiterima: 0,
+  piutang: 0,
+  nilaiKontrak: 0,
+  totalTarget: 0,
+  totalConfirmed: 0,
+  achievementPct: 0,
 };
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -42,6 +40,11 @@ export default function FinancePage() {
   const [fromOpen, setFromOpen] = useState(false);
   const [toOpen, setToOpen] = useState(false);
 
+  const { data, isLoading } = useFinanceOverview();
+
+  const summary = data?.summary ?? EMPTY_SUMMARY;
+  const groups = data?.groups ?? [];
+
   return (
     <div className="flex flex-col gap-6 py-6 px-2">
 
@@ -52,7 +55,7 @@ export default function FinancePage() {
             Finance Overview
           </h1>
           <p className="text-sm text-muted-foreground">
-            Ringkasan posisi keuangan & piutang usaha
+            Ringkasan posisi keuangan &amp; piutang usaha
           </p>
         </div>
 
@@ -125,16 +128,30 @@ export default function FinancePage() {
         </div>
       </div>
 
-      {/* ── Section 2: KPI Cards ─────────────────────────────────────────────── */}
-      <KpiCards kpi={MOCK_KPI} />
+      {/* ── Section 2: Finance Summary Cards (real data) ─────────────────────── */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-2xl bg-muted/40 animate-pulse h-40" />
+          <div className="rounded-2xl bg-muted/40 animate-pulse h-40" />
+        </div>
+      ) : (
+        <FinanceSummaryCards summary={summary} />
+      )}
 
-      {/* ── Section 3: Charts ────────────────────────────────────────────────── */}
+      {/* ── Section 3: Group Finance Breakdown Table (real data) ─────────────── */}
+      {isLoading ? (
+        <div className="rounded-2xl bg-muted/40 animate-pulse h-32" />
+      ) : (
+        <GroupFinanceTable groups={groups} />
+      )}
+
+      {/* ── Section 4: Charts (dummy — out of scope) ─────────────────────────── */}
       <div className="flex flex-col gap-4 lg:flex-row">
         <CollectionTrendChart />
         <AgingBreakdownChart />
       </div>
 
-      {/* ── Section 4: Table + Panel ─────────────────────────────────────────── */}
+      {/* ── Section 5: Table + Panel (dummy — out of scope) ──────────────────── */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
         <InvoiceDueDateTable />
         <ActionRequiredPanel />

@@ -36,6 +36,12 @@ export async function GET(request: Request) {
     if (profile) dataScope = profile.dataScope as DataScope;
   }
 
+  const rawApprovalStatus = searchParams.get("approvalStatus");
+  const approvalStatus: "pending" | "approved" | undefined =
+    rawApprovalStatus === "pending" ? "pending" :
+    rawApprovalStatus === "approved" ? "approved" :
+    undefined;
+
   const rawSalesId = searchParams.get("salesId") ?? undefined;
   const salesId = rawSalesId?.trim() || undefined;
 
@@ -65,7 +71,7 @@ export async function GET(request: Request) {
   // share a group, so visibility is intentional.
   const effectiveScope: DataScope = salesId ? "all" : dataScope;
 
-  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, salesId });
+  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, salesId, approvalStatus });
 
   const transformed = {
     ...result,

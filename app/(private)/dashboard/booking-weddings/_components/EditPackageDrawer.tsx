@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -22,25 +22,19 @@ import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SimpleEditor } from "@/components/ui/simple-editor";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import {
   AddCircle,
   TrashBinTrash,
-  MenuDots,
+  AlignVerticalSpacing,
   Settings,
   UsersGroupRounded,
-  Gift,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import {
   saveSnapInternalItems,
   saveSnapVendorItems,
-  saveSnapComplimentaries,
 } from "@/actions/snap-package-items";
-import { useComplimentaries } from "@/hooks/use-complimentaries";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,15 +56,6 @@ interface VendorItemState {
   itemText: string;
 }
 
-interface ComplimentaryItemState {
-  uid: string;
-  complimentaryId: string | null;
-  name: string;
-  price: number;
-  isShowPrice: boolean;
-  description: string | null;
-}
-
 // ─── Sortable Row ─────────────────────────────────────────────────────────────
 
 function SortableRow({ id, onDelete, children }: { id: string; onDelete: () => void; children: React.ReactNode }) {
@@ -86,10 +71,10 @@ function SortableRow({ id, onDelete, children }: { id: string; onDelete: () => v
           type="button"
           {...attributes}
           {...listeners}
-          className="mt-1 shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing"
+          className="mt-1 shrink-0 p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
           tabIndex={-1}
         >
-          <MenuDots weight="BoldDuotone" className="h-4 w-4" />
+          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
         </button>
         <div className="flex-1 space-y-3">{children}</div>
         <Button
@@ -111,16 +96,15 @@ function SortableRow({ id, onDelete, children }: { id: string; onDelete: () => v
 // initializer. No effects needed: the parent's key prop ensures this component
 // remounts fresh whenever the booking changes, so stale state is never an issue.
 
-type TabValue = "internal" | "vendor" | "complimentary";
+type TabValue = "internal" | "vendor";
 
 interface EditPackageContentProps {
   bookingDetail: BookingDetail;
   target: EditPackageTarget;
   onClose: () => void;
-  complimentaryOptions: Array<{ id: string; name: string; price: number; isShowPrice: boolean; description: string | null }>;
 }
 
-function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptions }: EditPackageContentProps) {
+function EditPackageContent({ bookingDetail, target, onClose }: EditPackageContentProps) {
   const qc = useQueryClient();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeTab, setActiveTab] = useState<TabValue>("internal");
@@ -140,21 +124,9 @@ function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptio
       itemText: i.itemText,
     })),
   );
-  const [complItems, setComplItems] = useState<ComplimentaryItemState[]>(() =>
-    (bookingDetail.snapComplimentaries ?? []).map((i) => ({
-      uid: i.id,
-      complimentaryId: i.complimentaryId ?? null,
-      name: i.name,
-      price: i.price,
-      isShowPrice: i.isShowPrice,
-      description: i.description ?? null,
-    })),
-  );
-
   // ── Saving state ──────────────────────────────────────────────────────────
   const [savingInternal, setSavingInternal] = useState(false);
   const [savingVendor, setSavingVendor] = useState(false);
-  const [savingCompl, setSavingCompl] = useState(false);
 
   // ── Internal items handlers ───────────────────────────────────────────────
   const addInternalItem = useCallback(() => {
@@ -232,66 +204,17 @@ function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptio
     await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
   }, [target.bookingId, vendorItems, qc]);
 
-  // ── Complimentary handlers ────────────────────────────────────────────────
-  const addComplItem = useCallback(() => {
-    setComplItems((prev) => [...prev, { uid: crypto.randomUUID(), complimentaryId: null, name: "", price: 0, isShowPrice: false, description: null }]);
-  }, []);
-
-  const removeComplItem = useCallback((uid: string) => {
-    setComplItems((prev) => prev.filter((i) => i.uid !== uid));
-  }, []);
-
-  const updateComplItem = useCallback((uid: string, field: keyof ComplimentaryItemState, value: unknown) => {
-    setComplItems((prev) => prev.map((i) => i.uid === uid ? { ...i, [field]: value } : i));
-  }, []);
-
-  const handleComplDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setComplItems((prev) => {
-        const from = prev.findIndex((i) => i.uid === active.id);
-        const to = prev.findIndex((i) => i.uid === over.id);
-        return arrayMove(prev, from, to);
-      });
-    }
-  }, []);
-
-  const pickComplimentary = useCallback((uid: string, complId: string) => {
-    const found = complimentaryOptions.find((c) => c.id === complId);
-    if (!found) return;
-    setComplItems((prev) => prev.map((i) => i.uid === uid
-      ? { ...i, complimentaryId: found.id, name: found.name, price: found.price, isShowPrice: found.isShowPrice, description: found.description ?? null }
-      : i,
-    ));
-  }, [complimentaryOptions]);
-
-  const saveCompl = useCallback(async () => {
-    const emptyItem = complItems.find((i) => !i.name.trim());
-    if (emptyItem) { toast.error("Nama complimentary tidak boleh kosong."); return; }
-    setSavingCompl(true);
-    const res = await saveSnapComplimentaries({
-      bookingId: target.bookingId,
-      items: complItems.map((i, idx) => ({ complimentaryId: i.complimentaryId ?? null, name: i.name, price: i.price, isShowPrice: i.isShowPrice, description: i.description ?? null, qty: 1, sortOrder: idx })),
-    });
-    setSavingCompl(false);
-    if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
-    toast.success("Complimentary berhasil disimpan.");
-    await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
-  }, [target.bookingId, complItems, qc]);
-
   // ── Derived save handler & state for active tab ───────────────────────────
-  const isSaving = activeTab === "internal" ? savingInternal : activeTab === "vendor" ? savingVendor : savingCompl;
+  const isSaving = activeTab === "internal" ? savingInternal : savingVendor;
 
   const handleSave = useCallback(() => {
     if (activeTab === "internal") return saveInternal();
-    if (activeTab === "vendor") return saveVendor();
-    return saveCompl();
-  }, [activeTab, saveInternal, saveVendor, saveCompl]);
+    return saveVendor();
+  }, [activeTab, saveInternal, saveVendor]);
 
   const saveLabelMap: Record<TabValue, string> = {
     internal: savingInternal ? "Menyimpan..." : "Simpan Item Internal",
     vendor: savingVendor ? "Menyimpan..." : "Simpan Item Vendor",
-    complimentary: savingCompl ? "Menyimpan..." : "Simpan Complimentary",
   };
 
   return (
@@ -299,7 +222,7 @@ function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptio
       {/* ── Tab navigation — underline style ───────────────────────── */}
       <div className="border-b border-border mb-4">
         <div className="flex">
-          {(["internal", "vendor", "complimentary"] as const).map((tab) => {
+          {(["internal", "vendor"] as const).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -317,8 +240,7 @@ function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptio
               >
                 {tab === "internal" && <Settings weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
                 {tab === "vendor" && <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
-                {tab === "complimentary" && <Gift weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
-                <span className="capitalize">{tab === "complimentary" ? "Complimentary" : tab === "internal" ? "Internal" : "Vendor"}</span>
+                <span className="capitalize">{tab === "internal" ? "Internal" : "Vendor"}</span>
               </button>
             );
           })}
@@ -415,73 +337,6 @@ function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptio
           </div>
         )}
 
-        {/* Complimentary */}
-        {activeTab === "complimentary" && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Complimentary yang disertakan dalam booking.
-            </p>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleComplDragEnd}>
-              <SortableContext items={complItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-3">
-                  {complItems.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
-                      Belum ada complimentary.
-                    </p>
-                  )}
-                  {complItems.map((item) => (
-                    <SortableRow key={item.uid} id={item.uid} onDelete={() => removeComplItem(item.uid)}>
-                      <SearchableSelect
-                        options={complimentaryOptions.map((c) => ({ id: c.id, name: c.name }))}
-                        value={item.complimentaryId ?? ""}
-                        onChange={(val) => pickComplimentary(item.uid, val)}
-                        placeholder="Pilih complimentary..."
-                        searchPlaceholder="Cari complimentary..."
-                        emptyText="Tidak ditemukan"
-                        className="w-full"
-                      />
-                      <Input
-                        value={item.name}
-                        onChange={(e) => updateComplItem(item.uid, "name", e.target.value)}
-                        placeholder="Nama complimentary..."
-                        className="font-medium"
-                      />
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Harga</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={item.price}
-                          onChange={(e) => updateComplItem(item.uid, "price", Math.max(0, Number(e.target.value)))}
-                          className="h-8"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id={`show-price-${item.uid}`}
-                          checked={item.isShowPrice}
-                          onCheckedChange={(v) => updateComplItem(item.uid, "isShowPrice", v)}
-                        />
-                        <Label htmlFor={`show-price-${item.uid}`} className="text-sm text-muted-foreground cursor-pointer">
-                          Tampil harga
-                        </Label>
-                      </div>
-                    </SortableRow>
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={addComplItem}
-              className="w-full border-dashed rounded-xl"
-            >
-              <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
-              Tambah Complimentary
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* ── Sticky footer ──────────────────────────────────────────── */}
@@ -531,9 +386,6 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
     staleTime: 0,
   });
 
-  const { data: complimentaryList } = useComplimentaries({ activeOnly: true, pageSize: 200 });
-  const complimentaryOptions = useMemo(() => complimentaryList?.items ?? [], [complimentaryList]);
-
   return (
     <Drawer
       isOpen={!!target}
@@ -552,7 +404,6 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
           bookingDetail={bookingDetail}
           target={target}
           onClose={onClose}
-          complimentaryOptions={complimentaryOptions}
         />
       )}
     </Drawer>

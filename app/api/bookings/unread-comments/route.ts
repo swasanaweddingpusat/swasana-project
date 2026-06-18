@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getUnreadCommentCounts } from "@/lib/queries/booking-comments";
+import { getUnreadCommentCounts, getUnreadMentionCounts } from "@/lib/queries/booking-comments";
 
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
@@ -9,11 +9,15 @@ export async function POST(req: Request) {
   if (!apiLimiter.check(`unread-comments:${session.user.id}`)) return rateLimitResponse();
 
   const profileId = session?.user?.profileId;
-  if (!profileId) return NextResponse.json({});
+  if (!profileId) return NextResponse.json({ unreadCounts: {}, mentionCounts: {} });
 
   const { bookingIds } = await req.json() as { bookingIds: string[] };
-  if (!Array.isArray(bookingIds) || !bookingIds.length) return NextResponse.json({});
+  if (!Array.isArray(bookingIds) || !bookingIds.length) return NextResponse.json({ unreadCounts: {}, mentionCounts: {} });
 
-  const counts = await getUnreadCommentCounts(bookingIds, profileId);
-  return NextResponse.json(counts);
+  const [unreadCounts, mentionCounts] = await Promise.all([
+    getUnreadCommentCounts(bookingIds, profileId),
+    getUnreadMentionCounts(bookingIds, profileId),
+  ]);
+
+  return NextResponse.json({ unreadCounts, mentionCounts });
 }

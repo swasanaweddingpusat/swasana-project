@@ -118,7 +118,7 @@ function comparePoDesc(
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; salesId?: string },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; salesId?: string; approvalStatus?: "pending" | "approved" },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
@@ -131,7 +131,19 @@ export async function getBookings(
     { recordStatus: "saved" };
   const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo);
   const salesIdFilter: Prisma.BookingWhereInput = options?.salesId ? { salesId: options.salesId } : {};
-  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...dateFilter, ...salesIdFilter };
+  let approvalStatusFilter: Prisma.BookingWhereInput = {};
+  if (options?.approvalStatus) {
+    const approvedRecords = await db.approvalRecord.findMany({
+      where: { module: "booking", status: "approved" },
+      select: { entityId: true },
+    });
+    const approvedIds = approvedRecords.map((r) => r.entityId);
+    approvalStatusFilter =
+      options.approvalStatus === "approved"
+        ? { id: { in: approvedIds } }
+        : { id: { notIn: approvedIds } };
+  }
+  const where: Prisma.BookingWhereInput = { ...recordStatusFilter, ...scopeFilter, ...searchFilter, ...venueFilter, ...categoryFilter, ...dateFilter, ...salesIdFilter, ...approvalStatusFilter };
 
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
@@ -191,19 +203,33 @@ async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
   if (!profileId || !dataScope || dataScope === "all") return {};
   if (dataScope === "own") return { salesId: profileId };
 
-  // group: find all members in the same group as profileId
+  // group: find all groups where profileId is a member
   const myGroups = await db.userGroupMember.findMany({
     where: { userId: profileId },
     select: { groupId: true },
   });
   if (myGroups.length === 0) return { salesId: profileId };
   const groupIds = myGroups.map((g) => g.groupId);
-  const members = await db.userGroupMember.findMany({
-    where: { groupId: { in: groupIds } },
-    select: { userId: true },
-  });
-  const memberIds = [...new Set(members.map((m) => m.userId))];
-  return { salesId: { in: memberIds } };
+
+  // Fetch all members + group leaders (defensive: covers legacy leaders who
+  // weren't added as members before this fix was deployed)
+  const [members, groupLeaders] = await Promise.all([
+    db.userGroupMember.findMany({
+      where: { groupId: { in: groupIds } },
+      select: { userId: true },
+    }),
+    db.userGroup.findMany({
+      where: { id: { in: groupIds }, leaderId: { not: null } },
+      select: { leaderId: true },
+    }),
+  ]);
+
+  const memberIds = new Set(members.map((m) => m.userId));
+  for (const g of groupLeaders) {
+    if (g.leaderId) memberIds.add(g.leaderId);
+  }
+
+  return { salesId: { in: [...memberIds] } };
 }
 
 export async function getBookingById(id: string) {

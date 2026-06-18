@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
 import type { BookingsResult, SalesProfile } from "@/lib/queries/bookings";
 import { usePoll } from "@/hooks/use-poll";
 
@@ -17,5 +18,9 @@ export function BookingsTableClient({
   salesProfiles: SalesProfile[];
 }) {
   usePoll();
-  return <BookingsTable initialData={initialData} salesProfiles={salesProfiles} />;
+  return (
+    <Suspense>
+      <BookingsTable initialData={initialData} salesProfiles={salesProfiles} />
+    </Suspense>
+  );
 }

@@ -6,12 +6,13 @@ import type { NotificationItem } from "@/lib/queries/notifications";
 interface NotificationsResponse {
   notifications: NotificationItem[];
   unreadCount: number;
+  unreadMentionCount: number;
 }
 
 async function fetchNotifications(): Promise<NotificationsResponse> {
   const res = await fetch("/api/notifications");
-  if (!res.ok) return { notifications: [], unreadCount: 0 };
-  return res.json();
+  if (!res.ok) return { notifications: [], unreadCount: 0, unreadMentionCount: 0 };
+  return res.json() as Promise<NotificationsResponse>;
 }
 
 export function useNotifications() {

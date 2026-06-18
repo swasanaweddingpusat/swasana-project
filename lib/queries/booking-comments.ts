@@ -42,6 +42,38 @@ export async function getBookingComments(bookingId: string, page = 1, limit = 10
 export type BookingCommentsResult = Awaited<ReturnType<typeof getBookingComments>>;
 export type BookingCommentItem = BookingCommentsResult["data"][number];
 
+/**
+ * Returns count of unread mention notifications per bookingId for a given profile.
+ * "Mention" = Notification dengan type "comment_mention" + isMention = true + isRead = false,
+ * entityId = bookingId, dan userId = profileId.
+ */
+export async function getUnreadMentionCounts(
+  bookingIds: string[],
+  profileId: string
+): Promise<Record<string, number>> {
+  if (!bookingIds.length) return {};
+
+  const mentions = await db.notification.findMany({
+    where: {
+      userId: profileId,
+      isMention: true,
+      isRead: false,
+      entityType: "booking",
+      entityId: { in: bookingIds },
+    },
+    select: { entityId: true },
+  });
+
+  const counts: Record<string, number> = {};
+  for (const m of mentions) {
+    if (!m.entityId) continue;
+    counts[m.entityId] = (counts[m.entityId] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export type MentionCountsResult = Record<string, number>;
+
 /** Returns unread comment counts per bookingId for a given profile */
 export async function getUnreadCommentCounts(
   bookingIds: string[],

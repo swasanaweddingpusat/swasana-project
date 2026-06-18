@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AddCircle } from "@solar-icons/react";
 import { toast } from "sonner";
-import { GroupsStatsCards } from "./GroupsStatsCards";
 import { GroupsTable } from "./GroupsTable";
 import { GroupFormDialog } from "./GroupFormDialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -29,17 +28,6 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete, eli
 
   const { data } = useGroupsPerformance();
   const groups = data?.groups ?? initialGroups;
-  const summary = data?.summary ?? {
-    totalGroups: initialGroups.length,
-    totalSales: initialGroups.reduce((s, g) => s + g.revenue, 0),
-    totalTarget: initialGroups.reduce((s, g) => s + g.target, 0),
-    avgAchievement: initialGroups.length > 0
-      ? Math.round(initialGroups.reduce((s, g) => s + g.avgAchievement, 0) / initialGroups.length)
-      : 0,
-    totalConfirmed: initialGroups.reduce((s, g) => s + g.confirmedCount, 0),
-    totalPiutang: initialGroups.reduce((s, g) => s + (g.piutang ?? 0), 0),
-    totalRevenue: initialGroups.reduce((s, g) => s + (g.totalRevenue ?? 0), 0),
-  };
 
   function handleConfirmDelete() {
     if (!deleteGroup) return;
@@ -58,8 +46,6 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete, eli
 
   return (
     <div className="space-y-6">
-      <GroupsStatsCards {...summary} />
-
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">Daftar Groups</h2>
