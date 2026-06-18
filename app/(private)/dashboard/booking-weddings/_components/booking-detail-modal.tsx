@@ -136,12 +136,15 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
   if (!open) return null;
 
+  // The Client Agreement tab is only relevant once the client has actually
+  // signed — before that there's nothing for the viewer to see here.
+  const isAgreementSigned = booking?.clientAgreement?.status === "Signed";
   const tabs = [
     { key: "booking" as const, label: "Booking Details" },
     { key: "vendor" as const, label: "Vendor Details" },
     { key: "payment" as const, label: "Pembayaran" },
     { key: "documents" as const, label: "Dokumen" },
-    { key: "agreement" as const, label: "Client Agreement" },
+    ...(isAgreementSigned ? [{ key: "agreement" as const, label: "Client Agreement" }] : []),
   ];
 
   return (
@@ -564,13 +567,33 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   {booking.snapPackageInternalItems.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Internal Items</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
+                      {/* Mobile: card per item */}
+                      <div className="sm:hidden space-y-3">
                         {booking.snapPackageInternalItems.map((item) => (
-                          <div key={item.id} className="py-2 border-b last:border-b-0">
-                            <p className="text-sm font-medium text-foreground">{item.itemName}</p>
+                          <div key={item.id} className="rounded-2xl border bg-card p-4 space-y-1.5">
+                            <p className="text-sm font-semibold text-foreground">{item.itemName}</p>
                             {item.itemDescription && <RichText html={item.itemDescription} />}
                           </div>
                         ))}
+                      </div>
+                      {/* Desktop: table */}
+                      <div className="hidden sm:block rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="px-4 w-1/3">Nama Item</TableHead>
+                              <TableHead className="px-4">Keterangan</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {booking.snapPackageInternalItems.map((item) => (
+                              <TableRow key={item.id}>
+                                <TableCell className="px-4 font-medium text-sm text-foreground align-top">{item.itemName}</TableCell>
+                                <TableCell className="px-4 text-sm">{item.itemDescription ? <RichText html={item.itemDescription} /> : <span className="text-muted-foreground">—</span>}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
                     </div>
                   )}
@@ -579,13 +602,33 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                   {booking.snapPackageVendorItems.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Paket Vendor Items</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 text-sm">
+                      {/* Mobile: card per item */}
+                      <div className="sm:hidden space-y-3">
                         {booking.snapPackageVendorItems.map((item) => (
-                          <div key={item.id} className="py-2 border-b last:border-b-0">
-                            <p className="text-xs text-muted-foreground">{item.categoryName}</p>
+                          <div key={item.id} className="rounded-2xl border bg-card p-4 space-y-1.5">
+                            <p className="text-sm font-semibold text-foreground">{item.categoryName}</p>
                             <RichText html={item.itemText} />
                           </div>
                         ))}
+                      </div>
+                      {/* Desktop: table */}
+                      <div className="hidden sm:block rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="px-4 w-1/3">Kategori</TableHead>
+                              <TableHead className="px-4">Item</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {booking.snapPackageVendorItems.map((item) => (
+                              <TableRow key={item.id}>
+                                <TableCell className="px-4 font-medium text-sm text-foreground align-top">{item.categoryName}</TableCell>
+                                <TableCell className="px-4 text-sm"><RichText html={item.itemText} /></TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
                     </div>
                   )}

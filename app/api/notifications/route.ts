@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getNotifications, getUnreadCount, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
+import { getNotifications, getUnreadCount, getUnreadMentionCount, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -9,10 +9,13 @@ export async function GET(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   if (!apiLimiter.check(`notif:${session.user.id}:${ip}`)) return rateLimitResponse();
 
-  const notifications = await getNotifications(session.user.profileId);
-  const unreadCount = await getUnreadCount(session.user.profileId);
+  const [notifications, unreadCount, unreadMentionCount] = await Promise.all([
+    getNotifications(session.user.profileId),
+    getUnreadCount(session.user.profileId),
+    getUnreadMentionCount(session.user.profileId),
+  ]);
 
-  return Response.json({ notifications, unreadCount });
+  return Response.json({ notifications, unreadCount, unreadMentionCount });
 }
 
 export async function PATCH(req: Request) {

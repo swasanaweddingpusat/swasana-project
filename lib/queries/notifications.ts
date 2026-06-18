@@ -14,6 +14,12 @@ export async function getUnreadCount(userId: string): Promise<number> {
   });
 }
 
+export async function getUnreadMentionCount(userId: string): Promise<number> {
+  return db.notification.count({
+    where: { userId, isMention: true, isRead: false },
+  });
+}
+
 export async function markAsRead(notificationId: string, _userId: string): Promise<void> {
   await db.notification.update({
     where: { id: notificationId },

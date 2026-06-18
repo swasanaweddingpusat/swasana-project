@@ -5,7 +5,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { MenuDots, AltArrowRight, AltArrowDown, TrashBinTrash, AddCircle } from "@solar-icons/react";
+import { AlignVerticalSpacing, AltArrowRight, AltArrowDown, TrashBinTrash, AddCircle } from "@solar-icons/react";
 import { SortableNodeRow } from "./sortable-node-row";
 import { AddGroupButton, InlineAddItemForm } from "./helpers";
 import type { PaketNode, CateringSection } from "@/types/catering";
@@ -51,7 +51,7 @@ export function SortableSectionBlock(props: Props) {
     <div ref={setNodeRef} style={style} {...attributes} className="border border-gray-300 rounded-lg bg-white overflow-hidden">
       {/* Section header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
-        {!isViewOnly && <button type="button" {...listeners} className="text-gray-300 hover:text-gray-400 cursor-grab shrink-0 touch-none"><MenuDots weight="BoldDuotone" className="h-4 w-4" /></button>}
+        {!isViewOnly && <button type="button" {...listeners} className="p-1 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none"><AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" /></button>}
         <button type="button" onClick={() => setIsCollapsed(!isCollapsed)} className="shrink-0 text-gray-400">
           {isCollapsed ? <AltArrowRight weight="BoldDuotone" className="h-4 w-4" /> : <AltArrowDown weight="BoldDuotone" className="h-4 w-4" />}
         </button>

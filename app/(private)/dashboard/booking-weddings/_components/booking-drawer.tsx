@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, MenuDots, Copy } from "@solar-icons/react";
+import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, AlignVerticalSpacing, Copy } from "@solar-icons/react";
 import {
   DndContext,
   closestCenter,
@@ -2338,9 +2338,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                 {...listeners}
                                 aria-label="Drag untuk mengurutkan"
                                 tabIndex={-1}
-                                className="shrink-0 p-1 -ml-1 rounded-lg text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+                                className="shrink-0 p-1.5 -ml-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
                               >
-                                <MenuDots weight="BoldDuotone" className="h-4 w-4" />
+                                <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
                               </button>
                               <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
                                 <AltArrowDown

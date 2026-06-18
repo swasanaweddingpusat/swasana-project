@@ -9,7 +9,7 @@ import { SimpleEditor } from "@/components/ui/simple-editor";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Box, UsersGroupRounded, Settings, PenNewSquare, AddCircle, TrashBinTrash, MenuDots } from "@solar-icons/react";
+import { Box, UsersGroupRounded, Settings, PenNewSquare, AddCircle, TrashBinTrash, AlignVerticalSpacing } from "@solar-icons/react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -62,8 +62,8 @@ function SortableItemRow({ id, children }: { id: string; children: React.ReactNo
       className={cn("border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2", isDragging && "opacity-50 shadow-lg")}
     >
       <div className={cn("flex items-center gap-2")}>
-        <button type="button" {...attributes} {...listeners} className={cn("text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing shrink-0")} tabIndex={-1}>
-          <MenuDots weight="BoldDuotone" className={cn("h-4 w-4")} />
+        <button type="button" {...attributes} {...listeners} className={cn("p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none")} tabIndex={-1}>
+          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
         </button>
         <div className={cn("flex-1 space-y-2")}>{children}</div>
       </div>

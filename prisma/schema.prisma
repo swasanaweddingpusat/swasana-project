@@ -1174,12 +1174,15 @@ model Notification {
   type       String
   entityType String?
   entityId   String?
+  isMention  Boolean  @default(false)
+  commentId  String?
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
   profile    Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
   @@index([userId, createdAt])
+  @@index([userId, isMention, isRead])
   @@map("notifications")
 }
 

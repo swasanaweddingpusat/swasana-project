@@ -23,7 +23,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Box, CloseCircle, MenuDots } from "@solar-icons/react";
+import { Box, CloseCircle, AlignVerticalSpacing } from "@solar-icons/react";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { useSavePackagePrices } from "@/hooks/use-packages";
 import { useCategories } from "@/hooks/use-categories";
@@ -116,7 +116,7 @@ function SortableCategoryRow({
         className={cn("p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing shrink-0")}
         tabIndex={-1}
       >
-        <MenuDots weight="BoldDuotone" className={cn("h-3.5 w-3.5")} />
+        <AlignVerticalSpacing weight="BoldDuotone" className="h-3.5 w-3.5" />
       </button>
       <Switch checked={isShow} onCheckedChange={onToggleShow} className="shrink-0" />
       <span className={cn("text-sm w-32 shrink-0 truncate", !isShow && "text-muted-foreground")} title={cat}>{cat}</span>

@@ -1149,20 +1149,26 @@ export async function editBooking(data: unknown) {
     if (rest.termOfPayments && rest.termOfPayments.length > 0) {
       const currentTerms = await db.termOfPayment.findMany({
         where: { bookingId: id },
-        select: { id: true, name: true, amount: true, sortOrder: true, paymentStatus: true, ackStatus: true },
+        select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true },
         orderBy: { sortOrder: "asc" },
       });
       const newTerms = rest.termOfPayments;
       if (currentTerms.length !== newTerms.length) {
         topChanged = true;
       } else {
+        // dueDate is stored as a DateTime (UTC midnight); the client sends a
+        // "yyyy-MM-dd" string. Normalise the stored value to the same string
+        // form before comparing so a pure date change is detected as material.
+        const toYmd = (d: Date | null): string =>
+          d ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}` : "";
         for (let i = 0; i < currentTerms.length; i++) {
           const cur = currentTerms[i];
           const nw = newTerms[i];
           if (
             cur.name !== nw.name ||
             cur.amount !== nw.amount ||
-            cur.sortOrder !== nw.sortOrder
+            cur.sortOrder !== nw.sortOrder ||
+            toYmd(cur.dueDate) !== nw.dueDate
           ) {
             topChanged = true;
             break;

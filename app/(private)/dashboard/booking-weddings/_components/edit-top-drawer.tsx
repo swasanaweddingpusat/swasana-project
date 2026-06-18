@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,7 +19,7 @@ import {
   TrashBinTrash,
   CloseCircle,
   CheckCircle,
-  MenuDots,
+  AlignVerticalSpacing,
 } from "@solar-icons/react";
 import {
   DndContext,
@@ -111,8 +111,19 @@ function TopContent({
   const [discountAmount, setDiscountAmount] = useState(initialDiscountAmount);
   const [discountEditing, setDiscountEditing] = useState(false);
 
-  // Reset when initialTerms changes (drawer re-opened with different booking)
+  // Reset when the booking data actually changes (drawer re-opened with different booking).
+  // We compare by content fingerprint rather than by reference so that a TanStack Query
+  // background refetch that returns the same data (new array object, same IDs/values)
+  // does NOT clobber the user's in-progress drag reorder.
+  const prevFingerprintRef = useRef<string>("");
   useEffect(() => {
+    const fingerprint = JSON.stringify({
+      terms: initialTerms.map((t) => ({ id: t.id, name: t.name, amount: Number(t.amount), dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
+      discountName: initialDiscountName ?? "Discount",
+      discountAmount: initialDiscountAmount,
+    });
+    if (fingerprint === prevFingerprintRef.current) return; // same data — preserve user edits (inc. drag order)
+    prevFingerprintRef.current = fingerprint;
     queueMicrotask(() => {
       setTerms(initialTerms.map((t) => ({ ...t, amount: Number(t.amount) })));
       setPendingFiles({});
@@ -165,9 +176,15 @@ function TopContent({
     if (terms.length !== initialTerms.length) return true;
     if (discountName !== (initialDiscountName ?? "Discount")) return true;
     if (discountAmount !== initialDiscountAmount) return true;
-    return terms.some((t, i) => {
-      const init = initialTerms[i];
-      if (!init) return true;
+    // Compare by ID order to detect drag reorder (position change) in addition to field edits.
+    // We check both: same id at same array index AND field-level changes.
+    const initById = new Map(initialTerms.map((t) => [t.id, t]));
+    // Order changed if any term appears at a different position than in initialTerms
+    const orderChanged = terms.some((t, i) => initialTerms[i]?.id !== t.id);
+    if (orderChanged) return true;
+    return terms.some((t) => {
+      const init = initById.get(t.id);
+      if (!init) return true; // new term
       return (
         t.name !== init.name ||
         Number(t.amount) !== Number(init.amount) ||
@@ -357,11 +374,11 @@ function TopContent({
                       type="button"
                       {...attributes}
                       {...listeners}
-                      className="shrink-0 p-1 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+                      className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
                       tabIndex={-1}
                       aria-label="Drag to reorder"
                     >
-                      <MenuDots weight="BoldDuotone" className="h-3.5 w-3.5" />
+                      <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
                     </button>
                     <div className="flex items-center gap-0.5 flex-1 min-w-0">
                       <Input
