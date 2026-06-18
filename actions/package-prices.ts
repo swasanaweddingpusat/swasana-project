@@ -25,8 +25,8 @@ const updatePackagePricesSchema = z.object({
 export async function updatePackagePrices(
   data: unknown,
 ): Promise<{ success: true; newPrice: number } | { success: false; error: string }> {
-  // Allow booking:edit OR finance-ar:edit
-  const bookingPerm = await requirePermission({ module: "booking", action: "edit" });
+  // Allow booking:edit-set-harga OR finance-ar:edit
+  const bookingPerm = await requirePermission({ module: "booking", action: "edit-set-harga" });
   const arPerm = await requirePermission({ module: "finance-ar", action: "edit" });
   if (bookingPerm.error && arPerm.error) {
     return { success: false, error: bookingPerm.error };
@@ -207,8 +207,8 @@ const updateTakeoutWithTermsSchema = z.object({
 export async function updateTakeoutWithTerms(
   data: unknown,
 ): Promise<{ success: true; newPrice: number } | { success: false; error: string }> {
-  // Allow booking:edit OR finance-ar:edit (same as updatePackagePrices).
-  const bookingPerm = await requirePermission({ module: "booking", action: "edit" });
+  // Allow booking:edit-set-harga OR finance-ar:edit (same as updatePackagePrices).
+  const bookingPerm = await requirePermission({ module: "booking", action: "edit-set-harga" });
   const arPerm = await requirePermission({ module: "finance-ar", action: "edit" });
   if (bookingPerm.error && arPerm.error) {
     return { success: false, error: bookingPerm.error };
