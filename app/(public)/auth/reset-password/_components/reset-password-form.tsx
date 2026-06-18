@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { Refresh, Eye, EyeClosed, CheckCircle, CloseCircle } from "@solar-icons/react"
 import { toast } from "sonner"
 import { useSearchParams, useRouter } from "next/navigation"
-import { resetPassword } from "@/actions/auth"
+import { resetPassword, forceResetPassword } from "@/actions/auth"
 
 // --- Password strength helpers (mirrors lib/validations/auth.ts passwordSchema) ---
 
@@ -222,6 +222,23 @@ export function ResetPasswordForm({
   const handleSubmit = async (formData: FormData) => {
     startTransition(async () => {
       try {
+        // Force-reset without token: user is authenticated, verify via session
+        if (isForceReset && !token) {
+          const result = await forceResetPassword(formData)
+          if (!result.success) {
+            toast.error("Gagal reset password", {
+              description: result.error ?? "Silakan coba lagi.",
+            })
+          } else {
+            toast.success("Password berhasil diubah!", {
+              description: result.message ?? "Silakan login dengan password baru Anda.",
+            })
+            router.push("/auth/login")
+          }
+          return
+        }
+
+        // Token-based reset (forgot-password email flow or invitation setup)
         if (token) formData.set("token", token)
         // setup=true (invitation flow) and force=true both require mustChangePassword reset
         if (force) formData.set("force", force)

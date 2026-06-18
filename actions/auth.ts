@@ -5,12 +5,13 @@ import { db } from "@/lib/db";
 import { getBaseUrl } from "@/lib/url";
 import { forgotPasswordSchema, resetPasswordSchema } from "@/lib/validations/auth";
 import { logAudit } from "@/lib/audit";
-import { authLimiter, rateLimitError } from "@/lib/rate-limit";
+import { authLimiter, mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
 import crypto from "crypto";
 import { resetPasswordEmailHtml } from "@/emails/reset-password-email";
+import { auth } from "@/lib/auth";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "noreply@swasana.com";
@@ -129,7 +130,7 @@ export async function resetPassword(formData: FormData) {
       }),
       db.profile.update({
         where: { id: resetToken.userId },
-        data: force ? { mustChangePassword: false } : {},
+        data: { mustChangePassword: false },
       }),
       db.passwordResetToken.update({
         where: { id: resetToken.id },
@@ -155,6 +156,75 @@ export async function resetPassword(formData: FormData) {
     return { success: true, message: "Password berhasil diubah." };
   } catch (e) {
     console.error("[resetPassword]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Force Reset Password (authenticated, no token) ───────────────────────────
+// Called when AuthGate redirects to /auth/reset-password?force=true.
+// The user already has an active session (JWT), so identity is verified via session.
+// Only allowed when session.user.mustChangePassword === true to prevent abuse.
+
+export async function forceResetPassword(formData: FormData) {
+  const raw = {
+    password: formData.get("password") as string,
+    confirmPassword: formData.get("confirmPassword") as string,
+  };
+
+  const h = await headers();
+  const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
+
+  const session = await auth();
+  if (!session?.user?.id || !session.user.profileId) {
+    return { success: false, error: "Sesi tidak valid. Silakan login ulang." };
+  }
+
+  // Guard: only allow if mustChangePassword is active in JWT to prevent abuse
+  if (!session.user.mustChangePassword) {
+    return { success: false, error: "Tidak ada kewajiban ganti password." };
+  }
+
+  if (!mutationLimiter.check(`force-reset-pw:${session.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const parsed = resetPasswordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
+
+    await db.$transaction([
+      db.user.update({
+        where: { id: session.user.id },
+        data: { password: hashedPassword },
+      }),
+      db.profile.update({
+        where: { id: session.user.profileId },
+        data: { mustChangePassword: false },
+      }),
+      db.session.deleteMany({
+        where: { userId: session.user.id },
+      }),
+    ]);
+
+    revalidateTag("users", "max");
+
+    await logAudit({
+      userId: session.user.profileId,
+      action: "auth.password_changed",
+      entityType: "profile",
+      entityId: session.user.profileId,
+      description: "Password sementara diganti via force-reset (session-authenticated)",
+      ipAddress: ip,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    return { success: true, message: "Password berhasil diubah. Silakan login ulang." };
+  } catch (e) {
+    console.error("[forceResetPassword]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

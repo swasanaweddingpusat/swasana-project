@@ -18,7 +18,7 @@ const roleData = [
 // ── Modules & Actions ────────────────────────────────────────────────
 // Only modules that are ACTUALLY used in code
 const moduleActions: Record<string, string[]> = {
-  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition"],
+  booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "term-&-condition", "edit-package", "edit-set-harga"],
   customers: ["view", "create", "edit", "delete"],
   "finance-ar": ["view", "create", "edit", "delete"],
   groups: ["view", "view-all", "create", "edit", "delete"],
@@ -83,7 +83,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // package, complimentary, vendors, and customers.
   // (dashboard has no permission module; calendar-event is gated by booking:view.)
   manager: {
-    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
     customers: ["view", "create", "edit", "delete"],
     groups: ["view", "create", "edit", "delete"],
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
@@ -105,7 +105,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     maintenance: ["view", "create", "edit"],
   },
   finance: {
-    booking: ["view", "comment"],
+    booking: ["view", "comment", "edit-set-harga"],
     customers: ["view"],
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
     "finance-ar": ["view", "create", "edit", "delete"],
@@ -335,6 +335,24 @@ export async function seedRolesPermissions(): Promise<void> {
       });
       if (!existing) {
         await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: bookingTcPerm.id } });
+      }
+    }
+  }
+
+  // 8. Force-grant booking:edit-package to ALL roles.
+  // Every role that can view bookings can also edit the package snapshot items.
+  // Runs AFTER step 6 wipe-and-replace so it sticks for roles whose matrix omits it.
+  const bookingEditPackagePerm = await prisma.permission.findUnique({
+    where: { module_action: { module: "booking", action: "edit-package" } },
+  });
+  if (bookingEditPackagePerm) {
+    const everyRole = await prisma.role.findMany({ select: { id: true } });
+    for (const role of everyRole) {
+      const existing = await prisma.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: bookingEditPackagePerm.id } },
+      });
+      if (!existing) {
+        await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: bookingEditPackagePerm.id } });
       }
     }
   }

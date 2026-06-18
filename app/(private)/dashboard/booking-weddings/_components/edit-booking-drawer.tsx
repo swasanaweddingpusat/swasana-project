@@ -515,7 +515,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   }
 
   // ── Price helpers ──
-  const getBasePrice = () => selectedPackagePrice;
+  // Derive base price from the reactive step3Price (post-takeout) when package data is
+  // loaded. Falls back to selectedPackagePrice (seeded from DB) while packages are still
+  // fetching, preventing a 0/NaN flash on initial render.
+  const getBasePrice = () => (allCategoryPrices.length > 0 ? step3Price : selectedPackagePrice);
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
   const getLockedTotal = () => terms.reduce((s, t) => s + (isLockedTerm(t) ? (t.amount || 0) : 0), 0);
@@ -1641,7 +1644,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground">Harga Paket</span>
-                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getPriceAfterDiscount())}</span>
               </div>
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground">Input User</span>
