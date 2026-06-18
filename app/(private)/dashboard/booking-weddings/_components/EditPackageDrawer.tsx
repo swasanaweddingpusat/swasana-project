@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -106,78 +106,50 @@ function SortableRow({ id, onDelete, children }: { id: string; onDelete: () => v
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-interface EditPackageDrawerProps {
-  target: EditPackageTarget | null;
-  onClose: () => void;
-}
+// ─── Inner Content — mounts only after bookingDetail is available ─────────────
+// State is initialized once from bookingDetail at mount time via useState lazy
+// initializer. No effects needed: the parent's key prop ensures this component
+// remounts fresh whenever the booking changes, so stale state is never an issue.
 
 type TabValue = "internal" | "vendor" | "complimentary";
 
-export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
+interface EditPackageContentProps {
+  bookingDetail: BookingDetail;
+  target: EditPackageTarget;
+  onClose: () => void;
+  complimentaryOptions: Array<{ id: string; name: string; price: number; isShowPrice: boolean; description: string | null }>;
+}
+
+function EditPackageContent({ bookingDetail, target, onClose, complimentaryOptions }: EditPackageContentProps) {
   const qc = useQueryClient();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeTab, setActiveTab] = useState<TabValue>("internal");
 
-  // ── Fetch booking detail ──────────────────────────────────────────────────
-  const { data: bookingDetail, isLoading: isLoadingDetail } = useQuery<BookingDetail>({
-    queryKey: ["booking-detail", target?.bookingId],
-    queryFn: async () => {
-      const res = await fetch(`/api/bookings/${target!.bookingId}`);
-      if (!res.ok) throw new Error("Failed to fetch booking detail");
-      return res.json() as Promise<BookingDetail>;
-    },
-    enabled: !!target?.bookingId,
-    staleTime: 0,
-  });
-
-  // ── Complimentary master list ─────────────────────────────────────────────
-  const { data: complimentaryList } = useComplimentaries({ activeOnly: true, pageSize: 200 });
-  const complimentaryOptions = complimentaryList?.items ?? [];
-
-  // ── Local state ───────────────────────────────────────────────────────────
-  const [internalItems, setInternalItems] = useState<InternalItemState[]>([]);
-  const [vendorItems, setVendorItems] = useState<VendorItemState[]>([]);
-  const [complItems, setComplItems] = useState<ComplimentaryItemState[]>([]);
-
-  // Populate state from fetched detail
-  useEffect(() => {
-    if (!bookingDetail) return;
-    setInternalItems(
-      (bookingDetail.snapPackageInternalItems ?? []).map((i) => ({
-        uid: i.id,
-        itemName: i.itemName,
-        itemDescription: i.itemDescription,
-      })),
-    );
-    setVendorItems(
-      (bookingDetail.snapPackageVendorItems ?? []).map((i) => ({
-        uid: i.id,
-        categoryName: i.categoryName,
-        itemText: i.itemText,
-      })),
-    );
-    setComplItems(
-      (bookingDetail.snapComplimentaries ?? []).map((i) => ({
-        uid: i.id,
-        complimentaryId: i.complimentaryId ?? null,
-        name: i.name,
-        price: i.price,
-        isShowPrice: i.isShowPrice,
-        description: i.description ?? null,
-      })),
-    );
-  }, [bookingDetail]);
-
-  // Reset state when drawer closes
-  useEffect(() => {
-    if (!target) {
-      setInternalItems([]);
-      setVendorItems([]);
-      setComplItems([]);
-    }
-  }, [target]);
+  // State initialized once at mount from bookingDetail — no effects required.
+  const [internalItems, setInternalItems] = useState<InternalItemState[]>(() =>
+    (bookingDetail.snapPackageInternalItems ?? []).map((i) => ({
+      uid: i.id,
+      itemName: i.itemName,
+      itemDescription: i.itemDescription,
+    })),
+  );
+  const [vendorItems, setVendorItems] = useState<VendorItemState[]>(() =>
+    (bookingDetail.snapPackageVendorItems ?? []).map((i) => ({
+      uid: i.id,
+      categoryName: i.categoryName,
+      itemText: i.itemText,
+    })),
+  );
+  const [complItems, setComplItems] = useState<ComplimentaryItemState[]>(() =>
+    (bookingDetail.snapComplimentaries ?? []).map((i) => ({
+      uid: i.id,
+      complimentaryId: i.complimentaryId ?? null,
+      name: i.name,
+      price: i.price,
+      isShowPrice: i.isShowPrice,
+      description: i.description ?? null,
+    })),
+  );
 
   // ── Saving state ──────────────────────────────────────────────────────────
   const [savingInternal, setSavingInternal] = useState(false);
@@ -209,7 +181,6 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
   }, []);
 
   const saveInternal = useCallback(async () => {
-    if (!target) return;
     const emptyItem = internalItems.find((i) => !i.itemName.trim());
     if (emptyItem) { toast.error("Nama item tidak boleh kosong."); return; }
     setSavingInternal(true);
@@ -221,7 +192,7 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
     if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
     toast.success("Item internal berhasil disimpan.");
     await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
-  }, [target, internalItems, qc]);
+  }, [target.bookingId, internalItems, qc]);
 
   // ── Vendor items handlers ─────────────────────────────────────────────────
   const addVendorItem = useCallback(() => {
@@ -248,7 +219,6 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
   }, []);
 
   const saveVendor = useCallback(async () => {
-    if (!target) return;
     const emptyItem = vendorItems.find((i) => !i.categoryName.trim() || !i.itemText.trim());
     if (emptyItem) { toast.error("Nama kategori dan item text tidak boleh kosong."); return; }
     setSavingVendor(true);
@@ -260,7 +230,7 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
     if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
     toast.success("Item vendor berhasil disimpan.");
     await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
-  }, [target, vendorItems, qc]);
+  }, [target.bookingId, vendorItems, qc]);
 
   // ── Complimentary handlers ────────────────────────────────────────────────
   const addComplItem = useCallback(() => {
@@ -296,7 +266,6 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
   }, [complimentaryOptions]);
 
   const saveCompl = useCallback(async () => {
-    if (!target) return;
     const emptyItem = complItems.find((i) => !i.name.trim());
     if (emptyItem) { toast.error("Nama complimentary tidak boleh kosong."); return; }
     setSavingCompl(true);
@@ -308,7 +277,7 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
     if (!res.success) { toast.error(res.error ?? "Gagal menyimpan."); return; }
     toast.success("Complimentary berhasil disimpan.");
     await qc.invalidateQueries({ queryKey: ["booking-detail", target.bookingId] });
-  }, [target, complItems, qc]);
+  }, [target.bookingId, complItems, qc]);
 
   // ── Derived save handler & state for active tab ───────────────────────────
   const isSaving = activeTab === "internal" ? savingInternal : activeTab === "vendor" ? savingVendor : savingCompl;
@@ -325,7 +294,245 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
     complimentary: savingCompl ? "Menyimpan..." : "Simpan Complimentary",
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col min-h-full">
+      {/* ── Tab navigation — underline style ───────────────────────── */}
+      <div className="border-b border-border mb-4">
+        <div className="flex">
+          {(["internal", "vendor", "complimentary"] as const).map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                  isActive
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+                )}
+              >
+                {tab === "internal" && <Settings weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
+                {tab === "vendor" && <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
+                {tab === "complimentary" && <Gift weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
+                <span className="capitalize">{tab === "complimentary" ? "Complimentary" : tab === "internal" ? "Internal" : "Vendor"}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Tab content ────────────────────────────────────────────── */}
+      <div className="flex-1">
+        {/* Internal Items */}
+        {activeTab === "internal" && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Item internal paket yang tampil di PO booking.
+            </p>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleInternalDragEnd}>
+              <SortableContext items={internalItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3">
+                  {internalItems.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
+                      Belum ada item internal.
+                    </p>
+                  )}
+                  {internalItems.map((item) => (
+                    <SortableRow key={item.uid} id={item.uid} onDelete={() => removeInternalItem(item.uid)}>
+                      <Input
+                        value={item.itemName}
+                        onChange={(e) => updateInternalItem(item.uid, "itemName", e.target.value)}
+                        placeholder="Nama item..."
+                        className="font-medium"
+                      />
+                      <SimpleEditor
+                        value={item.itemDescription}
+                        onChange={(html) => updateInternalItem(item.uid, "itemDescription", html)}
+                        placeholder="Deskripsi item..."
+                      />
+                    </SortableRow>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addInternalItem}
+              className="w-full border-dashed rounded-xl"
+            >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
+              Tambah Item Internal
+            </Button>
+          </div>
+        )}
+
+        {/* Vendor Items */}
+        {activeTab === "vendor" && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Item vendor per kategori yang tampil di PO booking.
+            </p>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleVendorDragEnd}>
+              <SortableContext items={vendorItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3">
+                  {vendorItems.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
+                      Belum ada item vendor.
+                    </p>
+                  )}
+                  {vendorItems.map((item) => (
+                    <SortableRow key={item.uid} id={item.uid} onDelete={() => removeVendorItem(item.uid)}>
+                      <Input
+                        value={item.categoryName}
+                        onChange={(e) => updateVendorItem(item.uid, "categoryName", e.target.value)}
+                        placeholder="Nama kategori vendor..."
+                        className="font-medium"
+                      />
+                      <SimpleEditor
+                        value={item.itemText}
+                        onChange={(html) => updateVendorItem(item.uid, "itemText", html)}
+                        placeholder="Deskripsi item vendor..."
+                      />
+                    </SortableRow>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addVendorItem}
+              className="w-full border-dashed rounded-xl"
+            >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
+              Tambah Item Vendor
+            </Button>
+          </div>
+        )}
+
+        {/* Complimentary */}
+        {activeTab === "complimentary" && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Complimentary yang disertakan dalam booking.
+            </p>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleComplDragEnd}>
+              <SortableContext items={complItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3">
+                  {complItems.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
+                      Belum ada complimentary.
+                    </p>
+                  )}
+                  {complItems.map((item) => (
+                    <SortableRow key={item.uid} id={item.uid} onDelete={() => removeComplItem(item.uid)}>
+                      <SearchableSelect
+                        options={complimentaryOptions.map((c) => ({ id: c.id, name: c.name }))}
+                        value={item.complimentaryId ?? ""}
+                        onChange={(val) => pickComplimentary(item.uid, val)}
+                        placeholder="Pilih complimentary..."
+                        searchPlaceholder="Cari complimentary..."
+                        emptyText="Tidak ditemukan"
+                        className="w-full"
+                      />
+                      <Input
+                        value={item.name}
+                        onChange={(e) => updateComplItem(item.uid, "name", e.target.value)}
+                        placeholder="Nama complimentary..."
+                        className="font-medium"
+                      />
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Harga</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={item.price}
+                          onChange={(e) => updateComplItem(item.uid, "price", Math.max(0, Number(e.target.value)))}
+                          className="h-8"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`show-price-${item.uid}`}
+                          checked={item.isShowPrice}
+                          onCheckedChange={(v) => updateComplItem(item.uid, "isShowPrice", v)}
+                        />
+                        <Label htmlFor={`show-price-${item.uid}`} className="text-sm text-muted-foreground cursor-pointer">
+                          Tampil harga
+                        </Label>
+                      </div>
+                    </SortableRow>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addComplItem}
+              className="w-full border-dashed rounded-xl"
+            >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
+              Tambah Complimentary
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Sticky footer ──────────────────────────────────────────── */}
+      <div className="sticky bottom-0 mt-6 border-t border-border bg-background pt-4 pb-1">
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="flex-1 rounded-xl"
+          >
+            Batal
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex-1 rounded-xl"
+          >
+            {saveLabelMap[activeTab]}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shell — handles Drawer wrapper + data fetching ──────────────────────────
+// The parent passes key={target?.bookingId ?? "none"} so this component remounts
+// fresh for each booking, ensuring EditPackageContent's lazy initializers run
+// with the correct bookingDetail every time.
+
+interface EditPackageDrawerProps {
+  target: EditPackageTarget | null;
+  onClose: () => void;
+}
+
+export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
+  const { data: bookingDetail, isLoading: isLoadingDetail } = useQuery<BookingDetail>({
+    queryKey: ["booking-detail", target?.bookingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${target!.bookingId}`);
+      if (!res.ok) throw new Error("Failed to fetch booking detail");
+      return res.json() as Promise<BookingDetail>;
+    },
+    enabled: !!target?.bookingId,
+    staleTime: 0,
+  });
+
+  const { data: complimentaryList } = useComplimentaries({ activeOnly: true, pageSize: 200 });
+  const complimentaryOptions = useMemo(() => complimentaryList?.items ?? [], [complimentaryList]);
 
   return (
     <Drawer
@@ -334,224 +541,19 @@ export function EditPackageDrawer({ target, onClose }: EditPackageDrawerProps) {
       title={target ? `Edit Package — ${target.customerName}` : "Edit Package"}
       maxWidth="sm:max-w-2xl"
     >
-      {isLoadingDetail ? (
+      {isLoadingDetail || !bookingDetail || !target ? (
         <div className="space-y-4 p-1">
           <Skeleton className="h-10 w-full rounded-xl" />
           <Skeleton className="h-32 w-full rounded-2xl" />
           <Skeleton className="h-32 w-full rounded-2xl" />
         </div>
       ) : (
-        <div className="flex flex-col min-h-full">
-          {/* ── Tab navigation — underline style ───────────────────────── */}
-          <div className="border-b border-border mb-4">
-            <div className="flex">
-              {(["internal", "vendor", "complimentary"] as const).map((tab) => {
-                const isActive = activeTab === tab;
-                return (
-                  <button
-                    key={tab}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => setActiveTab(tab)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                      isActive
-                        ? "border-primary text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
-                    )}
-                  >
-                    {tab === "internal" && <Settings weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
-                    {tab === "vendor" && <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
-                    {tab === "complimentary" && <Gift weight="BoldDuotone" className="h-4 w-4 shrink-0" />}
-                    <span className="capitalize">{tab === "complimentary" ? "Complimentary" : tab === "internal" ? "Internal" : "Vendor"}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── Tab content ────────────────────────────────────────────── */}
-          <div className="flex-1">
-            {/* Internal Items */}
-            {activeTab === "internal" && (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Item internal paket yang tampil di PO booking.
-                </p>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleInternalDragEnd}>
-                  <SortableContext items={internalItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-3">
-                      {internalItems.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
-                          Belum ada item internal.
-                        </p>
-                      )}
-                      {internalItems.map((item) => (
-                        <SortableRow key={item.uid} id={item.uid} onDelete={() => removeInternalItem(item.uid)}>
-                          <Input
-                            value={item.itemName}
-                            onChange={(e) => updateInternalItem(item.uid, "itemName", e.target.value)}
-                            placeholder="Nama item..."
-                            className="font-medium"
-                          />
-                          <SimpleEditor
-                            value={item.itemDescription}
-                            onChange={(html) => updateInternalItem(item.uid, "itemDescription", html)}
-                            placeholder="Deskripsi item..."
-                          />
-                        </SortableRow>
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addInternalItem}
-                  className="w-full border-dashed rounded-xl"
-                >
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
-                  Tambah Item Internal
-                </Button>
-              </div>
-            )}
-
-            {/* Vendor Items */}
-            {activeTab === "vendor" && (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Item vendor per kategori yang tampil di PO booking.
-                </p>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleVendorDragEnd}>
-                  <SortableContext items={vendorItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-3">
-                      {vendorItems.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
-                          Belum ada item vendor.
-                        </p>
-                      )}
-                      {vendorItems.map((item) => (
-                        <SortableRow key={item.uid} id={item.uid} onDelete={() => removeVendorItem(item.uid)}>
-                          <Input
-                            value={item.categoryName}
-                            onChange={(e) => updateVendorItem(item.uid, "categoryName", e.target.value)}
-                            placeholder="Nama kategori vendor..."
-                            className="font-medium"
-                          />
-                          <SimpleEditor
-                            value={item.itemText}
-                            onChange={(html) => updateVendorItem(item.uid, "itemText", html)}
-                            placeholder="Deskripsi item vendor..."
-                          />
-                        </SortableRow>
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addVendorItem}
-                  className="w-full border-dashed rounded-xl"
-                >
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
-                  Tambah Item Vendor
-                </Button>
-              </div>
-            )}
-
-            {/* Complimentary */}
-            {activeTab === "complimentary" && (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Complimentary yang disertakan dalam booking.
-                </p>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleComplDragEnd}>
-                  <SortableContext items={complItems.map((i) => i.uid)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-3">
-                      {complItems.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-6 rounded-2xl border border-dashed border-border">
-                          Belum ada complimentary.
-                        </p>
-                      )}
-                      {complItems.map((item) => (
-                        <SortableRow key={item.uid} id={item.uid} onDelete={() => removeComplItem(item.uid)}>
-                          <SearchableSelect
-                            options={complimentaryOptions.map((c) => ({ id: c.id, name: c.name }))}
-                            value={item.complimentaryId ?? ""}
-                            onChange={(val) => pickComplimentary(item.uid, val)}
-                            placeholder="Pilih complimentary..."
-                            searchPlaceholder="Cari complimentary..."
-                            emptyText="Tidak ditemukan"
-                            className="w-full"
-                          />
-                          <Input
-                            value={item.name}
-                            onChange={(e) => updateComplItem(item.uid, "name", e.target.value)}
-                            placeholder="Nama complimentary..."
-                            className="font-medium"
-                          />
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Harga</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={item.price}
-                              onChange={(e) => updateComplItem(item.uid, "price", Math.max(0, Number(e.target.value)))}
-                              className="h-8"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              id={`show-price-${item.uid}`}
-                              checked={item.isShowPrice}
-                              onCheckedChange={(v) => updateComplItem(item.uid, "isShowPrice", v)}
-                            />
-                            <Label htmlFor={`show-price-${item.uid}`} className="text-sm text-muted-foreground cursor-pointer">
-                              Tampil harga
-                            </Label>
-                          </div>
-                        </SortableRow>
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addComplItem}
-                  className="w-full border-dashed rounded-xl"
-                >
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" />
-                  Tambah Complimentary
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Sticky footer ──────────────────────────────────────────── */}
-          <div className="sticky bottom-0 mt-6 border-t border-border bg-background pt-4 pb-1">
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                className="flex-1 rounded-xl"
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 rounded-xl"
-              >
-                {saveLabelMap[activeTab]}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <EditPackageContent
+          bookingDetail={bookingDetail}
+          target={target}
+          onClose={onClose}
+          complimentaryOptions={complimentaryOptions}
+        />
       )}
     </Drawer>
   );
