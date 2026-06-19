@@ -53,7 +53,7 @@ const s = StyleSheet.create({
   paymentSection: { marginBottom: 16, width: "50%" },
   paymentRow: { flexDirection: "row", height: 18 },
   paymentCell: { borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: "#000", justifyContent: "center", paddingLeft: 4 },
-  complimentarySection: { marginBottom: 16, width: "40%" },
+  complimentarySection: { marginBottom: 8 },
   signatureSection: { flexDirection: "row", justifyContent: "space-between", marginTop: 60, marginBottom: 10 },
   signBox: { alignItems: "center", width: "30%" },
   signatureLabel: { fontSize: 9, fontWeight: "bold", marginTop: 1 },
@@ -558,6 +558,89 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             })()}
           </View>
 
+          {/* Complimentary — setelah detail client, sebelum tabel package; wrap=false supaya gak kepotong */}
+          {(booking.snapComplimentaries ?? []).length > 0 ? (
+            (() => {
+              const compItems = booking.snapComplimentaries!;
+              // Hide the price column entirely when NO item has isShowPrice === true
+              const showPriceCol = compItems.some((c) => c.isShowPrice);
+              // Column widths — No | Complimentary | Harga (Qty removed)
+              const colNo = "8%";
+              const colName = showPriceCol ? "68%" : "92%";
+              const colPrice = "24%";
+              return (
+                <View wrap={false} style={s.complimentarySection}>
+                  <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+                  <View style={{ borderWidth: 1, borderColor: "#000" }}>
+                    {/* Header */}
+                    <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
+                      <Text style={{ width: colNo, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
+                      <Text style={showPriceCol
+                        ? { width: colName, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }
+                        : { width: colName, fontSize: 6, fontWeight: "bold", padding: 2 }
+                      }>Complimentary</Text>
+                      {showPriceCol && (
+                        <Text style={{ width: colPrice, fontSize: 6, fontWeight: "bold", padding: 2 }}>Harga</Text>
+                      )}
+                    </View>
+                    {/* Rows */}
+                    {compItems.map((c, idx) => (
+                      <View
+                        key={c.id}
+                        style={idx < compItems.length - 1
+                          ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
+                          : { flexDirection: "row" }
+                        }
+                      >
+                        <Text style={{ width: colNo, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
+                        <View style={showPriceCol
+                          ? { width: colName, padding: 2, borderRightWidth: 1, borderColor: "#000" }
+                          : { width: colName, padding: 2 }
+                        }>
+                          <Text style={{ fontSize: 6, fontWeight: "bold" }}>{c.name}</Text>
+                          {c.description ? renderHtmlToPdf(c.description) : null}
+                        </View>
+                        {showPriceCol && (
+                          <Text style={{ width: colPrice, fontSize: 6, padding: 2 }}>
+                            {c.isShowPrice ? fmtRp(c.price) : ""}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              );
+            })()
+          ) : booking.snapBonuses.length > 0 ? (
+            <View wrap={false} style={s.complimentarySection}>
+              <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+              {/* Table — legacy snapBonuses (no price, no qty) */}
+              <View style={{ borderWidth: 1, borderColor: "#000" }}>
+                {/* Header */}
+                <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
+                  <Text style={{ width: "10%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
+                  <Text style={{ width: "90%", fontSize: 6, fontWeight: "bold", padding: 2 }}>Complimentary</Text>
+                </View>
+                {/* Rows */}
+                {booking.snapBonuses.map((b, idx) => (
+                  <View
+                    key={b.id}
+                    style={idx < booking.snapBonuses.length - 1
+                      ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
+                      : { flexDirection: "row" }
+                    }
+                  >
+                    <Text style={{ width: "10%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
+                    <View style={{ width: "90%", padding: 2 }}>
+                      <Text style={{ fontSize: 6, fontWeight: "bold" }}>{b.vendorName}</Text>
+                      {b.description ? renderHtmlToPdf(b.description) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
           {/* Tabel paket — mulai halaman baru (break), boleh ngalir lintas halaman biar gak overflow */}
           <View break>
             {/* Table Header */}
@@ -602,125 +685,31 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
           </View>
           </View>
 
-          {/* Complimentary + Payment — blok kecil, dijaga utuh & ngalir natural setelah tabel */}
-          <View wrap={false} style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 8 }}>
-            {/* Prioritize new snapComplimentaries; fall back to legacy snapBonuses */}
-            {(booking.snapComplimentaries ?? []).length > 0 ? (
-              (() => {
-                const compItems = booking.snapComplimentaries!;
-                // Hide the price column entirely when NO item has isShowPrice === true
-                const showPriceCol = compItems.some((c) => c.isShowPrice);
-                // Column widths (percentages as strings for react-pdf)
-                const colNo = showPriceCol ? "8%" : "10%";
-                const colName = showPriceCol ? "55%" : "65%";
-                const colQty = showPriceCol ? "15%" : "25%";
-                const colPrice = "22%";
-                return (
-                  <View style={s.complimentarySection}>
-                    <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
-                    {/* Table */}
-                    <View style={{ borderWidth: 1, borderColor: "#000" }}>
-                      {/* Header */}
-                      <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
-                        <Text style={{ width: colNo, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
-                        <Text style={{ width: colName, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Complimentary</Text>
-                        <Text style={showPriceCol
-                          ? { width: colQty, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }
-                          : { width: colQty, fontSize: 6, fontWeight: "bold", padding: 2 }
-                        }>Qty</Text>
-                        {showPriceCol && (
-                          <Text style={{ width: colPrice, fontSize: 6, fontWeight: "bold", padding: 2 }}>Harga</Text>
-                        )}
-                      </View>
-                      {/* Rows */}
-                      {compItems.map((c, idx) => (
-                        <View
-                          key={c.id}
-                          style={idx < compItems.length - 1
-                            ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
-                            : { flexDirection: "row" }
-                          }
-                        >
-                          {/* No */}
-                          <Text style={{ width: colNo, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
-                          {/* Complimentary name + description */}
-                          <View style={{ width: colName, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
-                            <Text style={{ fontSize: 6, fontWeight: "bold" }}>{c.name}</Text>
-                            {c.description ? renderHtmlToPdf(c.description) : null}
-                          </View>
-                          {/* Qty */}
-                          <Text style={showPriceCol
-                            ? { width: colQty, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }
-                            : { width: colQty, fontSize: 6, padding: 2 }
-                          }>{c.qty}</Text>
-                          {/* Harga — only rendered when showPriceCol is true */}
-                          {showPriceCol && (
-                            <Text style={{ width: colPrice, fontSize: 6, padding: 2 }}>
-                              {c.isShowPrice ? fmtRp(c.price) : ""}
-                            </Text>
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                );
-              })()
-            ) : booking.snapBonuses.length > 0 ? (
-              <View style={s.complimentarySection}>
-                <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
-                {/* Table — legacy snapBonuses (no price) */}
-                <View style={{ borderWidth: 1, borderColor: "#000" }}>
-                  {/* Header */}
-                  <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
-                    <Text style={{ width: "10%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
-                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Complimentary</Text>
-                    <Text style={{ width: "20%", fontSize: 6, fontWeight: "bold", padding: 2 }}>Qty</Text>
-                  </View>
-                  {/* Rows */}
-                  {booking.snapBonuses.map((b, idx) => (
-                    <View
-                      key={b.id}
-                      style={idx < booking.snapBonuses.length - 1
-                        ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
-                        : { flexDirection: "row" }
-                      }
-                    >
-                      <Text style={{ width: "10%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
-                      <View style={{ width: "70%", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
-                        <Text style={{ fontSize: 6, fontWeight: "bold" }}>{b.vendorName}</Text>
-                        {b.description ? renderHtmlToPdf(b.description) : null}
-                      </View>
-                      <Text style={{ width: "20%", fontSize: 6, padding: 2 }}>{b.qty}</Text>
-                    </View>
-                  ))}
+          {/* Payment Summary — style asli (box 50% rata kanan), standalone setelah tabel */}
+          <View wrap={false} style={[s.paymentSection, { marginLeft: "auto" }]}>
+            <View style={s.paymentRow}>
+              <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Total Payment</Text></View>
+              <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text></View>
+            </View>
+            {(booking.discountAmount ?? 0) > 0 && (
+              <>
+                <View style={s.paymentRow}>
+                  <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6, color: "red" }}>{booking.discountName || "Discount"}</Text></View>
+                  <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text></View>
                 </View>
-              </View>
-            ) : null}
-            <View style={[s.paymentSection, { marginLeft: "auto" }]}>
-              <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Total Payment</Text></View>
-                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text></View>
-              </View>
-              {(booking.discountAmount ?? 0) > 0 && (
-                <>
-                  <View style={s.paymentRow}>
-                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6, color: "red" }}>{booking.discountName || "Discount"}</Text></View>
-                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text></View>
-                  </View>
-                  <View style={s.paymentRow}>
-                    <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Harga Setelah Discount</Text></View>
-                    <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text></View>
-                  </View>
-                </>
-              )}
-              <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {(() => { const bf = booking.termOfPayments[0]; const d = bf?.dueDate ?? createdAt; return new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }); })()}</Text></View>
-                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
-              </View>
-              <View style={s.paymentRow}>
-                <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Sisa Bayar</Text></View>
-                <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments[0]; return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text></View>
-              </View>
+                <View style={s.paymentRow}>
+                  <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Harga Setelah Discount</Text></View>
+                  <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text></View>
+                </View>
+              </>
+            )}
+            <View style={s.paymentRow}>
+              <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {(() => { const bf = booking.termOfPayments[0]; const d = bf?.dueDate ?? createdAt; return new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }); })()}</Text></View>
+              <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
+            </View>
+            <View style={s.paymentRow}>
+              <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Sisa Bayar</Text></View>
+              <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments[0]; return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text></View>
             </View>
           </View>
 

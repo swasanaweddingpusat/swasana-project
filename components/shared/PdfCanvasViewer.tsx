@@ -14,6 +14,11 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2.0;
 const ZOOM_DEFAULT = 1.0;
 
+/** Euclidean distance between two Touch points. */
+function getTouchDistance(a: Touch, b: Touch): number {
+  return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+}
+
 interface PdfCanvasViewerProps {
   /** Blob URL (from URL.createObjectURL) pointing to the PDF. */
   blobUrl: string;
@@ -29,6 +34,22 @@ export function PdfCanvasViewer({ blobUrl, showZoomControls = false }: PdfCanvas
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const [scale, setScale] = useState<number>(ZOOM_DEFAULT);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Pinch-to-zoom: mutable refs so we don't trigger re-renders during gesture.
+  // pinchActive tracks whether a 2-finger gesture is currently in progress.
+  const pinchActive = useRef<boolean>(false);
+  // Distance between the two fingers at the moment the pinch started.
+  const pinchStartDistance = useRef<number>(0);
+  // Scale value at the moment the pinch started — ratio is applied on top of this.
+  const pinchStartScale = useRef<number>(ZOOM_DEFAULT);
+  // Mirror of the scale state kept in a ref so touch handlers (attached once) can
+  // always read the latest scale without needing to re-attach their event listeners.
+  const scaleRef = useRef<number>(ZOOM_DEFAULT);
+
+  // Keep scaleRef in sync with scale state so pinch handlers always see the latest value.
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
 
   // Track container width for responsive page sizing
   useEffect(() => {
@@ -49,6 +70,56 @@ export function PdfCanvasViewer({ blobUrl, showZoomControls = false }: PdfCanvas
     return () => {
       observer.disconnect();
     };
+  }, []);
+
+  // Pinch-to-zoom gesture — attached via native addEventListener with { passive: false }
+  // so we can call preventDefault() on touchmove when 2 fingers are detected.
+  // React's synthetic onTouchMove is passive in many browsers, making preventDefault() a no-op there.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    function handleTouchStart(e: TouchEvent): void {
+      if (e.touches.length === 2) {
+        pinchActive.current = true;
+        pinchStartDistance.current = getTouchDistance(e.touches[0], e.touches[1]);
+        // Read from scaleRef (always current) — not from the stale closure captured at effect mount.
+        pinchStartScale.current = scaleRef.current;
+      } else {
+        pinchActive.current = false;
+      }
+    }
+
+    function handleTouchMove(e: TouchEvent): void {
+      if (!pinchActive.current || e.touches.length !== 2) return;
+      // Block native scroll & browser pinch-zoom only when a 2-finger gesture is active.
+      e.preventDefault();
+      const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+      if (pinchStartDistance.current === 0) return;
+      const ratio = currentDistance / pinchStartDistance.current;
+      const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchStartScale.current * ratio));
+      setScale(parseFloat(newScale.toFixed(3)));
+    }
+
+    function handleTouchEnd(e: TouchEvent): void {
+      // If fewer than 2 fingers remain, pinch gesture is over.
+      if (e.touches.length < 2) {
+        pinchActive.current = false;
+      }
+    }
+
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
+    // passive: false is required here so preventDefault() actually works.
+    el.addEventListener("touchmove", handleTouchMove, { passive: false });
+    el.addEventListener("touchend", handleTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("touchend", handleTouchEnd);
+    };
+    // No state dependencies — handlers read latest scale via scaleRef (a mutable ref),
+    // so the effect only needs to run once on mount.
   }, []);
 
   const handleLoadSuccess = useCallback(({ numPages: n }: { numPages: number }): void => {

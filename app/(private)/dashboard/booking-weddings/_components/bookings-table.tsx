@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -976,15 +976,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
                         <div className="leading-tight">
                           <span className={cn('block', 'truncate', 'text-sm', 'font-medium')}>{booking.snapVenue?.venueName ?? "—"}</span>
-                          {booking.poNumber ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
-                              className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-muted', 'text-[10px]', 'font-mono', 'text-muted-foreground', 'hover:bg-muted/80', 'transition-colors', 'cursor-pointer', 'truncate', 'mt-0.5')}
-                            >
-                              <span className="truncate">{booking.poNumber}</span>
-                            </button>
-                          ) : (
-                            <span className={cn('text-muted-foreground', 'text-[10px]', 'block', 'mt-0.5')}>No PO</span>
+                          <div className="mt-0.5">
+                            {booking.poNumber ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
+                                className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-muted', 'text-[10px]', 'font-mono', 'text-muted-foreground', 'hover:bg-muted/80', 'transition-colors', 'cursor-pointer', 'truncate')}
+                              >
+                                <span className="truncate">{booking.poNumber}</span>
+                              </button>
+                            ) : (
+                              <span className={cn('text-muted-foreground', 'text-[10px]')}>No PO</span>
+                            )}
+                          </div>
+                          {booking.sales?.fullName && (
+                            <div className={cn('flex', 'items-center', 'gap-0.5', 'mt-1', 'text-[10px]', 'text-muted-foreground')}>
+                              <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{booking.sales.fullName}</span>
+                            </div>
                           )}
                         </div>
                       </TableCell>
@@ -1147,6 +1155,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <span className={cn('text-muted-foreground', 'text-[10px]')}>No PO</span>
                       )}
                     </div>
+
+                    {/* Row 4b: Sales PIC — shown below PO when available */}
+                    {booking.sales?.fullName && (
+                      <div className={cn('flex', 'items-center', 'gap-0.5', 'text-[10px]', 'text-muted-foreground')}>
+                        <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{booking.sales.fullName}</span>
+                      </div>
+                    )}
 
                     {/* Footer: mobile action tile bar — icon above + label below, centered */}
                     <div className={cn('flex', 'items-center', 'justify-center', 'gap-1', 'pt-1', 'border-t', 'border-border')} onClick={(e) => e.stopPropagation()}>
