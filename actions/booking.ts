@@ -1145,6 +1145,7 @@ export async function editBooking(data: unknown) {
     //                        AND its payment proof must be cleared.
     let topChanged = false;
     let topStatusChanged = false;
+    let topSortOrderChanged = false;
     let paidReversed = false;
     if (rest.termOfPayments && rest.termOfPayments.length > 0) {
       const currentTerms = await db.termOfPayment.findMany({
@@ -1153,32 +1154,56 @@ export async function editBooking(data: unknown) {
         orderBy: { sortOrder: "asc" },
       });
       const newTerms = rest.termOfPayments;
-      if (currentTerms.length !== newTerms.length) {
-        topChanged = true;
-      } else {
-        // dueDate is stored as a DateTime (UTC midnight); the client sends a
-        // "yyyy-MM-dd" string. Normalise the stored value to the same string
-        // form before comparing so a pure date change is detected as material.
-        const toYmd = (d: Date | null): string =>
-          d ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}` : "";
-        for (let i = 0; i < currentTerms.length; i++) {
-          const cur = currentTerms[i];
-          const nw = newTerms[i];
+
+      // dueDate is stored as a DateTime (UTC midnight); the client sends a
+      // "yyyy-MM-dd" string. Normalise the stored value to the same string
+      // form before comparing so a pure date change is detected as material.
+      const toYmd = (d: Date | null): string =>
+        d ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}` : "";
+
+      // Structural comparison is id-based, not index-based. This prevents drag-reorder
+      // (sortOrder change) from being treated as a material change. A term is structural
+      // when: added (no id on client side), removed (existing id not in client payload),
+      // or has a name/amount/dueDate change. sortOrder-only changes are non-material
+      // (display reorder) but still need a write so they are tracked separately.
+      const dbById = new Map(currentTerms.map((t) => [t.id, t]));
+      const clientIds = new Set(newTerms.filter((t) => t.id).map((t) => t.id as string));
+
+      // Term removed from client (and it's not a new term with no id)
+      const removedTermIds = currentTerms.filter((t) => !clientIds.has(t.id));
+      if (removedTermIds.length > 0) topChanged = true;
+
+      if (!topChanged) {
+        for (const nw of newTerms) {
+          if (!nw.id) {
+            // New term (no existing id) — structural addition
+            topChanged = true;
+            break;
+          }
+          const cur = dbById.get(nw.id);
+          if (!cur) {
+            // Client sent an id that doesn't exist in DB — treat as new (structural)
+            topChanged = true;
+            break;
+          }
           if (
             cur.name !== nw.name ||
             cur.amount !== nw.amount ||
-            cur.sortOrder !== nw.sortOrder ||
             toYmd(cur.dueDate) !== nw.dueDate
           ) {
             topChanged = true;
             break;
           }
+          // sortOrder-only change: non-material but requires a write to persist the reorder
+          if (cur.sortOrder !== nw.sortOrder) {
+            topSortOrderChanged = true;
+          }
         }
       }
+
       // Payment-status deltas — compared by term id (robust to ordering). Finance-
       // acknowledged terms are locked and excluded; only unpaid/paid from the client
       // are honoured (partial/refund are managed by the finance flows, not here).
-      const dbById = new Map(currentTerms.map((t) => [t.id, t]));
       for (const nw of newTerms) {
         if (!nw.id) continue; // new term — covered by the structural path
         const cur = dbById.get(nw.id);
@@ -1204,8 +1229,10 @@ export async function editBooking(data: unknown) {
       takeoutChanged ||
       topChanged ||
       paidReversed;
-    // Terms must be re-written whenever structure OR any status changed.
-    const termsNeedWrite = topChanged || topStatusChanged;
+    // Terms must be re-written whenever structure, status, or sort-order changed.
+    // sortOrder-only change (drag reorder) is non-material but still needs a write
+    // so the new display order is persisted correctly.
+    const termsNeedWrite = topChanged || topStatusChanged || topSortOrderChanged;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([

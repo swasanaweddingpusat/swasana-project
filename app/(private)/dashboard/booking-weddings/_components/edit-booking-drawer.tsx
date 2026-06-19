@@ -24,6 +24,7 @@ import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
+import { updateTermOfPayments } from "@/actions/term-of-payment";
 import { saveEditDraft, discardEditDraft } from "@/actions/booking-edit-draft";
 import { createComplimentary } from "@/actions/complimentary";
 import { computeFullPrice } from "@/lib/package-prices";
@@ -393,7 +394,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     const initialTerms = bTerms.length > 0 ? bTerms : defaultTerms;
     setTerms(initialTerms);
     // Snapshot for TOP change detection — mirrors server: count, name, amount, sortOrder, paymentStatus
-    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus }))));
+    setOriginalTermsKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus, evidence: t.paymentEvidence instanceof File ? `file:${t.paymentEvidence.name}:${t.paymentEvidence.size}` : (typeof t.paymentEvidence === "string" ? t.paymentEvidence : null) }))));
     setOriginalStructuralKey(JSON.stringify(initialTerms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder }))));
     setOriginalTermStatuses(Object.fromEntries(initialTerms.filter((t) => t.id).map((t) => [t.id as string, t.paymentStatus])));
     setLastAllocatedPrice(0);
@@ -592,7 +593,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   //  • topChanged       — ANY change incl. payment status. Enables Save & locks the wizard.
   //  • topApprovalReset — structural change OR a paid→unpaid reversal. Drives the step-5
   //                       "approval will reset" warning. A plain unpaid→paid does NOT reset.
-  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })));
+  const currentTermsKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus, evidence: t.paymentEvidence instanceof File ? `file:${t.paymentEvidence.name}:${t.paymentEvidence.size}` : (typeof t.paymentEvidence === "string" ? t.paymentEvidence : null) })));
   const topChanged = originalTermsKey !== "" && currentTermsKey !== originalTermsKey;
   const currentStructuralKey = JSON.stringify(terms.map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })));
   const topStructuralChanged = originalStructuralKey !== "" && currentStructuralKey !== originalStructuralKey;
@@ -835,6 +836,57 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   async function handleSubmit() {
     if (!booking) return;
     setIsSubmitting(true);
+
+    // ── Payment-only fast path (Opsi B) ──────────────────────────────────────
+    // When the ONLY change is payment-status (unpaid→paid) and/or new evidence
+    // files — no structural/material change — we skip editBooking entirely and
+    // call updateTermOfPayments directly. This prevents a spurious revision from
+    // being created just because the user uploaded a bukti bayar.
+    if (!isMaterialChange && hasSignificantChange) {
+      // Collect terms whose payment status changed (existing id, not "new-")
+      const changedTerms = terms
+        .filter((t) => {
+          if (!t.id || t.id.startsWith("new-")) return false;
+          const origStatus = originalTermStatuses[t.id];
+          return origStatus !== undefined && origStatus !== t.paymentStatus;
+        })
+        .map((t) => ({
+          id: t.id as string,
+          name: t.name,
+          amount: t.amount,
+          // dueDate from state is ISO string (e.g. "yyyy-MM-ddT00:00:00.000Z"); extract date part
+          dueDate: t.dueDate.slice(0, 10),
+          paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
+          sortOrder: t.sortOrder,
+        }));
+
+      if (changedTerms.length > 0) {
+        const r = await updateTermOfPayments(booking.id, changedTerms);
+        if (!r.success) { toast.error(r.error); setIsSubmitting(false); return; }
+      }
+
+      // Upload new evidence files for existing terms
+      const termsWithNewFiles = terms.filter(
+        (t) => t.id && !t.id.startsWith("new-") && t.paymentEvidence instanceof File
+      );
+      if (termsWithNewFiles.length > 0) {
+        await Promise.allSettled(
+          termsWithNewFiles.map((t) => {
+            const fd = new FormData();
+            fd.append("termId", t.id!);
+            fd.append("file", t.paymentEvidence as File);
+            return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+          })
+        );
+      }
+
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      toast.success("Status pembayaran berhasil disimpan.");
+      onOpenChange(false);
+      return;
+    }
+
+    // ── Material change path — may create revision ────────────────────────────
     const r = await mut.mutateAsync({
       id: booking.id,
       // bookingDate is already stored as "yyyy-MM-dd" — pass directly to action.
