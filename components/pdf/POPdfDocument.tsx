@@ -168,7 +168,13 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       }
 
       if (nestedNodes.length > 0) {
-        nodes.push(<View key={k++} style={{ marginLeft: indent }}>{nestedNodes}</View>);
+        // Push nested bullet nodes directly into the parent array (no wrapper View).
+        // A wrapper <View> caused react-pdf to treat the entire nested list as a single
+        // layout block, collapsing all bullets after the first into a single row.
+        // Flattening lets react-pdf render each bullet as its own vertical block.
+        for (const node of nestedNodes) {
+          nodes.push(node);
+        }
       }
     });
 

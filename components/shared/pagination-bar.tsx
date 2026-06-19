@@ -13,10 +13,37 @@ interface PaginationBarProps {
   className?: string;
 }
 
+/** Returns a page range array with "..." for gaps.
+ *  Always shows: first, last, current, and 1 neighbour each side.
+ *  Example (current=50, total=150): [1, "...", 49, 50, 51, "...", 150]
+ */
+function buildPageRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  pages.add(current);
+  if (current - 1 >= 1) pages.add(current - 1);
+  if (current + 1 <= total) pages.add(current + 1);
+
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const result: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    result.push(sorted[i]);
+    if (i < sorted.length - 1 && sorted[i + 1] - sorted[i] > 1) {
+      result.push("...");
+    }
+  }
+  return result;
+}
+
 /**
  * Shared numbered pagination used across list/table views. Desktop shows
- * numbered page buttons (Prev · 1 2 3 · Next); mobile collapses to "page X / Y".
- * Mirrors the original inline leads pagination so every table looks identical.
+ * numbered page buttons with ellipsis gaps (Prev · 1 … 4 5 6 … 20 · Next);
+ * mobile collapses to "page X / Y". Mirrors the booking table pagination so
+ * every table looks identical even with many pages.
  */
 export function PaginationBar({
   currentPage,
@@ -47,9 +74,20 @@ export function PaginationBar({
         {currentPage} / {totalPages}
       </span>
 
-      {/* Desktop: numbered pages */}
+      {/* Desktop: numbered pages with ellipsis gaps */}
       <div className="hidden sm:flex items-center gap-1 overflow-x-auto justify-center">
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+        {buildPageRange(currentPage, totalPages).map((page, idx) => {
+          if (page === "...") {
+            return (
+              <span
+                key={`ellipsis-${idx}`}
+                aria-hidden="true"
+                className="px-2 py-1 text-sm text-muted-foreground shrink-0 select-none"
+              >
+                …
+              </span>
+            );
+          }
           const isCurrent = currentPage === page;
           return (
             <button
