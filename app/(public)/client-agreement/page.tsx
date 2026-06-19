@@ -3,13 +3,27 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Refresh, CheckCircle, FileText, Lock } from "@solar-icons/react";
+import { Refresh, CheckCircle, FileText, Lock, DownloadMinimalistic } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
 import { cn } from "../../../lib/utils";
+
+// react-pdf must not be SSR'd — uses browser canvas/worker APIs
+const PdfCanvasViewer = dynamic(
+  () => import("@/components/shared/PdfCanvasViewer").then((m) => ({ default: m.PdfCanvasViewer })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className={cn("flex", "h-full", "items-center", "justify-center")}>
+        <Refresh weight="BoldDuotone" className={cn("h-8", "w-8", "animate-spin", "text-muted-foreground")} />
+      </div>
+    ),
+  }
+);
 
 function ClientAgreementContent() {
   const searchParams = useSearchParams();
@@ -120,9 +134,26 @@ function ClientAgreementContent() {
     return (
       <div className={cn('min-h-screen', 'bg-gray-50')}>
         <div className={cn('sticky', 'top-0', 'z-10', 'bg-white', 'border-b', 'px-4', 'py-3')}>
-          <div className={cn('max-w-4xl', 'mx-auto')}>
-            <h1 className={cn('text-sm', 'font-semibold')}>Client Agreement</h1>
-            <p className={cn('text-xs', 'text-gray-500')}>{(customer?.name as string) ?? "Client"}</p>
+          <div className={cn('max-w-4xl', 'mx-auto', 'flex', 'items-center', 'justify-between', 'gap-3')}>
+            <div>
+              <h1 className={cn('text-sm', 'font-semibold')}>Client Agreement</h1>
+              <p className={cn('text-xs', 'text-gray-500')}>{(customer?.name as string) ?? "Client"}</p>
+            </div>
+            {pdfUrl && (
+              <a
+                href={pdfUrl}
+                download={`client-agreement-${((booking?.poNumber as string) ?? "").replace(/\//g, "-") || "dokumen"}.pdf`}
+                className={cn(
+                  'flex', 'items-center', 'gap-1.5',
+                  'rounded-full', 'bg-primary', 'px-3', 'py-1.5',
+                  'text-xs', 'font-medium', 'text-primary-foreground',
+                  'transition-colors', 'hover:bg-primary/90',
+                )}
+              >
+                <DownloadMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
+                Download
+              </a>
+            )}
           </div>
         </div>
         <div className={cn('max-w-4xl', 'mx-auto', 'px-4', 'sm:px-6', 'lg:px-8', 'py-6', 'space-y-4', 'pb-12')}>
@@ -138,14 +169,17 @@ function ClientAgreementContent() {
             </div>
             {loadingPdf ? (
               <div className={cn('flex', 'items-center', 'justify-center', 'py-16')}>
-                <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin', 'text-gray-400', 'mr-2')} />
-                <span className={cn('text-sm', 'text-gray-500')}>Memuat dokumen...</span>
+                <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin', 'text-muted-foreground', 'mr-2')} />
+                <span className={cn('text-sm', 'text-muted-foreground')}>Memuat dokumen...</span>
               </div>
             ) : pdfUrl ? (
-              <iframe src={pdfUrl} className={cn('w-full', 'border-0')} style={{ height: "75vh", minHeight: "500px" }} title="PO Preview" />
+              // Canvas-based renderer — shows ALL pages on mobile (iOS Safari iframe only renders page 1)
+              <div className="h-[75vh] min-h-[500px] w-full">
+                <PdfCanvasViewer blobUrl={pdfUrl} showZoomControls />
+              </div>
             ) : (
               <div className={cn('flex', 'items-center', 'justify-center', 'py-16')}>
-                <p className={cn('text-sm', 'text-gray-400')}>Preview tidak tersedia</p>
+                <p className={cn('text-sm', 'text-muted-foreground')}>Preview tidak tersedia</p>
               </div>
             )}
           </div>

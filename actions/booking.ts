@@ -1065,7 +1065,7 @@ export async function editBooking(data: unknown) {
         customerId: true, salesId: true, venueId: true, packageId: true,
         bookingDate: true, weddingSession: true, weddingType: true,
         paymentMethodId: true, sourceOfInformationId: true,
-        discountName: true, discountAmount: true, currentRevisionId: true,
+        discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
         snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
       },
     });
@@ -1102,6 +1102,7 @@ export async function editBooking(data: unknown) {
 
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
+    const typeChanged = (rest.weddingType ?? null) !== (booking.weddingType ?? null);
 
     // ── Material change detection ─────────────────────────────────────────────
     // Compare event date (bookingDate field = event date in wedding bookings)
@@ -1295,25 +1296,58 @@ export async function editBooking(data: unknown) {
       }),
     ];
 
-    // Update venue snapshot if venue changed
-    if (venueChanged) {
-      const venue = await db.venue.findUniqueOrThrow({
+    // Fetch new venue data when venue changed (needed for both snap update and PO recompute).
+    // Also fetched when only the event type changed so we have brand/code for PO rebuild.
+    let fetchedVenue: { id: string; name: string; code: string; address: string | null; description: string | null; brand: { name: string; code: string } | null } | null = null;
+    if (venueChanged || typeChanged) {
+      fetchedVenue = await db.venue.findUniqueOrThrow({
         where: { id: rest.venueId },
-        include: { brand: true },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          address: true,
+          description: true,
+          brand: { select: { name: true, code: true } },
+        },
       });
+    }
+
+    // Update venue snapshot if venue changed
+    if (venueChanged && fetchedVenue) {
       ops.push(
         db.snapVenue.update({
           where: { bookingId: id },
           data: {
-            venueId: venue.id,
-            venueName: venue.name,
-            address: venue.address,
-            description: venue.description,
-            brandName: venue.brand?.name ?? null,
-            brandCode: venue.brand?.code ?? null,
+            venueId: fetchedVenue.id,
+            venueName: fetchedVenue.name,
+            address: fetchedVenue.address,
+            description: fetchedVenue.description,
+            brandName: fetchedVenue.brand?.name ?? null,
+            brandCode: fetchedVenue.brand?.code ?? null,
           },
         })
       );
+    }
+
+    // Recompute poNumber when venue or event type changed.
+    // - seq (running number) and dealing-date segment are preserved from the stored PO.
+    // - brandCode, venueCode, eventTypeCode are re-derived from the new venue/type.
+    // Fail-safe: if the stored PO doesn't match the expected 5-segment format (legacy/custom),
+    // skip the update entirely rather than corrupting it.
+    if ((venueChanged || typeChanged) && fetchedVenue && booking.poNumber) {
+      const oldSegments = booking.poNumber.split("/");
+      if (oldSegments.length === 5) {
+        const [oldSeq, , , , oldDate] = oldSegments;
+        const newBrandCode = fetchedVenue.brand?.code ?? "";
+        const newVenueCode = fetchedVenue.code;
+        const newTypeCode = rest.weddingType ?? "R";
+        const newPoNumber = `${oldSeq}/${newBrandCode}/${newVenueCode}/${newTypeCode}/${oldDate}`;
+        ops.push(
+          db.booking.update({ where: { id }, data: { poNumber: newPoNumber } })
+        );
+      }
+      // If segment count != 5: legacy format — leave poNumber untouched (no push).
     }
 
     // Update package snapshots if package changed

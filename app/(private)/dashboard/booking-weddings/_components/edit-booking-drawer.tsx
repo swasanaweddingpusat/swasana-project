@@ -1823,31 +1823,38 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 {isSavingClientInfo ? "Menyimpan..." : "Save & Publish"}
               </Button>
             ) : (
-              /* Steps 2-5: Previous + Continue/Update */
+              /* Steps 2-5: Discard (when locked) + Previous + Continue/Update */
               <>
-                {isLocked ? (
+                {isLocked && (
                   <Button
                     variant="outline"
                     onClick={handleDiscard}
                     disabled={isDiscarding || mut.isPending}
-                    className="flex-[40%] cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10"
+                    className="flex-[35%] cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10"
                   >
                     {isDiscarding ? "Membuang..." : "Discard"}
                   </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    onClick={handlePrevious}
-                    disabled={mut.isPending || isSubmitting}
-                    className="flex-[40%] cursor-pointer"
-                  >
-                    Previous
-                  </Button>
                 )}
+                <Button
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={currentStep <= 1 || mut.isPending || isSubmitting}
+                  className={cn(
+                    "cursor-pointer",
+                    isLocked ? "flex-[25%]" : "flex-[40%]",
+                    (currentStep <= 1 || mut.isPending || isSubmitting) && "opacity-50 cursor-not-allowed",
+                  )}
+                >
+                  Previous
+                </Button>
                 <Button
                   onClick={currentStep < totalSteps ? handleNext : handleSubmit}
                   disabled={isContinueDisabled}
-                  className={cn("flex-[60%] cursor-pointer", isContinueDisabled && "opacity-50 cursor-not-allowed")}
+                  className={cn(
+                    "cursor-pointer",
+                    isLocked ? "flex-[40%]" : "flex-[60%]",
+                    isContinueDisabled && "opacity-50 cursor-not-allowed",
+                  )}
                 >
                   {currentStep < totalSteps
                     ? "Continue"

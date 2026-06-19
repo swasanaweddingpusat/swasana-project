@@ -606,27 +606,91 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
           <View wrap={false} style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 8 }}>
             {/* Prioritize new snapComplimentaries; fall back to legacy snapBonuses */}
             {(booking.snapComplimentaries ?? []).length > 0 ? (
-              <View style={s.complimentarySection}>
-                <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
-                <View style={{ marginLeft: 8 }}>
-                  {(booking.snapComplimentaries ?? []).map((c) => (
-                    <View key={c.id} style={{ marginBottom: 4 }}>
-                      <Text style={{ fontSize: 7, fontWeight: "bold" }}>
-                        {c.name}{c.qty > 1 ? ` (${c.qty}x)` : ""}{c.isShowPrice ? ` - ${fmtRp(c.price)}` : ""}
-                      </Text>
-                      {c.description ? renderHtmlToPdf(c.description) : null}
+              (() => {
+                const compItems = booking.snapComplimentaries!;
+                // Hide the price column entirely when NO item has isShowPrice === true
+                const showPriceCol = compItems.some((c) => c.isShowPrice);
+                // Column widths (percentages as strings for react-pdf)
+                const colNo = showPriceCol ? "8%" : "10%";
+                const colName = showPriceCol ? "55%" : "65%";
+                const colQty = showPriceCol ? "15%" : "25%";
+                const colPrice = "22%";
+                return (
+                  <View style={s.complimentarySection}>
+                    <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
+                    {/* Table */}
+                    <View style={{ borderWidth: 1, borderColor: "#000" }}>
+                      {/* Header */}
+                      <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
+                        <Text style={{ width: colNo, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
+                        <Text style={{ width: colName, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Complimentary</Text>
+                        <Text style={showPriceCol
+                          ? { width: colQty, fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }
+                          : { width: colQty, fontSize: 6, fontWeight: "bold", padding: 2 }
+                        }>Qty</Text>
+                        {showPriceCol && (
+                          <Text style={{ width: colPrice, fontSize: 6, fontWeight: "bold", padding: 2 }}>Harga</Text>
+                        )}
+                      </View>
+                      {/* Rows */}
+                      {compItems.map((c, idx) => (
+                        <View
+                          key={c.id}
+                          style={idx < compItems.length - 1
+                            ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
+                            : { flexDirection: "row" }
+                          }
+                        >
+                          {/* No */}
+                          <Text style={{ width: colNo, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
+                          {/* Complimentary name + description */}
+                          <View style={{ width: colName, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
+                            <Text style={{ fontSize: 6, fontWeight: "bold" }}>{c.name}</Text>
+                            {c.description ? renderHtmlToPdf(c.description) : null}
+                          </View>
+                          {/* Qty */}
+                          <Text style={showPriceCol
+                            ? { width: colQty, fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }
+                            : { width: colQty, fontSize: 6, padding: 2 }
+                          }>{c.qty}</Text>
+                          {/* Harga — only rendered when showPriceCol is true */}
+                          {showPriceCol && (
+                            <Text style={{ width: colPrice, fontSize: 6, padding: 2 }}>
+                              {c.isShowPrice ? fmtRp(c.price) : ""}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
                     </View>
-                  ))}
-                </View>
-              </View>
+                  </View>
+                );
+              })()
             ) : booking.snapBonuses.length > 0 ? (
               <View style={s.complimentarySection}>
                 <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
-                <View style={{ marginLeft: 8 }}>
-                  {booking.snapBonuses.map((b) => (
-                    <View key={b.id} style={{ marginBottom: 4 }}>
-                      <Text style={{ fontSize: 7, fontWeight: "bold" }}>{b.vendorName}</Text>
-                      {b.description ? renderHtmlToPdf(b.description) : null}
+                {/* Table — legacy snapBonuses (no price) */}
+                <View style={{ borderWidth: 1, borderColor: "#000" }}>
+                  {/* Header */}
+                  <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
+                    <Text style={{ width: "10%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
+                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Complimentary</Text>
+                    <Text style={{ width: "20%", fontSize: 6, fontWeight: "bold", padding: 2 }}>Qty</Text>
+                  </View>
+                  {/* Rows */}
+                  {booking.snapBonuses.map((b, idx) => (
+                    <View
+                      key={b.id}
+                      style={idx < booking.snapBonuses.length - 1
+                        ? { flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }
+                        : { flexDirection: "row" }
+                      }
+                    >
+                      <Text style={{ width: "10%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
+                      <View style={{ width: "70%", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
+                        <Text style={{ fontSize: 6, fontWeight: "bold" }}>{b.vendorName}</Text>
+                        {b.description ? renderHtmlToPdf(b.description) : null}
+                      </View>
+                      <Text style={{ width: "20%", fontSize: 6, padding: 2 }}>{b.qty}</Text>
                     </View>
                   ))}
                 </View>
