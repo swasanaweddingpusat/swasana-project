@@ -86,28 +86,31 @@ export async function getUnreadCommentCounts(
 ): Promise<Record<string, number>> {
   if (!bookingIds.length) return {};
 
-  type Row = { booking_id: string; cnt: bigint };
+  // NOTE: kolom Prisma camelCase TANPA @map → di Postgres tetap camelCase,
+  // jadi WAJIB di-double-quote ("bookingId", bukan booking_id). Hanya nama
+  // TABEL yang snake_case (via @@map).
+  type Row = { bookingId: string; cnt: bigint };
 
   const rows = await db.$queryRaw<Row[]>(Prisma.sql`
-    SELECT bc.booking_id, COUNT(*)::bigint AS cnt
+    SELECT bc."bookingId", COUNT(*)::bigint AS cnt
     FROM booking_comments bc
-    WHERE bc.booking_id = ANY(${bookingIds}::text[])
-      AND bc.author_id <> ${profileId}
-      AND bc.created_at > COALESCE(
+    WHERE bc."bookingId" = ANY(${bookingIds}::text[])
+      AND bc."authorId" <> ${profileId}
+      AND bc."createdAt" > COALESCE(
         (
-          SELECT bcr.last_read_at
+          SELECT bcr."lastReadAt"
           FROM booking_comment_reads bcr
-          WHERE bcr.booking_id = bc.booking_id
-            AND bcr.profile_id = ${profileId}
+          WHERE bcr."bookingId" = bc."bookingId"
+            AND bcr."profileId" = ${profileId}
         ),
         '1970-01-01'::timestamptz
       )
-    GROUP BY bc.booking_id
+    GROUP BY bc."bookingId"
   `);
 
   const result: Record<string, number> = {};
   for (const row of rows) {
-    result[row.booking_id] = Number(row.cnt);
+    result[row.bookingId] = Number(row.cnt);
   }
   return result;
 }
