@@ -2,6 +2,7 @@ import { DefaultSession, DefaultUser } from "next-auth";
 import type { JWT } from "next-auth/jwt"; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 type ProfileStatus = "active" | "inactive" | "suspended";
+type DataScope = "own" | "group" | "all";
 
 declare module "next-auth" {
   interface Session {
@@ -15,6 +16,7 @@ declare module "next-auth" {
       isEmailVerified: boolean;
       status: ProfileStatus;
       profileMissing?: boolean;
+      dataScope: DataScope;
     };
   }
 
@@ -38,5 +40,6 @@ declare module "next-auth/jwt" {
     status?: ProfileStatus;
     profileCachedAt?: number;
     profileMissing?: boolean;
+    dataScope?: DataScope;
   }
 }

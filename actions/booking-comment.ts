@@ -33,6 +33,7 @@ export async function createBookingComment(data: {
   if (!parsed.success) return { success: false as const, error: "Komentar tidak valid." };
   if (!data.content.trim() && !data.attachments?.length) return { success: false as const, error: "Komentar tidak boleh kosong." };
 
+  if (!session!.user.profileId) return { success: false as const, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, data.bookingId))) {
     return { success: false as const, error: "Anda tidak memiliki akses ke booking ini." };

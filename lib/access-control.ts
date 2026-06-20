@@ -24,18 +24,28 @@ export async function canAccessBooking(
     return booking.salesId === profileId;
   }
 
-  // group scope — check if salesId is in same group as profileId
+  // group scope — check if salesId is reachable via any group where profileId is leader OR member.
+  // Mirrors canViewSalesBookings() in lib/permissions.ts — same semantics, same query shape.
   if (booking.salesId === profileId) return true;
-  const myGroups = await db.userGroupMember.findMany({
-    where: { userId: profileId },
-    select: { groupId: true },
+  const myGroups = await db.userGroup.findMany({
+    where: {
+      OR: [
+        { leaderId: profileId },
+        { members: { some: { userId: profileId } } },
+      ],
+    },
+    select: {
+      leaderId: true,
+      members: { select: { userId: true } },
+    },
   });
   if (myGroups.length === 0) return false;
-  const groupIds = myGroups.map((g) => g.groupId);
-  const groupMember = await db.userGroupMember.findFirst({
-    where: { groupId: { in: groupIds }, userId: booking.salesId },
-  });
-  return !!groupMember;
+  const reachableIds = new Set<string>();
+  for (const g of myGroups) {
+    if (g.leaderId) reachableIds.add(g.leaderId);
+    for (const m of g.members) reachableIds.add(m.userId);
+  }
+  return reachableIds.has(booking.salesId);
 }
 
 // ─── Helpers: resolve bookingId from related entities ────────────────────────
