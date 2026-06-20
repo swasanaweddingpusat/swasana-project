@@ -6,6 +6,21 @@ const nextConfig: NextConfig = {
   output: "standalone",
   cacheComponents: true,
   allowedDevOrigins: ["192.168.1.4"],
+  async headers() {
+    // Client agreement is a public, status-sensitive flow (validate / sign /
+    // render-po). Without no-store, an intermediate HTTP/CDN cache can serve a
+    // stale "Signed" response to some browsers after the status has changed,
+    // causing a false "Agreement sudah ditandatangani". Force every response on
+    // this path (and its API) to be revalidated on each request.
+    const noStore = [
+      { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, max-age=0" },
+      { key: "Pragma", value: "no-cache" },
+    ];
+    return [
+      { source: "/api/client-agreement/:path*", headers: noStore },
+      { source: "/client-agreement", headers: noStore },
+    ];
+  },
   async redirects() {
     return [
       {

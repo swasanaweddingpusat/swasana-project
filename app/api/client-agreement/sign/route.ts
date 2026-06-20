@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
@@ -32,15 +33,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
-    await db.$transaction([
-      db.clientAgreement.update({
-        where: { token },
-        data: { status: "Signed", signedAt: new Date() },
-      }),
-    ]);
-
-    // Auto-approve client step in ApprovalRecord.
-    // Fetch booking first to get currentRevisionId.
+    // Read everything needed BEFORE writing, so the entire effect can commit as a
+    // single atomic transaction. Committing "Signed" on its own (as before) left a
+    // window where the agreement read "Signed" but the approval step was never
+    // approved if a later step failed — a "Signed zombie" that blocked re-signing.
     const booking = await db.booking.findUnique({
       where: { id: agreement.bookingId },
       select: { currentRevisionId: true },
@@ -50,6 +46,14 @@ export async function POST(req: Request) {
       where: { module_entityId: { module: "booking", entityId: agreement.bookingId } },
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
+
+    // Always start with the agreement status update.
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.clientAgreement.update({
+        where: { token },
+        data: { status: "Signed", signedAt: new Date() },
+      }),
+    ];
 
     if (approvalRecord) {
       const allSteps = approvalRecord.steps;
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
           .filter((s) => s.id !== clientStep.id)
           .every((s) => s.status === "approved");
 
-        await db.$transaction([
+        ops.push(
           db.approvalRecordStep.update({
             where: { id: clientStep.id },
             data: {
@@ -84,23 +88,26 @@ export async function POST(req: Request) {
               decidedAt: new Date(),
             },
           }),
-          ...(allOtherApproved
-            ? [
-                db.approvalRecord.update({
-                  where: { id: approvalRecord.id },
-                  data: { status: "approved" },
-                }),
-                db.booking.update({
-                  where: { id: agreement.bookingId },
-                  data: { bookingStatus: "Confirmed" },
-                }),
-              ]
-            : []),
-        ]);
+        );
+        if (allOtherApproved) {
+          ops.push(
+            db.approvalRecord.update({
+              where: { id: approvalRecord.id },
+              data: { status: "approved" },
+            }),
+            db.booking.update({
+              where: { id: agreement.bookingId },
+              data: { bookingStatus: "Confirmed" },
+            }),
+          );
+        }
       }
       // If clientStep not found (legacy booking without client step) — signing still
-      // updates clientAgreement above. No crash; log the audit and return success.
+      // updates clientAgreement via ops[0]. No crash; log the audit and return success.
     }
+
+    // Single atomic commit: agreement + step + record + booking all-or-nothing.
+    await db.$transaction(ops);
 
     await logAudit({
       action: "client_signed",
