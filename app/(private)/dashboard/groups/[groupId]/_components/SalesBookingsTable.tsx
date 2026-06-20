@@ -276,7 +276,9 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           [bookingId]: items as { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[],
         }));
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("[SalesBookingsTable] fetchRevisions error:", err);
+      });
   }, []);
 
   async function handleDelete(): Promise<void> {
@@ -727,7 +729,12 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           type="button"
           variant="outline"
           size="icon"
-          onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch(() => {}); }}
+          onClick={() => {
+            void refetch();
+            qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
+          }}
           disabled={isFetching}
           aria-label="Muat ulang"
           className="shrink-0"
@@ -902,7 +909,9 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigator.clipboard.writeText(booking.poNumber!).catch(() => {});
+                              navigator.clipboard.writeText(booking.poNumber!).catch((err) => {
+                                console.error("[SalesBookingsTable] clipboard error:", err);
+                              });
                               toast.success("Nomor PO disalin", { duration: 1500 });
                             }}
                             className="font-mono bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 transition-colors cursor-pointer truncate max-w-36"
@@ -1024,7 +1033,9 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         open={!!commentTarget}
         onClose={() => {
           setCommentTarget(null);
-          qc.invalidateQueries({ queryKey: ["unread-comments"] }).catch(() => {});
+          qc.invalidateQueries({ queryKey: ["unread-comments"] }).catch((err) => {
+            console.error("[SalesBookingsTable] invalidateQueries error:", err);
+          });
         }}
         bookingId={commentTarget?.id ?? null}
         customerName={commentTarget?.snapCustomer?.name ?? ""}
@@ -1053,8 +1064,12 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           open={!!approvalDialogTarget}
           onClose={() => {
             setApprovalDialogTarget(null);
-            qc.invalidateQueries({ queryKey: ["bookings"] }).catch(() => {});
-            qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch(() => {});
+            qc.invalidateQueries({ queryKey: ["bookings"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
+            qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
           }}
           packageId={approvalDialogTarget.id}
           packageName={approvalDialogTarget.snapCustomer?.name ?? "Booking"}
@@ -1070,8 +1085,12 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
           open={!!approveModal}
           onClose={() => {
             setApproveModal(null);
-            qc.invalidateQueries({ queryKey: ["bookings"] }).catch(() => {});
-            qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch(() => {});
+            qc.invalidateQueries({ queryKey: ["bookings"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
+            qc.invalidateQueries({ queryKey: ["booking-approvals"] }).catch((err) => {
+              console.error("[SalesBookingsTable] invalidateQueries error:", err);
+            });
           }}
           stepId={approveModal.stepId}
           stepLabel={approveModal.stepLabel}

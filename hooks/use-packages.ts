@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { z } from "zod";
 import { fetchPackages } from "@/services/package-service";
 import type { FetchPackagesParams } from "@/services/package-service";
 import {
@@ -15,6 +16,10 @@ import {
   togglePackageAvailable,
   unverifyPackage,
 } from "@/actions/package";
+import {
+  updateBookingCategoryPrices,
+  updateBookingCategoryPricesSchema,
+} from "@/actions/package-prices";
 import type { PackagesQueryResult } from "@/lib/queries/packages";
 import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
 
@@ -133,5 +138,18 @@ export function useUnverifyPackage() {
   return useMutation({
     mutationFn: (id: string) => unverifyPackage(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+type UpdateBookingCategoryPricesInput = z.infer<typeof updateBookingCategoryPricesSchema>;
+
+export function useUpdateBookingCategoryPrices() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateBookingCategoryPricesInput) =>
+      updateBookingCategoryPrices(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
   });
 }

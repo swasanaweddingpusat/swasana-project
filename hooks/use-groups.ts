@@ -12,7 +12,7 @@ import {
   removeGroupMember,
   setMemberTarget,
 } from "@/actions/groups";
-import type { CreateGroupInput, UpdateGroupInput, SetMemberTargetInput } from "@/lib/validations/user";
+import type { CreateGroupInput, UpdateGroupInput, SetMemberTargetInput } from "@/lib/validations/group";
 
 export function useGroups(initialData?: GroupsQueryResult) {
   return useQuery({
