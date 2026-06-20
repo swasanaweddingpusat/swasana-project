@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { LeadDrawer } from "./lead-drawer";
+import { CreateLeadDrawer } from "./CreateLeadDrawer";
 import { LeadsFilters, type ViewMode } from "./leads-filters";
 import { LeadsListView } from "./leads-list-view";
 import { LeadsPipelineView } from "./leads-pipeline-view";
@@ -48,6 +49,8 @@ export function LeadsTable() {
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editLead, setEditLead] = useState<LeadListItem | null>(null);
+  // CreateLeadDrawer — new redesigned create flow (frontend-only for now)
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<LeadItem | null>(null);
   const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
   const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
@@ -123,8 +126,9 @@ export function LeadsTable() {
   );
 
   function handleAdd() {
-    setEditLead(null);
-    setDrawerOpen(true);
+    // Opens the new redesigned CreateLeadDrawer (frontend-only UI for review)
+    // TODO(backend): after backend wiring, this will call the real create action
+    setCreateDrawerOpen(true);
   }
 
   function handleEdit(lead: LeadItem) {
@@ -454,6 +458,13 @@ export function LeadsTable() {
         </CardContent>
       </Card>
 
+      {/* New create drawer — redesigned UI with step-0 category selection */}
+      <CreateLeadDrawer
+        open={createDrawerOpen}
+        onOpenChange={setCreateDrawerOpen}
+      />
+
+      {/* Edit drawer — existing LeadDrawer (edit mode only) */}
       <LeadDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}

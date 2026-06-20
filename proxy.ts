@@ -63,7 +63,12 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|ttf|woff|woff2)).*)",
+    // Exclude static assets so the proxy never redirects them to /auth/login.
+    // `mjs|js|css|map|wasm` are critical: the pdf.js worker (public/pdf.worker.min.mjs)
+    // is requested from the public /client-agreement page WITHOUT a session — without
+    // these, the request gets redirected to the HTML login page and the browser rejects
+    // the module script for its "text/html" MIME type ("gagal memuat PDF").
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|ttf|woff|woff2|mjs|js|css|map|wasm|txt|xml|json)).*)",
   ],
   skipProxyUrlNormalize: true,
 };
