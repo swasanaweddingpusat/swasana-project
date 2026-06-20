@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { hasPermission, isSuperAdmin } from "@/lib/permissions";
 import {
@@ -8,6 +9,7 @@ import {
   getAvailableSalesProfiles,
   getEligibleLeaders,
 } from "@/lib/queries/groups";
+import { logAudit } from "@/lib/audit";
 import { GroupDetailClient } from "./_components/GroupDetailClient";
 import type { GroupDetail } from "@/lib/queries/groups";
 
@@ -32,7 +34,19 @@ export default async function GroupDetailPage({ params }: Props) {
   const isLeader = group.leaderId === profileId;
   const isMember = group.members.some((m) => m.userId === profileId);
 
-  if (!hasViewAll && !isLeader && !isMember) notFound();
+  if (!hasViewAll && !isLeader && !isMember) {
+    const heads = await headers();
+    await logAudit({
+      userId: session.user.id,
+      action: "groups.view_denied",
+      result: "failure",
+      entityType: "Group",
+      entityId: groupId,
+      ipAddress: heads.get("x-forwarded-for") ?? "unknown",
+      userAgent: heads.get("user-agent") ?? "unknown",
+    });
+    redirect("/dashboard?error=forbidden");
+  }
 
   const canManage =
     isAdmin ||

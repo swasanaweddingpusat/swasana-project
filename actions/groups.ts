@@ -2,7 +2,6 @@
 
 import { revalidateTag } from "next/cache";
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { requirePermission, isSuperAdmin } from "@/lib/permissions";
@@ -13,7 +12,7 @@ import {
   updateGroupSchema,
   setMemberTargetSchema,
   updateGroupLeaderSchema,
-} from "@/lib/validations/user";
+} from "@/lib/validations/group";
 
 // ─── Create Group ─────────────────────────────────────────────────────────────
 
@@ -57,9 +56,6 @@ export async function createGroup(data: unknown) {
       await db.$transaction(leaderOps);
     }
 
-    revalidateTag("groups", "max");
-    revalidateTag("users", "max");
-
     const h = await headers();
     await logAudit({
       userId: session!.user.profileId,
@@ -71,6 +67,9 @@ export async function createGroup(data: unknown) {
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });
+
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
 
     return { success: true, group };
   } catch (e) {
@@ -92,75 +91,79 @@ export async function updateGroup(data: unknown) {
   const { id, name, description, leaderId } = parsed.data;
 
   try {
-    // Read current group to know old leader before updating
+    // ── Phase 1: Reads (before any write) ──
     const currentGroup = await db.userGroup.findUnique({
       where: { id },
-      select: { leaderId: true },
+      select: { name: true, leaderId: true },
     });
     if (!currentGroup) return { success: false, error: "Grup tidak ditemukan." };
 
     const oldLeaderId = currentGroup.leaderId;
     const newLeaderId = leaderId !== undefined ? (leaderId ?? null) : oldLeaderId;
+    const leaderChanging = leaderId !== undefined && newLeaderId !== oldLeaderId;
 
-    // Update the group record
-    const [group] = await db.$transaction([
-      db.userGroup.update({
-        where: { id },
-        data: {
-          ...(name !== undefined && { name }),
-          ...(description !== undefined && { description }),
-          ...(leaderId !== undefined && { leaderId: newLeaderId }),
-        },
-      }),
-    ]);
-
-    // Handle leader membership + dataScope changes when leaderId is being updated
-    if (leaderId !== undefined && newLeaderId !== oldLeaderId) {
-      const leaderOps: Prisma.PrismaPromise<unknown>[] = [];
-
-      // New leader: ensure membership + set dataScope "group"
-      if (newLeaderId) {
-        const existingMember = await db.userGroupMember.findUnique({
-          where: { groupId_userId: { groupId: id, userId: newLeaderId } },
-          select: { userId: true },
+    // Conditionally read membership state for the new leader (needed to build tx ops)
+    let existingMember: { userId: string } | null = null;
+    let lastMemberSortOrder = 0;
+    if (leaderChanging && newLeaderId) {
+      existingMember = await db.userGroupMember.findUnique({
+        where: { groupId_userId: { groupId: id, userId: newLeaderId } },
+        select: { userId: true },
+      });
+      if (!existingMember) {
+        const lastMember = await db.userGroupMember.findFirst({
+          where: { groupId: id },
+          orderBy: { sortOrder: "desc" },
+          select: { sortOrder: true },
         });
-        if (!existingMember) {
-          const lastMember = await db.userGroupMember.findFirst({
-            where: { groupId: id },
-            orderBy: { sortOrder: "desc" },
-            select: { sortOrder: true },
-          });
-          leaderOps.push(
-            db.userGroupMember.create({
-              data: { groupId: id, userId: newLeaderId, sortOrder: (lastMember?.sortOrder ?? 0) + 1 },
-            })
-          );
-        }
-        leaderOps.push(
+        lastMemberSortOrder = lastMember?.sortOrder ?? 0;
+      }
+    }
+
+    // ── Phase 2: Build all write ops ──
+    const groupUpdateOp = db.userGroup.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(leaderId !== undefined && { leaderId: newLeaderId }),
+      },
+    });
+
+    const sideOps: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (leaderChanging) {
+      // New leader: ensure membership + set dataScope "group"
+      if (newLeaderId && !existingMember) {
+        sideOps.push(
+          db.userGroupMember.create({
+            data: { groupId: id, userId: newLeaderId, sortOrder: lastMemberSortOrder + 1 },
+          })
+        );
+      }
+      if (newLeaderId) {
+        sideOps.push(
           db.profile.update({
             where: { id: newLeaderId },
             data: { dataScope: "group" },
           })
         );
       }
-
       // Old leader: keep membership, reset dataScope to "own"
-      if (oldLeaderId && oldLeaderId !== newLeaderId) {
-        leaderOps.push(
+      if (oldLeaderId) {
+        sideOps.push(
           db.profile.update({
             where: { id: oldLeaderId },
             data: { dataScope: "own" },
           })
         );
       }
-
-      if (leaderOps.length > 0) {
-        await db.$transaction(leaderOps);
-      }
     }
 
-    revalidateTag("groups", "max");
-    revalidateTag("users", "max");
+    // ── Phase 3: Single atomic transaction ──
+    const [group] = await db.$transaction([groupUpdateOp, ...sideOps]);
+
+    const groupName = name ?? currentGroup.name;
 
     const h = await headers();
     await logAudit({
@@ -168,9 +171,9 @@ export async function updateGroup(data: unknown) {
       action: "group.updated",
       entityType: "group",
       entityId: id,
-      description: `Grup "${group.name}" diperbarui`,
+      description: `Grup "${groupName}" diperbarui`,
       changes: {
-        ...(leaderId !== undefined && newLeaderId !== oldLeaderId && {
+        ...(leaderChanging && {
           before: { leaderId: oldLeaderId },
           after: { leaderId: newLeaderId },
         }),
@@ -178,6 +181,9 @@ export async function updateGroup(data: unknown) {
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });
+
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
 
     return { success: true, group };
   } catch (e) {
@@ -199,8 +205,6 @@ export async function deleteGroup(groupId: string) {
 
     await db.$transaction([db.userGroup.delete({ where: { id: groupId } })]);
 
-    revalidateTag("groups", "max");
-
     const h = await headers();
     await logAudit({
       userId: session!.user.profileId,
@@ -213,6 +217,8 @@ export async function deleteGroup(groupId: string) {
       userAgent: h.get("user-agent") ?? undefined,
     });
 
+    revalidateTag("groups", "max");
+
     return { success: true };
   } catch (e) {
     console.error("[deleteGroup]", e);
@@ -223,7 +229,7 @@ export async function deleteGroup(groupId: string) {
 // ─── Add Member ───────────────────────────────────────────────────────────────
 
 export async function addGroupMember(groupId: string, profileId: string) {
-  const { session, error } = await requirePermission({ module: "groups", action: "create" });
+  const { session, error } = await requirePermission({ module: "groups", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`groups-member-add:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
@@ -233,11 +239,14 @@ export async function addGroupMember(groupId: string, profileId: string) {
       orderBy: { sortOrder: "desc" },
       select: { sortOrder: true },
     });
-    await db.userGroupMember.create({
-      data: { groupId, userId: profileId, sortOrder: (last?.sortOrder ?? 0) + 1 },
-    });
 
     const h = await headers();
+    await db.$transaction([
+      db.userGroupMember.create({
+        data: { groupId, userId: profileId, sortOrder: (last?.sortOrder ?? 0) + 1 },
+      }),
+    ]);
+
     await logAudit({
       userId: session!.user.profileId,
       action: "group.member_added",
@@ -390,11 +399,12 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
   const parsed = updateGroupLeaderSchema.safeParse({ groupId, leaderId });
   if (!parsed.success) return { success: false, error: "Data tidak valid" };
 
-  const session = await auth();
-  if (!session?.user) return { success: false, error: "Unauthorized" };
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const { session, error } = await requirePermission({ module: "groups", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`groups-leader:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const isAdmin = await isSuperAdmin(session!.user.roleId);
   if (!isAdmin) return { success: false, error: "Hanya super admin yang bisa mengganti leader." };
-  if (!mutationLimiter.check(`groups-leader:${session.user.id}`)) return { success: false, ...rateLimitError() };
 
   try {
     // Read current group to know the old leader
@@ -461,12 +471,9 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
 
     await db.$transaction(txOps);
 
-    revalidateTag("groups", "max");
-    revalidateTag("users", "max");
-
     const h = await headers();
     await logAudit({
-      userId: session.user.profileId,
+      userId: session!.user.profileId,
       action: "group.leader_changed",
       entityType: "group",
       entityId: groupId,
@@ -474,6 +481,9 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });
+
+    revalidateTag("groups", "max");
+    revalidateTag("users", "max");
 
     return { success: true };
   } catch (e) {

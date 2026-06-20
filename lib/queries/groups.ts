@@ -1,18 +1,21 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
-import { BookingStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { resolveAvatarUrl } from "@/lib/storage";
 
 // ─── Paginated list (used by settings & API) ──────────────────────────────────
 
-export async function getGroups(page = 1, limit = 10) {
+export async function getGroups(page = 1, limit = 10, userId?: string) {
   "use cache";
   cacheTag("groups");
   cacheLife("minutes");
 
   const skip = (page - 1) * limit;
+  const where = userId ? { members: { some: { userId } } } : undefined;
+
   const [data, total] = await Promise.all([
     db.userGroup.findMany({
+      where,
       select: {
         id: true,
         name: true,
@@ -44,7 +47,7 @@ export async function getGroups(page = 1, limit = 10) {
       skip,
       take: limit,
     }),
-    db.userGroup.count(),
+    db.userGroup.count({ where }),
   ]);
 
   const resolved = data.map((g) => ({
@@ -124,6 +127,7 @@ export async function getAllGroups() {
       _count: { select: { members: true } },
     },
     orderBy: { name: "asc" },
+    take: 200,
   });
 
   return groups.map((g) => ({
@@ -153,6 +157,7 @@ export async function getUserGroups(profileId: string) {
       _count: { select: { members: true } },
     },
     orderBy: { name: "asc" },
+    take: 200,
   });
 
   return groups.map((g) => ({
@@ -204,6 +209,22 @@ export async function getGroupDetail(groupId: string) {
 
 // ─── Performance queries ──────────────────────────────────────────────────────
 
+// ─── Raw query row types ──────────────────────────────────────────────────────
+
+type BookingAggRow = {
+  sales_id: string;
+  total_bookings: bigint;
+  confirmed_count: bigint;
+  pending_count: bigint;
+  revenue: bigint | null;
+};
+
+type FinancialAggRow = {
+  sales_id: string;
+  piutang: bigint;
+  total_revenue: bigint;
+};
+
 export async function getGroupPerformance(groupId: string, startDate?: Date, endDate?: Date) {
   "use cache";
   cacheTag("groups", "bookings");
@@ -221,51 +242,72 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
 
   if (!group) return [];
 
-  const results = await Promise.all(
-    group.members.map(async ({ userId: profileId, profile }) => {
-      const [bookingRevenues, target] = await Promise.all([
-        db.booking.findMany({
-          where: {
-            recordStatus: "saved",
-            salesId: profileId,
-            bookingStatus: { not: BookingStatus.Canceled },
-            ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
-          },
-          select: {
-            bookingStatus: true,
-            snapPackagePricing: { select: { price: true } },
-          },
-          take: 1000,
-        }),
-        db.userTarget.findFirst({
-          where: {
-            profileId,
-            type: "sales",
-          },
-          orderBy: { createdAt: "desc" },
-          select: { amount: true },
-        }),
-      ]);
+  const profileIds = group.members.map((m) => m.userId);
+  if (profileIds.length === 0) return [];
 
-      const confirmed = bookingRevenues.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
-      const pendingApproval = bookingRevenues.filter((b) => b.bookingStatus === BookingStatus.Pending);
-      const actual = confirmed.reduce((sum, b) => sum + (b.snapPackagePricing?.price ?? 0), 0);
-      const targetAmount = target ? Number(target.amount) : 0;
-      const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
+  const dateFilter =
+    startDate && endDate
+      ? Prisma.sql`AND b."bookingDate" >= ${startDate} AND b."bookingDate" <= ${endDate}`
+      : Prisma.empty;
 
-      return {
-        profileId,
-        fullName: profile.fullName,
-        avatarUrl: resolveAvatarUrl(profile.avatarUrl),
-        actual,
-        target: targetAmount,
-        achievement,
-        bookings: bookingRevenues.length,
-        confirmed: confirmed.length,
-        pendingApproval: pendingApproval.length,
-      };
+  const [bookingAgg, targets] = await Promise.all([
+    db.$queryRaw<BookingAggRow[]>`
+      SELECT
+        b."salesId"                                                              AS sales_id,
+        COUNT(b.id)                                                              AS total_bookings,
+        COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Confirmed')              AS confirmed_count,
+        COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Pending')                AS pending_count,
+        SUM(spp.price)  FILTER (WHERE b."bookingStatus" = 'Confirmed')          AS revenue
+      FROM bookings b
+      LEFT JOIN snap_package_pricing spp ON spp."bookingId" = b.id
+      WHERE
+        b."recordStatus" = 'saved'
+        AND b."salesId" = ANY(${profileIds})
+        AND b."bookingStatus" != 'Canceled'
+        ${dateFilter}
+      GROUP BY b."salesId"
+    `,
+    db.userTarget.findMany({
+      where: { profileId: { in: profileIds }, type: "sales" },
+      orderBy: { createdAt: "desc" },
+      select: { profileId: true, amount: true },
     }),
-  );
+  ]);
+
+  // Map target by profileId — first-write-wins (ordered by createdAt desc → latest first)
+  const targetBySalesId = new Map<string, number>();
+  for (const t of targets) {
+    if (!targetBySalesId.has(t.profileId)) {
+      targetBySalesId.set(t.profileId, Number(t.amount));
+    }
+  }
+
+  const aggBySalesId = new Map<string, BookingAggRow>();
+  for (const row of bookingAgg) {
+    aggBySalesId.set(row.sales_id, row);
+  }
+
+  const results = group.members.map(({ userId: profileId, profile }) => {
+    const agg = aggBySalesId.get(profileId);
+    const actual = agg?.revenue ? Number(agg.revenue) : 0;
+    const totalBookings = agg ? Number(agg.total_bookings) : 0;
+    const confirmed = agg ? Number(agg.confirmed_count) : 0;
+    const pendingApproval = agg ? Number(agg.pending_count) : 0;
+    const targetAmount = targetBySalesId.get(profileId) ?? 0;
+    const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
+
+    return {
+      profileId,
+      fullName: profile.fullName,
+      avatarUrl: resolveAvatarUrl(profile.avatarUrl),
+      actual,
+      target: targetAmount,
+      achievement,
+      bookings: totalBookings,
+      confirmed,
+      pendingApproval,
+    };
+  });
 
   return results.sort((a, b) => b.actual - a.actual);
 }
@@ -311,99 +353,92 @@ export async function getGroupsWithPerformance(
     ...new Set(groupsWithMembers.flatMap((g) => g.members.map((m) => m.userId))),
   ];
 
-  // ── Query 2: all relevant bookings in one shot ───────────────────────────────
-  const allBookings = await db.booking.findMany({
-    where: {
-      recordStatus: "saved",
-      salesId: { in: allSalesIds },
-      bookingStatus: { not: BookingStatus.Canceled },
-      ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
-    },
-    select: {
-      id: true,
-      salesId: true,
-      bookingStatus: true,
-      snapPackagePricing: { select: { price: true } },
-      termOfPayments: {
-        select: {
-          amount: true,
-          paymentStatus: true,
-          ackStatus: true,
-          partialPayments: { select: { amount: true } },
-        },
-      },
-    },
-    take: 10000,
-  });
+  const dateFilter =
+    startDate && endDate
+      ? Prisma.sql`AND b."bookingDate" >= ${startDate} AND b."bookingDate" <= ${endDate}`
+      : Prisma.empty;
 
-  // ── Query 3: all relevant targets in one shot ────────────────────────────────
-  // Fetch latest target per sales profile (no date overlap filter for all-time view)
-  const allTargets = await db.userTarget.findMany({
-    where: {
-      profileId: { in: allSalesIds },
-      type: "sales",
-    },
-    orderBy: { createdAt: "desc" },
-    select: { profileId: true, amount: true },
-  });
+  // ── Query 2: DB-level booking aggregation per salesId ───────────────────────
+  // Revenue = SUM of snapPackagePricing.price for Confirmed bookings only
+  // Counts = total active bookings, confirmed, pending (Pending = awaiting approval)
+  const [bookingAgg, financialAgg, allTargets] = await Promise.all([
+    db.$queryRaw<BookingAggRow[]>`
+      SELECT
+        b."salesId"                                                              AS sales_id,
+        COUNT(b.id)                                                              AS total_bookings,
+        COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Confirmed')              AS confirmed_count,
+        COUNT(b.id) FILTER (WHERE b."bookingStatus" = 'Pending')                AS pending_count,
+        SUM(spp.price)  FILTER (WHERE b."bookingStatus" = 'Confirmed')          AS revenue
+      FROM bookings b
+      LEFT JOIN snap_package_pricing spp ON spp."bookingId" = b.id
+      WHERE
+        b."recordStatus" = 'saved'
+        AND b."salesId" = ANY(${allSalesIds})
+        AND b."bookingStatus" != 'Canceled'
+        ${dateFilter}
+      GROUP BY b."salesId"
+    `,
+    // ── Query 3: DB-level financial aggregation per salesId ──────────────────
+    // Piutang logic (mirrors computeTopFinancials):
+    //   paid + acknowledged  → totalRevenue
+    //   paid + not acked     → piutang (full amount)
+    //   partial              → piutang = amount - SUM(partial_payments.amount)
+    //   unpaid               → piutang (full amount)
+    //   refund               → excluded from both
+    // Note: piutang filter includes all active booking statuses (non-Canceled, non-draft)
+    //       because outstanding amounts can exist on any status.
+    db.$queryRaw<FinancialAggRow[]>`
+      SELECT
+        b."salesId"  AS sales_id,
+        COALESCE(SUM(
+          CASE
+            WHEN t."paymentStatus" = 'refund'                                   THEN 0
+            WHEN t."paymentStatus" = 'paid' AND t."ackStatus" = 'acknowledged'  THEN 0
+            WHEN t."paymentStatus" = 'paid'                                     THEN t.amount
+            WHEN t."paymentStatus" = 'partial'
+              THEN GREATEST(0, t.amount - COALESCE(pp_sum.partial_paid, 0))
+            WHEN t."paymentStatus" = 'unpaid'                                   THEN t.amount
+            ELSE 0
+          END
+        ), 0)        AS piutang,
+        COALESCE(SUM(
+          CASE
+            WHEN t."paymentStatus" = 'paid' AND t."ackStatus" = 'acknowledged'  THEN t.amount
+            ELSE 0
+          END
+        ), 0)        AS total_revenue
+      FROM bookings b
+      JOIN term_of_payments t ON t."bookingId" = b.id
+      LEFT JOIN (
+        SELECT pp."termId", SUM(pp.amount) AS partial_paid
+        FROM partial_payments pp
+        GROUP BY pp."termId"
+      ) pp_sum ON pp_sum."termId" = t.id
+      WHERE
+        b."recordStatus" = 'saved'
+        AND b."salesId" = ANY(${allSalesIds})
+        AND b."bookingStatus" != 'Canceled'
+        ${dateFilter}
+      GROUP BY b."salesId"
+    `,
+    // ── Query 4: all relevant targets ───────────────────────────────────────
+    db.userTarget.findMany({
+      where: { profileId: { in: allSalesIds }, type: "sales" },
+      orderBy: { createdAt: "desc" },
+      select: { profileId: true, amount: true },
+    }),
+  ]);
 
-  // ── In-memory aggregation ────────────────────────────────────────────────────
+  // ── In-memory map assembly (from aggregated DB rows) ─────────────────────────
 
-  // Helper: compute piutang (outstanding) and totalRevenue for a booking's TOPs
-  function computeTopFinancials(tops: typeof allBookings[number]["termOfPayments"]): {
-    piutang: number;
-    totalRevenue: number;
-  } {
-    let piutang = 0;
-    let totalRevenue = 0;
-
-    for (const top of tops) {
-      const amount = Number(top.amount);
-      const paidSoFar = top.partialPayments.reduce((s, p) => s + Number(p.amount), 0);
-
-      if (top.paymentStatus === "refund") {
-        // Refund = uang dikembalikan ke customer. Bukan piutang, bukan revenue.
-        // Di-exclude dari kedua sisi agar konsisten dengan ar.ts yang memperlakukan
-        // refund sebagai "settled" (deriveTerminStatus: refund → "paid").
-        continue;
-      }
-
-      if (top.paymentStatus === "paid" && top.ackStatus === "acknowledged") {
-        // Cash-based revenue: fully paid + acknowledged
-        totalRevenue += amount;
-      } else if (top.paymentStatus === "paid" && top.ackStatus !== "acknowledged") {
-        // Paid but not yet acked → still piutang (waiting finance confirmation)
-        piutang += amount;
-      } else if (top.paymentStatus === "partial") {
-        // Partial: remaining outstanding amount
-        piutang += Math.max(0, amount - paidSoFar);
-      } else if (top.paymentStatus === "unpaid") {
-        // Unpaid: full amount is piutang
-        piutang += amount;
-      }
-    }
-
-    return { piutang, totalRevenue };
+  const aggBySalesId = new Map<string, BookingAggRow>();
+  for (const row of bookingAgg) {
+    aggBySalesId.set(row.sales_id, row);
   }
 
-  // Group bookings by salesId
-  const bookingsBySalesId = new Map<
-    string,
-    {
-      bookingStatus: BookingStatus;
-      price: number;
-      tops: typeof allBookings[number]["termOfPayments"];
-    }[]
-  >();
-  for (const b of allBookings) {
-    if (!b.salesId) continue;
-    const list = bookingsBySalesId.get(b.salesId) ?? [];
-    list.push({
-      bookingStatus: b.bookingStatus,
-      price: b.snapPackagePricing?.price ?? 0,
-      tops: b.termOfPayments,
-    });
-    bookingsBySalesId.set(b.salesId, list);
+  const financialBySalesId = new Map<string, FinancialAggRow>();
+  for (const row of financialAgg) {
+    financialBySalesId.set(row.sales_id, row);
   }
 
   // Map target by profileId — first-write-wins because allTargets is ordered by createdAt desc
@@ -425,26 +460,22 @@ export async function getGroupsWithPerformance(
     let totalRevenue = 0;
 
     for (const member of g.members) {
-      const bookings = bookingsBySalesId.get(member.userId) ?? [];
-      const confirmed = bookings.filter((b) => b.bookingStatus === BookingStatus.Confirmed);
-      const actual = confirmed.reduce((s, b) => s + b.price, 0);
+      const agg = aggBySalesId.get(member.userId);
+      const fin = financialBySalesId.get(member.userId);
+
+      const actual = agg?.revenue ? Number(agg.revenue) : 0;
+      const confirmed = agg ? Number(agg.confirmed_count) : 0;
       const targetAmount = targetBySalesId.get(member.userId) ?? 0;
       const achievement = targetAmount > 0 ? Math.round((actual / targetAmount) * 100) : 0;
 
       revenue += actual;
       target += targetAmount;
-      confirmedCount += confirmed.length;
+      confirmedCount += confirmed;
       totalAchievement += achievement;
       memberCount += 1;
 
-      // Finance metrics: all active bookings (non-draft, non-Canceled — already filtered upstream)
-      // Piutang dihitung dari semua booking aktif, bukan hanya Confirmed.
-      // Revenue (totalRevenue) hanya dari booking yang TOPnya paid+acknowledged — perhitungan ada di computeTopFinancials.
-      for (const booking of bookings) {
-        const fin = computeTopFinancials(booking.tops);
-        piutang += fin.piutang;
-        totalRevenue += fin.totalRevenue;
-      }
+      piutang += fin ? Number(fin.piutang) : 0;
+      totalRevenue += fin ? Number(fin.total_revenue) : 0;
     }
 
     const avgAchievement = memberCount > 0 ? Math.round(totalAchievement / memberCount) : 0;

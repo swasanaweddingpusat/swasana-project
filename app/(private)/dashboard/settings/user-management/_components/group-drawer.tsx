@@ -34,7 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { CloseCircle, UserPlus } from "@solar-icons/react";
-import { createGroupSchema, updateGroupSchema } from "@/lib/validations/user";
+import { createGroupSchema, updateGroupSchema } from "@/lib/validations/group";
 import { createGroup, updateGroup, addGroupMember, removeGroupMember } from "@/actions/groups";
 import type { GroupQueryItem } from "@/lib/queries/groups";
 import type { UsersQueryResult } from "@/lib/queries/users";

@@ -52,15 +52,15 @@ function getCardTier(rank: number): {
   if (rank <= 3) {
     return {
       container:
-        "bg-gradient-to-br from-white via-amber-50/40 to-amber-100/30 ring-1 ring-amber-200/40 shadow-md shadow-amber-100/20",
-      divider: "divide-amber-200/40",
-      barFill: "bg-gradient-to-r from-amber-400 to-amber-500",
+        "bg-gradient-to-br from-card via-[var(--brand-gold)]/5 to-[var(--brand-gold)]/10 ring-1 ring-[var(--brand-gold)]/25 shadow-md shadow-[var(--brand-gold)]/10",
+      divider: "divide-[var(--brand-gold)]/20",
+      barFill: "bg-gradient-to-r from-[var(--brand-gold)] to-[var(--brand-gold)]/80",
     };
   }
   return {
     container:
-      "bg-gradient-to-br from-white to-stone-50 ring-1 ring-stone-200/60 shadow-sm",
-    divider: "divide-stone-200/60",
+      "bg-gradient-to-br from-card to-muted/30 ring-1 ring-border/60 shadow-sm",
+    divider: "divide-border/60",
     barFill: "",
   };
 }
@@ -68,7 +68,7 @@ function getCardTier(rank: number): {
 function getBarFill(rank: number, pct: number): string {
   // rank 1-3 always gold if >= 70%
   if (rank <= 3 && pct >= 70) {
-    return "bg-gradient-to-r from-amber-400 to-amber-500";
+    return "bg-gradient-to-r from-[var(--brand-gold)] to-[var(--brand-gold)]/80";
   }
   if (pct >= 100) return "bg-foreground";
   if (pct >= 70) return "bg-muted-foreground";
@@ -79,7 +79,7 @@ function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
       <span
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white text-xs font-bold leading-none shadow-sm shadow-amber-300/40"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-br from-[var(--brand-gold)] to-[var(--brand-gold)]/70 text-primary-foreground text-xs font-bold leading-none shadow-sm shadow-[var(--brand-gold)]/30"
         aria-label="Peringkat ke-1 (top performer)"
       >
         <Crown weight="BoldDuotone" className="h-3 w-3" />
@@ -90,7 +90,7 @@ function RankBadge({ rank }: { rank: number }) {
   if (rank === 2 || rank === 3) {
     return (
       <span
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold leading-none"
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--brand-gold)]/15 text-[var(--brand-gold)] text-xs font-bold leading-none"
         aria-label={`Peringkat ke-${rank}`}
       >
         <MedalStar weight="BoldDuotone" className="h-3 w-3" />
@@ -100,7 +100,7 @@ function RankBadge({ rank }: { rank: number }) {
   }
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 text-xs font-semibold leading-none"
+      className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-semibold leading-none"
       aria-label={`Peringkat ke-${rank}`}
     >
       #{rank}
@@ -131,7 +131,7 @@ function GroupCard({
     <article
       className={cn(
         "relative flex flex-col rounded-2xl overflow-hidden transition-all duration-200",
-        "focus-within:ring-2 focus-within:ring-amber-400/60",
+        "focus-within:ring-2 focus-within:ring-ring/60",
         tier.container,
         "hover:shadow-md",
       )}
@@ -171,7 +171,7 @@ function GroupCard({
                 size="icon"
                 className={cn(
                   "h-9 w-9 sm:h-8 sm:w-8 relative z-10",
-                  "hover:bg-black/5",
+                  "hover:bg-foreground/5",
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -188,7 +188,7 @@ function GroupCard({
                 size="icon"
                 className={cn(
                   "h-9 w-9 sm:h-8 sm:w-8 relative z-10",
-                  "hover:bg-black/5 text-destructive hover:text-destructive",
+                  "hover:bg-foreground/5 text-destructive hover:text-destructive",
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -204,7 +204,7 @@ function GroupCard({
               className={cn(
                 buttonVariants({ variant: "ghost", size: "icon" }),
                 "h-9 w-9 sm:h-8 sm:w-8 relative z-10",
-                "hover:bg-black/5",
+                "hover:bg-foreground/5",
               )}
               aria-label={`Lihat detail group ${group.name}`}
             >
@@ -239,7 +239,7 @@ function GroupCard({
         <div
           className={cn(
             "border-t",
-            rank <= 3 ? "border-amber-200/50" : "border-stone-200/60",
+            rank <= 3 ? "border-[var(--brand-gold)]/25" : "border-border/60",
           )}
         />
 
@@ -255,7 +255,7 @@ function GroupCard({
                   weight="BoldDuotone"
                   className={cn(
                     "h-3 w-3",
-                    rank <= 3 ? "text-amber-600" : "text-foreground",
+                    rank <= 3 ? "text-[var(--brand-gold)]" : "text-foreground",
                   )}
                 />
               ) : (
@@ -273,7 +273,7 @@ function GroupCard({
               className={cn(
                 "text-xl sm:text-2xl font-bold tabular-nums leading-none shrink-0",
                 rank <= 3 && group.avgAchievement >= 70
-                  ? "text-amber-700"
+                  ? "text-[var(--brand-gold)]"
                   : group.avgAchievement < 70
                     ? "text-destructive"
                     : "text-foreground",
@@ -285,7 +285,7 @@ function GroupCard({
             {/* Progress bar */}
             <div className="flex-1">
               <div
-                className="w-full bg-black/5 rounded-full h-2 sm:h-2.5 overflow-hidden"
+                className="w-full bg-foreground/8 rounded-full h-2 sm:h-2.5 overflow-hidden"
                 role="progressbar"
                 aria-valuenow={pct}
                 aria-valuemin={0}
@@ -305,7 +305,7 @@ function GroupCard({
         <div
           className={cn(
             "grid grid-cols-3 divide-x border-t pt-3 -mx-5 px-5 sm:-mx-6 sm:px-6",
-            rank <= 3 ? "border-amber-200/50 divide-amber-200/50" : "border-stone-200/60 divide-stone-200/60",
+            rank <= 3 ? "border-[var(--brand-gold)]/25 divide-[var(--brand-gold)]/25" : "border-border/60 divide-border/60",
           )}
         >
           <div className="flex flex-col items-center gap-0.5 px-2 first:pl-0 last:pr-0">
