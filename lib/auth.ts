@@ -190,6 +190,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               avatarUrl: true,
               isEmailVerified: true,
               status: true,
+              dataScope: true,
             },
           });
           if (profile) {
@@ -204,6 +205,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.mustChangePassword = profile.mustChangePassword;
             token.isEmailVerified = profile.isEmailVerified;
             token.status = profile.status;
+            token.dataScope = profile.dataScope;
             token.name = profile.fullName;
             token.picture = resolveAvatarUrl(profile.avatarUrl);
             token.profileCachedAt = Date.now();
@@ -235,6 +237,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
         session.user.status = (token.status as "active" | "inactive" | "suspended") ?? "active";
         session.user.profileMissing = (token.profileMissing as boolean) ?? false;
+        session.user.dataScope = (token.dataScope as "own" | "group" | "all") ?? "own";
       }
       return session;
     },

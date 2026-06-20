@@ -715,6 +715,7 @@ export async function updateBooking(data: unknown) {
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`booking-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
@@ -759,6 +760,7 @@ export async function deleteBooking(id: string) {
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`booking-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
@@ -819,6 +821,7 @@ export async function transferBooking(bookingId: string, targetSalesId: string) 
 
   if (!bookingId || !targetSalesId) return { success: false, error: "Parameter tidak valid." };
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
@@ -913,6 +916,7 @@ export async function transferBookingManager(
 
   if (!bookingId || !targetManagerId) return { success: false, error: "Parameter tidak valid." };
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
@@ -968,6 +972,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
 
   const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId } = parsed.data;
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
@@ -1053,6 +1058,7 @@ export async function editBooking(data: unknown) {
 
   const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, ...rest } = parsed.data;
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
@@ -1861,6 +1867,7 @@ export async function approveBooking(bookingId: string) {
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`booking-approve:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
