@@ -1,0 +1,6 @@
+# PDF.js worker is a pre-minified asset shipped to the browser as an ES module.
+# It MUST stay byte-identical to the version in node_modules/pdfjs-dist.
+# Under core.autocrlf=true (default on Windows), git rewrites LF→CRLF on checkout,
+# which corrupts the worker and makes react-pdf fail to load PDFs in strict browsers.
+# Marking it binary disables all line-ending and text transformation.
+public/pdf.worker.min.mjs binary
