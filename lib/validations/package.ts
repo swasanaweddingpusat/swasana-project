@@ -11,6 +11,23 @@ export const createPackageSchema = z.object({
 
 export const updatePackageSchema = createPackageSchema.partial();
 
+export const updateBookingCategoryPricesSchema = z.object({
+  bookingId: z.string().min(1),
+  categories: z
+    .array(
+      z.object({
+        categoryId: z.string().nullable().optional(),
+        categoryName: z.string().min(1),
+        basePrice: z.number().int().min(0),
+        sortOrder: z.number().int(),
+        isShow: z.boolean(),
+      }),
+    )
+    .min(1),
+  margin: z.number().min(0),
+  sellingPrice: z.number().int().min(0),
+});
+
 export const createVendorItemSchema = z.object({
   packageId: z.string().min(1),
   categoryName: z.string().min(1, "Nama kategori wajib diisi"),
