@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     undefined;
 
   // dateFrom/dateTo arrive as full ISO instants (the client sends local day
-  // start/end via toISOString) so they line up with how bookingDate is stored.
+  // start/end via toISOString) so they line up with how eventDate is stored.
   const rawDateFrom = searchParams.get("dateFrom") ?? undefined;
   const rawDateTo = searchParams.get("dateTo") ?? undefined;
   const dateFrom = rawDateFrom && !Number.isNaN(Date.parse(rawDateFrom)) ? rawDateFrom : undefined;

@@ -352,9 +352,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setPackageId(booking.packageId ?? "");
     setOriginalVenueId(booking.venueId ?? "");
     setOriginalPackageId(booking.packageId ?? "");
-    // Store bookingDate as "yyyy-MM-dd" using UTC getters — bookingDate is stored
+    // Store eventDate as "yyyy-MM-dd" using UTC getters — eventDate is stored
     // as UTC midnight in the DB, so UTC getters always return the correct calendar date.
-    const bd = booking.bookingDate ? new Date(booking.bookingDate) : null;
+    const bd = booking.eventDate ? new Date(booking.eventDate) : null;
     const initialBookingDate = bd
       ? `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`
       : "";
@@ -416,7 +416,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       const fs = draft.formState as Record<string, unknown>;
       if (typeof fs.venueId === "string") setVenueId(fs.venueId);
       if (typeof fs.packageId === "string") setPackageId(fs.packageId);
-      if (typeof fs.bookingDate === "string") setBookingDate(fs.bookingDate);
+      if (typeof fs.eventDate === "string") setBookingDate(fs.eventDate);
       if (typeof fs.weddingSession === "string") setWeddingSession(fs.weddingSession);
       if (typeof fs.weddingType === "string") setWeddingType(fs.weddingType);
       if (typeof fs.eventTime === "string") setTime(fs.eventTime);
@@ -790,7 +790,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   function buildFormState() {
     return {
       currentStep,
-      venueId, packageId, bookingDate, weddingSession, weddingType,
+      venueId, packageId, eventDate: bookingDate, weddingSession, weddingType,
       eventTime: time, noteDateEvent,
       specialBonusName, specialBonusAmount, paymentMethodId,
       // Strip File instances — they can't be JSON-serialised. Worst case: a
@@ -900,8 +900,8 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     // ── Material change path — may create revision ────────────────────────────
     const r = await mut.mutateAsync({
       id: booking.id,
-      // bookingDate is already stored as "yyyy-MM-dd" — pass directly to action.
-      bookingDate: bookingDate,
+      // eventDate is already stored as "yyyy-MM-dd" — pass directly to action.
+      eventDate: bookingDate,
       venueId, packageId,
       refreshPackagePrice: packageReselected,
       paymentMethodId: paymentMethodId || null,

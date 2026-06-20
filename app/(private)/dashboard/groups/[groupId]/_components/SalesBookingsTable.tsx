@@ -806,7 +806,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
               const approvalRecord = approvalMap.get(booking.id);
               const isDraft = booking.recordStatus === "draft";
 
-              const eventDate = new Date(booking.bookingDate);
+              const eventDate = booking.eventDate ? new Date(booking.eventDate) : null;
               return (
                 <div
                   key={booking.id}
@@ -826,13 +826,13 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
                   {/* Date anchor — the most actionable info for a sales rep */}
                   <div className="shrink-0 flex flex-col items-center justify-center w-14 rounded-xl bg-secondary/60 px-1 py-2 text-center">
                     <span className="text-lg font-bold font-heading text-foreground leading-none tabular-nums">
-                      {format(eventDate, "dd")}
+                      {eventDate ? format(eventDate, "dd") : "—"}
                     </span>
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-0.5">
-                      {format(eventDate, "MMM")}
+                      {eventDate ? format(eventDate, "MMM") : ""}
                     </span>
                     <span className="text-[10px] text-muted-foreground tabular-nums">
-                      {format(eventDate, "yyyy")}
+                      {eventDate ? format(eventDate, "yyyy") : ""}
                     </span>
                   </div>
 

@@ -17,8 +17,8 @@ export interface MiceTerm {
 export interface MiceBookingItem {
   id: string;
   poNumber: string | null;
-  bookingDate: string; // ISO
-  eventDate: string | null; // ISO
+  createdAt: string; // ISO — kapan booking dibuat/deal
+  eventDate: string | null; // ISO — tanggal acara
   status: MiceBookingStatus;
   customer: { id: string; name: string; phone: string };
   venue: { id: string; name: string };

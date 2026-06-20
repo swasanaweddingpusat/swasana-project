@@ -526,7 +526,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const form = useForm<BookingInput>({
     defaultValues: {
-      bookingDate: "", customerId: "", venueId: "", packageId: "",
+      eventDate: "", customerId: "", venueId: "", packageId: "",
       salesId: null,
       paymentMethodId: null, sourceOfInformationId: null,
       weddingSession: null, weddingType: null, bonuses: [], termOfPayments: [],
@@ -604,7 +604,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           if (prefillLead.package?.id) { form.setValue("packageId", prefillLead.package.id); setSelectedPackageId(prefillLead.package.id); }
           if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
           if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
-          if (prefillLead.eventDate) form.setValue("bookingDate", toDateOnly(new Date(prefillLead.eventDate)));
+          if (prefillLead.eventDate) form.setValue("eventDate", toDateOnly(new Date(prefillLead.eventDate)));
         }
         // Jump to step 3 (Takeout) — draft already persisted by Deal flow in leads-table,
         // and lead prefill already includes venue + package from the lead record.
@@ -638,7 +638,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         if (prefillLead.package?.id) { form.setValue("packageId", prefillLead.package.id); setSelectedPackageId(prefillLead.package.id); }
         if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
         if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
-        if (prefillLead.eventDate) form.setValue("bookingDate", toDateOnly(new Date(prefillLead.eventDate)));
+        if (prefillLead.eventDate) form.setValue("eventDate", toDateOnly(new Date(prefillLead.eventDate)));
         return;
       }
 
@@ -728,7 +728,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     });
   };
 
-  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId, wSalesId] = form.watch(["venueId", "packageId", "bookingDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId", "salesId"]);
+  const [wVenueId, wPackageId, wBookingDate, wWeddingSession, wWeddingType, wSourceOfInformationId, wPaymentMethodId, wSalesId] = form.watch(["venueId", "packageId", "eventDate", "weddingSession", "weddingType", "sourceOfInformationId", "paymentMethodId", "salesId"]);
   // Name shown in the locked sales field — resolves from the current salesId.
   const lockedSalesName =
     salesUsers.find((s) => s.id === wSalesId)?.fullName ??
@@ -866,9 +866,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (resumeDraftDetail.sourceOfInformationId) {
       form.setValue("sourceOfInformationId", resumeDraftDetail.sourceOfInformationId);
     }
-    // bookingDate
-    if (resumeDraftDetail.bookingDate) {
-      form.setValue("bookingDate", resumeDraftDetail.bookingDate);
+    // eventDate
+    if (resumeDraftDetail.eventDate) {
+      form.setValue("eventDate", resumeDraftDetail.eventDate);
     }
     // customerId
     if (resumeDraftDetail.customerId) {
@@ -1057,7 +1057,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         isCreatingDraftRef.current = true;
         const draftPayload = {
           id: pendingDraftId,
-          bookingDate: form.getValues("bookingDate"),
+          eventDate: form.getValues("eventDate"),
           category: "WEDDINGS" as const,
           venueId: form.getValues("venueId"),
           packageId: form.getValues("packageId") || null,
@@ -1852,7 +1852,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   )} />
 
                   {/* Event Date */}
-                  <FormField control={form.control} name="bookingDate" render={({ field }) => (
+                  <FormField control={form.control} name="eventDate" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Event Date <span className="text-destructive">*</span></FormLabel>
                       <Popover>

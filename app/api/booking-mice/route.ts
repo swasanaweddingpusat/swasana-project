@@ -32,7 +32,7 @@ export async function GET(request: Request): Promise<Response> {
     return {
       id: b.id,
       poNumber: b.poNumber ?? null,
-      bookingDate: b.bookingDate.toISOString(),
+      createdAt: b.createdAt.toISOString(),
       eventDate: b.eventDate ? b.eventDate.toISOString() : null,
       status: b.bookingStatus as MiceBookingStatus,
       customer: {

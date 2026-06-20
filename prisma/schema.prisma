@@ -286,7 +286,8 @@ model Venue {
   packages           Package[]
   paymentMethods     PaymentMethod[]
   bookings           Booking[]
-  leads              Lead[]
+  leads              Lead[]          @relation("LeadPrimaryVenue")
+  leadsSecondary     Lead[]          @relation("LeadSecondaryVenue")
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
   maintenanceTickets MaintenanceTicket[]
@@ -543,7 +544,6 @@ enum DataScope {
 
 model Booking {
   id                    String               @id @default(uuid())
-  bookingDate           DateTime
   bookingStatus         BookingStatus        @default(Pending)
   recordStatus          BookingRecordStatus  @default(saved)
   paymentStatus         String               @default("")
@@ -553,7 +553,7 @@ model Booking {
   eventTime             String?
   notes                 String?
   poNumber              String?
-  eventDate             DateTime?
+  eventDate             DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId           String?
   salesSignature        String?
   rejectionNotes        String?
@@ -621,7 +621,6 @@ model Booking {
   @@index([sourceOfInformationId])
   @@index([bookingStatus])
   @@index([recordStatus])
-  @@index([bookingDate])
   @@index([category])
   @@index([eventDate])
   @@index([currentRevisionId])
@@ -1241,8 +1240,15 @@ model Lead {
   name           String
   contactNumbers Json   @default("[]") // Array of { label: string, number: string }
   email          String?
+  emailCpp       String? // Email Contact Person Pria (wedding)
+  emailCpw       String? // Email Contact Person Wanita (wedding)
+  nikCpp         String? // NIK Calon Pengantin Pria (wedding)
+  nikCpw         String? // NIK Calon Pengantin Wanita (wedding)
+  addressCpp     String? // Alamat Calon Pengantin Pria (wedding)
+  addressCpw     String? // Alamat Calon Pengantin Wanita (wedding)
   address        String?
   eventDate      DateTime?
+  eventDateAlt   DateTime? // Tanggal alternatif jika ada
   time           String?
   estimatedPax   Int?
   budgetRange    String?
@@ -1254,8 +1260,15 @@ model Lead {
   bitrixId       String?
   instansi       String?
 
+  // Date locking (booking fee)
+  isDateLocked          Boolean   @default(false)
+  bookingFeeAmount      Int?      // nominal booking fee dalam rupiah (Int, konsisten dengan TermOfPayment.amount)
+  bookingFeeDate        DateTime? // tanggal terima booking fee
+  bookingFeeEvidenceUrl String?   // S3/MinIO key/URL bukti bayar
+
   // FK relations
   venueId               String?
+  venueSecondaryId      String?   // venue cadangan / secondary
   packageId             String?
   eventTypeId           String?
   sourceOfInformationId String?
@@ -1268,10 +1281,14 @@ model Lead {
   convertedToCustomerId  String?
   convertedToBookingId   String?
 
+  // Soft delete — row tetap di DB, cuma ditandai terhapus (deletedAt != null)
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  venue                 Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  venue                 Venue?               @relation("LeadPrimaryVenue", fields: [venueId], references: [id], onDelete: SetNull)
+  venueSecondary        Venue?               @relation("LeadSecondaryVenue", fields: [venueSecondaryId], references: [id], onDelete: SetNull)
   package               Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
   eventType             EventType?           @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
   sourceOfInformation   SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
@@ -1286,6 +1303,10 @@ model Lead {
   @@index([assignedToId])
   @@index([eventDate])
   @@index([venueId])
+  @@index([venueSecondaryId])
+  @@index([isDateLocked])
+  // Composite index buat availability check: cari locked leads per venue+date+session
+  @@index([venueId, eventDate, weddingSession, isDateLocked])
   @@map("leads")
 }
 

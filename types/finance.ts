@@ -9,7 +9,7 @@ export interface FinanceBooking {
   id: string;
   customerName: string;
   customerPhone: string;
-  bookingDate: string;
+  eventDate: string;
   bookingStatus: "Confirmed" | "Pending" | "New" | "Uploaded";
   paymentStatus: string;
   paymentMethod: string;

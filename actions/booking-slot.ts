@@ -56,7 +56,7 @@ export async function checkSlotAvailability(data: unknown): Promise<CheckSlotRes
   const { venueId, eventDate, session, category, excludeBookingId } = parsed.data;
 
   try {
-    // Parse as explicit UTC midnight so the comparison matches how bookingDate is stored.
+    // Parse as explicit UTC midnight so the comparison matches how eventDate is stored.
     // Input is "yyyy-MM-dd" — appending T00:00:00.000Z guarantees UTC-midnight parse
     // regardless of Node.js TZ setting (avoids ambiguity of bare date-string parsing).
     const eventDateObj = new Date(`${eventDate}T00:00:00.000Z`);
@@ -94,7 +94,7 @@ export async function checkSlotAvailability(data: unknown): Promise<CheckSlotRes
     const conflict = await db.booking.findFirst({
       where: {
         venueId,
-        bookingDate: eventDateObj,
+        eventDate: eventDateObj,
         recordStatus: "saved",
         bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
         OR: sessionOrConditions,

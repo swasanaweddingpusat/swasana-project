@@ -25,7 +25,6 @@ export const createMiceBookingSchema = z.object({
   venueId: z.string().min(1, "Venue wajib dipilih"),
   eventTypeId: z.string().min(1, "Tipe event wajib dipilih"),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
-  bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
   quotationId: z.string().optional().nullable(),

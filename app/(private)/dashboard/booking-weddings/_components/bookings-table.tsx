@@ -643,7 +643,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 }
                 onSelect={(range: DateRange | undefined) => {
                   if (range?.from) {
-                    // Local day-start as a UTC instant — matches how bookingDate is
+                    // Local day-start as a UTC instant — matches how eventDate is
                     // stored (local date → toISOString); avoids off-by-one in non-UTC TZ.
                     setDateFrom(startOfDay(range.from).toISOString());
                     // Single date (no `to` yet): filter that day only — local day-end
@@ -952,7 +952,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                             </TooltipContent>
                           </Tooltip>
                           {/* Event date — tablet only (date col shown at sm) */}
-                          <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'sm:hidden')}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
+                          <p className={cn('text-xs', 'text-muted-foreground', 'mt-0.5', 'sm:hidden')}>{booking.eventDate ? format(new Date(booking.eventDate), "dd MMM yyyy") : "—"}</p>
                           <div className={cn('flex', 'flex-wrap', 'items-center', 'gap-1', 'mt-1')}>
                             {/* Draft badge — shown when recordStatus is draft */}
                             {booking.recordStatus === "draft" && (
@@ -1034,7 +1034,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
                       {/* Event Date */}
                       <TableCell className={cn('px-2', 'py-2', 'whitespace-nowrap', 'text-sm', 'hidden', 'sm:table-cell')}>
-                        {format(new Date(booking.bookingDate), "MMM dd, yyyy")}
+                        {booking.eventDate ? format(new Date(booking.eventDate), "MMM dd, yyyy") : "—"}
                       </TableCell>
 
                       {/* Activity */}
@@ -1136,7 +1136,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     <div className={cn('flex', 'items-center', 'gap-2', 'flex-wrap', 'text-xs', 'text-muted-foreground')}>
                       <span className={cn('flex', 'items-center', 'gap-1')}>
                         <CalendarDays weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'shrink-0', 'text-muted-foreground')} />
-                        {format(new Date(booking.bookingDate), "dd MMM yyyy")}
+                        {booking.eventDate ? format(new Date(booking.eventDate), "dd MMM yyyy") : "—"}
                       </span>
                       {booking.weddingSession && (
                         <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium", SESSION_STYLE[booking.weddingSession] ?? "bg-muted text-muted-foreground")}>

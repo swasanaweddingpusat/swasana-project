@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     // Build UTC-based start/end for the queried month.
     // monthParam = "YYYY-MM"; parse as UTC so the range is timezone-independent.
-    // bookingDate is stored as UTC midnight — the DB range query must also be UTC.
+    // eventDate is stored as UTC midnight — the DB range query must also be UTC.
     const year = monthParam
       ? parseInt(monthParam.split("-")[0] ?? "0", 10)
       : new Date().getUTCFullYear();
@@ -30,6 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const excludeId = searchParams.get("exclude"); // booking ID to exclude (for edit mode)
 
+    // ── Source 1: Confirmed/active bookings ────────────────────────────────────
     // Availability is per-venue (1 venue = 1 physical space).
     // We intentionally do NOT filter by packageId —
     // any active booking at this venue blocks the slot, regardless of package.
@@ -37,11 +38,47 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       where: {
         venueId: id,
         recordStatus: "saved",
-        bookingDate: { gte: start, lte: end },
+        eventDate: { gte: start, lte: end },
         bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
-      select: { bookingDate: true, weddingSession: true },
+      select: { eventDate: true, weddingSession: true },
+    });
+
+    // ── Source 2: Leads with isDateLocked = true ───────────────────────────────
+    // A locked lead means booking fee has been received and the date+venue is
+    // reserved for that prospective client. Both primary and secondary venue are
+    // checked — either blocks the date.
+    const lockedLeads = await db.lead.findMany({
+      where: {
+        isDateLocked: true,
+        eventDate: { gte: start, lte: end },
+        OR: [
+          { venueId: id },
+          { venueSecondaryId: id },
+        ],
+        // Exclude leads that have already been converted (won't block anymore)
+        convertedAt: null,
+        // Exclude soft-deleted leads
+        deletedAt: null,
+      },
+      select: { eventDate: true, weddingSession: true },
+    });
+
+    // Also check eventDateAlt for locked leads — secondary date also blocks.
+    const lockedLeadsAlt = await db.lead.findMany({
+      where: {
+        isDateLocked: true,
+        eventDateAlt: { gte: start, lte: end, not: null },
+        OR: [
+          { venueId: id },
+          { venueSecondaryId: id },
+        ],
+        convertedAt: null,
+        // Exclude soft-deleted leads
+        deletedAt: null,
+      },
+      select: { eventDateAlt: true, weddingSession: true },
     });
 
     // Init all dates in month as fully available.
@@ -54,36 +91,59 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       cur.setUTCDate(cur.getUTCDate() + 1);
     }
 
-    // Mark booked sessions.
-    // Weddings use morning / evening / fullday.
-    // MICE: if weddingSession is set (morning/evening) → block that session only (granular).
-    //       if weddingSession is null (legacy MICE without session) → block fullday (conservative fallback).
-    for (const b of bookings) {
-      // bookingDate is stored as UTC midnight — use UTC getters to derive the key
-      // so it's consistent regardless of the server's local timezone.
-      const bd = b.bookingDate;
-      const key = `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`;
-      if (!availability[key]) continue;
-      if (b.weddingSession === "morning") {
-        availability[key].morning = false;
-      } else if (b.weddingSession === "evening") {
-        availability[key].evening = false;
-      } else if (b.weddingSession === "fullday") {
-        availability[key].morning = false;
-        availability[key].evening = false;
-        availability[key].fullday = false;
+    /**
+     * Apply a booking/lead block to the availability map.
+     * Weddings: morning / evening / fullday blocks corresponding slots.
+     * MICE with session: block that session only.
+     * MICE without session (legacy): conservative fullday block.
+     */
+    function applyBlock(
+      dateKey: string,
+      weddingSession: "morning" | "evening" | "fullday" | null,
+    ) {
+      if (!availability[dateKey]) return;
+      if (weddingSession === "morning") {
+        availability[dateKey].morning = false;
+      } else if (weddingSession === "evening") {
+        availability[dateKey].evening = false;
+      } else if (weddingSession === "fullday") {
+        availability[dateKey].morning = false;
+        availability[dateKey].evening = false;
+        availability[dateKey].fullday = false;
       } else {
-        // weddingSession is null — legacy MICE booking (no session recorded).
-        // Conservative fallback: block entire day so no new booking slips through
-        // on a date that has an untracked MICE session.
-        availability[key].morning = false;
-        availability[key].evening = false;
-        availability[key].fullday = false;
+        // weddingSession is null — legacy MICE or MICE without session recorded.
+        // Conservative fallback: block entire day.
+        availability[dateKey].morning = false;
+        availability[dateKey].evening = false;
+        availability[dateKey].fullday = false;
       }
       // If both morning and evening are blocked, fullday is also unavailable.
-      if (!availability[key].morning && !availability[key].evening) {
-        availability[key].fullday = false;
+      if (!availability[dateKey].morning && !availability[dateKey].evening) {
+        availability[dateKey].fullday = false;
       }
+    }
+
+    // Apply confirmed bookings
+    for (const b of bookings) {
+      const bd = b.eventDate!; // query filters eventDate: { gte, lte }, always non-null
+      const key = `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`;
+      applyBlock(key, b.weddingSession);
+    }
+
+    // Apply locked leads (primary event date)
+    for (const l of lockedLeads) {
+      if (!l.eventDate) continue;
+      const ld = l.eventDate;
+      const key = `${ld.getUTCFullYear()}-${String(ld.getUTCMonth() + 1).padStart(2, "0")}-${String(ld.getUTCDate()).padStart(2, "0")}`;
+      applyBlock(key, l.weddingSession);
+    }
+
+    // Apply locked leads (alternative event date)
+    for (const l of lockedLeadsAlt) {
+      if (!l.eventDateAlt) continue;
+      const ld = l.eventDateAlt;
+      const key = `${ld.getUTCFullYear()}-${String(ld.getUTCMonth() + 1).padStart(2, "0")}-${String(ld.getUTCDate()).padStart(2, "0")}`;
+      applyBlock(key, l.weddingSession);
     }
 
     return Response.json(availability);

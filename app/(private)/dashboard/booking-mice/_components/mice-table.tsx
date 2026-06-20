@@ -464,7 +464,7 @@ export function MiceTable() {
                       </TableCell>
 
                       <TableCell className="px-4 whitespace-nowrap text-foreground/80">
-                        {format(new Date(item.bookingDate), "dd MMM yyyy")}
+                        {format(new Date(item.createdAt), "dd MMM yyyy")}
                       </TableCell>
 
                       <TableCell className="px-4">

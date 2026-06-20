@@ -247,7 +247,7 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
 
   const dateFilter =
     startDate && endDate
-      ? Prisma.sql`AND b."bookingDate" >= ${startDate} AND b."bookingDate" <= ${endDate}`
+      ? Prisma.sql`AND b."eventDate" >= ${startDate} AND b."eventDate" <= ${endDate}`
       : Prisma.empty;
 
   const [bookingAgg, targets] = await Promise.all([
@@ -355,7 +355,7 @@ export async function getGroupsWithPerformance(
 
   const dateFilter =
     startDate && endDate
-      ? Prisma.sql`AND b."bookingDate" >= ${startDate} AND b."bookingDate" <= ${endDate}`
+      ? Prisma.sql`AND b."eventDate" >= ${startDate} AND b."eventDate" <= ${endDate}`
       : Prisma.empty;
 
   // ── Query 2: DB-level booking aggregation per salesId ───────────────────────

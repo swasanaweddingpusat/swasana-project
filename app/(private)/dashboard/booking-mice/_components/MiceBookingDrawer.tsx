@@ -412,7 +412,7 @@ export function MiceBookingDrawer({
           clientPhone: booking.customer.phone,
           venueId: booking.venue.id,
           eventTypeId: "",
-          // bookingDate is stored as UTC midnight — use UTC getters to recover the date string.
+          // eventDate is stored as UTC midnight — use UTC getters to recover the date string.
           eventDate: booking.eventDate ? (() => { const d = new Date(booking.eventDate!); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; })() : "",
           time: "",
           estimatedPax: "",
@@ -507,7 +507,6 @@ export function MiceBookingDrawer({
 
         const draftData = {
           id: pendingDraftId,
-          bookingDate: values.eventDate || new Date().toISOString().split("T")[0],
           venueId: values.venueId,
           eventTypeId: values.eventTypeId,
           salesId: resolvedSalesId || null,
@@ -610,7 +609,6 @@ export function MiceBookingDrawer({
         venueId: values.venueId,
         eventTypeId: values.eventTypeId,
         eventDate: values.eventDate,
-        bookingDate: new Date().toISOString().split("T")[0],
         estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
         salesId: resolvedSalesId ?? null,
         salesSignature: signatureRef.current ?? null,

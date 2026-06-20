@@ -44,7 +44,7 @@ export async function createBooking(data: unknown) {
 
     if (leadId) {
       leadRecord = await db.lead.findUnique({
-        where: { id: leadId },
+        where: { id: leadId, deletedAt: null },
         select: {
           id: true,
           name: true,
@@ -147,12 +147,12 @@ export async function createBooking(data: unknown) {
 
     // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
     if (input.weddingSession) {
-      const bookingDateObj = new Date(`${input.bookingDate}T00:00:00.000Z`);
+      const eventDateObj = new Date(`${input.eventDate}T00:00:00.000Z`);
       const conflictingBooking = await db.booking.findFirst({
         where: {
           venueId: input.venueId,
           recordStatus: "saved",
-          bookingDate: bookingDateObj,
+          eventDate: eventDateObj,
           bookingStatus: { notIn: ["Canceled", "Lost"] },
           OR: input.weddingSession === "fullday"
             ? [
@@ -269,7 +269,7 @@ export async function createBooking(data: unknown) {
     }
 
     if (input.withMaterai) {
-      emateraiResult = await generateEmaterai(poNumber, new Date(`${input.bookingDate}T00:00:00.000Z`));
+      emateraiResult = await generateEmaterai(poNumber, new Date(`${input.eventDate}T00:00:00.000Z`));
     }
 
     // Approval steps: conditional Sales step + Manager → Finance.
@@ -356,7 +356,7 @@ export async function createBooking(data: unknown) {
       db.booking.create({
         data: {
           id: bookingId,
-          bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
+          eventDate: new Date(`${input.eventDate}T00:00:00.000Z`),
           salesId,
           managerId: await resolveManagerId(salesId),
           customerId,
@@ -723,7 +723,7 @@ export async function updateBooking(data: unknown) {
 
   try {
     const updateData: Record<string, unknown> = {};
-    if (rest.bookingDate) updateData.bookingDate = new Date(`${rest.bookingDate}T00:00:00.000Z`);
+    if (rest.eventDate) updateData.eventDate = new Date(`${rest.eventDate}T00:00:00.000Z`);
     if (rest.bookingStatus !== undefined) updateData.bookingStatus = rest.bookingStatus;
     if (rest.paymentStatus !== undefined) updateData.paymentStatus = rest.paymentStatus;
     if (rest.weddingSession !== undefined) updateData.weddingSession = rest.weddingSession;
@@ -1069,7 +1069,7 @@ export async function editBooking(data: unknown) {
       where: { id },
       select: {
         customerId: true, salesId: true, venueId: true, packageId: true,
-        bookingDate: true, weddingSession: true, weddingType: true,
+        eventDate: true, weddingSession: true, weddingType: true,
         paymentMethodId: true, sourceOfInformationId: true,
         discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
         snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
@@ -1084,13 +1084,13 @@ export async function editBooking(data: unknown) {
     // ── Venue availability conflict check (WEDDINGS only — MICE has no weddingSession) ──
     // Exclude the current booking so it doesn't conflict with itself.
     if (rest.weddingSession) {
-      const bookingDateObj = new Date(`${rest.bookingDate}T00:00:00.000Z`);
+      const eventDateObj = new Date(`${rest.eventDate}T00:00:00.000Z`);
       const conflictingBooking = await db.booking.findFirst({
         where: {
           id: { not: id },
           venueId: rest.venueId,
           recordStatus: "saved",
-          bookingDate: bookingDateObj,
+          eventDate: eventDateObj,
           bookingStatus: { notIn: ["Canceled", "Lost"] },
           OR: rest.weddingSession === "fullday"
             ? [
@@ -1119,13 +1119,12 @@ export async function editBooking(data: unknown) {
     const shouldRefreshPrice = packageChanged || rest.refreshPackagePrice === true;
 
     // ── Material change detection ─────────────────────────────────────────────
-    // Compare event date (bookingDate field = event date in wedding bookings)
-    // rest.bookingDate is "yyyy-MM-dd"; booking.bookingDate is stored as UTC midnight.
+    // Compare event date: rest.eventDate is "yyyy-MM-dd"; booking.eventDate is stored as UTC midnight.
     // Compare as date strings using UTC getters so the check is timezone-independent.
-    const newBookingDate = rest.bookingDate; // already "yyyy-MM-dd"
-    const bd = booking.bookingDate;
-    const oldBookingDate = `${bd.getUTCFullYear()}-${String(bd.getUTCMonth() + 1).padStart(2, "0")}-${String(bd.getUTCDate()).padStart(2, "0")}`;
-    const eventDateChanged = newBookingDate !== oldBookingDate;
+    const newEventDate = rest.eventDate; // already "yyyy-MM-dd"
+    const ed = booking.eventDate!; // saved bookings always have eventDate
+    const oldEventDate = `${ed.getUTCFullYear()}-${String(ed.getUTCMonth() + 1).padStart(2, "0")}-${String(ed.getUTCDate()).padStart(2, "0")}`;
+    const eventDateChanged = newEventDate !== oldEventDate;
 
     // Compare discount
     const newDiscountName = rest.specialBonusName ?? null;
@@ -1315,7 +1314,7 @@ export async function editBooking(data: unknown) {
       db.booking.update({
         where: { id },
         data: {
-          bookingDate: new Date(`${rest.bookingDate}T00:00:00.000Z`),
+          eventDate: new Date(`${rest.eventDate}T00:00:00.000Z`),
           venueId: rest.venueId,
           packageId: rest.packageId,
           paymentMethodId: rest.paymentMethodId ?? null,
@@ -1813,7 +1812,7 @@ export async function editBooking(data: unknown) {
         if (newContact !== oldContact) diff.contactNumbers = newContact;
         if (contactEmailCpp !== (booking.snapCustomer?.emailCpp ?? "")) diff.emailCpp = contactEmailCpp;
         if (contactEmailCpw !== (booking.snapCustomer?.emailCpw ?? "")) diff.emailCpw = contactEmailCpw;
-        if (rest.bookingDate !== booking.bookingDate.toISOString().split("T")[0]) diff.bookingDate = rest.bookingDate;
+        if (rest.eventDate !== booking.eventDate!.toISOString().split("T")[0]) diff.eventDate = rest.eventDate;
         if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
         if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
 
@@ -1835,7 +1834,7 @@ export async function editBooking(data: unknown) {
               diff.packagePricing = `${oldPV} → ${newPV}`;
             }
           }
-          if (eventDateChanged) diff.eventDate = `${oldBookingDate} → ${newBookingDate}`;
+          if (eventDateChanged) diff.eventDate = `${oldEventDate} → ${newEventDate}`;
           if (discountChanged) {
             const discount = newDiscountAmount;
             const oldDiscount = booking.discountAmount ?? 0;
