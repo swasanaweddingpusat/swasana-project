@@ -16,10 +16,8 @@ import {
   togglePackageAvailable,
   unverifyPackage,
 } from "@/actions/package";
-import {
-  updateBookingCategoryPrices,
-  updateBookingCategoryPricesSchema,
-} from "@/actions/package-prices";
+import { updateBookingCategoryPrices } from "@/actions/package-prices";
+import { updateBookingCategoryPricesSchema } from "@/lib/validations/package";
 import type { PackagesQueryResult } from "@/lib/queries/packages";
 import type { ApprovalRecordWithSteps } from "@/lib/queries/packages";
 

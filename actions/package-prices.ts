@@ -10,6 +10,7 @@ import { calcFinalFromFullPrice, computeFullPrice, adjustTermsForPriceChange } f
 import { createBookingRevision } from "@/lib/booking-revision";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import type { Prisma } from "@prisma/client";
+import { updateBookingCategoryPricesSchema } from "@/lib/validations/package";
 
 const updatePackagePricesSchema = z.object({
   bookingId: z.string().min(1),
@@ -388,23 +389,6 @@ export async function updateTakeoutWithTerms(
  * TOP (termOfPayment) is intentionally NOT touched here. Takeout-adjusted TOP
  * changes are handled by updatePackagePrices / updateTakeoutWithTerms instead.
  */
-
-export const updateBookingCategoryPricesSchema = z.object({
-  bookingId: z.string().min(1),
-  categories: z
-    .array(
-      z.object({
-        categoryId: z.string().nullable().optional(),
-        categoryName: z.string().min(1),
-        basePrice: z.number().int().min(0),
-        sortOrder: z.number().int(),
-        isShow: z.boolean(),
-      }),
-    )
-    .min(1),
-  margin: z.number().min(0),
-  sellingPrice: z.number().int().min(0),
-});
 
 export async function updateBookingCategoryPrices(
   data: unknown,
