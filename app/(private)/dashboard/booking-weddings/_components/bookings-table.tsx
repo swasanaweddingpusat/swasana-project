@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +38,7 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { BookingTCDrawer } from "./booking-tc-drawer";
 import { EditPackageDrawer, type EditPackageTarget } from "./EditPackageDrawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
+import { fetchBookingComments } from "@/services/booking-comment-service";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
@@ -455,7 +456,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {/* Comment button — placed last, right before the More actions menu */}
         <PermissionGate module="booking" action="comment">
           <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} />}>
+            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
               <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               {/* Badge merah — unread biasa */}
               {(unreadCounts[booking.id] ?? 0) > 0 && (
@@ -1282,6 +1283,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 type="button"
                                 className={cn('relative', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
                                 onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }}
+                                onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }}
+                                onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }}
                                 aria-label="Komentar"
                               >
                                 <span className="relative inline-flex">
@@ -1456,20 +1459,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-      {commentTarget && (
-        <BookingCommentPanel
-          open={!!commentTarget}
-          onClose={() => {
-            setCommentTarget(null);
-            setHighlightCommentId(null);
-            qc.invalidateQueries({ queryKey: ["unread-comments"] });
-            qc.invalidateQueries({ queryKey: ["notifications"] });
-          }}
-          bookingId={commentTarget.id}
-          customerName={commentTarget.snapCustomer?.name ?? ""}
-          highlightCommentId={highlightCommentId ?? undefined}
-        />
-      )}
+      <BookingCommentPanel
+        open={!!commentTarget}
+        onClose={() => {
+          setCommentTarget(null);
+          setHighlightCommentId(null);
+          qc.invalidateQueries({ queryKey: ["unread-comments"] });
+          qc.invalidateQueries({ queryKey: ["notifications"] });
+        }}
+        bookingId={commentTarget?.id ?? null}
+        customerName={commentTarget?.snapCustomer?.name ?? ""}
+        highlightCommentId={highlightCommentId ?? undefined}
+      />
 
       {/* Upload Document Modal */}
       {uploadDocTarget && (

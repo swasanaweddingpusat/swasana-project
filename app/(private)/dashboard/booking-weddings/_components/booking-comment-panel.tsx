@@ -176,7 +176,7 @@ interface SelectedMention { profileId: string; name: string }
 interface Props {
   open: boolean;
   onClose: () => void;
-  bookingId: string;
+  bookingId: string | null;
   customerName: string;
   highlightCommentId?: string;
 }
@@ -342,6 +342,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
   };
 
   const handleSend = async () => {
+    if (!bookingId) return;
     const text = input.trim();
     if (!text && !pendingAttachments.length) return;
 
@@ -404,7 +405,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
   };
 
   const handleEditSave = async (id: string) => {
-    if (!editInput.trim()) return;
+    if (!bookingId || !editInput.trim()) return;
     const result = await editBookingComment(id, editInput.trim());
     if (!result.success) { toast.error(result.error); return; }
     setEditingId(null);

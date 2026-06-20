@@ -58,6 +58,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
+import { fetchBookingComments } from "@/services/booking-comment-service";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgreementModal } from "@/components/shared/booking/agreement-modal";
 import { RejectBookingModal } from "@/components/shared/booking/reject-booking-modal";
@@ -423,7 +424,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         {can("booking", "comment") && (
           <TooltipProvider delay={200}>
             <Tooltip>
-              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8 relative" onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }} />}>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8 relative" onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
                 <MessageSquare weight="BoldDuotone" className="h-4 w-4" />
                 {(unreadCounts[booking.id] ?? 0) > 0 && (
                   <span className={cn("absolute", "-top-0.5", "-right-0.5", "min-w-4", "h-4", "rounded-full", "bg-destructive", "text-destructive-foreground", "text-[9px]", "font-bold", "flex", "items-center", "justify-center", "px-0.5")}>
@@ -1019,17 +1020,15 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
       )}
 
       {/* Comment Panel */}
-      {commentTarget && (
-        <BookingCommentPanel
-          open={!!commentTarget}
-          onClose={() => {
-            setCommentTarget(null);
-            qc.invalidateQueries({ queryKey: ["unread-comments"] }).catch(() => {});
-          }}
-          bookingId={commentTarget.id}
-          customerName={commentTarget.snapCustomer?.name ?? ""}
-        />
-      )}
+      <BookingCommentPanel
+        open={!!commentTarget}
+        onClose={() => {
+          setCommentTarget(null);
+          qc.invalidateQueries({ queryKey: ["unread-comments"] }).catch(() => {});
+        }}
+        bookingId={commentTarget?.id ?? null}
+        customerName={commentTarget?.snapCustomer?.name ?? ""}
+      />
 
       {/* Upload Document */}
       {uploadDocTarget && (

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { resolveAvatarUrl } from "@/lib/storage";
 
@@ -74,33 +75,39 @@ export async function getUnreadMentionCounts(
 
 export type MentionCountsResult = Record<string, number>;
 
-/** Returns unread comment counts per bookingId for a given profile */
+/** Returns unread comment counts per bookingId for a given profile.
+ *  Uses a single GROUP BY query to avoid N+1 round-trips.
+ *  lastReadAt varies per booking, so we use a correlated subquery inside
+ *  the WHERE clause — one SQL query total instead of 1+N.
+ */
 export async function getUnreadCommentCounts(
   bookingIds: string[],
   profileId: string
 ): Promise<Record<string, number>> {
   if (!bookingIds.length) return {};
 
-  const reads = await db.bookingCommentRead.findMany({
-    where: { profileId, bookingId: { in: bookingIds } },
-    select: { bookingId: true, lastReadAt: true },
-  });
+  type Row = { booking_id: string; cnt: bigint };
 
-  const readMap = new Map(reads.map((r: { bookingId: string; lastReadAt: Date }) => [r.bookingId, r.lastReadAt]));
+  const rows = await db.$queryRaw<Row[]>(Prisma.sql`
+    SELECT bc.booking_id, COUNT(*)::bigint AS cnt
+    FROM booking_comments bc
+    WHERE bc.booking_id = ANY(${bookingIds}::text[])
+      AND bc.author_id <> ${profileId}
+      AND bc.created_at > COALESCE(
+        (
+          SELECT bcr.last_read_at
+          FROM booking_comment_reads bcr
+          WHERE bcr.booking_id = bc.booking_id
+            AND bcr.profile_id = ${profileId}
+        ),
+        '1970-01-01'::timestamptz
+      )
+    GROUP BY bc.booking_id
+  `);
 
-  const counts = await Promise.all(
-    bookingIds.map(async (bookingId) => {
-      const lastReadAt = readMap.get(bookingId) ?? new Date(0);
-      const count = await db.bookingComment.count({
-        where: {
-          bookingId,
-          authorId: { not: profileId },
-          createdAt: { gt: lastReadAt },
-        },
-      });
-      return [bookingId, count] as const;
-    })
-  );
-
-  return Object.fromEntries(counts.filter(([, count]) => count > 0));
+  const result: Record<string, number> = {};
+  for (const row of rows) {
+    result[row.booking_id] = Number(row.cnt);
+  }
+  return result;
 }
