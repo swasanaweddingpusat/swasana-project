@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGroupPerformance } from "@/hooks/use-groups-performance";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Input } from "@/components/ui/input";
@@ -96,16 +97,7 @@ export function GroupDetailClient({
     removeMemberMutation.isPending ||
     setTargetMutation.isPending;
 
-  const { data: performance = initialPerformance } = useQuery<GroupPerformanceItem[]>({
-    queryKey: ["groups", "performance", group.id],
-    queryFn: async () => {
-      const res = await fetch(`/api/groups/${group.id}/performance`);
-      if (!res.ok) return initialPerformance;
-      return res.json() as Promise<GroupPerformanceItem[]>;
-    },
-    initialData: initialPerformance,
-    staleTime: 60_000,
-  });
+  const { data: performance = initialPerformance } = useGroupPerformance(group.id, initialPerformance);
 
   // ── Dialog state ─────────────────────────────────────────────────────────────
 
