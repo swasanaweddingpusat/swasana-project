@@ -14,6 +14,7 @@ interface BookingsParams {
   dateFrom?: string;
   dateTo?: string;
   approvalStatus?: "pending" | "approved";
+  salesId?: string;
 }
 
 async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
@@ -26,6 +27,7 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
     ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
     ...(params.dateTo ? { dateTo: params.dateTo } : {}),
     ...(params.approvalStatus ? { approvalStatus: params.approvalStatus } : {}),
+    ...(params.salesId ? { salesId: params.salesId } : {}),
   });
   const res = await fetch(`/api/bookings?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch bookings");
@@ -41,9 +43,10 @@ export function useBookings(params: BookingsParams, initialData?: BookingsResult
     (!params.recordStatus || params.recordStatus === "saved") &&
     !params.dateFrom &&
     !params.dateTo &&
-    !params.approvalStatus;
+    !params.approvalStatus &&
+    !params.salesId;
   return useQuery({
-    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.approvalStatus ?? ""],
+    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.approvalStatus ?? "", params.salesId ?? ""],
     queryFn: () => fetchBookings(params),
     initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,

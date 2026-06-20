@@ -135,6 +135,10 @@ export const editBookingSchema = z.object({
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
+  /** Sinyal eksplisit: user me-re-select paket (sama atau beda) sehingga harga
+   *  master harus di-refresh dari DB. Diset true di drawer saat SearchableSelect
+   *  paket onChange terpicu. False = harga snapshot tidak di-touch. */
+  refreshPackagePrice: z.boolean().optional().default(false),
 });
 
 export const approveBookingSchema = z.object({

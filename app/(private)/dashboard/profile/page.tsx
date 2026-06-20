@@ -51,6 +51,7 @@ export default async function ProfilePage() {
         emergencyContactRel: profile.emergencyContactRel,
         emergencyContactPhone: profile.emergencyContactPhone,
         avatarUrl: resolveAvatarUrl(profile.avatarUrl),
+        defaultSignature: profile.defaultSignature ?? null,
       } : null}
       educationLevels={educationLevels}
     />

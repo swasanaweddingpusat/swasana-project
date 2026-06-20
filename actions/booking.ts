@@ -1065,8 +1065,12 @@ export async function editBooking(data: unknown) {
         customerId: true, salesId: true, venueId: true, packageId: true,
         bookingDate: true, weddingSession: true, weddingType: true,
         paymentMethodId: true, sourceOfInformationId: true,
-        discountName: true, discountAmount: true, currentRevisionId: true,
+        discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
         snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
+        snapComplimentaries: {
+          select: { name: true, price: true, isShowPrice: true, description: true, qty: true },
+          orderBy: { sortOrder: "asc" },
+        },
       },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
@@ -1102,6 +1106,11 @@ export async function editBooking(data: unknown) {
 
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
+    const typeChanged = (rest.weddingType ?? null) !== (booking.weddingType ?? null);
+    // shouldRefreshPrice = true saat paket beda (packageChanged) ATAU user re-select
+    // paket yang sama (refreshPackagePrice signal dari drawer). Pada keduanya kita fetch
+    // master price terbaru dan rebuild snapshot pricing + snapPackageCategoryPrices.
+    const shouldRefreshPrice = packageChanged || rest.refreshPackagePrice === true;
 
     // ── Material change detection ─────────────────────────────────────────────
     // Compare event date (bookingDate field = event date in wedding bookings)
@@ -1219,16 +1228,70 @@ export async function editBooking(data: unknown) {
       }
     }
 
+    // refreshPackagePrice (re-select same package): detect whether the master price
+    // ACTUALLY changed compared to the current snapshot. If harga sama → no-op (no
+    // material change, no revision). Only a real price delta counts as material.
+    // This runs ONLY when shouldRefreshPrice=true but packageChanged=false (same pkg).
+    let priceRefreshed = false;
+    if (shouldRefreshPrice && !packageChanged) {
+      const [masterPkg, snapPricing] = await Promise.all([
+        db.package.findUnique({
+          where: { id: rest.packageId },
+          select: { margin: true, sellingPrice: true, categoryPrices: { select: { basePrice: true, isShow: true, categoryName: true, sortOrder: true } } },
+        }),
+        db.snapPackagePricing.findUnique({
+          where: { bookingId: id },
+          select: { fullPrice: true },
+        }),
+      ]);
+      if (masterPkg && snapPricing) {
+        const newFullPrice = computeFullPrice(masterPkg.categoryPrices, masterPkg.margin ?? 0, masterPkg.sellingPrice);
+        priceRefreshed = newFullPrice !== snapPricing.fullPrice;
+      }
+    }
+
+    // Compare complimentaries: field-based diff against current DB snapshot.
+    // Full-replace write semantics (delete+recreate) means no stable client-side id —
+    // compare by count + content instead. Normalization: trim strings, cast numerics,
+    // treat null/"" as equivalent for description.
+    let complimentaryChanged = false;
+    if (parsed.data.complimentaries !== undefined) {
+      const existing = booking.snapComplimentaries;
+      const incoming = parsed.data.complimentaries;
+      if (existing.length !== incoming.length) {
+        complimentaryChanged = true;
+      } else {
+        for (let ci = 0; ci < existing.length; ci++) {
+          const ex = existing[ci];
+          const inc = incoming[ci];
+          const exDesc = ex.description?.trim() || null;
+          const incDesc = inc.description?.trim() || null;
+          if (
+            ex.name.trim() !== inc.name.trim() ||
+            ex.price !== inc.price ||
+            ex.isShowPrice !== inc.isShowPrice ||
+            exDesc !== incDesc ||
+            ex.qty !== inc.qty
+          ) {
+            complimentaryChanged = true;
+            break;
+          }
+        }
+      }
+    }
+
     // unpaid→paid persists WITHOUT resetting approval; a paid→unpaid reversal IS
     // material (paidReversed) and re-triggers the approval revision flow below.
     const hasMaterialChange =
       venueChanged ||
       packageChanged ||
+      priceRefreshed ||
       eventDateChanged ||
       discountChanged ||
       takeoutChanged ||
       topChanged ||
-      paidReversed;
+      paidReversed ||
+      complimentaryChanged;
     // Terms must be re-written whenever structure, status, or sort-order changed.
     // sortOrder-only change (drag reorder) is non-material but still needs a write
     // so the new display order is persisted correctly.
@@ -1295,29 +1358,63 @@ export async function editBooking(data: unknown) {
       }),
     ];
 
-    // Update venue snapshot if venue changed
-    if (venueChanged) {
-      const venue = await db.venue.findUniqueOrThrow({
+    // Fetch new venue data when venue changed (needed for both snap update and PO recompute).
+    // Also fetched when only the event type changed so we have brand/code for PO rebuild.
+    let fetchedVenue: { id: string; name: string; code: string; address: string | null; description: string | null; brand: { name: string; code: string } | null } | null = null;
+    if (venueChanged || typeChanged) {
+      fetchedVenue = await db.venue.findUniqueOrThrow({
         where: { id: rest.venueId },
-        include: { brand: true },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          address: true,
+          description: true,
+          brand: { select: { name: true, code: true } },
+        },
       });
+    }
+
+    // Update venue snapshot if venue changed
+    if (venueChanged && fetchedVenue) {
       ops.push(
         db.snapVenue.update({
           where: { bookingId: id },
           data: {
-            venueId: venue.id,
-            venueName: venue.name,
-            address: venue.address,
-            description: venue.description,
-            brandName: venue.brand?.name ?? null,
-            brandCode: venue.brand?.code ?? null,
+            venueId: fetchedVenue.id,
+            venueName: fetchedVenue.name,
+            address: fetchedVenue.address,
+            description: fetchedVenue.description,
+            brandName: fetchedVenue.brand?.name ?? null,
+            brandCode: fetchedVenue.brand?.code ?? null,
           },
         })
       );
     }
 
-    // Update package snapshots if package changed
-    if (packageChanged) {
+    // Recompute poNumber when venue or event type changed.
+    // - seq (running number) and dealing-date segment are preserved from the stored PO.
+    // - brandCode, venueCode, eventTypeCode are re-derived from the new venue/type.
+    // Fail-safe: if the stored PO doesn't match the expected 5-segment format (legacy/custom),
+    // skip the update entirely rather than corrupting it.
+    if ((venueChanged || typeChanged) && fetchedVenue && booking.poNumber) {
+      const oldSegments = booking.poNumber.split("/");
+      if (oldSegments.length === 5) {
+        const [oldSeq, , , , oldDate] = oldSegments;
+        const newBrandCode = fetchedVenue.brand?.code ?? "";
+        const newVenueCode = fetchedVenue.code;
+        const newTypeCode = rest.weddingType ?? "R";
+        const newPoNumber = `${oldSeq}/${newBrandCode}/${newVenueCode}/${newTypeCode}/${oldDate}`;
+        ops.push(
+          db.booking.update({ where: { id }, data: { poNumber: newPoNumber } })
+        );
+      }
+      // If segment count != 5: legacy format — leave poNumber untouched (no push).
+    }
+
+    // Update package snapshots if package changed OR master price was re-fetched
+    // (shouldRefreshPrice: user re-selected same package — refresh master price from DB).
+    if (shouldRefreshPrice) {
       const newPkg = await db.package.findUniqueOrThrow({
         where: { id: rest.packageId },
         include: { vendorItems: true, internalItems: true, categoryPrices: true },
@@ -1633,11 +1730,13 @@ export async function editBooking(data: unknown) {
       const reasons: string[] = [];
       if (venueChanged) reasons.push("venue");
       if (packageChanged) reasons.push("package");
+      if (priceRefreshed) reasons.push("package price refreshed");
       if (eventDateChanged) reasons.push("event date");
       if (discountChanged) reasons.push("discount");
       if (takeoutChanged) reasons.push("takeout");
       if (topChanged) reasons.push("terms of payment");
       if (paidReversed) reasons.push("payment reversed to unpaid");
+      if (complimentaryChanged) reasons.push("complimentary changed");
       const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
       const approvalRecord = await db.approvalRecord.findUnique({
