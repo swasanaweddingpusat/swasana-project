@@ -461,7 +461,7 @@ Permission `(module, action)` tuples — kebab-case format:
 | `settings-role-permission` | `view`, `create`, `edit`, `delete` |
 | `settings-source-of-information` | `view`, `create`, `edit`, `delete` |
 | `complimentary` | `view`, `create`, `edit`, `delete` |
-| `leads` | `view`, `create`, `edit`, `delete` |
+| `leads` | `view`, `create`, `edit`, `delete`, `view-soft-delete` |
 | `settings-lead-status` | `view`, `create`, `edit`, `delete` |
 | `quotations` | `view`, `create`, `edit`, `delete` |
 

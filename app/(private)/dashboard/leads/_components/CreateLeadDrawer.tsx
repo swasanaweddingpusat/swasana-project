@@ -1,15 +1,6 @@
 "use client";
 
-/**
- * CreateLeadDrawer — frontend-only UI for creating a new lead.
- *
- * FRONTEND ONLY: uses dummy data for all select options.
- * No server actions or API calls are made.
- *
- * TODO(backend): replace all dummy data arrays + submit handler with real hooks/actions.
- */
-
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { Drawer } from "@/components/shared/drawer";
@@ -43,10 +34,21 @@ import {
   Gallery,
   Banknote,
   FileText,
+  Refresh,
   type IconProps,
 } from "@solar-icons/react";
+import {
+  getWeddingTimeRange,
+  type WeddingEventType,
+} from "@/lib/constants/wedding-session-times";
+import { useVenues } from "@/hooks/use-venues";
+import { useEventTypes } from "@/hooks/use-event-types";
+import { useLeadStatuses } from "@/hooks/use-lead-statuses";
+import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCreateLead } from "@/hooks/use-leads";
+import { useVenueAvailability } from "@/hooks/use-venue-availability";
 
-// ─── Currency helpers (same pattern as DrawerFinanceBase) ─────────────────────
+// ─── Currency helpers ─────────────────────────────────────────────────────────
 
 function fmtCurrency(value: number): string {
   if (!value) return "";
@@ -57,53 +59,27 @@ function parseCurrency(value: string): number {
   return parseInt(value.replace(/\D/g, ""), 10) || 0;
 }
 
-// ─── Availability dummy logic ─────────────────────────────────────────────────
-//
-// DUMMY: maps a specific set of date strings to "unavailable" to simulate
-// a fully-booked date. Any other non-empty date = "available".
-// Partial example included for demo.
-// TODO(backend): replace dummy availability with grouped booking+locked-lead check
-// against the real bookings table (category, session, venueId filters).
-
-type AvailStatus = "available" | "partial" | "unavailable";
-
-const DUMMY_BOOKED_DATES: Set<string> = new Set([
-  "2026-08-02",
-  "2026-08-15",
-  "2026-09-06",
-]);
-
-const DUMMY_PARTIAL_DATES: Set<string> = new Set([
-  "2026-08-09",
-  "2026-09-20",
-]);
-
-function getDummyAvailability(dateStr: string): AvailStatus | null {
-  if (!dateStr) return null;
-  if (DUMMY_BOOKED_DATES.has(dateStr)) return "unavailable";
-  if (DUMMY_PARTIAL_DATES.has(dateStr)) return "partial";
-  return "available";
-}
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type BookingCategory = "WEDDINGS" | "MICE";
-
 type WeddingSession = "morning" | "evening" | "fullday";
 
 interface ContactNumber {
   label: string;
-  number: string; // stored: dialCode+national (e.g. "6281234567890")
+  number: string;
 }
 
 interface CreateLeadFormState {
-  // Common
   name: string;
   email: string;
-  emailCpp: string; // wedding only
-  emailCpw: string; // wedding only
-  eventDate: string; // "yyyy-MM-dd"
-  eventDateAlt: string; // "yyyy-MM-dd", optional
+  emailCpp: string;
+  emailCpw: string;
+  nikCpp: string;
+  nikCpw: string;
+  addressCpp: string;
+  addressCpw: string;
+  eventDate: string;
+  eventDateAlt: string;
   venueId: string;
   venueSecondaryId: string;
   eventTypeId: string;
@@ -115,79 +91,16 @@ interface CreateLeadFormState {
   statusId: string;
   notes: string;
   bitrixId: string;
-  // Wedding-only
   weddingSession: WeddingSession | "";
   packageId: string;
-  // MICE-only
   instansi: string;
   miceSession: WeddingSession | "";
-  // Kunci Tanggal & Venue
   isDateLocked: boolean;
   bookingFeeAmount: number;
-  bookingFeeDate: string; // "yyyy-MM-dd"
+  bookingFeeDate: string;
 }
 
-// ─── Dummy data ───────────────────────────────────────────────────────────────
-// TODO(backend): replace all dummy arrays with real TanStack Query hooks
-// e.g. useVenues(), useEventTypes(), useLeadStatuses(), useSalesUsers(), etc.
-
-const DUMMY_VENUES: { id: string; name: string }[] = [
-  { id: "v1", name: "The Grand Ballroom" },
-  { id: "v2", name: "Garden Pavillion" },
-  { id: "v3", name: "Skyline Hall" },
-  { id: "v4", name: "Heritage Room" },
-  { id: "v5", name: "Lakeside Terrace" },
-];
-
-const DUMMY_EVENT_TYPES_WEDDING: { id: string; name: string }[] = [
-  { id: "et-w1", name: "Akad Nikah" },
-  { id: "et-w2", name: "Resepsi" },
-  { id: "et-w3", name: "Akad & Resepsi" },
-  { id: "et-w4", name: "Pengajian" },
-];
-
-const DUMMY_EVENT_TYPES_MICE: { id: string; name: string }[] = [
-  { id: "et-m1", name: "Meeting" },
-  { id: "et-m2", name: "Incentive" },
-  { id: "et-m3", name: "Conference" },
-  { id: "et-m4", name: "Exhibition" },
-  { id: "et-m5", name: "Seminar" },
-];
-
-const DUMMY_SOURCES: { id: string; name: string }[] = [
-  { id: "src1", name: "Instagram" },
-  { id: "src2", name: "TikTok" },
-  { id: "src3", name: "Rekomendasi Teman" },
-  { id: "src4", name: "Bitrix CRM" }, // name contains "bitrix" → triggers bitrixId field
-  { id: "src5", name: "Walk-in" },
-  { id: "src6", name: "Website" },
-  { id: "src7", name: "Google Ads" },
-];
-
-const DUMMY_SALES: { id: string; name: string; badge?: string }[] = [
-  { id: "sal1", name: "Rina Wulandari", badge: "Sales" },
-  { id: "sal2", name: "Budi Santoso", badge: "Sales" },
-  { id: "sal3", name: "Dewi Maharani", badge: "Sales-Mice" },
-  { id: "sal4", name: "Agus Pratama", badge: "Sales" },
-  { id: "sal5", name: "Siti Rahayu", badge: "Sales-Mice" },
-];
-
-const DUMMY_STATUSES: { id: string; name: string; color: string }[] = [
-  { id: "st1", name: "Cold", color: "#94a3b8" },
-  { id: "st2", name: "Warm", color: "#f59e0b" },
-  { id: "st3", name: "Hot", color: "#ef4444" },
-  { id: "st4", name: "Follow-up", color: "#3b82f6" },
-  { id: "st5", name: "Proposal Sent", color: "#8b5cf6" },
-];
-
-const DUMMY_PACKAGES: { id: string; name: string }[] = [
-  { id: "pkg1", name: "Package Silver — 200 pax" },
-  { id: "pkg2", name: "Package Gold — 300 pax" },
-  { id: "pkg3", name: "Package Platinum — 500 pax" },
-  { id: "pkg4", name: "Package Intimate — 100 pax" },
-];
-
-// ─── Constants ─────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const SESSION_OPTIONS: { id: WeddingSession; name: string }[] = [
   { id: "morning", name: "Pagi (Morning)" },
@@ -200,6 +113,10 @@ const DEFAULT_FORM: CreateLeadFormState = {
   email: "",
   emailCpp: "",
   emailCpw: "",
+  nikCpp: "",
+  nikCpw: "",
+  addressCpp: "",
+  addressCpw: "",
   eventDate: "",
   eventDateAlt: "",
   venueId: "",
@@ -218,13 +135,37 @@ const DEFAULT_FORM: CreateLeadFormState = {
   instansi: "",
   miceSession: "",
   isDateLocked: false,
-  bookingFeeAmount: 0,
+  bookingFeeAmount: 5000000,
   bookingFeeDate: "",
 };
 
+/** Map event type code → WeddingEventType for time auto-fill (same as lead-drawer.tsx) */
+function mapCodeToWeddingEventType(code: string): WeddingEventType | "" {
+  if (code === "R") return "resepsi";
+  if (code === "AR") return "akad-dan-resepsi";
+  if (code === "A") return "akad";
+  return "";
+}
+
+// ─── Upload helper ────────────────────────────────────────────────────────────
+
+async function uploadBookingFeeEvidence(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch("/api/upload/booking-fee-evidence", {
+    method: "POST",
+    body: fd,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(err.error ?? "Gagal upload bukti bayar");
+  }
+  const { key } = await res.json() as { key: string };
+  return key;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Section header dengan icon + judul */
 function SectionHeader({
   icon: Icon,
   title,
@@ -242,87 +183,7 @@ function SectionHeader({
   );
 }
 
-/** Date picker button + calendar popover — reusable for Utama & Alternatif */
-function DatePickerField({
-  label,
-  required,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  required?: boolean;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const displayDate = value
-    ? format(new Date(value + "T00:00:00"), "d MMMM yyyy", { locale: localeId })
-    : null;
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-foreground">
-        {label}
-        {required && <span className="text-destructive ml-0.5">*</span>}
-      </label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={
-            <Button
-              type="button"
-              variant="outline"
-              className={cn(
-                "w-full justify-start text-left font-normal rounded-xl",
-                !displayDate && "text-muted-foreground",
-              )}
-            >
-              <CalendarDate weight="BoldDuotone" className="mr-2 h-4 w-4 shrink-0" />
-              {displayDate ?? (placeholder ?? "Pilih tanggal...")}
-            </Button>
-          }
-        />
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            captionLayout="dropdown"
-            selected={value ? new Date(value + "T00:00:00") : undefined}
-            onSelect={(date) => {
-              if (date) {
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, "0");
-                const d = String(date.getDate()).padStart(2, "0");
-                onChange(`${y}-${m}-${d}`);
-              } else {
-                onChange("");
-              }
-              setOpen(false);
-            }}
-            fromYear={new Date().getFullYear() - 1}
-            toYear={new Date().getFullYear() + 5}
-            defaultMonth={value ? new Date(value + "T00:00:00") : new Date()}
-          />
-          {value && (
-            <div className="border-t p-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs text-muted-foreground"
-                onClick={() => { onChange(""); setOpen(false); }}
-              >
-                Hapus tanggal
-              </Button>
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-/** Pill radio session (morning / evening / fullday) */
 function SessionPillRadio({
   label,
   required,
@@ -362,37 +223,131 @@ function SessionPillRadio({
   );
 }
 
-/** Badge availability dummy — shown below each date field when a date is chosen */
-function AvailabilityBadge({ dateStr }: { dateStr: string }) {
-  const status = getDummyAvailability(dateStr);
-  if (!status) return null;
+/** Date picker with built-in venue availability dots — mirrors booking-drawer.tsx Calendar behavior */
+function AvailabilityDatePickerField({
+  label,
+  required,
+  value,
+  onChange,
+  placeholder,
+  venueId,
+}: {
+  label: string;
+  required?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  venueId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(
+    value ? new Date(value + "T00:00:00") : new Date(),
+  );
 
-  if (status === "available") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-        <span>&#10003;</span>
-        Tersedia
-      </span>
-    );
+  // Derive month string from visibleMonth for the query key
+  const monthStr = format(visibleMonth, "yyyy-MM");
+
+  const { data: avail, isFetching } = useVenueAvailability(
+    venueId || null,
+    monthStr,
+  );
+
+  /** Identical logic to booking-drawer.tsx getDateStatus — checks all 3 slots */
+  function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
+    if (!venueId || !avail) return null;
+    const key = format(d, "yyyy-MM-dd");
+    const a = avail[key];
+    if (!a) return null;
+    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
+    if (count === 0) return "unavailable";
+    if (count === 3) return "available";
+    return "partial";
   }
-  if (status === "unavailable") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive">
-        <span>&#10007;</span>
-        Terisi
-      </span>
-    );
-  }
-  // partial
+
+  const disabled = !venueId;
+  const displayDate = value
+    ? format(new Date(value + "T00:00:00"), "d MMMM yyyy", { locale: localeId })
+    : null;
+
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-      <span>&#9888;</span>
-      Tersedia sebagian
-    </span>
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-medium text-foreground">
+        {label}
+        {required && <span className="text-destructive ml-0.5">*</span>}
+      </label>
+      <Popover open={open} onOpenChange={(o) => { if (!disabled) setOpen(o); }}>
+        <PopoverTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              className={cn(
+                "w-full justify-start text-left font-normal rounded-xl",
+                !displayDate && "text-muted-foreground",
+              )}
+            >
+              <CalendarDate weight="BoldDuotone" className="mr-2 h-4 w-4 shrink-0" />
+              {disabled
+                ? "Pilih venue dulu"
+                : (displayDate ?? (placeholder ?? "Pilih tanggal..."))}
+              {isFetching && venueId && (
+                <Refresh weight="BoldDuotone" className="ml-auto h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+              )}
+            </Button>
+          }
+        />
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            captionLayout="dropdown"
+            selected={value ? new Date(value + "T00:00:00") : undefined}
+            onSelect={(date) => {
+              if (date) {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, "0");
+                const d = String(date.getDate()).padStart(2, "0");
+                onChange(`${y}-${m}-${d}`);
+              } else {
+                onChange("");
+              }
+              setOpen(false);
+            }}
+            disabled={(d) => getDateStatus(d) === "unavailable"}
+            fromYear={new Date().getFullYear() - 1}
+            toYear={new Date().getFullYear() + 5}
+            defaultMonth={value ? new Date(value + "T00:00:00") : new Date()}
+            onMonthChange={setVisibleMonth}
+            modifiers={{
+              available: (d) => !!venueId && getDateStatus(d) === "available",
+              partial: (d) => !!venueId && getDateStatus(d) === "partial",
+              unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable",
+            }}
+            modifiersClassNames={{
+              available: "day-available",
+              partial: "day-partial",
+              unavailable: "day-unavailable",
+            }}
+          />
+          {value && (
+            <div className="border-t p-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => { onChange(""); setOpen(false); }}
+              >
+                Hapus tanggal
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 
-/** Currency input with "Rp" prefix — pattern from DrawerFinanceBase */
 function CurrencyInput({
   value,
   onChange,
@@ -435,22 +390,17 @@ function CurrencyInput({
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CreateLeadDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Called after dummy submit with payload — real implementation connects to server action */
-  onSubmit?: (
-    payload: CreateLeadFormState & {
-      contactNumbers: ContactNumber[];
-      /** File object from booking fee evidence upload. TODO(backend): wire to storage. */
-      bookingFeeEvidence: File | null;
-    },
-  ) => void;
+  onSuccess?: () => void;
 }
 
-export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDrawerProps) {
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDrawerProps) {
   // ── Step 0: tipe booking ────────────────────────────────────────────────────
   const [category, setCategory] = useState<BookingCategory | null>(null);
 
@@ -462,35 +412,60 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactInput, setContactInput] = useState({ name: "", phone: "" });
 
-  // ── Date alt toggle ────────────────────────────────────────────────────────
+  // ── UI toggles ─────────────────────────────────────────────────────────────
   const [showDateAlt, setShowDateAlt] = useState(false);
-
-  // ── Venue secondary toggle ─────────────────────────────────────────────────
   const [showVenueSecondary, setShowVenueSecondary] = useState(false);
 
-  // ── Booking fee evidence (file-only, frontend state) ───────────────────────
-  // TODO(backend): wire evidence upload to storage (MinIO/S3) via server action
+  // ── Booking fee evidence ───────────────────────────────────────────────────
   const [bookingFeeEvidence, setBookingFeeEvidence] = useState<File | null>(null);
   const evidenceInputRef = useRef<HTMLInputElement>(null);
 
   // ── Booking fee date popover ───────────────────────────────────────────────
   const [bookingFeeDateOpen, setBookingFeeDateOpen] = useState(false);
 
+  // ── Submit state ───────────────────────────────────────────────────────────
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // ── Data hooks ─────────────────────────────────────────────────────────────
+  const { data: venues = [] } = useVenues();
+  const { data: eventTypesData } = useEventTypes(category ?? undefined);
+  const { data: leadStatuses = [] } = useLeadStatuses();
+  const { users: salesUsers } = useSalesUsers();
+  const createLead = useCreateLead();
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const isWedding = category === "WEDDINGS";
   const isMice = category === "MICE";
 
+  const venueOptions = venues.map((v) => ({ id: v.id, name: v.name }));
+  const venueSecondaryOptions = venueOptions.filter((v) => v.id !== form.venueId);
+
+  const eventTypeOptions = (eventTypesData ?? []).map((et) => ({ id: et.id, name: et.name, code: et.code }));
+  const statusOptions = leadStatuses.map((s) => ({ id: s.id, name: s.name }));
+  const salesOptions = salesUsers.map((u) => ({
+    id: u.id,
+    name: u.fullName ?? u.id,
+  }));
+  // Source of informations — fetched inline (no hook exists, quick fetch)
+  const [sources, setSources] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/source-of-informations")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => { if (Array.isArray(data)) setSources(data); })
+      .catch(() => {});
+  }, []);
+
   const isBitrixSource =
-    DUMMY_SOURCES.find((s) => s.id === form.sourceOfInformationId)
+    sources.find((s) => s.id === form.sourceOfInformationId)
       ?.name.toLowerCase()
       .includes("bitrix") ?? false;
 
-  // Booking fee lock validation: when ON, amount + date + evidence all required
+  // Booking fee lock validation
   const isLockIncomplete =
     form.isDateLocked &&
     (form.bookingFeeAmount <= 0 || !form.bookingFeeDate || !bookingFeeEvidence);
 
-  // Required field check for submit button
   const isIncomplete =
     !category ||
     !form.name.trim() ||
@@ -504,15 +479,35 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
     (isBitrixSource && !form.bitrixId.trim()) ||
     isLockIncomplete;
 
+  // ── Auto-fill time from session + event type ────────────────────────────────
+  const selectedEventType = eventTypeOptions.find((et) => et.id === form.eventTypeId);
+  const weddingEventTypeMapped: WeddingEventType | "" = selectedEventType
+    ? mapCodeToWeddingEventType(selectedEventType.code)
+    : "";
+
+  useEffect(() => {
+    if (!isWedding) return;
+    // fullday has no standard time range; morning/evening are mapped
+    if (form.weddingSession === "fullday" || !form.weddingSession) return;
+    const sessionVal = form.weddingSession; // "morning" | "evening"
+    const autoTime = getWeddingTimeRange(sessionVal, weddingEventTypeMapped);
+    if (autoTime) {
+      setForm((prev) => ({ ...prev, time: autoTime }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.weddingSession, form.eventTypeId, isWedding]);
+
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  function setField<K extends keyof CreateLeadFormState>(key: K, value: CreateLeadFormState[K]) {
+  const setField = useCallback(<K extends keyof CreateLeadFormState>(
+    key: K,
+    value: CreateLeadFormState[K],
+  ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
+  }, []);
 
   function handleCategorySelect(cat: BookingCategory) {
     setCategory(cat);
-    // Clear category-specific fields when switching
     setForm((prev) => ({
       ...prev,
       eventTypeId: "",
@@ -520,8 +515,13 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
       packageId: "",
       emailCpp: "",
       emailCpw: "",
+      nikCpp: "",
+      nikCpw: "",
+      addressCpp: "",
+      addressCpw: "",
       instansi: "",
       miceSession: "",
+      time: "",
     }));
   }
 
@@ -541,46 +541,89 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
     setContactNumbers((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function handleClose() {
-    onOpenChange(false);
-  }
-
-  function handleSubmit() {
-    if (isIncomplete) return;
-    const payload = {
-      ...form,
-      contactNumbers,
-      // TODO(backend): bookingFeeEvidence should be uploaded to storage before
-      // calling createLead — wire to uploadBookingFeeEvidence() server action.
-      bookingFeeEvidence,
-    };
-    // TODO(backend): replace console.log with real server action call
-    // e.g. await createLead(payload); then invalidate queries & close
-    // eslint-disable-next-line no-console
-    console.log("[CreateLeadDrawer] submit payload:", payload);
-    onSubmit?.(payload);
-    // Reset state
+  function resetForm() {
     setCategory(null);
     setForm(DEFAULT_FORM);
     setContactNumbers([]);
     setShowDateAlt(false);
     setShowVenueSecondary(false);
     setBookingFeeEvidence(null);
+    setSubmitError(null);
+  }
+
+  function handleClose() {
+    resetForm();
     onOpenChange(false);
   }
 
-  // ── Event type options filtered by category ─────────────────────────────────
-  const eventTypeOptions = isWedding
-    ? DUMMY_EVENT_TYPES_WEDDING
-    : isMice
-      ? DUMMY_EVENT_TYPES_MICE
-      : [];
+  async function handleSubmit() {
+    if (isIncomplete || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
 
-  // ── Package disabled until venue is chosen ──────────────────────────────────
-  const packageDisabled = !form.venueId;
+    try {
+      // 1. Upload booking fee evidence to S3 first (if locked + evidence provided)
+      let evidenceUrl: string | null = null;
+      if (form.isDateLocked && bookingFeeEvidence) {
+        evidenceUrl = await uploadBookingFeeEvidence(bookingFeeEvidence);
+      }
 
-  // ── Venue secondary options excluding primary choice ───────────────────────
-  const venueSecondaryOptions = DUMMY_VENUES.filter((v) => v.id !== form.venueId);
+      // 2. Determine effective session (MICE uses miceSession mapped to weddingSession field)
+      const effectiveSession = isWedding
+        ? (form.weddingSession || undefined)
+        : (form.miceSession || undefined);
+
+      // 3. Call createLead server action
+      const result = await createLead.mutateAsync({
+        name: form.name.trim(),
+        contactNumbers,
+        email: isWedding ? undefined : (form.email || undefined),
+        emailCpp: isWedding ? (form.emailCpp || undefined) : undefined,
+        emailCpw: isWedding ? (form.emailCpw || undefined) : undefined,
+        nikCpp: isWedding ? (form.nikCpp || undefined) : undefined,
+        nikCpw: isWedding ? (form.nikCpw || undefined) : undefined,
+        addressCpp: isWedding ? (form.addressCpp || undefined) : undefined,
+        addressCpw: isWedding ? (form.addressCpw || undefined) : undefined,
+        address: undefined,
+        eventDate: form.eventDate,
+        eventDateAlt: form.eventDateAlt || null,
+        time: form.time || undefined,
+        estimatedPax: form.estimatedPax ? parseInt(form.estimatedPax, 10) : undefined,
+        budgetRange: form.budgetRange || undefined,
+        notes: form.notes || undefined,
+        instansi: isMice ? (form.instansi || undefined) : undefined,
+        category: category!,
+        venueId: form.venueId || undefined,
+        venueSecondaryId: form.venueSecondaryId || null,
+        packageId: isWedding ? (form.packageId || null) : null,
+        eventTypeId: form.eventTypeId,
+        sourceOfInformationId: form.sourceOfInformationId,
+        assignedToId: form.assignedToId,
+        statusId: form.statusId,
+        weddingSession: effectiveSession as "morning" | "evening" | "fullday" | undefined,
+        bitrixId: isBitrixSource ? (form.bitrixId || null) : null,
+        isDateLocked: form.isDateLocked,
+        bookingFeeAmount: form.isDateLocked ? form.bookingFeeAmount : null,
+        bookingFeeDate: form.isDateLocked ? (form.bookingFeeDate || null) : null,
+        bookingFeeEvidenceUrl: evidenceUrl,
+      });
+
+      if (!result.success) {
+        setSubmitError(result.error ?? "Gagal menyimpan lead.");
+        return;
+      }
+
+      resetForm();
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Terjadi kesalahan. Silakan coba lagi.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -604,7 +647,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                 Tipe Booking <span className="text-destructive">*</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
-                {/* WEDDINGS card */}
                 <button
                   type="button"
                   onClick={() => handleCategorySelect("WEDDINGS")}
@@ -629,19 +671,16 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     )}
                   />
                   <div className="flex flex-col items-center gap-0.5">
-                    <span
-                      className={cn(
-                        "text-sm font-bold tracking-wide",
-                        category === "WEDDINGS" ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    >
+                    <span className={cn(
+                      "text-sm font-bold tracking-wide",
+                      category === "WEDDINGS" ? "text-foreground" : "text-muted-foreground",
+                    )}>
                       WEDDINGS
                     </span>
                     <span className="text-xs text-muted-foreground">Pernikahan</span>
                   </div>
                 </button>
 
-                {/* MICE card */}
                 <button
                   type="button"
                   onClick={() => handleCategorySelect("MICE")}
@@ -666,12 +705,10 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     )}
                   />
                   <div className="flex flex-col items-center gap-0.5">
-                    <span
-                      className={cn(
-                        "text-sm font-bold tracking-wide",
-                        category === "MICE" ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    >
+                    <span className={cn(
+                      "text-sm font-bold tracking-wide",
+                      category === "MICE" ? "text-foreground" : "text-muted-foreground",
+                    )}>
                       MICE
                     </span>
                     <span className="text-xs text-muted-foreground">Corporate Event</span>
@@ -689,7 +726,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                 <div className="flex flex-col gap-4">
                   <SectionHeader icon={User} title="Informasi Client" />
 
-                  {/* Nama */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
                       {isWedding ? "Nama Pasangan" : "Nama Client"}
@@ -698,14 +734,11 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     <Input
                       value={form.name}
                       onChange={(e) => setField("name", e.target.value)}
-                      placeholder={
-                        isWedding ? "e.g. Budi & Siti" : "e.g. PT Maju Bersama"
-                      }
+                      placeholder={isWedding ? "e.g. Budi & Siti" : "e.g. PT Maju Bersama"}
                       className="rounded-xl"
                     />
                   </div>
 
-                  {/* Instansi — MICE only */}
                   {isMice && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-medium text-foreground">
@@ -720,44 +753,99 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     </div>
                   )}
 
-                  {/* Email utama */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-foreground">Email</label>
-                    <Input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setField("email", e.target.value)}
-                      placeholder="nama@email.com (opsional)"
-                      className="rounded-xl"
-                    />
-                  </div>
+                  {!isWedding && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-foreground">Email</label>
+                      <Input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => setField("email", e.target.value)}
+                        placeholder="nama@email.com (opsional)"
+                        className="rounded-xl"
+                      />
+                    </div>
+                  )}
 
-                  {/* Email CPP & CPW — Wedding only */}
                   {isWedding && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-medium text-foreground">
-                          Email CP Pria
-                        </label>
-                        <Input
-                          type="email"
-                          value={form.emailCpp}
-                          onChange={(e) => setField("emailCpp", e.target.value)}
-                          placeholder="pria@email.com"
-                          className="rounded-xl"
-                        />
+                    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4">
+                      {/* ── Calon Pengantin Pria ── */}
+                      <div className="flex flex-col gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Calon Pengantin Pria
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-foreground">Email CP Pria</label>
+                          <Input
+                            type="email"
+                            value={form.emailCpp}
+                            onChange={(e) => setField("emailCpp", e.target.value)}
+                            placeholder="pria@email.com (opsional)"
+                            className="rounded-xl"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-foreground">NIK CP Pria</label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={16}
+                            value={form.nikCpp}
+                            onChange={(e) => setField("nikCpp", e.target.value.replace(/\D/g, ""))}
+                            placeholder="16 digit NIK (opsional)"
+                            className="rounded-xl font-mono"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-foreground">Alamat CP Pria</label>
+                          <Textarea
+                            value={form.addressCpp}
+                            onChange={(e) => setField("addressCpp", e.target.value)}
+                            placeholder="Alamat sesuai KTP (opsional)"
+                            rows={2}
+                            className="rounded-xl resize-none"
+                          />
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-medium text-foreground">
-                          Email CP Wanita
-                        </label>
-                        <Input
-                          type="email"
-                          value={form.emailCpw}
-                          onChange={(e) => setField("emailCpw", e.target.value)}
-                          placeholder="wanita@email.com"
-                          className="rounded-xl"
-                        />
+
+                      <div className="border-t border-border" />
+
+                      {/* ── Calon Pengantin Wanita ── */}
+                      <div className="flex flex-col gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Calon Pengantin Wanita
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-foreground">Email CP Wanita</label>
+                          <Input
+                            type="email"
+                            value={form.emailCpw}
+                            onChange={(e) => setField("emailCpw", e.target.value)}
+                            placeholder="wanita@email.com (opsional)"
+                            className="rounded-xl"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-foreground">NIK CP Wanita</label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={16}
+                            value={form.nikCpw}
+                            onChange={(e) => setField("nikCpw", e.target.value.replace(/\D/g, ""))}
+                            placeholder="16 digit NIK (opsional)"
+                            className="rounded-xl font-mono"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-foreground">Alamat CP Wanita</label>
+                          <Textarea
+                            value={form.addressCpw}
+                            onChange={(e) => setField("addressCpw", e.target.value)}
+                            placeholder="Alamat sesuai KTP (opsional)"
+                            rows={2}
+                            className="rounded-xl resize-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -768,7 +856,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                   <SectionHeader icon={Phone} title="Kontak (HP / WA)" />
 
                   <div className="rounded-2xl bg-muted p-4 flex flex-col gap-2">
-                    {/* Existing contacts */}
                     {contactNumbers.map((entry, idx) => (
                       <div
                         key={idx}
@@ -789,7 +876,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                       </div>
                     ))}
 
-                    {/* Add button */}
                     <Popover
                       open={contactPopoverOpen}
                       onOpenChange={(o) => {
@@ -829,70 +915,17 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                   </div>
                 </div>
 
-                {/* ── SECTION: Tanggal Event ────────────────────────── */}
-                <div className="flex flex-col gap-4">
-                  <SectionHeader icon={CalendarDate} title="Tanggal Event" />
-
-                  {/* Tanggal Utama */}
-                  <div className="flex flex-col gap-1.5">
-                    <DatePickerField
-                      label="Tanggal Utama"
-                      required
-                      value={form.eventDate}
-                      onChange={(v) => setField("eventDate", v)}
-                      placeholder="Pilih tanggal utama..."
-                    />
-                    <AvailabilityBadge dateStr={form.eventDate} />
-                  </div>
-
-                  {/* Tanggal Alternatif */}
-                  {showDateAlt ? (
-                    <div className="flex flex-col gap-1.5">
-                      <DatePickerField
-                        label="Tanggal Alternatif"
-                        value={form.eventDateAlt}
-                        onChange={(v) => setField("eventDateAlt", v)}
-                        placeholder="Pilih tanggal alternatif..."
-                      />
-                      <AvailabilityBadge dateStr={form.eventDateAlt} />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowDateAlt(false);
-                          setField("eventDateAlt", "");
-                        }}
-                        className="self-start text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
-                      >
-                        <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                        Hapus Tanggal Alternatif
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowDateAlt(true)}
-                      className="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                      Tambah Tanggal Alternatif
-                    </button>
-                  )}
-
-                </div>
-
                 {/* ── SECTION: Venue ────────────────────────────────── */}
                 <div className="flex flex-col gap-4">
                   <SectionHeader icon={MapPoint} title="Venue" />
 
-                  {/* Venue Utama */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">Venue Utama</label>
                     <SearchableSelect
-                      options={DUMMY_VENUES}
+                      options={venueOptions}
                       value={form.venueId}
                       onChange={(v) => {
                         setField("venueId", v);
-                        // Reset package when venue changes
                         setField("packageId", "");
                       }}
                       placeholder="Pilih venue utama..."
@@ -901,7 +934,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     />
                   </div>
 
-                  {/* Venue Secondary */}
                   {showVenueSecondary ? (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-medium text-foreground">Venue Secondary</label>
@@ -936,14 +968,63 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     </button>
                   )}
 
+                </div>
+
+                {/* ── SECTION: Tanggal Event ────────────────────────── */}
+                <div className="flex flex-col gap-4">
+                  <SectionHeader icon={CalendarDate} title="Tanggal Event" />
+
+                  <AvailabilityDatePickerField
+                    label="Tanggal Utama"
+                    required
+                    value={form.eventDate}
+                    onChange={(v) => setField("eventDate", v)}
+                    placeholder="Pilih tanggal utama..."
+                    venueId={form.venueId || undefined}
+                  />
+
+                  {showDateAlt ? (
+                    <div className="flex flex-col gap-1.5">
+                      <AvailabilityDatePickerField
+                        label="Tanggal Alternatif"
+                        value={form.eventDateAlt}
+                        onChange={(v) => setField("eventDateAlt", v)}
+                        placeholder="Pilih tanggal alternatif..."
+                        venueId={form.venueId || undefined}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDateAlt(false);
+                          setField("eventDateAlt", "");
+                        }}
+                        className="self-start text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                      >
+                        <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        Hapus Tanggal Alternatif
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowDateAlt(true)}
+                      className="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                      Tambah Tanggal Alternatif
+                    </button>
+                  )}
+                </div>
+
+                {/* ── SECTION: Kunci Tanggal & Venue ───────────────────── */}
+                <div className="flex flex-col gap-4">
                   {/* ── Toggle: Kunci Tanggal & Venue ─────────────────── */}
-                  <div className="flex flex-col gap-3 pt-1">
+                  <div className="flex flex-col gap-3">
                     <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5">
                       <Switch
                         checked={form.isDateLocked}
                         onCheckedChange={(checked) => {
                           setField("isDateLocked", checked);
-                          // Reset booking fee fields when turning off
                           if (!checked) {
                             setField("bookingFeeAmount", 0);
                             setField("bookingFeeDate", "");
@@ -969,7 +1050,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                       </div>
                     </div>
 
-                    {/* Callout saat lock ON */}
                     {form.isDateLocked && (
                       <div className="flex items-start gap-2.5 rounded-xl bg-muted/60 border border-border p-3.5">
                         <ShieldWarning
@@ -987,7 +1067,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                   {/* ── Booking Fee section — hanya tampil saat locked ON ── */}
                   {form.isDateLocked && (
                     <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
-                      {/* Section header */}
                       <div className="flex items-center gap-2 pb-1 border-b border-border">
                         <Banknote weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -995,7 +1074,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                         </span>
                       </div>
 
-                      {/* Nominal Booking Fee */}
                       <div className="flex flex-col gap-1.5">
                         <label htmlFor="booking-fee-amount" className="text-sm font-medium text-foreground">
                           Nominal Booking Fee
@@ -1014,7 +1092,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                         )}
                       </div>
 
-                      {/* Tanggal Terima Booking Fee */}
                       <div className="flex flex-col gap-1.5">
                         <label className="text-sm font-medium text-foreground">
                           Tanggal Terima Booking Fee
@@ -1090,94 +1167,67 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                         </Popover>
                       </div>
 
-                      {/* Bukti Bayar / Evidence upload (frontend-only, no S3) */}
                       <div className="flex flex-col gap-1.5">
                         <label className="text-sm font-medium text-foreground">
                           Bukti Bayar / Evidence
                           <span className="text-destructive ml-0.5">*</span>
                         </label>
-                        {/* Hidden file input */}
                         <input
                           ref={evidenceInputRef}
+                          id="booking-fee-evidence-input"
                           type="file"
                           accept="image/jpeg,image/png,image/webp,application/pdf"
                           className="sr-only"
                           onChange={(e) => {
                             const file = e.target.files?.[0] ?? null;
                             setBookingFeeEvidence(file);
-                            // Reset so same file can be re-selected
                             if (evidenceInputRef.current) evidenceInputRef.current.value = "";
                           }}
                         />
-                        {/* Trigger area */}
-                        <button
-                          type="button"
-                          onClick={() => evidenceInputRef.current?.click()}
+                        <div
                           className={cn(
-                            "flex items-center gap-2.5 w-full rounded-xl border border-dashed px-3 py-2.5 text-sm transition-colors",
+                            "flex items-center gap-2.5 w-full rounded-xl border border-dashed text-sm transition-colors",
                             bookingFeeEvidence
                               ? "border-border bg-muted/40 text-foreground"
-                              : "border-border bg-muted/30 text-muted-foreground hover:border-foreground/30 hover:bg-muted/50",
+                              : "border-border bg-muted/30 text-muted-foreground",
                           )}
                         >
-                          {bookingFeeEvidence ? (
-                            <>
-                              <FileText weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span className="flex-1 truncate text-left text-xs font-medium">
-                                {bookingFeeEvidence.name}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setBookingFeeEvidence(null);
-                                }}
-                                className="shrink-0 p-0.5 rounded-full text-muted-foreground hover:text-destructive transition-colors"
-                                aria-label="Hapus file"
-                              >
-                                <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <Gallery weight="BoldDuotone" className="h-4 w-4 shrink-0" />
-                              <span className="text-xs">Pilih foto / PDF bukti bayar...</span>
-                            </>
+                          <label
+                            htmlFor="booking-fee-evidence-input"
+                            className={cn(
+                              "flex flex-1 min-w-0 items-center gap-2.5 px-3 py-2.5 cursor-pointer",
+                              !bookingFeeEvidence && "hover:border-foreground/30 hover:bg-muted/50",
+                            )}
+                          >
+                            {bookingFeeEvidence ? (
+                              <>
+                                <FileText weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <span className="flex-1 truncate text-xs font-medium">
+                                  {bookingFeeEvidence.name}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Gallery weight="BoldDuotone" className="h-4 w-4 shrink-0" />
+                                <span className="text-xs">Pilih foto / PDF bukti bayar...</span>
+                              </>
+                            )}
+                          </label>
+                          {bookingFeeEvidence && (
+                            <button
+                              type="button"
+                              onClick={() => setBookingFeeEvidence(null)}
+                              className="shrink-0 p-0.5 mr-2.5 rounded-full text-muted-foreground hover:text-destructive transition-colors"
+                              aria-label="Hapus file"
+                            >
+                              <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+                            </button>
                           )}
-                        </button>
+                        </div>
                         <p className="text-[10px] text-muted-foreground">
                           Format: JPG, PNG, WebP, PDF. Maks 10 MB.
-                          {/* TODO(backend): wire evidence upload to storage */}
                         </p>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Package (Wedding only) — disabled sampai venue dipilih */}
-                  {isWedding && (
-                    <div className="flex flex-col gap-1.5">
-                      <label
-                        className={cn(
-                          "text-sm font-medium",
-                          packageDisabled ? "text-muted-foreground" : "text-foreground",
-                        )}
-                      >
-                        Package Estimasi
-                        {packageDisabled && (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            (pilih venue utama dulu)
-                          </span>
-                        )}
-                      </label>
-                      <SearchableSelect
-                        options={DUMMY_PACKAGES}
-                        value={form.packageId}
-                        onChange={(v) => setField("packageId", v)}
-                        placeholder={packageDisabled ? "Pilih venue dulu..." : "Pilih package..."}
-                        searchPlaceholder="Cari package..."
-                        emptyText="Package tidak ditemukan"
-                        disabled={packageDisabled}
-                      />
                     </div>
                   )}
                 </div>
@@ -1186,7 +1236,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                 <div className="flex flex-col gap-4">
                   <SectionHeader icon={Buildings2} title="Detail Event" />
 
-                  {/* Event Type */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
                       Event Type <span className="text-destructive">*</span>
@@ -1194,7 +1243,10 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     <SearchableSelect
                       options={eventTypeOptions}
                       value={form.eventTypeId}
-                      onChange={(v) => setField("eventTypeId", v)}
+                      onChange={(v) => {
+                        setField("eventTypeId", v);
+                        setField("time", ""); // clear time so autofill can fire
+                      }}
                       placeholder={
                         isWedding ? "Pilih jenis acara nikah..." : "Pilih jenis event MICE..."
                       }
@@ -1203,7 +1255,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     />
                   </div>
 
-                  {/* Sesi — Wedding: pill radio required; MICE: select optional */}
                   {isWedding && (
                     <SessionPillRadio
                       label="Sesi Acara"
@@ -1215,9 +1266,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
 
                   {isMice && (
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium text-foreground">
-                        Sesi Event
-                      </label>
+                      <label className="text-sm font-medium text-foreground">Sesi Event</label>
                       <SearchableSelect
                         options={SESSION_OPTIONS}
                         value={form.miceSession}
@@ -1229,7 +1278,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     </div>
                   )}
 
-                  {/* Estimasi Waktu */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">Estimasi Waktu</label>
                     <TimeRangePicker
@@ -1239,7 +1287,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     />
                   </div>
 
-                  {/* Estimasi Pax */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">Estimasi Pax</label>
                     <Input
@@ -1253,7 +1300,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     />
                   </div>
 
-                  {/* Budget Range */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
                       <TagPrice weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1272,20 +1318,17 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                 <div className="flex flex-col gap-4">
                   <SectionHeader icon={UsersGroupRounded} title="Sales & Pipeline" />
 
-                  {/* Sumber Informasi */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
                       Sumber Informasi <span className="text-destructive">*</span>
                     </label>
-                    {/* TODO(backend): useSourceOfInformations() hook + onAdd server action */}
                     <SearchableSelect
-                      options={DUMMY_SOURCES}
+                      options={sources}
                       value={form.sourceOfInformationId}
                       onChange={(v) => {
                         setField("sourceOfInformationId", v);
-                        // Clear bitrixId if switching away from bitrix source
                         const isBitrix =
-                          DUMMY_SOURCES.find((s) => s.id === v)
+                          sources.find((s) => s.id === v)
                             ?.name.toLowerCase()
                             .includes("bitrix") ?? false;
                         if (!isBitrix) setField("bitrixId", "");
@@ -1296,7 +1339,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     />
                   </div>
 
-                  {/* Bitrix ID — conditional: muncul kalau source mengandung "bitrix" */}
                   {isBitrixSource && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-medium text-foreground">
@@ -1311,14 +1353,12 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     </div>
                   )}
 
-                  {/* Sales PIC */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
                       Sales PIC <span className="text-destructive">*</span>
                     </label>
-                    {/* TODO(backend): useSalesUsers() hook, lock to self if current user is sales */}
                     <SearchableSelect
-                      options={DUMMY_SALES}
+                      options={salesOptions}
                       value={form.assignedToId}
                       onChange={(v) => setField("assignedToId", v)}
                       placeholder="Pilih sales PIC..."
@@ -1327,14 +1367,12 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
                     />
                   </div>
 
-                  {/* Status Pipeline */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
                       Status Pipeline <span className="text-destructive">*</span>
                     </label>
-                    {/* TODO(backend): useLeadStatuses() hook with color dots */}
                     <SearchableSelect
-                      options={DUMMY_STATUSES.map((s) => ({ id: s.id, name: s.name }))}
+                      options={statusOptions}
                       value={form.statusId}
                       onChange={(v) => setField("statusId", v)}
                       placeholder="Pilih status..."
@@ -1362,11 +1400,15 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
 
         {/* ── Sticky footer ── */}
         <div className="sticky bottom-0 bg-background pt-4 border-t border-border mt-2">
+          {submitError && (
+            <p className="mb-3 text-xs text-destructive text-center">{submitError}</p>
+          )}
           <div className="flex gap-3">
             <Button
               type="button"
               variant="outline"
               onClick={handleClose}
+              disabled={isSubmitting}
               className="flex-1 rounded-full"
             >
               Batal
@@ -1374,11 +1416,17 @@ export function CreateLeadDrawer({ open, onOpenChange, onSubmit }: CreateLeadDra
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isIncomplete}
+              disabled={isIncomplete || isSubmitting}
               className="flex-1 rounded-full"
             >
-              {/* TODO(backend): show loading state when server action is pending */}
-              Simpan Lead
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Refresh weight="BoldDuotone" className="h-4 w-4 animate-spin" />
+                  Menyimpan...
+                </span>
+              ) : (
+                "Simpan Lead"
+              )}
             </Button>
           </div>
           {!category && (

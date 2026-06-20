@@ -5,8 +5,12 @@ import { createLead, updateLead, deleteLead, updateLeadStatus } from "@/actions/
 import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput, LeadScope } from "@/lib/validations/lead";
 import type { LeadsResult, LeadStatusItem } from "@/lib/queries/leads";
 
+// Re-export so consumers can import from here without touching the validation schema directly
+export type { LeadScope };
+
 interface LeadFilter {
   search?: string;
+  /** Scope of leads to fetch. "deleted" = soft-deleted (trash) view — requires leads:view-soft-delete on server. */
   scope?: LeadScope;
   statusId?: string;
   venueId?: string;

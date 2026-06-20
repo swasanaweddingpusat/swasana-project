@@ -9,8 +9,15 @@ const leadSelect = {
   name: true,
   contactNumbers: true,
   email: true,
+  emailCpp: true,
+  emailCpw: true,
+  nikCpp: true,
+  nikCpw: true,
+  addressCpp: true,
+  addressCpw: true,
   address: true,
   eventDate: true,
+  eventDateAlt: true,
   time: true,
   estimatedPax: true,
   budgetRange: true,
@@ -19,6 +26,10 @@ const leadSelect = {
   weddingSession: true,
   bitrixId: true,
   instansi: true,
+  isDateLocked: true,
+  bookingFeeAmount: true,
+  bookingFeeDate: true,
+  bookingFeeEvidenceUrl: true,
   convertedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -28,11 +39,14 @@ const leadSelect = {
   venue: {
     select: { id: true, name: true },
   },
+  venueSecondary: {
+    select: { id: true, name: true },
+  },
   package: {
     select: { id: true, packageName: true },
   },
   eventType: {
-    select: { id: true, name: true, category: true },
+    select: { id: true, name: true, category: true, code: true },
   },
   sourceOfInformation: {
     select: { id: true, name: true },
@@ -49,6 +63,7 @@ const leadSelect = {
   convertedToBooking: {
     select: { id: true },
   },
+  deletedAt: true,
 } satisfies Prisma.LeadSelect;
 
 /**
@@ -107,14 +122,21 @@ export async function getLeads(
 
   const { search, scope, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
 
+  // Deleted scope: show ONLY soft-deleted rows (inverse of normal).
+  // Caller must have leads:view-soft-delete — enforced at route layer before reaching here.
+  const isDeletedScope = scope === "deleted";
+
   // Scope filter: active = isFinal:false, deal = isFinal&&isSystem, lost = isFinal&&!isSystem
+  // Deleted scope skips status sub-filter — status is irrelevant for trash view.
   let scopeWhere: Prisma.LeadWhereInput = {};
-  if (scope === "active") {
-    scopeWhere = { status: { isFinal: false } };
-  } else if (scope === "deal") {
-    scopeWhere = { status: { isFinal: true, isSystem: true } };
-  } else if (scope === "lost") {
-    scopeWhere = { status: { isFinal: true, isSystem: false } };
+  if (!isDeletedScope) {
+    if (scope === "active") {
+      scopeWhere = { status: { isFinal: false } };
+    } else if (scope === "deal") {
+      scopeWhere = { status: { isFinal: true, isSystem: true } };
+    } else if (scope === "lost") {
+      scopeWhere = { status: { isFinal: true, isSystem: false } };
+    }
   }
 
   // Data-access scope filter (group/own/all) — enforced from server session, never from HTTP params
@@ -123,6 +145,8 @@ export async function getLeads(
     : {};
 
   const where: Prisma.LeadWhereInput = {
+    // Deleted scope: only rows with deletedAt set. Default: exclude soft-deleted rows.
+    deletedAt: isDeletedScope ? { not: null } : null,
     ...scopeWhere,
     ...dataScopeFilter,
     ...(search?.trim() && {
@@ -167,7 +191,7 @@ export async function getLeadById(id: string) {
   cacheLife("seconds");
 
   return db.lead.findUnique({
-    where: { id },
+    where: { id, deletedAt: null },
     select: leadSelect,
   });
 }

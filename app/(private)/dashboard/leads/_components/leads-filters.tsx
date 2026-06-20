@@ -15,12 +15,11 @@ import {
   Widget,
   Refresh,
   Filter,
-  HandShake,
-  CloseCircle,
-  UsersGroupRounded,
+  TrashBinTrash,
 } from "@solar-icons/react";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
+import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 import type { LeadScope } from "@/lib/validations/lead";
 
@@ -53,49 +52,14 @@ interface LeadsFiltersProps {
 }
 
 
-const SCOPE_TABS: { value: LeadScope; label: string; icon: React.ElementType }[] = [
-  { value: "active", label: "Active", icon: UsersGroupRounded },
-  { value: "deal", label: "Deal", icon: HandShake },
-  { value: "lost", label: "Lost", icon: CloseCircle },
+const SCOPE_OPTIONS: { value: LeadScope; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "deal", label: "Deal" },
+  { value: "lost", label: "Lost" },
 ];
 
-// ─── Scope segmented control (shared between mobile & desktop) ────────────────
-
-function ScopeTabs({
-  scope,
-  onScopeChange,
-}: {
-  scope: LeadScope;
-  onScopeChange: (s: LeadScope) => void;
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Lead scope"
-      className="flex items-center rounded-xl border border-border p-0.5"
-    >
-      {SCOPE_TABS.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          type="button"
-          role="tab"
-          aria-selected={scope === value}
-          onClick={() => onScopeChange(value)}
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            scope === value
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Icon weight="BoldDuotone" aria-hidden="true" className="size-3.5" />
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
+// Trash scope option — rendered separately, gated by permission
+const TRASH_SCOPE: { value: LeadScope; label: string } = { value: "deleted", label: "Trash" };
 
 interface Venue { id: string; name: string; }
 interface EventType { id: string; name: string; category: string; }
@@ -104,6 +68,7 @@ interface EventType { id: string; name: string; category: string; }
 
 function FilterPanelContent({
   scope,
+  onScopeChange,
   statusFilter,
   onStatusChange,
   venueFilter,
@@ -114,9 +79,11 @@ function FilterPanelContent({
   venues,
   eventTypes,
   hasActive,
+  canViewDeleted,
   onReset,
 }: {
   scope: LeadScope;
+  onScopeChange: (s: LeadScope) => void;
   statusFilter: string;
   onStatusChange: (v: string) => void;
   venueFilter: string;
@@ -127,8 +94,11 @@ function FilterPanelContent({
   venues: Venue[];
   eventTypes: EventType[];
   hasActive: boolean;
+  canViewDeleted: boolean;
   onReset: () => void;
 }) {
+  const isDeletedScope = scope === "deleted";
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -144,22 +114,63 @@ function FilterPanelContent({
         )}
       </div>
 
-      {/* Venue filter */}
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Venue</label>
-        <SearchableSelect
-          options={[
-            { id: "all", name: "Semua Venue" },
-            ...venues.map((v) => ({ id: v.id, name: v.name })),
-          ]}
-          value={venueFilter}
-          onChange={onVenueChange}
-          placeholder="Semua Venue"
-          searchPlaceholder="Cari venue..."
-          emptyText="Venue tidak ditemukan"
-          className="h-9"
-        />
+      {/* Scope filter */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Status Deal</label>
+        <div className="flex items-center gap-1.5">
+          {SCOPE_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onScopeChange(value)}
+              className={cn(
+                "flex-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                scope === value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+          {/* Trash scope — only rendered for users with leads:view-soft-delete */}
+          {canViewDeleted && (
+            <button
+              type="button"
+              onClick={() => onScopeChange(TRASH_SCOPE.value)}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1",
+                scope === "deleted"
+                  ? "bg-destructive text-destructive-foreground border-destructive"
+                  : "border-border text-muted-foreground hover:text-destructive hover:border-destructive/40"
+              )}
+              title="Lihat leads yang sudah dihapus"
+            >
+              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-3 w-3" />
+              {TRASH_SCOPE.label}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Venue filter — hidden in deleted scope (trash is read-only, venue still useful to narrow) */}
+      {!isDeletedScope && (
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Venue</label>
+          <SearchableSelect
+            options={[
+              { id: "all", name: "Semua Venue" },
+              ...venues.map((v) => ({ id: v.id, name: v.name })),
+            ]}
+            value={venueFilter}
+            onChange={onVenueChange}
+            placeholder="Semua Venue"
+            searchPlaceholder="Cari venue..."
+            emptyText="Venue tidak ditemukan"
+            className="h-9"
+          />
+        </div>
+      )}
 
       {/* Status filter — only shown in active scope */}
       {scope === "active" && (
@@ -180,26 +191,35 @@ function FilterPanelContent({
         </div>
       )}
 
-      {/* Event Type filter */}
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Event Type</label>
-        <SearchableSelect
-          options={[
-            { id: "all", name: "Semua Event Type" },
-            ...eventTypes.map((et) => ({
-              id: et.id,
-              name: et.name,
-              badge: et.category === "MICE" ? "MICE" : "Wedding",
-            })),
-          ]}
-          value={eventTypeFilter}
-          onChange={onEventTypeChange}
-          placeholder="Semua Event Type"
-          searchPlaceholder="Cari event type..."
-          emptyText="Event type tidak ditemukan"
-          className="h-9"
-        />
-      </div>
+      {/* Event Type filter — hidden in deleted scope */}
+      {!isDeletedScope && (
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Event Type</label>
+          <SearchableSelect
+            options={[
+              { id: "all", name: "Semua Event Type" },
+              ...eventTypes.map((et) => ({
+                id: et.id,
+                name: et.name,
+                badge: et.category === "MICE" ? "MICE" : "Wedding",
+              })),
+            ]}
+            value={eventTypeFilter}
+            onChange={onEventTypeChange}
+            placeholder="Semua Event Type"
+            searchPlaceholder="Cari event type..."
+            emptyText="Event type tidak ditemukan"
+            className="h-9"
+          />
+        </div>
+      )}
+
+      {/* Deleted scope hint */}
+      {isDeletedScope && (
+        <p className="text-xs text-muted-foreground rounded-lg bg-muted px-3 py-2">
+          Menampilkan leads yang sudah dihapus. Data bersifat read-only.
+        </p>
+      )}
     </div>
   );
 }
@@ -227,18 +247,25 @@ export function LeadsFilters({
 }: LeadsFiltersProps) {
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
+  const { can } = usePermissions();
+  const canViewDeleted = can("leads", "view-soft-delete");
+  const isDeletedScope = scope === "deleted";
 
   // Only count active (non-"all") filters — statusId irrelevant in deal/lost scope
-  const activeCount =
-    (venueFilter !== "all" ? 1 : 0) +
-    (scope === "active" && statusFilter !== "all" ? 1 : 0) +
-    (eventTypeFilter !== "all" ? 1 : 0);
+  // Deleted scope has no sub-filters to count
+  const activeCount = isDeletedScope
+    ? 0
+    : (venueFilter !== "all" ? 1 : 0) +
+      (scope === "active" && statusFilter !== "all" ? 1 : 0) +
+      (eventTypeFilter !== "all" ? 1 : 0);
   const hasActive = activeCount > 0;
 
   function handleReset() {
     onVenueChange("all");
     onStatusChange("all");
     onEventTypeChange("all");
+    // If resetting from deleted scope, go back to active
+    if (isDeletedScope) onScopeChange("active");
   }
 
   // ── Shared filter badge indicator ──
@@ -270,15 +297,12 @@ export function LeadsFilters({
     <div className="border-b">
       {/* ════════════════════════════════════════════════════════════════
           MOBILE TOOLBAR  (visible < sm)
-          Row 1: [scope tabs] ──── [filter icon] [refresh icon] [add button]
+          Row 1: [count] ──── [filter icon] [refresh icon] [add button]
           Row 2: [search full-width]
       ════════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col gap-2 px-4 pb-3 sm:hidden">
         {/* Row 1 */}
         <div className="flex items-center gap-2">
-          {/* Scope tabs — shrink to fit, no label on small */}
-          <ScopeTabs scope={scope} onScopeChange={onScopeChange} />
-
           {/* Count badge */}
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
             {totalFiltered}
@@ -293,6 +317,7 @@ export function LeadsFilters({
             <PopoverContent align="end" className="w-72 p-3">
               <FilterPanelContent
                 scope={scope}
+                onScopeChange={onScopeChange}
                 statusFilter={statusFilter}
                 onStatusChange={onStatusChange}
                 venueFilter={venueFilter}
@@ -303,6 +328,7 @@ export function LeadsFilters({
                 venues={venues}
                 eventTypes={eventTypes}
                 hasActive={hasActive}
+                canViewDeleted={canViewDeleted}
                 onReset={handleReset}
               />
             </PopoverContent>
@@ -325,10 +351,12 @@ export function LeadsFilters({
             />
           </Button>
 
-          {/* Add */}
-          <Button onClick={onAdd} size="icon" className="shrink-0" aria-label="Tambah lead">
-            <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-          </Button>
+          {/* Add — hidden in trash/deleted scope */}
+          {!isDeletedScope && (
+            <Button onClick={onAdd} size="icon" className="shrink-0" aria-label="Tambah lead">
+              <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         {/* Row 2: Search full-width */}
@@ -351,12 +379,9 @@ export function LeadsFilters({
 
       {/* ════════════════════════════════════════════════════════════════
           DESKTOP TOOLBAR  (visible sm+)
-          Single row: [scope tabs] [view toggle] [count] | [refresh] [filter] [search] →→ [add]
+          Single row: [view toggle] [count] | [refresh] [filter] [search] →→ [add]
       ════════════════════════════════════════════════════════════════ */}
       <div className="hidden sm:flex items-center gap-2 px-6 pb-3">
-        {/* Scope segmented control */}
-        <ScopeTabs scope={scope} onScopeChange={onScopeChange} />
-
         {/* View mode toggle */}
         <div
           role="tablist"
@@ -442,6 +467,7 @@ export function LeadsFilters({
           <PopoverContent align="end" className="w-72 p-3">
             <FilterPanelContent
               scope={scope}
+              onScopeChange={onScopeChange}
               statusFilter={statusFilter}
               onStatusChange={onStatusChange}
               venueFilter={venueFilter}
@@ -452,6 +478,7 @@ export function LeadsFilters({
               venues={venues}
               eventTypes={eventTypes}
               hasActive={hasActive}
+              canViewDeleted={canViewDeleted}
               onReset={handleReset}
             />
           </PopoverContent>
@@ -474,11 +501,13 @@ export function LeadsFilters({
           />
         </div>
 
-        {/* Tambah Lead — pushed to far right */}
-        <Button onClick={onAdd} className="ml-auto shrink-0">
-          <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-          Tambah Lead
-        </Button>
+        {/* Tambah Lead — hidden in trash/deleted scope */}
+        {!isDeletedScope && (
+          <Button onClick={onAdd} className="ml-auto shrink-0">
+            <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+            Tambah Lead
+          </Button>
+        )}
       </div>
     </div>
   );

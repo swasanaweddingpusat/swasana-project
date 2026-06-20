@@ -36,8 +36,15 @@ export async function createLead(data: CreateLeadInput) {
     name,
     contactNumbers,
     email,
+    emailCpp,
+    emailCpw,
+    nikCpp,
+    nikCpw,
+    addressCpp,
+    addressCpw,
     address,
     eventDate,
+    eventDateAlt,
     time,
     estimatedPax,
     budgetRange,
@@ -45,12 +52,17 @@ export async function createLead(data: CreateLeadInput) {
     category,
     weddingSession,
     venueId,
+    venueSecondaryId,
     packageId,
     eventTypeId,
     sourceOfInformationId,
     assignedToId,
     statusId,
     bitrixId,
+    isDateLocked,
+    bookingFeeAmount,
+    bookingFeeDate,
+    bookingFeeEvidenceUrl,
   } = parsed.data;
 
   try {
@@ -60,8 +72,15 @@ export async function createLead(data: CreateLeadInput) {
           name,
           contactNumbers,
           email: email || null,
+          emailCpp: emailCpp || null,
+          emailCpw: emailCpw || null,
+          nikCpp: nikCpp || null,
+          nikCpw: nikCpw || null,
+          addressCpp: addressCpp || null,
+          addressCpw: addressCpw || null,
           address: address || null,
           eventDate: eventDate ? new Date(eventDate) : null,
+          eventDateAlt: eventDateAlt ? new Date(eventDateAlt) : null,
           time: time || null,
           estimatedPax: estimatedPax ?? null,
           budgetRange: budgetRange || null,
@@ -69,12 +88,17 @@ export async function createLead(data: CreateLeadInput) {
           category,
           weddingSession,
           venueId: venueId || null,
+          venueSecondaryId: venueSecondaryId || null,
           packageId: packageId || null,
           eventTypeId: eventTypeId || null,
           sourceOfInformationId: sourceOfInformationId || null,
           assignedToId: assignedToId || null,
           statusId,
           bitrixId: bitrixId || null,
+          isDateLocked: isDateLocked ?? false,
+          bookingFeeAmount: bookingFeeAmount ?? null,
+          bookingFeeDate: bookingFeeDate ? new Date(bookingFeeDate) : null,
+          bookingFeeEvidenceUrl: bookingFeeEvidenceUrl || null,
           createdById: session!.user.profileId,
         },
         select: { id: true, name: true },
@@ -127,15 +151,25 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.name !== undefined && { name: fields.name }),
           ...(fields.contactNumbers !== undefined && { contactNumbers: fields.contactNumbers }),
           ...(fields.email !== undefined && { email: fields.email || null }),
+          ...(fields.emailCpp !== undefined && { emailCpp: fields.emailCpp || null }),
+          ...(fields.emailCpw !== undefined && { emailCpw: fields.emailCpw || null }),
+          ...(fields.nikCpp !== undefined && { nikCpp: fields.nikCpp || null }),
+          ...(fields.nikCpw !== undefined && { nikCpw: fields.nikCpw || null }),
+          ...(fields.addressCpp !== undefined && { addressCpp: fields.addressCpp || null }),
+          ...(fields.addressCpw !== undefined && { addressCpw: fields.addressCpw || null }),
           ...(fields.address !== undefined && { address: fields.address || null }),
           ...(fields.eventDate !== undefined && {
             eventDate: fields.eventDate ? new Date(fields.eventDate) : null,
+          }),
+          ...(fields.eventDateAlt !== undefined && {
+            eventDateAlt: fields.eventDateAlt ? new Date(fields.eventDateAlt) : null,
           }),
           ...(fields.time !== undefined && { time: fields.time || null }),
           ...(fields.estimatedPax !== undefined && { estimatedPax: fields.estimatedPax ?? null }),
           ...(fields.budgetRange !== undefined && { budgetRange: fields.budgetRange || null }),
           ...(fields.notes !== undefined && { notes: fields.notes || null }),
           ...(fields.venueId !== undefined && { venueId: fields.venueId || null }),
+          ...(fields.venueSecondaryId !== undefined && { venueSecondaryId: fields.venueSecondaryId || null }),
           ...(fields.packageId !== undefined && { packageId: fields.packageId || null }),
           ...(fields.eventTypeId !== undefined && { eventTypeId: fields.eventTypeId || null }),
           ...(fields.sourceOfInformationId !== undefined && {
@@ -146,6 +180,14 @@ export async function updateLead(data: UpdateLeadInput) {
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
           ...(fields.bitrixId !== undefined && { bitrixId: fields.bitrixId || null }),
+          ...(fields.isDateLocked !== undefined && { isDateLocked: fields.isDateLocked }),
+          ...(fields.bookingFeeAmount !== undefined && { bookingFeeAmount: fields.bookingFeeAmount ?? null }),
+          ...(fields.bookingFeeDate !== undefined && {
+            bookingFeeDate: fields.bookingFeeDate ? new Date(fields.bookingFeeDate) : null,
+          }),
+          ...(fields.bookingFeeEvidenceUrl !== undefined && {
+            bookingFeeEvidenceUrl: fields.bookingFeeEvidenceUrl || null,
+          }),
         },
         select: { id: true, name: true },
       }),
@@ -184,7 +226,10 @@ export async function deleteLead(id: string) {
 
   try {
     await db.$transaction([
-      db.lead.delete({ where: { id } }),
+      db.lead.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      }),
     ]);
 
     await logAudit({
@@ -303,11 +348,18 @@ export async function convertLead(leadId: string) {
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
 
   const lead = await db.lead.findUnique({
-    where: { id: leadId },
+    where: { id: leadId, deletedAt: null },
     select: {
       id: true,
       name: true,
       email: true,
+      emailCpp: true,
+      emailCpw: true,
+      nikCpp: true,
+      nikCpw: true,
+      addressCpp: true,
+      addressCpw: true,
+      category: true,
       contactNumbers: true,
       convertedAt: true,
       status: { select: { isFinal: true, isSystem: true, name: true } },
@@ -323,11 +375,27 @@ export async function convertLead(leadId: string) {
   try {
     const mobileNumberJson = JSON.parse(JSON.stringify(lead.contactNumbers)) as Prisma.InputJsonValue;
 
+    // Wedding: pakai emailCpp/emailCpw dari lead (field terpisah per pasangan)
+    // MICE: pakai lead.email (generic contact email) → dipetakan ke emailCpp customer
+    const isWeddingLead = lead.category === "WEDDINGS";
+    const customerEmailCpp = isWeddingLead ? (lead.emailCpp || null) : (lead.email || null);
+    const customerEmailCpw = isWeddingLead ? (lead.emailCpw || null) : null;
+
+    // NIK & Alamat hanya dipetakan untuk lead Wedding (MICE tidak punya field ini)
+    const customerCppNik = isWeddingLead ? (lead.nikCpp || null) : null;
+    const customerCpwNik = isWeddingLead ? (lead.nikCpw || null) : null;
+    const customerCppAddress = isWeddingLead ? (lead.addressCpp || null) : null;
+    const customerCpwAddress = isWeddingLead ? (lead.addressCpw || null) : null;
+
     const customer = await db.customer.create({
       data: {
         name: lead.name,
-        emailCpp: lead.email || null,
-        emailCpw: null,
+        emailCpp: customerEmailCpp,
+        emailCpw: customerEmailCpw,
+        cppNik: customerCppNik,
+        cpwNik: customerCpwNik,
+        cppAddress: customerCppAddress,
+        cpwAddress: customerCpwAddress,
         mobileNumber: mobileNumberJson,
         type: "Personal",
         memberStatus: "Non-Member",

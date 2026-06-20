@@ -26,6 +26,7 @@ import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads"
 import { createDraftBooking } from "@/actions/booking-draft";
 import { createDraftMiceBooking } from "@/actions/booking-mice-draft";
 import { DealConfirmModal } from "./DealConfirmModal";
+import { LeadDetailModal } from "./LeadDetailModal";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LeadItem } from "@/lib/queries/leads";
@@ -39,10 +40,11 @@ export type { LeadItem };
 export function LeadsTable() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const isMobile = useIsMobile();
-  // On mobile, always render list view regardless of viewMode state
-  const effectiveViewMode: ViewMode = isMobile ? "list" : viewMode;
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<LeadScope>("active");
+  // Force list view on mobile or when in deleted/trash scope (pipeline doesn't apply there)
+  const isDeletedScope = scope === "deleted";
+  const effectiveViewMode: ViewMode = isMobile || isDeletedScope ? "list" : viewMode;
   const [statusFilter, setStatusFilter] = useState("all");
   const [venueFilter, setVenueFilter] = useState("all");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
@@ -55,6 +57,7 @@ export function LeadsTable() {
   const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
   const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
   const [resetTarget, setResetTarget] = useState<LeadItem | null>(null);
+  const [detailLead, setDetailLead] = useState<LeadItem | null>(null);
   const [isMarkingStatus, setIsMarkingStatus] = useState(false);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
   // Booking creation from a lead — routed to wedding or MICE drawer by category.
@@ -134,10 +137,6 @@ export function LeadsTable() {
   function handleEdit(lead: LeadItem) {
     setEditLead(lead as unknown as LeadListItem);
     setDrawerOpen(true);
-  }
-
-  function handleBuatQuotation(lead: LeadItem) {
-    toast.info(`Buat Quotation untuk ${lead.name} — coming soon.`);
   }
 
   // Find the system Deal and Lost status IDs from the loaded statuses list.
@@ -220,7 +219,7 @@ export function LeadsTable() {
       // Step 2: Create draft booking from lead data
       // Route to MICE draft action for MICE leads (different permission: booking-mice:create)
       const prefill = buildPrefill(lead);
-      const bookingDate = lead.eventDate
+      const eventDate = lead.eventDate
         ? new Date(lead.eventDate).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0];
 
@@ -230,7 +229,7 @@ export function LeadsTable() {
         draftRes = await createDraftMiceBooking({
           leadId: lead.id,
           clientName: lead.name,
-          bookingDate,
+          eventDate,
           venueId: lead.venue?.id ?? "",
           eventTypeId: lead.eventType?.id ?? "",
           miceSession: lead.weddingSession as "morning" | "evening" | "fullday" | null ?? null,
@@ -243,7 +242,7 @@ export function LeadsTable() {
         draftRes = await createDraftBooking({
           leadId: lead.id,
           customerName: lead.name,
-          bookingDate,
+          eventDate,
           venueId: lead.venue?.id ?? "",
           category,
           weddingSession: lead.weddingSession ?? null,
@@ -436,11 +435,12 @@ export function LeadsTable() {
               onPageChange={setCurrentPage}
               onEdit={handleEdit}
               onDelete={setDeleteTarget}
-              onBuatQuotation={handleBuatQuotation}
               onMarkDeal={handleMarkDeal}
               onMarkLost={handleMarkLost}
               onReset={handleReset}
+              onViewDetail={setDetailLead}
               isLoading={leadsLoading || isManualRefresh}
+              isDeletedScope={isDeletedScope}
             />
           )}
 
@@ -511,6 +511,17 @@ export function LeadsTable() {
           }}
         />
       )}
+
+      {/* Lead detail modal — opens on row click */}
+      <LeadDetailModal
+        open={!!detailLead}
+        lead={detailLead}
+        onClose={() => setDetailLead(null)}
+        onEdit={(lead) => {
+          setDetailLead(null);
+          handleEdit(lead);
+        }}
+      />
 
       {/* Deal confirm modal — replaces simple AlertDialog */}
       <DealConfirmModal

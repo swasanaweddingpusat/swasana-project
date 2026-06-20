@@ -1,4 +1,4 @@
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { requirePermissionForRoute, hasPermission } from "@/lib/permissions";
 import { apiLimiter, mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { getLeads } from "@/lib/queries/leads";
 import { leadFilterSchema, createLeadSchema } from "@/lib/validations/lead";
@@ -30,6 +30,15 @@ export async function GET(req: Request) {
   const parsed = leadFilterSchema.safeParse(raw);
   if (!parsed.success) {
     return Response.json({ error: "Parameter tidak valid" }, { status: 400 });
+  }
+
+  // Guard: scope=deleted requires leads:view-soft-delete permission.
+  // Super-admin bypasses this via hasPermission (which calls isSuperAdmin internally).
+  if (parsed.data.scope === "deleted") {
+    const allowed = await hasPermission(session.user.roleId, "leads", "view-soft-delete");
+    if (!allowed) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   try {

@@ -38,7 +38,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-source-of-information": ["view", "create", "edit", "delete"],
   complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
-  leads: ["view", "create", "edit", "delete"],
+  leads: ["view", "create", "edit", "delete", "view-soft-delete"],
   "settings-lead-status": ["view", "create", "edit", "delete"],
   quotations: ["view", "create", "edit", "delete"],
   "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
@@ -73,7 +73,8 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     vendor: ["view"],
     "finance-ar": ["view"],
     // leads:delete is intentionally reserved for super-admin & manager only.
-    leads: ["view", "create", "edit"],
+    // view-soft-delete: direktur-sales can see trash for audit/oversight.
+    leads: ["view", "create", "edit", "view-soft-delete"],
     "settings-lead-status": ["view", "create", "edit", "delete"],
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
@@ -114,7 +115,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "finance-ar": ["view", "create", "edit", "delete"],
     groups: ["view", "view-all", "create", "edit", "delete"],
-    leads: ["view", "create", "edit", "delete"],
+    leads: ["view", "create", "edit", "delete", "view-soft-delete"],
     maintenance: ["view", "create", "edit", "delete"],
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
     quotations: ["view", "create", "edit", "delete"],
@@ -161,7 +162,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit"],
     vendor: ["view"],
     quotations: ["view", "create", "edit"],
-    leads: ["view", "create", "edit", "delete"],
+    leads: ["view", "create", "edit", "delete", "view-soft-delete"],
     // view+create only: same rationale as sales — operational access to pick/create
     // complimentary entries, master data management stays with direktur-sales and above.
     complimentary: ["view", "create"],
@@ -170,7 +171,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
   // customers, and event-types settings. No wedding booking, no finance/package/vendor.
   "manager-mice": {
     "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
-    leads: ["view", "create", "edit", "delete"],
+    leads: ["view", "create", "edit", "delete", "view-soft-delete"],
     quotations: ["view", "create", "edit", "delete"],
     groups: ["view", "create", "edit", "delete"],
     customers: ["view", "create", "edit", "delete"],

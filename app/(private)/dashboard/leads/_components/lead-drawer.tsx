@@ -418,6 +418,8 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       assignedToId: values.assignedToId,
       statusId: values.statusId,
       bitrixId: isBitrixSource ? bitrixId || null : null,
+      // New availability fields — not shown in this drawer (edit via CreateLeadDrawer)
+      isDateLocked: false,
     };
 
     // Edit mode uses the partial schema so untouched optional fields don't
