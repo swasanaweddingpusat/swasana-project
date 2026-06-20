@@ -60,6 +60,34 @@ export async function updateMyProfile(data: unknown) {
   }
 }
 
+const updateSignatureSchema = z.object({
+  defaultSignature: z.string().nullable(),
+});
+
+export async function updateMyDefaultSignature(data: unknown): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  if (!mutationLimiter.check(`profile-signature:${session.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = updateSignatureSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  try {
+    await db.$transaction([
+      db.profile.update({
+        where: { userId: session.user.id },
+        data: { defaultSignature: parsed.data.defaultSignature },
+      }),
+    ]);
+
+    revalidateTag("profiles", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[updateMyDefaultSignature]", e);
+    return { success: false, error: "Gagal memperbarui tanda tangan." };
+  }
+}
+
 export async function getEducationLevels() {
   try {
     return await db.educationLevel.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true } });

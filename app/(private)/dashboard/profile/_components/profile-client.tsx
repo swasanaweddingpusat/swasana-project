@@ -12,9 +12,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Lock, User, Eye, EyeClosed, Refresh, DangerTriangle, Card as CardIcon, UsersGroupRounded, Case } from "@solar-icons/react"
+import { Lock, User, Eye, EyeClosed, Refresh, DangerTriangle, Card as CardIcon, UsersGroupRounded, Case, Pen, TrashBinTrash, Gallery } from "@solar-icons/react"
+import { SignaturePad } from "@/components/shared/signature-pad"
 import { cn } from "@/lib/utils"
-import { updateMyProfile } from "@/actions/profile"
+import { updateMyProfile, updateMyDefaultSignature } from "@/actions/profile"
 import { createEducationLevel } from "@/actions/education-level"
 import { AvatarUpload } from "@/components/shared/avatar-upload"
 import { SearchableSelect } from "@/components/ui/searchable-select"
@@ -45,6 +46,7 @@ interface ProfileData {
   emergencyContactRel: string | null
   emergencyContactPhone: string | null
   avatarUrl: string | null
+  defaultSignature: string | null
 }
 
 interface ProfileClientProps {
@@ -112,6 +114,12 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
   })
   const [savingProfile, setSavingProfile] = useState(false)
 
+  // Signature section state
+  const [currentSignature, setCurrentSignature] = useState<string | null>(profile?.defaultSignature ?? null)
+  const [pendingSignature, setPendingSignature] = useState<string | null>(null)
+  const [showSignaturePad, setShowSignaturePad] = useState(!profile?.defaultSignature)
+  const [savingSignature, setSavingSignature] = useState(false)
+
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -152,6 +160,41 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
       }
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  const handleSaveSignature = async () => {
+    if (!pendingSignature) { toast.error("Tanda tangan belum diisi"); return }
+    setSavingSignature(true)
+    try {
+      const res = await updateMyDefaultSignature({ defaultSignature: pendingSignature })
+      if (res.success) {
+        setCurrentSignature(pendingSignature)
+        setPendingSignature(null)
+        setShowSignaturePad(false)
+        toast.success("Tanda tangan default berhasil disimpan")
+      } else {
+        toast.error(res.error ?? "Gagal menyimpan tanda tangan")
+      }
+    } finally {
+      setSavingSignature(false)
+    }
+  }
+
+  const handleDeleteSignature = async () => {
+    setSavingSignature(true)
+    try {
+      const res = await updateMyDefaultSignature({ defaultSignature: null })
+      if (res.success) {
+        setCurrentSignature(null)
+        setPendingSignature(null)
+        setShowSignaturePad(true)
+        toast.success("Tanda tangan default dihapus")
+      } else {
+        toast.error(res.error ?? "Gagal menghapus tanda tangan")
+      }
+    } finally {
+      setSavingSignature(false)
     }
   }
 
@@ -372,6 +415,79 @@ export function ProfileClient({ user, profile, educationLevels }: ProfileClientP
                   {savingProfile ? <><Refresh weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'animate-spin')} /> Menyimpan...</> : "Simpan Profil"}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Tanda Tangan Default */}
+          <Card className="border-border/60">
+            <CardContent className="">
+              <SectionHeader icon={Pen} title="Tanda Tangan Default" />
+              <p className={cn('text-xs', 'text-muted-foreground', 'mb-4')}>
+                Tanda tangan default digunakan sebagai isian otomatis saat membuat atau mengedit booking. Anda tetap bisa mengganti tanda tangan secara manual per-booking.
+              </p>
+
+              {currentSignature && !showSignaturePad ? (
+                <div className="space-y-4">
+                  <div className={cn('rounded-xl', 'border', 'border-border', 'bg-muted/40', 'p-3', 'flex', 'items-center', 'justify-center')}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={currentSignature}
+                      alt="Tanda tangan default"
+                      className={cn('max-h-32', 'max-w-full', 'object-contain')}
+                    />
+                  </div>
+                  <div className={cn('flex', 'items-center', 'gap-2')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setPendingSignature(null); setShowSignaturePad(true) }}
+                      disabled={savingSignature}
+                      className="gap-1.5"
+                    >
+                      <Gallery weight="BoldDuotone" className="h-4 w-4" />
+                      Ubah
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDeleteSignature}
+                      disabled={savingSignature}
+                      className={cn('gap-1.5', 'text-destructive', 'hover:text-destructive', 'border-destructive/30', 'hover:border-destructive/60', 'hover:bg-destructive/5')}
+                    >
+                      <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                      {savingSignature ? "Menghapus..." : "Hapus"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <SignaturePad
+                    onSignature={(dataUrl) => setPendingSignature(dataUrl)}
+                    label="Buat Tanda Tangan"
+                  />
+                  <div className={cn('flex', 'items-center', 'gap-2')}>
+                    <Button
+                      onClick={handleSaveSignature}
+                      disabled={savingSignature || !pendingSignature}
+                      size="sm"
+                      className="gap-1.5"
+                    >
+                      <Pen weight="BoldDuotone" className="h-4 w-4" />
+                      {savingSignature ? "Menyimpan..." : "Simpan Tanda Tangan"}
+                    </Button>
+                    {currentSignature && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setPendingSignature(null); setShowSignaturePad(false) }}
+                        disabled={savingSignature}
+                      >
+                        Batal
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -120,6 +120,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
+  const [salesFilter, setSalesFilter] = useState("");
   const [recordStatusFilter, setRecordStatusFilter] = useState<"saved" | "draft" | "all">("saved");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
@@ -143,7 +144,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, approvalStatus: approvalFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
@@ -529,10 +530,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }
 
   const hasVenueFilter = venueFilter !== "" && venueFilter !== "all";
+  const hasSalesFilter = salesFilter !== "";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
   const hasApprovalFilter = approvalFilter !== "";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
@@ -548,7 +550,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setApprovalFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setApprovalFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -567,6 +569,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           placeholder="Semua Venue"
           searchPlaceholder="Cari venue..."
           emptyText="Venue tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Sales</label>
+        <SearchableSelect
+          options={[
+            { id: "", name: "Semua Sales" },
+            ...salesProfiles.map((s) => ({ id: s.id, name: s.fullName ?? s.id })),
+          ]}
+          value={salesFilter || ""}
+          onChange={(val) => { setSalesFilter(val); setCurrentPage(1); }}
+          placeholder="Semua Sales"
+          searchPlaceholder="Cari sales..."
+          emptyText="Sales tidak ditemukan"
           className="h-9"
         />
       </div>

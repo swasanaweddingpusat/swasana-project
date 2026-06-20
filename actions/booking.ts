@@ -1103,6 +1103,10 @@ export async function editBooking(data: unknown) {
     const venueChanged = rest.venueId !== booking.venueId;
     const packageChanged = rest.packageId !== booking.packageId;
     const typeChanged = (rest.weddingType ?? null) !== (booking.weddingType ?? null);
+    // shouldRefreshPrice = true saat paket beda (packageChanged) ATAU user re-select
+    // paket yang sama (refreshPackagePrice signal dari drawer). Pada keduanya kita fetch
+    // master price terbaru dan rebuild snapshot pricing + snapPackageCategoryPrices.
+    const shouldRefreshPrice = packageChanged || rest.refreshPackagePrice === true;
 
     // ── Material change detection ─────────────────────────────────────────────
     // Compare event date (bookingDate field = event date in wedding bookings)
@@ -1220,11 +1224,34 @@ export async function editBooking(data: unknown) {
       }
     }
 
+    // refreshPackagePrice (re-select same package): detect whether the master price
+    // ACTUALLY changed compared to the current snapshot. If harga sama → no-op (no
+    // material change, no revision). Only a real price delta counts as material.
+    // This runs ONLY when shouldRefreshPrice=true but packageChanged=false (same pkg).
+    let priceRefreshed = false;
+    if (shouldRefreshPrice && !packageChanged) {
+      const [masterPkg, snapPricing] = await Promise.all([
+        db.package.findUnique({
+          where: { id: rest.packageId },
+          select: { margin: true, sellingPrice: true, categoryPrices: { select: { basePrice: true, isShow: true, categoryName: true, sortOrder: true } } },
+        }),
+        db.snapPackagePricing.findUnique({
+          where: { bookingId: id },
+          select: { fullPrice: true },
+        }),
+      ]);
+      if (masterPkg && snapPricing) {
+        const newFullPrice = computeFullPrice(masterPkg.categoryPrices, masterPkg.margin ?? 0, masterPkg.sellingPrice);
+        priceRefreshed = newFullPrice !== snapPricing.fullPrice;
+      }
+    }
+
     // unpaid→paid persists WITHOUT resetting approval; a paid→unpaid reversal IS
     // material (paidReversed) and re-triggers the approval revision flow below.
     const hasMaterialChange =
       venueChanged ||
       packageChanged ||
+      priceRefreshed ||
       eventDateChanged ||
       discountChanged ||
       takeoutChanged ||
@@ -1350,8 +1377,9 @@ export async function editBooking(data: unknown) {
       // If segment count != 5: legacy format — leave poNumber untouched (no push).
     }
 
-    // Update package snapshots if package changed
-    if (packageChanged) {
+    // Update package snapshots if package changed OR master price was re-fetched
+    // (shouldRefreshPrice: user re-selected same package — refresh master price from DB).
+    if (shouldRefreshPrice) {
       const newPkg = await db.package.findUniqueOrThrow({
         where: { id: rest.packageId },
         include: { vendorItems: true, internalItems: true, categoryPrices: true },
@@ -1667,6 +1695,7 @@ export async function editBooking(data: unknown) {
       const reasons: string[] = [];
       if (venueChanged) reasons.push("venue");
       if (packageChanged) reasons.push("package");
+      if (priceRefreshed) reasons.push("package price refreshed");
       if (eventDateChanged) reasons.push("event date");
       if (discountChanged) reasons.push("discount");
       if (takeoutChanged) reasons.push("takeout");

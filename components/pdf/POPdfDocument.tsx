@@ -66,6 +66,10 @@ const s = StyleSheet.create({
   detailColNo: { width: "5%", fontSize: 7, padding: 2, borderRightWidth: 1, borderColor: "#000" },
   detailColLabel: { width: "30%", fontSize: 7, padding: 2, borderRightWidth: 1, borderColor: "#000" },
   detailColValue: { flex: 1, fontSize: 7, padding: 2 },
+  // 2-column info table (label : value per side) — borderless, plain label
+  infoPairRow: { flexDirection: "row", marginBottom: 1, alignItems: "flex-start" },
+  infoPairLabel: { width: 48, fontSize: 7, fontWeight: "bold", paddingVertical: 0, marginRight: 2 },
+  infoPairValue: { flex: 1, fontSize: 7, paddingVertical: 0 },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -292,7 +296,10 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   const packageVendorItems = [...booking.snapPackageVendorItems].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const rows: TableRow[] = [];
-  rows.push({ no: "1", desc: `${venueName} ${packageName}${pricingPackageName ? ` - ${pricingPackageName}` : ""} for ${pax} people include: `, total: price });
+  // Only append the pricing tier name when it differs from the package name,
+  // otherwise it duplicates (e.g. "PRIORITY - PRIORITY").
+  const tierSuffix = pricingPackageName && pricingPackageName !== packageName ? ` - ${pricingPackageName}` : "";
+  rows.push({ no: "1", desc: `${venueName} ${packageName}${tierSuffix} for ${pax} people include: `, total: price });
   notes.forEach((note) => rows.push({ no: "", desc: note, total: "" }));
 
   const benefitItems = internalItems.filter((i) => i.itemName.toLowerCase().includes("benefit"));
@@ -504,8 +511,8 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             ))
           )}
 
-          {/* Detail Section — tabel 3 kolom (NO, NAMA, VALUE); selalu mulai di halaman baru & gak kepotong */}
-          <View break wrap={false} style={{ marginTop: 0, marginBottom: 8, borderWidth: 1, borderColor: "#000" }}>
+          {/* Detail Section — tabel 2 kolom data; mulai halaman baru (break), gak kepotong, tanpa border */}
+          <View break wrap={false} style={{ marginTop: 0, marginBottom: 8 }}>
             {(() => {
               const phone = (() => {
                 const raw = booking.snapCustomer?.mobileNumber;
@@ -525,51 +532,112 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               const sessionJam = booking.weddingSession === "morning" ? "08:00-14:00" : booking.weddingSession === "evening" ? "15:30-21:00" : booking.weddingSession === "fullday" ? "08:00-21:00" : "-";
               const jam = booking.eventTime?.trim() ? booking.eventTime.trim() : sessionJam;
               const tanggal = new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
-              const items: { label: string; value: string }[] = [
+              // Gabung nilai CPP & CPW jadi satu baris: "<cpp> (cpp), <cpw> (cpw)".
+              // Hanya sertakan sisi yang ada datanya; kalau dua-duanya kosong → "-".
+              const joinCppCpw = (cpp?: string | null, cpw?: string | null) => {
+                const parts: string[] = [];
+                if (cpp?.trim()) parts.push(`${cpp.trim()} (cpp)`);
+                if (cpw?.trim()) parts.push(`${cpw.trim()} (cpw)`);
+                return parts.length > 0 ? parts.join(", ") : "-";
+              };
+              const ktp = joinCppCpw(booking.snapCustomer?.cppNik, booking.snapCustomer?.cpwNik);
+              const email = joinCppCpw(booking.snapCustomer?.emailCpp, booking.snapCustomer?.emailCpw);
+              // Kolom kiri: data customer. Kolom kanan: detail acara.
+              const leftItems: { label: string; value: string }[] = [
                 { label: "Nama", value: booking.snapCustomer?.name ?? "-" },
                 { label: "No. Telp", value: phone },
-                { label: "No.KTP CPP", value: booking.snapCustomer?.cppNik ?? "-" },
+                { label: "Email", value: email },
+                { label: "No. KTP", value: ktp },
                 { label: "Alamat CPP", value: booking.snapCustomer?.cppAddress ?? "-" },
-                { label: "Email CPP", value: booking.snapCustomer?.emailCpp ?? "-" },
-                { label: "No.KTP CPW", value: booking.snapCustomer?.cpwNik ?? "-" },
                 { label: "Alamat CPW", value: booking.snapCustomer?.cpwAddress ?? "-" },
-                { label: "Email CPW", value: booking.snapCustomer?.emailCpw ?? "-" },
+              ];
+              const rightItems: { label: string; value: string }[] = [
                 { label: "Acara", value: acara },
                 { label: "Hari/Tanggal", value: tanggal },
                 { label: "Jam", value: jam },
                 { label: "Tempat", value: venueName },
               ];
-              return (
+              // Render satu sisi panel sebagai daftar baris label | value.
+              const renderSide = (rows: { label: string; value: string }[]) => (
                 <>
-                  <View style={[s.detailRow, { backgroundColor: "#eee" }]}>
-                    <Text style={[s.detailColNo, { fontWeight: "bold" }]}>NO</Text>
-                    <Text style={[s.detailColLabel, { fontWeight: "bold" }]}>INFORMASI</Text>
-                    <Text style={[s.detailColValue, { fontWeight: "bold" }]}>KETERANGAN</Text>
-                  </View>
-                  {items.map((it, i) => (
-                    <View key={i} style={[s.detailRow, i === items.length - 1 ? { borderBottomWidth: 0 } : {}]}>
-                      <Text style={s.detailColNo}>{i + 1}</Text>
-                      <Text style={s.detailColLabel}>{it.label}</Text>
-                      <Text style={s.detailColValue}>{it.value}</Text>
+                  {rows.map((it, i) => (
+                    <View key={i} style={s.infoPairRow}>
+                      <Text style={s.infoPairLabel}>{it.label}</Text>
+                      <Text style={s.infoPairValue}>: {it.value}</Text>
                     </View>
                   ))}
                 </>
               );
+              return (
+                <View style={{ flexDirection: "row" }}>
+                  <View style={{ flex: 1, paddingRight: 12 }}>{renderSide(leftItems)}</View>
+                  <View style={{ flex: 1, paddingLeft: 12 }}>{renderSide(rightItems)}</View>
+                </View>
+              );
             })()}
           </View>
 
-          {/* Complimentary — setelah detail client, sebelum tabel package; wrap=false supaya gak kepotong */}
+          {/* Tabel paket — ngalir natural (tanpa break), boleh lintas halaman biar gak overflow */}
+          <View>
+            {/* Table Header */}
+            <View style={s.table}>
+              <View style={s.tableHeader}>
+                <Text style={[s.tableCell, { width: "5%", fontWeight: "bold", fontSize: 7 }]}>NO</Text>
+                <Text style={[s.tableCell, { width: "75%", fontWeight: "bold", fontSize: 7 }]}>DESCRIPTION</Text>
+                <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 7 }]}>Total (Rp.)</Text>
+              </View>
+            </View>
+
+          {/* Table Body */}
+          <View style={{ borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: "#000" }}>
+            {(() => {
+              const groups: (typeof tableRows)[] = [];
+              let current: typeof tableRows = [];
+              tableRows.forEach((row) => { if (row.isSpacer) { if (current.length > 0) groups.push(current); current = []; } else { current.push(row); } });
+              if (current.length > 0) groups.push(current);
+              return groups.map((group, gi) => {
+                const noValue = group.find((r) => r.no)?.no ?? "";
+                const totalValue = group.find((r) => r.total)?.total ?? "";
+                return (
+                  <View key={gi} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+                    {/* NO — pinned to top of the group */}
+                    <View style={{ width: "5%", borderRightWidth: 1, borderColor: "#000", justifyContent: "flex-start" }}>
+                      {noValue ? <Text style={{ padding: 2, fontSize: 7 }}>{noValue}</Text> : null}
+                    </View>
+                    {/* DESCRIPTION — stacked rows */}
+                    <View style={{ width: "75%", flexDirection: "column", borderRightWidth: 1, borderColor: "#000" }}>
+                      {group.map((row, ri) => (
+                        <View key={ri} style={{ flexDirection: "row", borderBottomWidth: ri < group.length - 1 ? 1 : 0, borderColor: "#000", minHeight: 14 }}>
+                          {row.desc.includes("<ul>") || row.desc.includes("<ol>") ? (
+                            <View style={{ flex: 1, padding: 2, ...(row.isTakeout ? { opacity: 0.4 } : {}) }}>{parseRichText(row.desc, "normal", 7)}</View>
+                          ) : (
+                            <Text style={{ flex: 1, padding: 2, fontWeight: row.descBold ? "bold" : "normal", fontSize: 7, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc, "normal", 7)}</Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                    {/* TOTAL — pinned to top of the group */}
+                    <View style={{ width: "20%", justifyContent: "flex-start" }}>
+                      {totalValue ? <Text style={{ padding: 2, fontSize: 7 }}>{totalValue}</Text> : null}
+                    </View>
+                  </View>
+                );
+              });
+            })()}
+          </View>
+          </View>
+
+          {/* Complimentary — table full-width (No | Complimentary | Harga) */}
           {(booking.snapComplimentaries ?? []).length > 0 ? (
             (() => {
               const compItems = booking.snapComplimentaries!;
               // Hide the price column entirely when NO item has isShowPrice === true
               const showPriceCol = compItems.some((c) => c.isShowPrice);
-              // Column widths — No | Complimentary | Harga (Qty removed)
-              const colNo = "8%";
-              const colName = showPriceCol ? "68%" : "92%";
-              const colPrice = "24%";
+              const colNo = "6%";
+              const colName = showPriceCol ? "74%" : "94%";
+              const colPrice = "20%";
               return (
-                <View wrap={false} style={s.complimentarySection}>
+                <View wrap={false} style={[s.complimentarySection, { marginTop: 16 }]}>
                   <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
                   <View style={{ borderWidth: 1, borderColor: "#000" }}>
                     {/* Header */}
@@ -612,14 +680,14 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               );
             })()
           ) : booking.snapBonuses.length > 0 ? (
-            <View wrap={false} style={s.complimentarySection}>
+            <View wrap={false} style={[s.complimentarySection, { marginTop: 16 }]}>
               <Text style={{ fontWeight: "bold", fontSize: 7, color: "red", marginBottom: 4 }}>*Complimentary :</Text>
               {/* Table — legacy snapBonuses (no price, no qty) */}
               <View style={{ borderWidth: 1, borderColor: "#000" }}>
                 {/* Header */}
                 <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
-                  <Text style={{ width: "10%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
-                  <Text style={{ width: "90%", fontSize: 6, fontWeight: "bold", padding: 2 }}>Complimentary</Text>
+                  <Text style={{ width: "6%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>No</Text>
+                  <Text style={{ width: "94%", fontSize: 6, fontWeight: "bold", padding: 2 }}>Complimentary</Text>
                 </View>
                 {/* Rows */}
                 {booking.snapBonuses.map((b, idx) => (
@@ -630,8 +698,8 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                       : { flexDirection: "row" }
                     }
                   >
-                    <Text style={{ width: "10%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
-                    <View style={{ width: "90%", padding: 2 }}>
+                    <Text style={{ width: "6%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{idx + 1}</Text>
+                    <View style={{ width: "94%", padding: 2 }}>
                       <Text style={{ fontSize: 6, fontWeight: "bold" }}>{b.vendorName}</Text>
                       {b.description ? renderHtmlToPdf(b.description) : null}
                     </View>
@@ -641,84 +709,49 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
             </View>
           ) : null}
 
-          {/* Tabel paket — mulai halaman baru (break), boleh ngalir lintas halaman biar gak overflow */}
-          <View break>
-            {/* Table Header */}
-            <View style={s.table}>
-              <View style={s.tableHeader}>
-                <Text style={[s.tableCell, { width: "5%", fontWeight: "bold", fontSize: 7 }]}>NO</Text>
-                <Text style={[s.tableCell, { width: "75%", fontWeight: "bold", fontSize: 7 }]}>DESCRIPTION</Text>
-                <Text style={[s.tableCellLast, { width: "20%", fontWeight: "bold", fontSize: 7 }]}>Total (Rp.)</Text>
-              </View>
+          {/* Payment Summary — table full-width, header SUMMARY PAYMENT | NOMINAL; mulai halaman baru (break) */}
+          <View break wrap={false} style={{ marginBottom: 8, borderWidth: 1, borderColor: "#000" }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", backgroundColor: "#eee", borderBottomWidth: 1, borderColor: "#000" }}>
+              <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>SUMMARY PAYMENT</Text>
+              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>NOMINAL</Text>
             </View>
-
-          {/* Table Body */}
-          <View style={{ borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: "#000" }}>
-            {(() => {
-              const groups: (typeof tableRows)[] = [];
-              let current: typeof tableRows = [];
-              tableRows.forEach((row) => { if (row.isSpacer) { if (current.length > 0) groups.push(current); current = []; } else { current.push(row); } });
-              if (current.length > 0) groups.push(current);
-              return groups.map((group, gi) => {
-                const noValue = group.find((r) => r.no)?.no ?? "";
-                return (
-                  <View key={gi} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
-                    <View style={{ width: "5%", borderRightWidth: 1, borderColor: "#000", justifyContent: "flex-start" }}>
-                      {noValue ? <Text style={{ padding: 2, fontSize: 7 }}>{noValue}</Text> : null}
-                    </View>
-                    <View style={{ flex: 1, flexDirection: "column" }}>
-                      {group.map((row, ri) => (
-                        <View key={ri} style={{ flexDirection: "row", borderBottomWidth: ri < group.length - 1 ? 1 : 0, borderColor: "#000", minHeight: 14 }}>
-                          {row.desc.includes("<ul>") || row.desc.includes("<ol>") ? (
-                            <View style={{ width: "78.95%", padding: 2, borderRightWidth: 1, borderColor: "#000", ...(row.isTakeout ? { opacity: 0.4 } : {}) }}>{parseRichText(row.desc, "normal", 7)}</View>
-                          ) : (
-                            <Text style={{ width: "78.95%", padding: 2, borderRightWidth: 1, borderColor: "#000", fontWeight: row.descBold ? "bold" : "normal", fontSize: 7, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc, "normal", 7)}</Text>
-                          )}
-                          <Text style={{ width: "21.05%", padding: 2, fontSize: 7 }}>{row.total}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                );
-              });
-            })()}
-          </View>
-          </View>
-
-          {/* Payment Summary — style asli (box 50% rata kanan), standalone setelah tabel */}
-          <View wrap={false} style={[s.paymentSection, { marginLeft: "auto" }]}>
-            <View style={s.paymentRow}>
-              <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Total Payment</Text></View>
-              <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text></View>
+            {/* Total Payment */}
+            <View style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+              <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Total Payment</Text>
+              <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{varSnap ? fmtRp(varSnap.price) : ""}</Text>
             </View>
+            {/* Discount (conditional) */}
             {(booking.discountAmount ?? 0) > 0 && (
               <>
-                <View style={s.paymentRow}>
-                  <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6, color: "red" }}>{booking.discountName || "Discount"}</Text></View>
-                  <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text></View>
+                <View style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+                  <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000", color: "red" }}>{booking.discountName || "Discount"}</Text>
+                  <Text style={{ width: "30%", fontSize: 6, padding: 2, color: "red" }}>- {fmtRp(booking.discountAmount!)}</Text>
                 </View>
-                <View style={s.paymentRow}>
-                  <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Harga Setelah Discount</Text></View>
-                  <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text></View>
+                <View style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+                  <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Harga Setelah Discount</Text>
+                  <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{fmtRp(Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)))}</Text>
                 </View>
               </>
             )}
-            <View style={s.paymentRow}>
-              <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {(() => { const bf = booking.termOfPayments[0]; const d = bf?.dueDate ?? createdAt; return new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }); })()}</Text></View>
-              <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontSize: 6 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text></View>
+            {/* Booking fee */}
+            <View style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+              <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {(() => { const bf = booking.termOfPayments[0]; const d = bf?.dueDate ?? createdAt; return new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }); })()}</Text>
+              <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text>
             </View>
-            <View style={s.paymentRow}>
-              <View style={[s.paymentCell, { width: "60%" }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>Sisa Bayar</Text></View>
-              <View style={[s.paymentCell, { flex: 1 }]}><Text style={{ fontWeight: "bold", fontSize: 6 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments[0]; return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text></View>
+            {/* Sisa Bayar */}
+            <View style={{ flexDirection: "row" }}>
+              <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Sisa Bayar</Text>
+              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments[0]; return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text>
             </View>
           </View>
 
           {/* Closing — teks ngalir natural nempel ke atas; signature di-jaga utuh sendiri */}
           <View>
-            <Text style={{ fontSize: 8, marginLeft: 20, marginBottom: 10 }}>
+            <Text style={{ fontSize: 8, marginBottom: 10 }}>
               Demikian Surat Purchase Order ini dibuat oleh pihak penyewa dan penyelenggara dengan keadaan sehat, tanpa paksaan dari pihak manapun. Serta mempunyai kekuatan mengikat satu dengan lainnya. Apabila dikemudian hari salah satu pihak melanggar sesuai dengan ketentuan diatas, maka perjanjian ini menjadi bukti yang sah dan sempurna di mata hukum.
             </Text>
-            <Text style={{ fontSize: 7, fontWeight: "bold", marginTop: 10, marginLeft: 20 }}>
+            <Text style={{ fontSize: 7, fontWeight: "bold", marginTop: 10 }}>
               {booking.signingLocation ?? "_______________"}, {new Date(createdAt).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" })}
             </Text>
             <View wrap={false} style={{ flexDirection: "row", marginTop: 12, marginBottom: 6 }}>

@@ -42,6 +42,7 @@ import {
   idbClearAllEvidence,
 } from "@/lib/idbDraftStore";
 import { useCreateBooking } from "@/hooks/use-bookings";
+import { useMySignature } from "@/hooks/use-my-signature";
 import {
   useUnfinishedDraft,
   useDraftBookingDetail,
@@ -321,6 +322,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
   const { user } = useCurrentUser();
+  const { defaultSignature: myDefaultSignature } = useMySignature();
 
   // Sales auto-detect: salesUsers already contains both "sales" & "sales-mice"
   // roles, and s.id === profileId. If the logged-in user is in that list, lock
@@ -343,6 +345,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
+  const [useDefaultSignature, setUseDefaultSignature] = useState(false);
   const [signingLocation, setSigningLocation] = useState("");
   const [specialBonusName, setSpecialBonusName] = useState("Discount");
   const [specialBonusAmount, setSpecialBonusAmount] = useState(0);
@@ -538,7 +541,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     form.reset();
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
     setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms());
-    setCurrentStep(1); setSignatureSales(""); setSigningLocation("");
+    setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw("");
     setContactCppAddress(""); setContactCpwAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
@@ -1292,7 +1295,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 5) { sigSalesRef.current?.clear(); setSignatureSales(""); }
+      if (currentStep === 5) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -2578,20 +2581,58 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       sales. When a manager/admin assigns to another sales, that sales
                       signs later via the approval page, so we skip the pad here. */}
                   {currentUserIsSales ? (
-                    <div>
+                    <div className="space-y-3">
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Tanda Tangan Sales <span className="text-destructive">*</span></FormLabel>
-                      <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
-                        <SignatureCanvas
-                          ref={sigSalesRef}
-                          penColor="black"
-                          canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }}
-                          onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
+
+                      {/* Toggle: Gunakan Tanda Tangan Default */}
+                      <div className={cn("flex items-center justify-between rounded-xl border border-border bg-muted/40 px-4 py-3")}>
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium text-foreground">Gunakan Tanda Tangan Default Saya</p>
+                          {!myDefaultSignature && (
+                            <p className="text-xs text-muted-foreground">Atur dulu di Profil &rsaquo; Tanda Tangan Default</p>
+                          )}
+                        </div>
+                        <Switch
+                          checked={useDefaultSignature}
+                          disabled={!myDefaultSignature}
+                          onCheckedChange={(checked) => {
+                            setUseDefaultSignature(checked);
+                            if (checked && myDefaultSignature) {
+                              setSignatureSales(myDefaultSignature);
+                              sigSalesRef.current?.clear();
+                            } else {
+                              setSignatureSales("");
+                              sigSalesRef.current?.clear();
+                            }
+                          }}
                         />
                       </div>
-                      <div className={cn('flex', 'items-center', 'justify-between', 'mt-1.5')}>
-                        {!signatureSales && <p className={cn('text-xs', 'text-destructive')}>Tanda tangan sales wajib diisi</p>}
-                        <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className={cn('text-xs', 'text-destructive', 'hover:text-destructive', 'underline', 'ml-auto')}>Hapus tanda tangan</button>
-                      </div>
+
+                      {/* Manual pad — hanya tampil kalau toggle OFF */}
+                      {!useDefaultSignature && (
+                        <>
+                          <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
+                            <SignatureCanvas
+                              ref={sigSalesRef}
+                              penColor="black"
+                              canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }}
+                              onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }}
+                            />
+                          </div>
+                          <div className={cn('flex', 'items-center', 'justify-between', 'mt-1.5')}>
+                            {!signatureSales && <p className={cn('text-xs', 'text-destructive')}>Tanda tangan sales wajib diisi</p>}
+                            <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className={cn('text-xs', 'text-destructive', 'hover:text-destructive', 'underline', 'ml-auto')}>Hapus tanda tangan</button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Preview default signature kalau toggle ON */}
+                      {useDefaultSignature && myDefaultSignature && (
+                        <div className={cn("rounded-xl border border-border bg-white p-3 flex items-center justify-center")}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={myDefaultSignature} alt="Tanda tangan default" className="max-h-28 max-w-full object-contain" />
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">

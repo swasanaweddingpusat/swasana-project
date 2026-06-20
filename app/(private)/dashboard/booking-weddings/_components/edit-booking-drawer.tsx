@@ -32,6 +32,7 @@ import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useMySignature } from "@/hooks/use-my-signature";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 
@@ -168,6 +169,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const { users: salesUsers } = useSalesUsers();
   const { user: currentUser } = useCurrentUser();
+  const { defaultSignature: myDefaultSignature } = useMySignature();
 
   // Sales PIC = current user IS the specific sales assigned to THIS booking (not just any sales).
   // This controls whether step 5 (Signing) is shown. If not Sales PIC, the drawer
@@ -201,6 +203,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [venueId, setVenueId] = useState("");
   const [packageId, setPackageId] = useState("");
   const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
+  // TRUE saat user benar-benar memilih paket via SearchableSelect onChange (re-select
+  // sama atau beda). Reset ke false saat drawer dibuka & saat revertToOriginal().
+  const [packageReselected, setPackageReselected] = useState(false);
   const [bookingDate, setBookingDate] = useState("");
   const [weddingSession, setWeddingSession] = useState("");
   const [weddingType, setWeddingType] = useState("");
@@ -231,6 +236,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // ── Step 5: Signing ──
   const [signingLocation, setSigningLocation] = useState("");
   const [signatureSales, setSignatureSales] = useState("");
+  const [useDefaultSignature, setUseDefaultSignature] = useState(false);
   const sigSalesRef = useRef<SignatureCanvas>(null);
 
   // ── Change detection ──
@@ -326,6 +332,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (!open || !booking) return;
     setIsSubmitting(false);
     setCurrentStep(1);
+    setPackageReselected(false);
     setCustomerName(booking.snapCustomer?.name ?? "");
     const raw = booking.snapCustomer?.mobileNumber ?? "";
     if (raw.trim()) {
@@ -366,6 +373,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setSpecialBonusName(booking.discountName ?? "Discount");
     setSpecialBonusAmount(Number(booking.discountAmount) || 0);
     setSignatureSales("");
+    setUseDefaultSignature(false);
     sigSalesRef.current?.clear();
     setCategoryToggles({});
     setTakeoutPrices({});
@@ -692,6 +700,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     if (currentStep === 5 && step < 5) {
       sigSalesRef.current?.clear();
       setSignatureSales("");
+      setUseDefaultSignature(false);
     }
     setCurrentStep(step);
   }
@@ -730,13 +739,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   function handlePrevious() {
     if (currentStep > 1) {
-      if (currentStep === 5) { sigSalesRef.current?.clear(); setSignatureSales(""); }
+      if (currentStep === 5) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   }
 
   function revertToOriginal() {
     if (!booking) return;
+    setPackageReselected(false);
     setVenueId(originalVenueId);
     setPackageId(originalPackageId);
     setBookingDate(originalBookingDate);
@@ -757,6 +767,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     }));
     setTerms(bTerms);
     setSignatureSales("");
+    setUseDefaultSignature(false);
     sigSalesRef.current?.clear();
     setCurrentStep(1);
   }
@@ -892,6 +903,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       // bookingDate is already stored as "yyyy-MM-dd" — pass directly to action.
       bookingDate: bookingDate,
       venueId, packageId,
+      refreshPackagePrice: packageReselected,
       paymentMethodId: paymentMethodId || null,
       sourceOfInformationId: sourceOfInformationId || null,
       weddingSession: (weddingSession as "morning" | "evening" | "fullday") || null,
@@ -1168,6 +1180,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   value={packageId}
                   onChange={(id) => {
                     setPackageId(id);
+                    setPackageReselected(true);
                     setCategoryToggles({});
                     setTakeoutPrices({});
                     setLastAllocatedPrice(0);
@@ -1758,15 +1771,53 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <label className={cn(LBL, "mb-2 block")}>Lokasi Tanda Tangan <span className="text-destructive">*</span></label>
                 <Input placeholder="Contoh: Jakarta, Bandung..." value={signingLocation} onChange={(e) => setSigningLocation(e.target.value)} />
               </div>
-              <div>
+              <div className="space-y-3">
                 <label className={cn(LBL, "mb-2 block")}>Tanda Tangan Sales <span className="text-destructive">*</span></label>
-                <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
-                  <SignatureCanvas ref={sigSalesRef} penColor="black" canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }} onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }} />
+
+                {/* Toggle: Gunakan Tanda Tangan Default */}
+                <div className={cn("flex items-center justify-between rounded-xl border border-border bg-muted/40 px-4 py-3")}>
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">Gunakan Tanda Tangan Default Saya</p>
+                    {!myDefaultSignature && (
+                      <p className="text-xs text-muted-foreground">Atur dulu di Profil &rsaquo; Tanda Tangan Default</p>
+                    )}
+                  </div>
+                  <Switch
+                    checked={useDefaultSignature}
+                    disabled={!myDefaultSignature}
+                    onCheckedChange={(checked) => {
+                      setUseDefaultSignature(checked);
+                      if (checked && myDefaultSignature) {
+                        setSignatureSales(myDefaultSignature);
+                        sigSalesRef.current?.clear();
+                      } else {
+                        setSignatureSales("");
+                        sigSalesRef.current?.clear();
+                      }
+                    }}
+                  />
                 </div>
-                <div className="flex items-center justify-between mt-1.5">
-                  {!signatureSales && <p className="text-xs text-destructive">Tanda tangan sales wajib diisi</p>}
-                  <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-destructive hover:text-destructive underline ml-auto">Hapus tanda tangan</button>
-                </div>
+
+                {/* Manual pad — hanya tampil kalau toggle OFF */}
+                {!useDefaultSignature && (
+                  <>
+                    <div className={cn("border-2 border-dashed rounded-xl overflow-hidden bg-muted", !signatureSales ? "border-destructive/40" : "border-border")}>
+                      <SignatureCanvas ref={sigSalesRef} penColor="black" canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }} onEnd={() => { if (sigSalesRef.current) setSignatureSales(sigSalesRef.current.toDataURL("image/png")); }} />
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      {!signatureSales && <p className="text-xs text-destructive">Tanda tangan sales wajib diisi</p>}
+                      <button type="button" onClick={() => { sigSalesRef.current?.clear(); setSignatureSales(""); }} className="text-xs text-destructive hover:text-destructive underline ml-auto">Hapus tanda tangan</button>
+                    </div>
+                  </>
+                )}
+
+                {/* Preview default signature kalau toggle ON */}
+                {useDefaultSignature && myDefaultSignature && (
+                  <div className={cn("rounded-xl border border-border bg-white p-3 flex items-center justify-center")}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={myDefaultSignature} alt="Tanda tangan default" className="max-h-28 max-w-full object-contain" />
+                  </div>
+                )}
               </div>
               {willResetApproval && (
                 <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 space-y-1">
