@@ -105,18 +105,41 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     maintenance: ["view", "create", "edit"],
   },
   finance: {
-    booking: ["view", "comment", "edit-set-harga"],
-    customers: ["view"],
-    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
+    // Finance has near-full access per PROD (118 perms). Excludes settings-role-permission
+    // and settings-users (those stay super-admin only in prod).
+    // booking::term-&-condition auto-granted via step 7; booking::edit-package via step 8.
+    "booking-mice": ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement"],
+    booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "transfer-manager", "reject", "comment", "client-agreement", "edit-set-harga"],
+    complimentary: ["view", "create", "edit", "delete"],
+    customers: ["view", "create", "edit", "delete"],
     "finance-ar": ["view", "create", "edit", "delete"],
+    groups: ["view", "view-all", "create", "edit", "delete"],
+    leads: ["view", "create", "edit", "delete"],
+    maintenance: ["view", "create", "edit", "delete"],
+    package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition"],
+    quotations: ["view", "create", "edit", "delete"],
+    "settings-brands": ["view", "create", "edit", "delete"],
+    "settings-education-level": ["view", "create", "edit", "delete"],
+    "settings-event-types": ["view", "create", "edit", "delete"],
+    "settings-lead-status": ["view", "create", "edit", "delete"],
+    "settings-maintenance-category": ["view", "create", "edit", "delete"],
+    "settings-maintenance-priority": ["view", "create", "edit", "delete"],
+    "settings-maintenance-status": ["view", "create", "edit", "delete"],
+    "settings-order-status": ["view", "create", "edit", "delete"],
     "settings-payment-methods": ["view", "create", "edit", "delete"],
+    "settings-quotation-templates": ["view", "create", "edit", "delete"],
+    "settings-source-of-information": ["view", "create", "edit", "delete"],
+    "settings-venues": ["view", "create", "edit", "delete"],
+    "vendor-specialist": ["view", "create", "edit", "delete"],
+    vendor: ["view", "create", "edit", "delete"],
   },
   sales: {
-    booking: ["view", "create", "edit", "comment", "client-agreement"],
+    booking: ["view", "create", "edit", "comment", "client-agreement", "print"],
     customers: ["view", "create", "edit"],
     groups: ["view"],
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
+    "settings-source-of-information": ["view", "create", "edit", "delete"],
     // leads intentionally removed for now — only sales-mice keeps leads access.
     // quotations intentionally removed — sales role no longer has quotation access.
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
@@ -273,6 +296,8 @@ export async function seedRolesPermissions(): Promise<void> {
   }
 
   // 4b. Clean up stale actions (old format)
+  // NOTE: "package::set-status" is a LIVE permission in moduleActions — do NOT list it here.
+  // Only list truly-removed actions (old snake_case or renamed actions no longer in moduleActions).
   const staleActions = [
     { module: "booking", action: "approve_manager" },
     { module: "booking", action: "approve_finance" },
@@ -281,7 +306,8 @@ export async function seedRolesPermissions(): Promise<void> {
     { module: "booking", action: "mark_lost" },
     { module: "package", action: "set_harga" },
     { module: "package", action: "term-and-condition" },
-    { module: "package", action: "set-status" },
+    // "package::set-status" removed from this list — it is a valid current permission in moduleActions.
+    // Previously listed here by mistake (only "set_status" underscore variant was stale, not "set-status").
   ];
   for (const { module, action } of staleActions) {
     const stale = await prisma.permission.findUnique({ where: { module_action: { module, action } } });
