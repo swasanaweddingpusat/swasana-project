@@ -53,8 +53,8 @@ export function AttendanceSettingsPanel() {
   return (
     <Card className="rounded-2xl shadow-sm">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer pb-3">
+        <CollapsibleTrigger className="w-full text-left cursor-pointer">
+          <CardHeader className="pb-3">
             <CardTitle className="flex items-center justify-between font-heading text-lg">
               <span className="flex items-center gap-2">
                 <Settings weight="BoldDuotone" className="h-5 w-5" />
