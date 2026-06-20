@@ -93,6 +93,9 @@ model Profile {
   numberOfChildren Int?
   lastEducation    String?
 
+  // Signature
+  defaultSignature  String?  // base64 data URL PNG, tanda tangan default sales
+
   // Payroll
   bankName          String?
   bankAccountNumber String?

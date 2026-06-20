@@ -138,6 +138,10 @@ export async function getManagerProfiles() {
 export type ManagerProfile = Awaited<ReturnType<typeof getManagerProfiles>>[number];
 
 export async function getMentionableUsers() {
+  "use cache";
+  cacheTag("users");
+  cacheLife("minutes");
+
   const profiles = await db.profile.findMany({
     where: { status: "active" },
     select: {

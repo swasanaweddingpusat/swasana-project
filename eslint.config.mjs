@@ -19,6 +19,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vendored static assets (e.g. minified pdf.js worker) — not our source.
     "public/**",
+    // One-off utility/maintenance scripts (CommonJS, ad-hoc) — not app source.
+    "scripts/**",
   ]),
 ]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -38,6 +38,7 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { BookingTCDrawer } from "./booking-tc-drawer";
 import { EditPackageDrawer, type EditPackageTarget } from "./EditPackageDrawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
+import { fetchBookingComments } from "@/services/booking-comment-service";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
@@ -120,6 +121,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
+  const [salesFilter, setSalesFilter] = useState("");
   const [recordStatusFilter, setRecordStatusFilter] = useState<"saved" | "draft" | "all">("saved");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
@@ -143,7 +145,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, approvalStatus: approvalFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
@@ -454,7 +456,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {/* Comment button — placed last, right before the More actions menu */}
         <PermissionGate module="booking" action="comment">
           <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} />}>
+            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
               <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               {/* Badge merah — unread biasa */}
               {(unreadCounts[booking.id] ?? 0) > 0 && (
@@ -529,10 +531,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }
 
   const hasVenueFilter = venueFilter !== "" && venueFilter !== "all";
+  const hasSalesFilter = salesFilter !== "";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
   const hasApprovalFilter = approvalFilter !== "";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
@@ -548,7 +551,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setApprovalFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setApprovalFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -567,6 +570,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           placeholder="Semua Venue"
           searchPlaceholder="Cari venue..."
           emptyText="Venue tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Sales</label>
+        <SearchableSelect
+          options={[
+            { id: "", name: "Semua Sales" },
+            ...salesProfiles.map((s) => ({ id: s.id, name: s.fullName ?? s.id })),
+          ]}
+          value={salesFilter || ""}
+          onChange={(val) => { setSalesFilter(val); setCurrentPage(1); }}
+          placeholder="Semua Sales"
+          searchPlaceholder="Cari sales..."
+          emptyText="Sales tidak ditemukan"
           className="h-9"
         />
       </div>
@@ -976,15 +994,23 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       <TableCell className={cn('px-2', 'py-2', 'hidden', 'sm:table-cell')}>
                         <div className="leading-tight">
                           <span className={cn('block', 'truncate', 'text-sm', 'font-medium')}>{booking.snapVenue?.venueName ?? "—"}</span>
-                          {booking.poNumber ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
-                              className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-muted', 'text-[10px]', 'font-mono', 'text-muted-foreground', 'hover:bg-muted/80', 'transition-colors', 'cursor-pointer', 'truncate', 'mt-0.5')}
-                            >
-                              <span className="truncate">{booking.poNumber}</span>
-                            </button>
-                          ) : (
-                            <span className={cn('text-muted-foreground', 'text-[10px]', 'block', 'mt-0.5')}>No PO</span>
+                          <div className="mt-0.5">
+                            {booking.poNumber ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(booking.poNumber!); toast.success("PO Number copied!", { duration: 1500 }); }}
+                                className={cn('inline-flex', 'items-center', 'max-w-full', 'px-1.5', 'py-0.5', 'rounded', 'bg-muted', 'text-[10px]', 'font-mono', 'text-muted-foreground', 'hover:bg-muted/80', 'transition-colors', 'cursor-pointer', 'truncate')}
+                              >
+                                <span className="truncate">{booking.poNumber}</span>
+                              </button>
+                            ) : (
+                              <span className={cn('text-muted-foreground', 'text-[10px]')}>No PO</span>
+                            )}
+                          </div>
+                          {booking.sales?.fullName && (
+                            <div className={cn('flex', 'items-center', 'gap-0.5', 'mt-1', 'text-[10px]', 'text-muted-foreground')}>
+                              <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{booking.sales.fullName}</span>
+                            </div>
                           )}
                         </div>
                       </TableCell>
@@ -1148,6 +1174,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       )}
                     </div>
 
+                    {/* Row 4b: Sales PIC — shown below PO when available */}
+                    {booking.sales?.fullName && (
+                      <div className={cn('flex', 'items-center', 'gap-0.5', 'text-[10px]', 'text-muted-foreground')}>
+                        <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{booking.sales.fullName}</span>
+                      </div>
+                    )}
+
                     {/* Footer: mobile action tile bar — icon above + label below, centered */}
                     <div className={cn('flex', 'items-center', 'justify-center', 'gap-1', 'pt-1', 'border-t', 'border-border')} onClick={(e) => e.stopPropagation()}>
                       {booking.recordStatus === "draft" ? (
@@ -1249,6 +1283,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                                 type="button"
                                 className={cn('relative', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
                                 onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }}
+                                onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }}
+                                onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }}
                                 aria-label="Komentar"
                               >
                                 <span className="relative inline-flex">
@@ -1423,20 +1459,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-      {commentTarget && (
-        <BookingCommentPanel
-          open={!!commentTarget}
-          onClose={() => {
-            setCommentTarget(null);
-            setHighlightCommentId(null);
-            qc.invalidateQueries({ queryKey: ["unread-comments"] });
-            qc.invalidateQueries({ queryKey: ["notifications"] });
-          }}
-          bookingId={commentTarget.id}
-          customerName={commentTarget.snapCustomer?.name ?? ""}
-          highlightCommentId={highlightCommentId ?? undefined}
-        />
-      )}
+      <BookingCommentPanel
+        open={!!commentTarget}
+        onClose={() => {
+          setCommentTarget(null);
+          setHighlightCommentId(null);
+          qc.invalidateQueries({ queryKey: ["unread-comments"] });
+          qc.invalidateQueries({ queryKey: ["notifications"] });
+        }}
+        bookingId={commentTarget?.id ?? null}
+        customerName={commentTarget?.snapCustomer?.name ?? ""}
+        highlightCommentId={highlightCommentId ?? undefined}
+      />
 
       {/* Upload Document Modal */}
       {uploadDocTarget && (

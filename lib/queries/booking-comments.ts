@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { resolveAvatarUrl } from "@/lib/storage";
 
@@ -74,33 +75,42 @@ export async function getUnreadMentionCounts(
 
 export type MentionCountsResult = Record<string, number>;
 
-/** Returns unread comment counts per bookingId for a given profile */
+/** Returns unread comment counts per bookingId for a given profile.
+ *  Uses a single GROUP BY query to avoid N+1 round-trips.
+ *  lastReadAt varies per booking, so we use a correlated subquery inside
+ *  the WHERE clause — one SQL query total instead of 1+N.
+ */
 export async function getUnreadCommentCounts(
   bookingIds: string[],
   profileId: string
 ): Promise<Record<string, number>> {
   if (!bookingIds.length) return {};
 
-  const reads = await db.bookingCommentRead.findMany({
-    where: { profileId, bookingId: { in: bookingIds } },
-    select: { bookingId: true, lastReadAt: true },
-  });
+  // NOTE: kolom Prisma camelCase TANPA @map → di Postgres tetap camelCase,
+  // jadi WAJIB di-double-quote ("bookingId", bukan booking_id). Hanya nama
+  // TABEL yang snake_case (via @@map).
+  type Row = { bookingId: string; cnt: bigint };
 
-  const readMap = new Map(reads.map((r: { bookingId: string; lastReadAt: Date }) => [r.bookingId, r.lastReadAt]));
+  const rows = await db.$queryRaw<Row[]>(Prisma.sql`
+    SELECT bc."bookingId", COUNT(*)::bigint AS cnt
+    FROM booking_comments bc
+    WHERE bc."bookingId" = ANY(${bookingIds}::text[])
+      AND bc."authorId" <> ${profileId}
+      AND bc."createdAt" > COALESCE(
+        (
+          SELECT bcr."lastReadAt"
+          FROM booking_comment_reads bcr
+          WHERE bcr."bookingId" = bc."bookingId"
+            AND bcr."profileId" = ${profileId}
+        ),
+        '1970-01-01'::timestamptz
+      )
+    GROUP BY bc."bookingId"
+  `);
 
-  const counts = await Promise.all(
-    bookingIds.map(async (bookingId) => {
-      const lastReadAt = readMap.get(bookingId) ?? new Date(0);
-      const count = await db.bookingComment.count({
-        where: {
-          bookingId,
-          authorId: { not: profileId },
-          createdAt: { gt: lastReadAt },
-        },
-      });
-      return [bookingId, count] as const;
-    })
-  );
-
-  return Object.fromEntries(counts.filter(([, count]) => count > 0));
+  const result: Record<string, number> = {};
+  for (const row of rows) {
+    result[row.bookingId] = Number(row.cnt);
+  }
+  return result;
 }
