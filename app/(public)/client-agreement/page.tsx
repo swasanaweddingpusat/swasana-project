@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Refresh, CheckCircle, FileText, Lock, DownloadMinimalistic } from "@solar-icons/react";
 import SignatureCanvas from "react-signature-canvas";
@@ -37,6 +38,9 @@ function ClientAgreementContent() {
   const [hasSigned, setHasSigned] = React.useState(false);
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = React.useState(false);
+  const [showSuccessModal, setShowSuccessModal] = React.useState(false);
+  const [signedPdfUrl, setSignedPdfUrl] = React.useState<string | null>(null);
+  const [loadingSignedPdf, setLoadingSignedPdf] = React.useState(false);
   const sigRef = React.useRef<SignatureCanvas>(null);
 
   const handleValidate = async (e: React.FormEvent) => {
@@ -81,6 +85,24 @@ function ClientAgreementContent() {
     }
   };
 
+  const fetchSignedPdf = async (): Promise<void> => {
+    setLoadingSignedPdf(true);
+    try {
+      const res = await fetch("/api/client-agreement/render-po", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, accessCode: accessCode.trim() }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      setSignedPdfUrl(URL.createObjectURL(blob));
+    } catch {
+      // Download button will be hidden if fetch fails — non-critical
+    } finally {
+      setLoadingSignedPdf(false);
+    }
+  };
+
   const handleSign = async () => {
     if (!sigRef.current || sigRef.current.isEmpty()) {
       toast.error("Silakan tanda tangan terlebih dahulu");
@@ -96,8 +118,10 @@ function ClientAgreementContent() {
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "Gagal menyimpan tanda tangan"); return; }
+      // Fetch signed PDF (with embedded signature) before showing modal.
+      await fetchSignedPdf();
       setStep("done");
-      toast.success("Tanda tangan berhasil disimpan");
+      setShowSuccessModal(true);
     } catch {
       toast.error("Terjadi kesalahan");
     } finally {
@@ -117,15 +141,88 @@ function ClientAgreementContent() {
     );
   }
 
+  const poNumber = (booking?.poNumber as string) ?? "";
+  const signedFilename = poNumber
+    ? `client-agreement-${poNumber.replace(/\//g, "-")}-signed.pdf`
+    : "agreement-signed.pdf";
+
   if (step === "done") {
     return (
-      <div className={cn('min-h-screen', 'flex', 'items-center', 'justify-center', 'bg-gray-50', 'px-4')}>
-        <div className={cn('w-full', 'max-w-sm', 'bg-white', 'rounded-xl', 'shadow-sm', 'border', 'p-6', 'text-center', 'space-y-4')}>
-          <CheckCircle weight="BoldDuotone" className={cn('h-14', 'w-14', 'text-green-500', 'mx-auto')} />
-          <h1 className={cn('text-lg', 'font-semibold')}>Terima Kasih</h1>
-          <p className={cn('text-sm', 'text-gray-500')}>Tanda tangan Anda telah berhasil disimpan. Anda dapat menutup halaman ini.</p>
+      <>
+        <div className={cn('min-h-screen', 'flex', 'items-center', 'justify-center', 'bg-gray-50', 'px-4')}>
+          <div className={cn('w-full', 'max-w-sm', 'bg-white', 'rounded-2xl', 'shadow-sm', 'border', 'p-6', 'text-center', 'space-y-4')}>
+            <CheckCircle weight="BoldDuotone" className={cn('h-14', 'w-14', 'mx-auto')} style={{ color: "var(--brand-gold)" }} />
+            <h1 className={cn('text-lg', 'font-semibold')}>Terima Kasih</h1>
+            <p className={cn('text-sm', 'text-muted-foreground')}>
+              Dokumen Anda sudah ditandatangani. Silakan unduh salinan agreement Anda di bawah ini.
+            </p>
+            {loadingSignedPdf ? (
+              <div className={cn('flex', 'items-center', 'justify-center', 'gap-2', 'py-1')}>
+                <Refresh weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin', 'text-muted-foreground')} />
+                <span className={cn('text-xs', 'text-muted-foreground')}>Menyiapkan dokumen...</span>
+              </div>
+            ) : signedPdfUrl ? (
+              <a
+                href={signedPdfUrl}
+                download={signedFilename}
+                className={cn(
+                  'inline-flex', 'items-center', 'justify-center', 'gap-2',
+                  'rounded-full', 'bg-primary', 'px-5', 'py-2.5',
+                  'text-sm', 'font-medium', 'text-primary-foreground',
+                  'transition-colors', 'hover:bg-primary/90',
+                )}
+              >
+                <DownloadMinimalistic weight="BoldDuotone" className="h-4 w-4" />
+                Download Agreement
+              </a>
+            ) : null}
+          </div>
         </div>
-      </div>
+
+        {/* Success modal — shown immediately after signing (showSuccessModal=true).
+            The static card above is the fallback for already-signed links (alreadySigned). */}
+        <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+          <DialogContent className="max-w-sm rounded-2xl text-center">
+            <DialogHeader className="items-center gap-3 pb-1">
+              <CheckCircle weight="BoldDuotone" className="h-14 w-14" style={{ color: "var(--brand-gold)" }} />
+              <DialogTitle className="text-lg">Terima kasih!</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Dokumen Anda sudah ditandatangani. Unduh salinan agreement Anda sebelum menutup halaman ini.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col items-center gap-3 pt-2">
+              {loadingSignedPdf ? (
+                <div className={cn('flex', 'items-center', 'gap-2')}>
+                  <Refresh weight="BoldDuotone" className={cn('h-4', 'w-4', 'animate-spin', 'text-muted-foreground')} />
+                  <span className={cn('text-xs', 'text-muted-foreground')}>Menyiapkan dokumen...</span>
+                </div>
+              ) : signedPdfUrl ? (
+                <a
+                  href={signedPdfUrl}
+                  download={signedFilename}
+                  className={cn(
+                    'inline-flex', 'items-center', 'justify-center', 'gap-2',
+                    'rounded-full', 'bg-primary', 'px-5', 'py-2.5',
+                    'text-sm', 'font-medium', 'text-primary-foreground',
+                    'transition-colors', 'hover:bg-primary/90',
+                  )}
+                >
+                  <DownloadMinimalistic weight="BoldDuotone" className="h-4 w-4" />
+                  Download Agreement
+                </a>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => setShowSuccessModal(false)}
+              >
+                Tutup
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 

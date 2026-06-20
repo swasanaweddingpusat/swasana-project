@@ -122,6 +122,33 @@ export function PdfCanvasViewer({ blobUrl, showZoomControls = false }: PdfCanvas
     // so the effect only needs to run once on mount.
   }, []);
 
+  // Mouse wheel zoom (Ctrl + scroll) — non-passive so we can preventDefault() to block
+  // the browser's own page zoom while Ctrl is held. Without Ctrl the event is ignored,
+  // preserving normal vertical scrolling through multi-page PDFs.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    function handleWheel(e: WheelEvent): void {
+      if (!e.ctrlKey) return; // Only intercept Ctrl+scroll; let plain scroll pass through.
+      e.preventDefault();
+      // deltaY: negative = scroll up = zoom in; positive = scroll down = zoom out.
+      // Use a small continuous step (0.1) for smooth feel, clamped to [ZOOM_MIN, ZOOM_MAX].
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat((scaleRef.current + delta).toFixed(3))));
+      setScale(next);
+    }
+
+    // { passive: false } is mandatory — otherwise e.preventDefault() is silently ignored
+    // in Chrome (which registers wheel listeners as passive by default).
+    el.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+    };
+    // scaleRef keeps the latest scale without requiring the effect to re-run.
+  }, []);
+
   const handleLoadSuccess = useCallback(({ numPages: n }: { numPages: number }): void => {
     setNumPages(n);
   }, []);
