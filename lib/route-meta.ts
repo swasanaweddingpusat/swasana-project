@@ -219,6 +219,22 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Tutorial",
     subtitle: "Panduan penggunaan aplikasi",
   },
+
+  // ─── HR & Payroll ──────────────────────────────────────────────────────────
+  "/dashboard/hr": {
+    title: "HR & Payroll",
+    subtitle: "Manajemen SDM dan penggajian",
+  },
+  "/dashboard/hr/absensi": {
+    title: "Absensi",
+    subtitle: "Clock in dan clock out harian",
+    parent: "/dashboard/hr",
+  },
+  "/dashboard/hr/manajemen-kehadiran": {
+    title: "Manajemen Kehadiran",
+    subtitle: "Rekap kehadiran karyawan",
+    parent: "/dashboard/hr",
+  },
 };
 
 export interface Breadcrumb {

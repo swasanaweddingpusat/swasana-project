@@ -164,7 +164,7 @@ export const navItems: NavItem[] = [
     href: "/dashboard/hr",
     icon: Accessibility,
     permission: { module: "hr", action: "view" },
-    hidden: true, // TODO: sementara disembunyiin — balikin ke false/hapus buat munculin lagi
+    hidden: false,
     submenu: [
       { name: "Database Karyawan", href: "/dashboard/hr/database-karyawan", icon: UsersGroupRounded, permission: { module: "hr", action: "view" } },
       { name: "Manajemen Kehadiran", href: "/dashboard/hr/manajemen-kehadiran", icon: ClockCircle, permission: { module: "hr", action: "view" } },
