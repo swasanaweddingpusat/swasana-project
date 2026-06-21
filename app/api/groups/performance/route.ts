@@ -13,8 +13,13 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const now = new Date();
-  const defaultStart = new Date(now.getFullYear(), 0, 1);
-  const defaultEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+
+  // Year param takes precedence; if absent, derive from startDate/endDate or default to current year
+  const yearParam = searchParams.get("year");
+  const year = yearParam ? parseInt(yearParam, 10) : now.getFullYear();
+
+  const defaultStart = new Date(year, 0, 1);
+  const defaultEnd = new Date(year, 11, 31, 23, 59, 59);
 
   const startDate = searchParams.get("startDate")
     ? new Date(searchParams.get("startDate")!)
@@ -27,6 +32,7 @@ export async function GET(request: Request) {
     isViewAll ? undefined : session.user.profileId,
     startDate,
     endDate,
+    year,
   );
 
   const totalSales = groups.reduce((s, g) => s + g.revenue, 0);

@@ -20,7 +20,14 @@ export const updateGroupSchema = z.object({
 export const setMemberTargetSchema = z.object({
   groupId: z.string().min(1),
   profileId: z.string().min(1),
+  year: z.number().int().min(2000).max(2100),
   amount: z.coerce.number().int().min(0, "Target tidak boleh negatif"),
+});
+
+export const deleteMemberTargetSchema = z.object({
+  groupId: z.string().min(1),
+  profileId: z.string().min(1),
+  year: z.number().int().min(2000).max(2100),
 });
 
 export const updateGroupLeaderSchema = z.object({
@@ -33,4 +40,5 @@ export const updateGroupLeaderSchema = z.object({
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
 export type SetMemberTargetInput = z.infer<typeof setMemberTargetSchema>;
+export type DeleteMemberTargetInput = z.infer<typeof deleteMemberTargetSchema>;
 export type UpdateGroupLeaderInput = z.infer<typeof updateGroupLeaderSchema>;

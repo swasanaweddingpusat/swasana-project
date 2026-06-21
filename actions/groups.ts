@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -11,6 +11,7 @@ import {
   createGroupSchema,
   updateGroupSchema,
   setMemberTargetSchema,
+  deleteMemberTargetSchema,
   updateGroupLeaderSchema,
 } from "@/lib/validations/group";
 
@@ -184,6 +185,8 @@ export async function updateGroup(data: unknown) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
+    revalidatePath(`/dashboard/groups/${id}`);
+    revalidatePath("/dashboard/groups");
 
     return { success: true, group };
   } catch (e) {
@@ -260,6 +263,8 @@ export async function addGroupMember(groupId: string, profileId: string) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
+    revalidatePath(`/dashboard/groups/${groupId}`);
+    revalidatePath("/dashboard/groups");
     return { success: true };
   } catch (e) {
     console.error("[addGroupMember]", e);
@@ -293,6 +298,8 @@ export async function removeGroupMember(groupId: string, profileId: string) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
+    revalidatePath(`/dashboard/groups/${groupId}`);
+    revalidatePath("/dashboard/groups");
     return { success: true };
   } catch (e) {
     console.error("[removeGroupMember]", e);
@@ -353,25 +360,25 @@ export async function setMemberTarget(data: unknown) {
   const parsed = setMemberTargetSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { profileId, amount } = parsed.data;
+  const { groupId, profileId, year, amount } = parsed.data;
 
   try {
-    await db.$transaction([
-      db.userTarget.deleteMany({
-        where: {
-          profileId,
-          type: "sales",
-        },
-      }),
-      db.userTarget.create({
-        data: {
-          profileId,
-          type: "sales",
-          amount: BigInt(amount),
-          setById: session!.user.profileId,
-        },
-      }),
-    ]);
+    await db.userTarget.upsert({
+      where: {
+        profileId_type_year: { profileId, type: "sales", year },
+      },
+      create: {
+        profileId,
+        type: "sales",
+        year,
+        amount: BigInt(amount),
+        setById: session!.user.profileId,
+      },
+      update: {
+        amount: BigInt(amount),
+        setById: session!.user.profileId,
+      },
+    });
 
     const h = await headers();
     await logAudit({
@@ -379,16 +386,59 @@ export async function setMemberTarget(data: unknown) {
       action: "group.member_target_set",
       entityType: "UserTarget",
       entityId: profileId,
-      description: `Target sales anggota ditetapkan`,
-      changes: { after: { profileId, amount } },
+      description: `Target sales ${year} anggota ditetapkan`,
+      changes: { after: { profileId, year, amount } },
       ipAddress: h.get("x-forwarded-for") ?? undefined,
       userAgent: h.get("user-agent") ?? undefined,
     });
 
     revalidateTag("groups", "max");
+    revalidatePath(`/dashboard/groups/${groupId}`);
+    revalidatePath("/dashboard/groups");
     return { success: true };
   } catch (e) {
     console.error("[setMemberTarget]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
+// ─── Delete Member Target ─────────────────────────────────────────────────────
+
+export async function deleteMemberTarget(data: unknown) {
+  const { session, error } = await requirePermission({ module: "groups", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`groups-target-del:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = deleteMemberTargetSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const { groupId, profileId, year } = parsed.data;
+
+  try {
+    await db.$transaction([
+      db.userTarget.deleteMany({
+        where: { profileId, type: "sales", year },
+      }),
+    ]);
+
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "group.member_target_deleted",
+      entityType: "UserTarget",
+      entityId: profileId,
+      description: `Target sales ${year} anggota dihapus`,
+      changes: { before: { profileId, year } },
+      ipAddress: h.get("x-forwarded-for") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    revalidateTag("groups", "max");
+    revalidatePath(`/dashboard/groups/${groupId}`);
+    revalidatePath("/dashboard/groups");
+    return { success: true };
+  } catch (e) {
+    console.error("[deleteMemberTarget]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }
@@ -484,6 +534,8 @@ export async function updateGroupLeader(groupId: string, leaderId: string) {
 
     revalidateTag("groups", "max");
     revalidateTag("users", "max");
+    revalidatePath(`/dashboard/groups/${groupId}`);
+    revalidatePath("/dashboard/groups");
 
     return { success: true };
   } catch (e) {

@@ -25,13 +25,12 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete, eli
   const [editGroup, setEditGroup] = useState<GroupWithPerformance | null>(null);
   const [deleteGroup, setDeleteGroup] = useState<GroupWithPerformance | null>(null);
 
-  // Year selector — UI state only; TODO: pass year to useGroupsPerformance / API when backend supports year param
+  // Year selector — drives performance data fetch year
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const deleteMutation = useDeleteGroup();
 
-  // TODO: pass selectedYear as query param when API supports ?year=YYYY
-  const { data } = useGroupsPerformance();
+  const { data } = useGroupsPerformance(selectedYear);
   const groups = data?.groups ?? initialGroups;
 
   function handleConfirmDelete() {
@@ -55,8 +54,7 @@ export function GroupsClient({ initialGroups, canCreate, canEdit, canDelete, eli
         <div className="flex items-center justify-between gap-3 mb-3">
           <h2 className="text-sm font-semibold shrink-0">Daftar Groups</h2>
           <div className="flex items-center gap-2">
-            {/* Year selector — filters performance data by year.
-                TODO: wire to API year param when backend supports ?year=YYYY */}
+            {/* Year selector — filters performance data by year (wired to API). */}
             <GroupYearSelector value={selectedYear} onChange={setSelectedYear} />
             {canCreate && (
               <Button size="sm" className="h-9 gap-1.5 rounded-full" onClick={() => setCreateOpen(true)}>
