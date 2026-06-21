@@ -226,10 +226,10 @@ type FinancialAggRow = {
 };
 
 export async function getMemberAnnualTargets(profileId: string) {
-  "use cache";
-  cacheTag("groups");
-  cacheLife("minutes");
-
+  // No "use cache" here — this function is called from an API route handler,
+  // not an RSC. Server-action revalidateTag does not reliably bust "use cache"
+  // entries accessed via API routes. Client-side caching is handled by TanStack
+  // Query (queryKey: ["member-annual-targets", profileId]).
   const targets = await db.userTarget.findMany({
     where: { profileId, type: "sales" },
     orderBy: { year: "desc" },
