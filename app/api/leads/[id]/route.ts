@@ -118,7 +118,7 @@ export async function DELETE(
 
   try {
     await db.$transaction([
-      db.lead.update({ where: { id }, data: { deletedAt: new Date() } }),
+      db.lead.delete({ where: { id } }),
     ]);
 
     await logAudit({

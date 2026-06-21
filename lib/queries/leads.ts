@@ -1,8 +1,24 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
+import { getPublicUrl } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
 import type { LeadFilterInput } from "@/lib/validations/lead";
 import type { DataScope } from "@/types/user";
+
+/**
+ * Resolve bookingFeeEvidenceUrl from a stored S3 key to a full public URL.
+ * Consistent with how paymentEvidence is handled in booking queries/actions.
+ */
+function resolveLeadEvidenceUrl<T extends { bookingFeeEvidenceUrl: string | null }>(
+  lead: T,
+): T {
+  return {
+    ...lead,
+    bookingFeeEvidenceUrl: lead.bookingFeeEvidenceUrl
+      ? getPublicUrl(lead.bookingFeeEvidenceUrl)
+      : null,
+  };
+}
 
 const leadSelect = {
   id: true,
@@ -63,7 +79,6 @@ const leadSelect = {
   convertedToBooking: {
     select: { id: true },
   },
-  deletedAt: true,
 } satisfies Prisma.LeadSelect;
 
 /**
@@ -117,26 +132,18 @@ export async function getLeads(
   // NOTE: "use cache" intentionally removed — this function may receive an
   // identity-scoped filter (callerProfileId + dataScope). Caching a per-user
   // result set without a per-user cache key would leak data across callers.
-  // The upstream cache (cacheLife("seconds")) also had near-zero TTL value.
   // Callers that need caching should cache at a higher layer with identity in key.
 
   const { search, scope, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
 
-  // Deleted scope: show ONLY soft-deleted rows (inverse of normal).
-  // Caller must have leads:view-soft-delete — enforced at route layer before reaching here.
-  const isDeletedScope = scope === "deleted";
-
   // Scope filter: active = isFinal:false, deal = isFinal&&isSystem, lost = isFinal&&!isSystem
-  // Deleted scope skips status sub-filter — status is irrelevant for trash view.
   let scopeWhere: Prisma.LeadWhereInput = {};
-  if (!isDeletedScope) {
-    if (scope === "active") {
-      scopeWhere = { status: { isFinal: false } };
-    } else if (scope === "deal") {
-      scopeWhere = { status: { isFinal: true, isSystem: true } };
-    } else if (scope === "lost") {
-      scopeWhere = { status: { isFinal: true, isSystem: false } };
-    }
+  if (scope === "active") {
+    scopeWhere = { status: { isFinal: false } };
+  } else if (scope === "deal") {
+    scopeWhere = { status: { isFinal: true, isSystem: true } };
+  } else if (scope === "lost") {
+    scopeWhere = { status: { isFinal: true, isSystem: false } };
   }
 
   // Data-access scope filter (group/own/all) — enforced from server session, never from HTTP params
@@ -145,8 +152,6 @@ export async function getLeads(
     : {};
 
   const where: Prisma.LeadWhereInput = {
-    // Deleted scope: only rows with deletedAt set. Default: exclude soft-deleted rows.
-    deletedAt: isDeletedScope ? { not: null } : null,
     ...scopeWhere,
     ...dataScopeFilter,
     ...(search?.trim() && {
@@ -177,7 +182,7 @@ export async function getLeads(
   ]);
 
   return {
-    items,
+    items: items.map(resolveLeadEvidenceUrl),
     total,
     page,
     pageSize,
@@ -190,10 +195,12 @@ export async function getLeadById(id: string) {
   cacheTag("leads");
   cacheLife("seconds");
 
-  return db.lead.findUnique({
-    where: { id, deletedAt: null },
+  const lead = await db.lead.findUnique({
+    where: { id },
     select: leadSelect,
   });
+  if (!lead) return null;
+  return resolveLeadEvidenceUrl(lead);
 }
 
 export async function getLeadStatuses() {

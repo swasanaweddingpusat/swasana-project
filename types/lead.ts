@@ -44,6 +44,10 @@ export type LeadListItem = {
   email: string | null;
   emailCpp: string | null;
   emailCpw: string | null;
+  nikCpp: string | null;
+  nikCpw: string | null;
+  addressCpp: string | null;
+  addressCpw: string | null;
   address: string | null;
   eventDate: Date | null;
   eventDateAlt: Date | null;

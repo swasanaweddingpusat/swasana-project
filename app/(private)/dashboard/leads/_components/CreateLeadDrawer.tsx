@@ -35,7 +35,6 @@ import {
   Banknote,
   FileText,
   Refresh,
-  type IconProps,
 } from "@solar-icons/react";
 import {
   getWeddingTimeRange,
@@ -46,23 +45,20 @@ import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCreateLead } from "@/hooks/use-leads";
-import { useVenueAvailability } from "@/hooks/use-venue-availability";
-
-// ─── Currency helpers ─────────────────────────────────────────────────────────
-
-function fmtCurrency(value: number): string {
-  if (!value) return "";
-  return value.toLocaleString("id-ID");
-}
-
-function parseCurrency(value: string): number {
-  return parseInt(value.replace(/\D/g, ""), 10) || 0;
-}
+import {
+  SectionHeader,
+  SessionPillRadio,
+  AvailabilityDatePickerField,
+  CurrencyInput,
+  fmtCurrency,
+  mapCodeToWeddingEventType,
+} from "./lead-form-fields";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type BookingCategory = "WEDDINGS" | "MICE";
 type WeddingSession = "morning" | "evening" | "fullday";
+
 
 interface ContactNumber {
   label: string;
@@ -102,12 +98,6 @@ interface CreateLeadFormState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SESSION_OPTIONS: { id: WeddingSession; name: string }[] = [
-  { id: "morning", name: "Pagi (Morning)" },
-  { id: "evening", name: "Malam (Evening)" },
-  { id: "fullday", name: "Full Day" },
-];
-
 const DEFAULT_FORM: CreateLeadFormState = {
   name: "",
   email: "",
@@ -139,14 +129,6 @@ const DEFAULT_FORM: CreateLeadFormState = {
   bookingFeeDate: "",
 };
 
-/** Map event type code → WeddingEventType for time auto-fill (same as lead-drawer.tsx) */
-function mapCodeToWeddingEventType(code: string): WeddingEventType | "" {
-  if (code === "R") return "resepsi";
-  if (code === "AR") return "akad-dan-resepsi";
-  if (code === "A") return "akad";
-  return "";
-}
-
 // ─── Upload helper ────────────────────────────────────────────────────────────
 
 async function uploadBookingFeeEvidence(file: File): Promise<string> {
@@ -164,231 +146,8 @@ async function uploadBookingFeeEvidence(file: File): Promise<string> {
   return key;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// Sub-components are imported from ./lead-form-fields
 
-function SectionHeader({
-  icon: Icon,
-  title,
-}: {
-  icon: React.ForwardRefExoticComponent<Omit<IconProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
-  title: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 pb-1 border-b border-border">
-      <Icon weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </span>
-    </div>
-  );
-}
-
-
-function SessionPillRadio({
-  label,
-  required,
-  value,
-  onChange,
-}: {
-  label: string;
-  required?: boolean;
-  value: WeddingSession | "";
-  onChange: (v: WeddingSession) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-foreground">
-        {label}
-        {required && <span className="text-destructive ml-0.5">*</span>}
-      </label>
-      <div className="flex gap-2 flex-wrap">
-        {SESSION_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => onChange(opt.id)}
-            className={cn(
-              "px-4 py-1.5 rounded-full text-sm font-medium border transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              value === opt.id
-                ? "border-foreground bg-foreground text-background"
-                : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-            )}
-          >
-            {opt.id === "morning" ? "Pagi" : opt.id === "evening" ? "Malam" : "Full Day"}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Date picker with built-in venue availability dots — mirrors booking-drawer.tsx Calendar behavior */
-function AvailabilityDatePickerField({
-  label,
-  required,
-  value,
-  onChange,
-  placeholder,
-  venueId,
-}: {
-  label: string;
-  required?: boolean;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  venueId?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState<Date>(
-    value ? new Date(value + "T00:00:00") : new Date(),
-  );
-
-  // Derive month string from visibleMonth for the query key
-  const monthStr = format(visibleMonth, "yyyy-MM");
-
-  const { data: avail, isFetching } = useVenueAvailability(
-    venueId || null,
-    monthStr,
-  );
-
-  /** Identical logic to booking-drawer.tsx getDateStatus — checks all 3 slots */
-  function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
-    if (!venueId || !avail) return null;
-    const key = format(d, "yyyy-MM-dd");
-    const a = avail[key];
-    if (!a) return null;
-    const count = [a.morning, a.evening, a.fullday].filter(Boolean).length;
-    if (count === 0) return "unavailable";
-    if (count === 3) return "available";
-    return "partial";
-  }
-
-  const disabled = !venueId;
-  const displayDate = value
-    ? format(new Date(value + "T00:00:00"), "d MMMM yyyy", { locale: localeId })
-    : null;
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-foreground">
-        {label}
-        {required && <span className="text-destructive ml-0.5">*</span>}
-      </label>
-      <Popover open={open} onOpenChange={(o) => { if (!disabled) setOpen(o); }}>
-        <PopoverTrigger
-          render={
-            <Button
-              type="button"
-              variant="outline"
-              disabled={disabled}
-              className={cn(
-                "w-full justify-start text-left font-normal rounded-xl",
-                !displayDate && "text-muted-foreground",
-              )}
-            >
-              <CalendarDate weight="BoldDuotone" className="mr-2 h-4 w-4 shrink-0" />
-              {disabled
-                ? "Pilih venue dulu"
-                : (displayDate ?? (placeholder ?? "Pilih tanggal..."))}
-              {isFetching && venueId && (
-                <Refresh weight="BoldDuotone" className="ml-auto h-3 w-3 animate-spin text-muted-foreground shrink-0" />
-              )}
-            </Button>
-          }
-        />
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            captionLayout="dropdown"
-            selected={value ? new Date(value + "T00:00:00") : undefined}
-            onSelect={(date) => {
-              if (date) {
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, "0");
-                const d = String(date.getDate()).padStart(2, "0");
-                onChange(`${y}-${m}-${d}`);
-              } else {
-                onChange("");
-              }
-              setOpen(false);
-            }}
-            disabled={(d) => getDateStatus(d) === "unavailable"}
-            fromYear={new Date().getFullYear() - 1}
-            toYear={new Date().getFullYear() + 5}
-            defaultMonth={value ? new Date(value + "T00:00:00") : new Date()}
-            onMonthChange={setVisibleMonth}
-            modifiers={{
-              available: (d) => !!venueId && getDateStatus(d) === "available",
-              partial: (d) => !!venueId && getDateStatus(d) === "partial",
-              unavailable: (d) => !!venueId && getDateStatus(d) === "unavailable",
-            }}
-            modifiersClassNames={{
-              available: "day-available",
-              partial: "day-partial",
-              unavailable: "day-unavailable",
-            }}
-          />
-          {value && (
-            <div className="border-t p-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs text-muted-foreground"
-                onClick={() => { onChange(""); setOpen(false); }}
-              >
-                Hapus tanggal
-              </Button>
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-function CurrencyInput({
-  value,
-  onChange,
-  placeholder,
-  id,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  placeholder?: string;
-  id?: string;
-}) {
-  const [focused, setFocused] = useState(false);
-  const [localText, setLocalText] = useState("");
-
-  return (
-    <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-        Rp
-      </span>
-      <Input
-        id={id}
-        type="text"
-        inputMode="numeric"
-        placeholder={placeholder ?? "0"}
-        value={focused ? localText : fmtCurrency(value)}
-        onFocus={() => {
-          setLocalText(fmtCurrency(value));
-          setFocused(true);
-        }}
-        onBlur={() => setFocused(false)}
-        onChange={(e) => {
-          const raw = e.target.value.replace(/\D/g, "");
-          const num = parseCurrency(raw);
-          setLocalText(raw ? fmtCurrency(num) : "");
-          onChange(num);
-        }}
-        className="pl-9 rounded-xl"
-      />
-    </div>
-  );
-}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -1014,6 +773,27 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       Tambah Tanggal Alternatif
                     </button>
                   )}
+
+                  {isWedding && (
+                    <SessionPillRadio
+                      label="Sesi Acara"
+                      required
+                      value={form.weddingSession}
+                      onChange={(v) => setField("weddingSession", v)}
+                      venueId={form.venueId || undefined}
+                      eventDate={form.eventDate || undefined}
+                    />
+                  )}
+
+                  {isMice && (
+                    <SessionPillRadio
+                      label="Sesi Event"
+                      value={form.miceSession}
+                      onChange={(v) => setField("miceSession", v)}
+                      venueId={form.venueId || undefined}
+                      eventDate={form.eventDate || undefined}
+                    />
+                  )}
                 </div>
 
                 {/* ── SECTION: Kunci Tanggal & Venue ───────────────────── */}
@@ -1254,29 +1034,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       emptyText="Tidak ada event type"
                     />
                   </div>
-
-                  {isWedding && (
-                    <SessionPillRadio
-                      label="Sesi Acara"
-                      required
-                      value={form.weddingSession}
-                      onChange={(v) => setField("weddingSession", v)}
-                    />
-                  )}
-
-                  {isMice && (
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium text-foreground">Sesi Event</label>
-                      <SearchableSelect
-                        options={SESSION_OPTIONS}
-                        value={form.miceSession}
-                        onChange={(v) => setField("miceSession", v as WeddingSession)}
-                        placeholder="Pilih sesi (opsional)..."
-                        searchPlaceholder="Cari sesi..."
-                        emptyText="Tidak ada sesi"
-                      />
-                    </div>
-                  )}
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">Estimasi Waktu</label>

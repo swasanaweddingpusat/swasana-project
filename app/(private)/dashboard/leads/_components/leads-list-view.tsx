@@ -56,8 +56,6 @@ interface LeadsListViewProps {
   onReset: (lead: LeadItem) => void;
   onViewDetail: (lead: LeadItem) => void;
   isLoading?: boolean;
-  /** When true, rows are read-only (deleted/trash scope). No edit/delete/mark actions. */
-  isDeletedScope?: boolean;
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -137,7 +135,6 @@ function MobileLeadCard({
   onMarkLost,
   onReset,
   onViewDetail,
-  isDeletedScope,
 }: {
   lead: LeadItem;
   rowNumber: number;
@@ -147,7 +144,6 @@ function MobileLeadCard({
   onMarkLost: (lead: LeadItem) => void;
   onReset: (lead: LeadItem) => void;
   onViewDetail: (lead: LeadItem) => void;
-  isDeletedScope?: boolean;
 }) {
   const firstContact = Array.isArray(lead.contactNumbers)
     ? (lead.contactNumbers[0] as { number?: string } | undefined)?.number ?? ""
@@ -157,7 +153,7 @@ function MobileLeadCard({
     ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
     : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—");
 
-  const showFinalActions = !lead.status.isFinal && !isDeletedScope;
+  const showFinalActions = !lead.status.isFinal;
 
   return (
     <Card
@@ -232,72 +228,63 @@ function MobileLeadCard({
           <span>{salesName}</span>
         </div>
 
-        {/* Footer: Actions — read-only in deleted scope */}
-        {isDeletedScope ? (
-          <div className="pt-1 border-t border-border">
-            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-              Dihapus {lead.deletedAt ? format(new Date(lead.deletedAt), "d MMM yyyy") : ""}
-            </p>
-          </div>
-        ) : (
-          <div
-            className="flex items-center gap-2 pt-1 border-t border-border"
-            onClick={(e) => e.stopPropagation()}
+        {/* Footer: Actions */}
+        <div
+          className="flex items-center gap-2 pt-1 border-t border-border"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            variant="outline"
+            className="h-9 flex-1 text-xs"
+            onClick={() => onEdit(lead)}
+            aria-label={`Edit lead ${lead.name}`}
           >
-            <Button
-              variant="outline"
-              className="h-9 flex-1 text-xs"
-              onClick={() => onEdit(lead)}
-              aria-label={`Edit lead ${lead.name}`}
-            >
-              <Pen weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1" />
-              Edit
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-9 shrink-0"
-                  aria-label={`Aksi lainnya untuk lead ${lead.name}`}
+            <Pen weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1" />
+            Edit
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 shrink-0"
+                aria-label={`Aksi lainnya untuk lead ${lead.name}`}
+              >
+                <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {showFinalActions && (
+                <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
+                  <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                  Tandai sebagai Deal
+                </DropdownMenuItem>
+              )}
+              {showFinalActions && (
+                <DropdownMenuItem onClick={() => onMarkLost(lead)}>
+                  <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
+                  Tandai sebagai Lost
+                </DropdownMenuItem>
+              )}
+              {lead.status.isFinal && (
+                <DropdownMenuItem onClick={() => onReset(lead)}>
+                  <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Reset ke Cold
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <PermissionGate module="leads" action="delete">
+                <DropdownMenuItem
+                  onClick={() => onDelete(lead)}
+                  className="text-destructive focus:text-destructive"
                 >
-                  <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {showFinalActions && (
-                  <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
-                    <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                    Tandai sebagai Deal
-                  </DropdownMenuItem>
-                )}
-                {showFinalActions && (
-                  <DropdownMenuItem onClick={() => onMarkLost(lead)}>
-                    <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
-                    Tandai sebagai Lost
-                  </DropdownMenuItem>
-                )}
-                {lead.status.isFinal && !isDeletedScope && (
-                  <DropdownMenuItem onClick={() => onReset(lead)}>
-                    <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
-                    Reset ke Cold
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <PermissionGate module="leads" action="delete">
-                  <DropdownMenuItem
-                    onClick={() => onDelete(lead)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
-                    Hapus
-                  </DropdownMenuItem>
-                </PermissionGate>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
+                  <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
+                  Hapus
+                </DropdownMenuItem>
+              </PermissionGate>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </CardContent>
     </Card>
   );
@@ -319,7 +306,6 @@ export function LeadsListView({
   onReset,
   onViewDetail,
   isLoading,
-  isDeletedScope,
 }: LeadsListViewProps) {
   // ── Loading state ──
   if (isLoading) {
@@ -348,11 +334,7 @@ export function LeadsListView({
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-10 w-10 mb-3 opacity-40" />
         <p className="text-sm">
-          {search
-            ? `Tidak ada hasil untuk "${search}"`
-            : isDeletedScope
-              ? "Tidak ada leads yang dihapus."
-              : "Belum ada lead."}
+          {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada lead."}
         </p>
       </div>
     );
@@ -375,7 +357,6 @@ export function LeadsListView({
               onMarkLost={onMarkLost}
               onReset={onReset}
               onViewDetail={onViewDetail}
-              isDeletedScope={isDeletedScope}
             />
           );
         })}
@@ -512,66 +493,59 @@ export function LeadsListView({
                     </div>
                   </TableCell>
 
-                  {/* Action — read-only in deleted scope. stopPropagation prevents row click from opening detail. */}
+                  {/* Action — stopPropagation prevents row click from opening detail. */}
                   <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
-                    {isDeletedScope ? (
-                      <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
-                        <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                        {lead.deletedAt ? format(new Date(lead.deletedAt), "d MMM yyyy") : "—"}
-                      </span>
-                    ) : (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onEdit(lead)}
-                          aria-label={`Edit lead ${lead.name}`}
-                        >
-                          <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Aksi lainnya untuk lead ${lead.name}`}
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEdit(lead)}
+                        aria-label={`Edit lead ${lead.name}`}
+                      >
+                        <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Aksi lainnya untuk lead ${lead.name}`}
+                          >
+                            <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {!lead.status.isFinal && (
+                            <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
+                              <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
+                              Tandai sebagai Deal
+                            </DropdownMenuItem>
+                          )}
+                          {!lead.status.isFinal && (
+                            <DropdownMenuItem onClick={() => onMarkLost(lead)}>
+                              <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
+                              Tandai sebagai Lost
+                            </DropdownMenuItem>
+                          )}
+                          {lead.status.isFinal && (
+                            <DropdownMenuItem onClick={() => onReset(lead)}>
+                              <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
+                              Reset ke Cold
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <PermissionGate module="leads" action="delete">
+                            <DropdownMenuItem
+                              onClick={() => onDelete(lead)}
+                              className="text-destructive focus:text-destructive"
                             >
-                              <MenuDots weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {!lead.status.isFinal && (
-                              <DropdownMenuItem onClick={() => onMarkDeal(lead)}>
-                                <CheckCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-primary" />
-                                Tandai sebagai Deal
-                              </DropdownMenuItem>
-                            )}
-                            {!lead.status.isFinal && (
-                              <DropdownMenuItem onClick={() => onMarkLost(lead)}>
-                                <CloseCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-destructive" />
-                                Tandai sebagai Lost
-                              </DropdownMenuItem>
-                            )}
-                            {lead.status.isFinal && (
-                              <DropdownMenuItem onClick={() => onReset(lead)}>
-                                <Refresh weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2 text-muted-foreground" />
-                                Reset ke Cold
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <PermissionGate module="leads" action="delete">
-                              <DropdownMenuItem
-                                onClick={() => onDelete(lead)}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
-                                Hapus
-                              </DropdownMenuItem>
-                            </PermissionGate>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
+                              <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className="h-4 w-4 mr-2" />
+                              Hapus
+                            </DropdownMenuItem>
+                          </PermissionGate>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               );

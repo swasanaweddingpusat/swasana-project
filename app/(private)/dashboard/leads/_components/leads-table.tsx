@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
-import { type DropResult } from "@hello-pangea/dnd";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -17,9 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 import { LeadDrawer } from "./lead-drawer";
 import { CreateLeadDrawer } from "./CreateLeadDrawer";
-import { LeadsFilters, type ViewMode } from "./leads-filters";
+import { LeadsFilters } from "./leads-filters";
 import { LeadsListView } from "./leads-list-view";
-import { LeadsPipelineView } from "./leads-pipeline-view";
 import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
 import { MiceBookingDrawer } from "@/app/(private)/dashboard/booking-mice/_components/MiceBookingDrawer";
 import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
@@ -28,7 +26,6 @@ import { createDraftMiceBooking } from "@/actions/booking-mice-draft";
 import { DealConfirmModal } from "./DealConfirmModal";
 import { LeadDetailModal } from "./LeadDetailModal";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import { useIsMobile } from "@/hooks/use-mobile";
 import type { LeadItem } from "@/lib/queries/leads";
 import type { LeadListItem, BookingPrefillLead, ContactNumber } from "@/types/lead";
 import type { LeadScope } from "@/lib/validations/lead";
@@ -38,13 +35,8 @@ export type { LeadItem };
 // ─── Main orchestrator ────────────────────────────────────────────────────────
 
 export function LeadsTable() {
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<LeadScope>("active");
-  // Force list view on mobile or when in deleted/trash scope (pipeline doesn't apply there)
-  const isDeletedScope = scope === "deleted";
-  const effectiveViewMode: ViewMode = isMobile || isDeletedScope ? "list" : viewMode;
   const [statusFilter, setStatusFilter] = useState("all");
   const [venueFilter, setVenueFilter] = useState("all");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
@@ -90,43 +82,8 @@ export function LeadsTable() {
   const { mutateAsync: updateStatus } = useUpdateLeadStatus();
   const { mutateAsync: deleteLeadMut, isPending: isDeleting } = useDeleteLead();
 
-  // Non-final statuses go in pipeline
-  const pipelineStatuses = statuses.filter((s) => !s.isFinal);
-
   const leads = useMemo(() => leadsData?.items ?? [], [leadsData?.items]);
   const totalPages = leadsData?.totalPages ?? 1;
-
-  const handleDragEnd = useCallback(
-    (result: DropResult) => {
-      const { draggableId, destination } = result;
-      if (!destination) return;
-      const newStatusId = destination.droppableId;
-      const newStatus = statuses.find((s) => s.id === newStatusId);
-      if (!newStatus) return;
-
-      const lead = leads.find((l) => l.id === draggableId);
-      if (!lead || lead.status.id === newStatusId) return;
-
-      if (newStatus.isSystem) {
-        toast.error(`Status "${newStatus.name}" tidak dapat diubah lewat drag.`);
-        return;
-      }
-
-      // Fire-and-forget: the card moves instantly via optimistic cache update
-      // in useUpdateLeadStatus. The API runs in the background; on failure the
-      // mutation rolls back the cache and we surface the error.
-      updateStatus({ id: draggableId, statusId: newStatusId })
-        .then((res) => {
-          if (res.success) {
-            toast.success(`${lead.name} dipindahkan ke ${newStatus.name}`);
-          } else {
-            toast.error(res.error ?? "Gagal memindahkan lead.");
-          }
-        })
-        .catch(() => toast.error("Gagal memindahkan lead."));
-    },
-    [leads, statuses, updateStatus]
-  );
 
   function handleAdd() {
     // Opens the new redesigned CreateLeadDrawer (frontend-only UI for review)
@@ -406,8 +363,6 @@ export function LeadsTable() {
       <Card>
         <CardContent className="p-0">
           <LeadsFilters
-            viewMode={viewMode}
-            onViewModeChange={(mode) => { setViewMode(mode); }}
             scope={scope}
             onScopeChange={handleScopeChange}
             search={search}
@@ -425,36 +380,21 @@ export function LeadsTable() {
             isRefreshing={isManualRefresh}
           />
 
-          {effectiveViewMode === "list" && (
-            <LeadsListView
-              leads={leads}
-              search={search}
-              currentPage={currentPage}
-              pageSize={pageSize}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              onEdit={handleEdit}
-              onDelete={setDeleteTarget}
-              onMarkDeal={handleMarkDeal}
-              onMarkLost={handleMarkLost}
-              onReset={handleReset}
-              onViewDetail={setDetailLead}
-              isLoading={leadsLoading || isManualRefresh}
-              isDeletedScope={isDeletedScope}
-            />
-          )}
-
-          {effectiveViewMode === "pipeline" && (
-            <LeadsPipelineView
-              leads={leads}
-              statuses={pipelineStatuses}
-              onDragEnd={handleDragEnd}
-              onEdit={handleEdit}
-              onMarkDeal={handleMarkDeal}
-              onMarkLost={handleMarkLost}
-              isLoading={leadsLoading || isManualRefresh}
-            />
-          )}
+          <LeadsListView
+            leads={leads}
+            search={search}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            onEdit={handleEdit}
+            onDelete={setDeleteTarget}
+            onMarkDeal={handleMarkDeal}
+            onMarkLost={handleMarkLost}
+            onReset={handleReset}
+            onViewDetail={setDetailLead}
+            isLoading={leadsLoading || isManualRefresh}
+          />
         </CardContent>
       </Card>
 

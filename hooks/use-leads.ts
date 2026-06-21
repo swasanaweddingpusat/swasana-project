@@ -10,7 +10,6 @@ export type { LeadScope };
 
 interface LeadFilter {
   search?: string;
-  /** Scope of leads to fetch. "deleted" = soft-deleted (trash) view — requires leads:view-soft-delete on server. */
   scope?: LeadScope;
   statusId?: string;
   venueId?: string;

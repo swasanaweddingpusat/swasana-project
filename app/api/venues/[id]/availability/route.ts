@@ -49,18 +49,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // A locked lead means booking fee has been received and the date+venue is
     // reserved for that prospective client. Both primary and secondary venue are
     // checked — either blocks the date.
+    //
+    // Only ACTIVE locked leads block a slot. A lead whose status is final
+    // (Deal: isFinal&&isSystem, Lost: isFinal&&!isSystem) no longer reserves the
+    // date: a Lost lead is dead, and a Deal lead's hold is carried by the booking
+    // it converted into (Source 1). `convertedAt: null` is kept as defence in
+    // depth alongside the status filter.
+    const lockedLeadWhere = {
+      isDateLocked: true,
+      status: { isFinal: false },
+      convertedAt: null,
+      OR: [{ venueId: id }, { venueSecondaryId: id }],
+    };
+
     const lockedLeads = await db.lead.findMany({
       where: {
-        isDateLocked: true,
+        ...lockedLeadWhere,
         eventDate: { gte: start, lte: end },
-        OR: [
-          { venueId: id },
-          { venueSecondaryId: id },
-        ],
-        // Exclude leads that have already been converted (won't block anymore)
-        convertedAt: null,
-        // Exclude soft-deleted leads
-        deletedAt: null,
       },
       select: { eventDate: true, weddingSession: true },
     });
@@ -68,15 +73,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // Also check eventDateAlt for locked leads — secondary date also blocks.
     const lockedLeadsAlt = await db.lead.findMany({
       where: {
-        isDateLocked: true,
+        ...lockedLeadWhere,
         eventDateAlt: { gte: start, lte: end, not: null },
-        OR: [
-          { venueId: id },
-          { venueSecondaryId: id },
-        ],
-        convertedAt: null,
-        // Exclude soft-deleted leads
-        deletedAt: null,
       },
       select: { eventDateAlt: true, weddingSession: true },
     });

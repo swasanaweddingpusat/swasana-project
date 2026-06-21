@@ -12,7 +12,94 @@ import {
   updateLeadStatusSchema,
 } from "@/lib/validations/lead";
 import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput } from "@/lib/validations/lead";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, WeddingSession } from "@prisma/client";
+
+// ─── Slot conflict guard (locked leads only) ──────────────────────────────────
+
+/**
+ * Build the OR clause for a session overlap, fullday-aware.
+ * Identical semantics to the booking create/edit guard in actions/booking.ts:
+ *   • fullday collides with morning, evening, AND fullday
+ *   • a single session collides with itself AND fullday
+ * MICE leads without a session (null) skip the guard entirely (handled by caller).
+ */
+function sessionOverlapOr(
+  session: WeddingSession,
+): Array<{ weddingSession: WeddingSession }> {
+  if (session === "fullday") {
+    return [
+      { weddingSession: "morning" },
+      { weddingSession: "evening" },
+      { weddingSession: "fullday" },
+    ];
+  }
+  return [{ weddingSession: session }, { weddingSession: "fullday" }];
+}
+
+/**
+ * Server-side slot guard for a date-locked lead. Mirrors the DB-backed guard that
+ * protects bookings, but leads have no partial unique index (a fullday lock can't be
+ * expressed as one, and locking a lead is a rare manual event), so we enforce it at
+ * the app layer with a findFirst against the two sources that reserve a slot:
+ *   1. Active saved bookings (recordStatus saved, non-final bookingStatus).
+ *   2. Other active locked leads (isDateLocked, status not final, not converted),
+ *      excluding the lead being edited itself via excludeLeadId.
+ *
+ * Returns an error string when the slot is taken, or null when free.
+ * Only call this when the lead being saved is itself date-locked with a venue,
+ * date, and (wedding) session — an unlocked lead reserves nothing.
+ */
+async function findLeadSlotConflict(params: {
+  venueId: string;
+  eventDate: Date;
+  weddingSession: WeddingSession | null;
+  excludeLeadId?: string;
+}): Promise<string | null> {
+  const { venueId, eventDate, weddingSession, excludeLeadId } = params;
+
+  // MICE leads without a session: a locked lead still reserves the whole day.
+  // Match any booking/lead on that venue+date regardless of their session.
+  const overlapOr = weddingSession
+    ? sessionOverlapOr(weddingSession)
+    : undefined;
+
+  const bookingConflict = await db.booking.findFirst({
+    where: {
+      venueId,
+      recordStatus: "saved",
+      eventDate,
+      bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
+      ...(overlapOr ? { OR: overlapOr } : {}),
+    },
+    select: { id: true },
+  });
+  if (bookingConflict) {
+    return "Slot venue di tanggal & sesi tersebut sudah dibooking.";
+  }
+
+  const leadConflict = await db.lead.findFirst({
+    where: {
+      ...(excludeLeadId ? { id: { not: excludeLeadId } } : {}),
+      isDateLocked: true,
+      status: { isFinal: false },
+      convertedAt: null,
+      // Either the primary or secondary venue locked on this exact date.
+      OR: [
+        { venueId, eventDate },
+        { venueSecondaryId: venueId, eventDate },
+        { venueId, eventDateAlt: eventDate },
+        { venueSecondaryId: venueId, eventDateAlt: eventDate },
+      ],
+      ...(overlapOr ? { weddingSession: { in: overlapOr.map((o) => o.weddingSession) } } : {}),
+    },
+    select: { id: true },
+  });
+  if (leadConflict) {
+    return "Slot venue di tanggal & sesi tersebut sudah dikunci lead lain.";
+  }
+
+  return null;
+}
 
 // ─── Create Lead ──────────────────────────────────────────────────────────────
 
@@ -64,6 +151,17 @@ export async function createLead(data: CreateLeadInput) {
     bookingFeeDate,
     bookingFeeEvidenceUrl,
   } = parsed.data;
+
+  // Guard: check slot conflict only when this lead will lock a date.
+  // An unlocked lead does not reserve any slot and cannot be blocked.
+  if (isDateLocked && venueId && eventDate) {
+    const conflict = await findLeadSlotConflict({
+      venueId,
+      eventDate: new Date(eventDate),
+      weddingSession: weddingSession ?? null,
+    });
+    if (conflict) return { success: false as const, error: conflict };
+  }
 
   try {
     const [lead] = await db.$transaction([
@@ -142,6 +240,25 @@ export async function updateLead(data: UpdateLeadInput) {
   }
 
   const { id, ...fields } = parsed.data;
+
+  // Guard: check slot conflict only when this update explicitly enables date-locking.
+  // We check when isDateLocked is being set to true AND both venueId and eventDate
+  // are present in the payload (either newly set or already on the record isn't knowable
+  // from a partial update — only explicit fields are checked here).
+  // Exclude this lead itself (excludeLeadId) so it doesn't conflict with its own existing lock.
+  if (
+    fields.isDateLocked === true &&
+    fields.venueId &&
+    fields.eventDate
+  ) {
+    const conflict = await findLeadSlotConflict({
+      venueId: fields.venueId,
+      eventDate: new Date(fields.eventDate),
+      weddingSession: fields.weddingSession ?? null,
+      excludeLeadId: id,
+    });
+    if (conflict) return { success: false as const, error: conflict };
+  }
 
   try {
     const [lead] = await db.$transaction([
@@ -226,10 +343,7 @@ export async function deleteLead(id: string) {
 
   try {
     await db.$transaction([
-      db.lead.update({
-        where: { id },
-        data: { deletedAt: new Date() },
-      }),
+      db.lead.delete({ where: { id } }),
     ]);
 
     await logAudit({
@@ -269,10 +383,26 @@ export async function updateLeadStatus(data: UpdateLeadStatusInput) {
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
 
   try {
+    // Resolve the target status to decide whether this is a "mark lost" transition.
+    // Lost status = isFinal && !isSystem (Deal = isFinal && isSystem). When a lead is
+    // marked Lost we release its date hold (isDateLocked → false) so the slot frees up
+    // and the availability endpoint no longer blocks it. Read outside the transaction,
+    // write the flag inside it (array form, consistent with the rest of the codebase).
+    const targetStatus = await db.leadStatus.findUnique({
+      where: { id: parsed.data.statusId },
+      select: { isFinal: true, isSystem: true },
+    });
+    if (!targetStatus) return { success: false as const, error: "Status tidak ditemukan." };
+
+    const isLostTransition = targetStatus.isFinal && !targetStatus.isSystem;
+
     await db.$transaction([
       db.lead.update({
         where: { id: parsed.data.id },
-        data: { statusId: parsed.data.statusId },
+        data: {
+          statusId: parsed.data.statusId,
+          ...(isLostTransition && { isDateLocked: false }),
+        },
       }),
     ]);
 
@@ -348,7 +478,7 @@ export async function convertLead(leadId: string) {
   const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "unknown";
 
   const lead = await db.lead.findUnique({
-    where: { id: leadId, deletedAt: null },
+    where: { id: leadId },
     select: {
       id: true,
       name: true,
@@ -387,28 +517,32 @@ export async function convertLead(leadId: string) {
     const customerCppAddress = isWeddingLead ? (lead.addressCpp || null) : null;
     const customerCpwAddress = isWeddingLead ? (lead.addressCpw || null) : null;
 
-    const customer = await db.customer.create({
-      data: {
-        name: lead.name,
-        emailCpp: customerEmailCpp,
-        emailCpw: customerEmailCpw,
-        cppNik: customerCppNik,
-        cpwNik: customerCpwNik,
-        cppAddress: customerCppAddress,
-        cpwAddress: customerCpwAddress,
-        mobileNumber: mobileNumberJson,
-        type: "Personal",
-        memberStatus: "Non-Member",
-      },
-      select: { id: true },
-    });
+    // Pre-generate customer id so both writes can share it in the same transaction array.
+    // Array-form transactions on Neon HTTP are atomic but cannot cross-reference results
+    // between elements — pre-gen id is the standard pattern for this in the codebase.
+    const customerId = crypto.randomUUID();
 
     await db.$transaction([
+      db.customer.create({
+        data: {
+          id: customerId,
+          name: lead.name,
+          emailCpp: customerEmailCpp,
+          emailCpw: customerEmailCpw,
+          cppNik: customerCppNik,
+          cpwNik: customerCpwNik,
+          cppAddress: customerCppAddress,
+          cpwAddress: customerCpwAddress,
+          mobileNumber: mobileNumberJson,
+          type: "Personal",
+          memberStatus: "Non-Member",
+        },
+      }),
       db.lead.update({
         where: { id: leadId },
         data: {
           convertedAt: new Date(),
-          convertedToCustomerId: customer.id,
+          convertedToCustomerId: customerId,
         },
       }),
     ]);
@@ -419,14 +553,14 @@ export async function convertLead(leadId: string) {
       result: "success",
       entityType: "Lead",
       entityId: leadId,
-      changes: { customerId: customer.id },
+      changes: { customerId },
       ipAddress: ip,
     });
 
     revalidateTag("leads", "max");
     revalidateTag("customers", "max");
 
-    return { success: true as const, data: { customerId: customer.id } };
+    return { success: true as const, data: { customerId } };
   } catch (err) {
     console.error("[convertLead]", err);
     return { success: false as const, error: "Gagal mengkonversi lead." };

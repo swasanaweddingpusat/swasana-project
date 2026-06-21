@@ -1281,9 +1281,6 @@ model Lead {
   convertedToCustomerId  String?
   convertedToBookingId   String?
 
-  // Soft delete — row tetap di DB, cuma ditandai terhapus (deletedAt != null)
-  deletedAt DateTime?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
