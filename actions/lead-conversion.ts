@@ -19,11 +19,6 @@ export interface ConvertLeadResult {
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
-/**
- * Payload for converting a lead into a Deal + draft booking atomically.
- * `eventDate`/`venueId`/`session` come from the Deal confirmation modal selection;
- * the rest are read from the lead row on the server (we only trust the lead id).
- */
 const convertLeadWeddingSchema = z.object({
   leadId: z.string().min(1, "Lead wajib dipilih"),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
@@ -39,7 +34,7 @@ const convertLeadMiceSchema = z.object({
   miceSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
 });
 
-// ─── Internal helper ──────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function mapLeadContactNumbers(
   raw: unknown,
@@ -58,88 +53,6 @@ function mapLeadContactNumbers(
     .filter((e) => e.number);
 }
 
-/**
- * Resolve (or create) the customer for a lead conversion. Mirrors the pre-transaction
- * customer-resolution path of createDraftBooking/createDraftMiceBooking exactly:
- *   1. If the lead already converted (convertedToCustomerId), reuse that customer.
- *   2. Otherwise create a Customer and claim the conversion lock via updateMany
- *      (count === 0 → lost the race → cleanup + reuse the winner's customer).
- *
- * Runs BEFORE the status+booking transaction (option A). A failure here leaves the
- * lead status untouched, so there is no partial Deal state.
- */
-async function resolveLeadCustomerId(
-  leadId: string,
-  updatedBy: string | null | undefined,
-): Promise<{ ok: true; customerId: string } | { ok: false; error: string }> {
-  const leadRecord = await db.lead.findUnique({
-    where: { id: leadId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      contactNumbers: true,
-      address: true,
-      bitrixId: true,
-      sourceOfInformationId: true,
-      convertedToCustomerId: true,
-    },
-  });
-  if (!leadRecord) return { ok: false, error: "Lead tidak ditemukan." };
-
-  if (leadRecord.convertedToCustomerId) {
-    const existing = await db.customer.findUnique({
-      where: { id: leadRecord.convertedToCustomerId },
-      select: { id: true },
-    });
-    if (!existing) return { ok: false, error: "Customer dari lead tidak ditemukan." };
-    return { ok: true, customerId: leadRecord.convertedToCustomerId };
-  }
-
-  // Create customer and claim conversion lock (same pattern as createDraftBooking)
-  let customerId = crypto.randomUUID();
-  const contactNums = mapLeadContactNumbers(leadRecord.contactNumbers);
-  await db.customer.create({
-    data: {
-      id: customerId,
-      name: leadRecord.name,
-      mobileNumber: contactNums as Prisma.InputJsonValue,
-      emailCpp: leadRecord.email || null,
-      emailCpw: null,
-      ktpAddress: leadRecord.address ?? null,
-      cppAddress: leadRecord.address ?? null,
-      cpwAddress: null,
-      bitrixId: leadRecord.bitrixId ?? null,
-      sourceOfInformationId: leadRecord.sourceOfInformationId ?? null,
-      type: "Other",
-      memberStatus: "Non-Member",
-      updatedBy,
-    },
-  });
-
-  const lockResult = await db.lead.updateMany({
-    where: { id: leadRecord.id, convertedToCustomerId: null },
-    data: { convertedToCustomerId: customerId },
-  });
-
-  if (lockResult.count === 0) {
-    // Lost race — cleanup and reuse winner's customer
-    await db.customer.delete({ where: { id: customerId } }).catch(() => undefined);
-    const refreshed = await db.lead.findUnique({
-      where: { id: leadRecord.id },
-      select: { convertedToCustomerId: true },
-    });
-    if (refreshed?.convertedToCustomerId) {
-      customerId = refreshed.convertedToCustomerId;
-    } else {
-      return { ok: false, error: "Gagal mengkonversi lead, coba lagi." };
-    }
-  }
-
-  return { ok: true, customerId };
-}
-
-/** Resolve the system Deal status (isSystem && isFinal), seeded at migration time. */
 async function resolveDealStatusId(): Promise<string | null> {
   const dealStatus = await db.leadStatus.findFirst({
     where: { isSystem: true, isFinal: true },
@@ -148,17 +61,19 @@ async function resolveDealStatusId(): Promise<string | null> {
   return dealStatus?.id ?? null;
 }
 
-// ─── Convert → Draft WEDDING booking (atomic) ────────────────────────────────
+// ─── Convert → Draft WEDDING booking ─────────────────────────────────────────
 
 /**
- * Marks a lead as Deal AND creates its draft booking in a single transaction.
- * The lead.update(statusId = Deal) and booking.create(recordStatus = "draft") share
- * one db.$transaction([...]) array, so a booking failure rolls back the status change —
- * no "floating Deal with no booking" can occur.
+ * Atomically mark a lead as Deal and create a draft booking in one transaction.
  *
- * Customer resolution runs pre-transaction (option A) and is safe: if it fails the
- * lead status is still untouched. convertedAt/convertedToBookingId stay null until
- * finalize; isDateLocked is left as-is (Deal is not Lost).
+ * All writes — customer creation (if needed), lead status flip, booking creation —
+ * are batched into a single db.$transaction([...]) array. A failure in any step
+ * rolls back the entire batch; no partial state (customer with no booking, Deal
+ * status with no booking) can be left behind.
+ *
+ * If the lead already has a convertedToCustomerId (retry after earlier partial
+ * failure OR existing customer), the customer.create step is skipped and the
+ * existing id is reused.
  */
 export async function convertLeadToDraftBooking(data: unknown): Promise<ConvertLeadResult> {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -175,33 +90,72 @@ export async function convertLeadToDraftBooking(data: unknown): Promise<ConvertL
     const dealStatusId = await resolveDealStatusId();
     if (!dealStatusId) return { success: false, error: "Status Deal tidak ditemukan." };
 
-    // Idempotency: if the lead already has a draft booking, return it directly.
     const lead = await db.lead.findUnique({
       where: { id: input.leadId },
-      select: { id: true, name: true, assignedToId: true, convertedToBookingId: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        contactNumbers: true,
+        address: true,
+        bitrixId: true,
+        sourceOfInformationId: true,
+        assignedToId: true,
+        convertedToCustomerId: true,
+        convertedToBookingId: true,
+      },
     });
     if (!lead) return { success: false, error: "Lead tidak ditemukan." };
+
+    // Idempotency: already converted — return existing draft.
     if (lead.convertedToBookingId) {
       return { success: true, draftId: lead.convertedToBookingId };
     }
-
-    // Pre-transaction: resolve/create customer (option A — safe before status flips).
-    const customerRes = await resolveLeadCustomerId(
-      input.leadId,
-      session!.user.name ?? session!.user.email,
-    );
-    if (!customerRes.ok) return { success: false, error: customerRes.error };
-    const customerId = customerRes.customerId;
 
     const salesId = lead.assignedToId ?? session!.user.profileId!;
     const managerId = await resolveManagerId(salesId);
     const draftId = crypto.randomUUID();
 
-    // Atomic: flip status to Deal + create the draft booking together.
-    await db.$transaction([
+    // Build the atomic ops list. customer.create is included only when the lead
+    // doesn't already have a customer (first attempt). On retry after a prior
+    // partial failure the existing customerId is reused and only the status +
+    // booking ops are needed.
+    const customerId = lead.convertedToCustomerId ?? crypto.randomUUID();
+    const contactNums = mapLeadContactNumbers(lead.contactNumbers);
+
+    const txOps: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (!lead.convertedToCustomerId) {
+      txOps.push(
+        db.customer.create({
+          data: {
+            id: customerId,
+            name: lead.name,
+            mobileNumber: contactNums as Prisma.InputJsonValue,
+            emailCpp: lead.email || null,
+            emailCpw: null,
+            ktpAddress: lead.address ?? null,
+            cppAddress: lead.address ?? null,
+            cpwAddress: null,
+            bitrixId: lead.bitrixId ?? null,
+            sourceOfInformationId: lead.sourceOfInformationId ?? null,
+            type: "Other",
+            memberStatus: "Non-Member",
+            updatedBy: session!.user.name ?? session!.user.email,
+          },
+        }),
+      );
+    }
+
+    txOps.push(
       db.lead.update({
         where: { id: input.leadId },
-        data: { statusId: dealStatusId },
+        data: {
+          statusId: dealStatusId,
+          // Stamp convertedToCustomerId in the same transaction as customer.create
+          // so both land atomically or not at all.
+          ...(!lead.convertedToCustomerId && { convertedToCustomerId: customerId }),
+        },
       }),
       db.booking.create({
         data: {
@@ -218,7 +172,9 @@ export async function convertLeadToDraftBooking(data: unknown): Promise<ConvertL
           leadId: input.leadId,
         },
       }),
-    ]);
+    );
+
+    await db.$transaction(txOps);
 
     await logAudit({
       userId: session!.user.id,
@@ -239,7 +195,7 @@ export async function convertLeadToDraftBooking(data: unknown): Promise<ConvertL
   }
 }
 
-// ─── Convert → Draft MICE booking (atomic) ───────────────────────────────────
+// ─── Convert → Draft MICE booking ────────────────────────────────────────────
 
 export async function convertLeadToDraftMiceBooking(data: unknown): Promise<ConvertLeadResult> {
   const { session, error } = await requirePermission({ module: "booking-mice", action: "create" });
@@ -261,32 +217,61 @@ export async function convertLeadToDraftMiceBooking(data: unknown): Promise<Conv
       select: {
         id: true,
         name: true,
-        assignedToId: true,
+        email: true,
+        contactNumbers: true,
+        address: true,
+        bitrixId: true,
         sourceOfInformationId: true,
+        assignedToId: true,
+        convertedToCustomerId: true,
         convertedToBookingId: true,
       },
     });
     if (!lead) return { success: false, error: "Lead tidak ditemukan." };
+
     if (lead.convertedToBookingId) {
       return { success: true, draftId: lead.convertedToBookingId };
     }
-
-    const customerRes = await resolveLeadCustomerId(
-      input.leadId,
-      session!.user.name ?? session!.user.email,
-    );
-    if (!customerRes.ok) return { success: false, error: customerRes.error };
-    const customerId = customerRes.customerId;
 
     const salesId = lead.assignedToId ?? session!.user.profileId!;
     if (!salesId) return { success: false, error: "Sales wajib dipilih." };
     const managerId = await resolveManagerId(salesId);
     const draftId = crypto.randomUUID();
 
-    await db.$transaction([
+    const customerId = lead.convertedToCustomerId ?? crypto.randomUUID();
+    const contactNums = mapLeadContactNumbers(lead.contactNumbers);
+
+    const txOps: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (!lead.convertedToCustomerId) {
+      txOps.push(
+        db.customer.create({
+          data: {
+            id: customerId,
+            name: lead.name,
+            mobileNumber: contactNums as Prisma.InputJsonValue,
+            emailCpp: lead.email || null,
+            emailCpw: null,
+            ktpAddress: lead.address ?? null,
+            cppAddress: lead.address ?? null,
+            cpwAddress: null,
+            bitrixId: lead.bitrixId ?? null,
+            sourceOfInformationId: lead.sourceOfInformationId ?? null,
+            type: "Other",
+            memberStatus: "Non-Member",
+            updatedBy: session!.user.name ?? session!.user.email,
+          },
+        }),
+      );
+    }
+
+    txOps.push(
       db.lead.update({
         where: { id: input.leadId },
-        data: { statusId: dealStatusId },
+        data: {
+          statusId: dealStatusId,
+          ...(!lead.convertedToCustomerId && { convertedToCustomerId: customerId }),
+        },
       }),
       db.booking.create({
         data: {
@@ -300,12 +285,13 @@ export async function convertLeadToDraftMiceBooking(data: unknown): Promise<Conv
           customerId,
           venueId: input.venueId,
           sourceOfInformationId: lead.sourceOfInformationId ?? null,
-          // MICE uses weddingSession field for the session (morning/evening/fullday)
           weddingSession: input.miceSession ?? null,
           leadId: input.leadId,
         },
       }),
-    ]);
+    );
+
+    await db.$transaction(txOps);
 
     await logAudit({
       userId: session!.user.id,
