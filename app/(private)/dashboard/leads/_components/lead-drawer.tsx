@@ -306,7 +306,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     setContactInput({ name: "", phone: "" });
     setContactPopoverOpen(false);
     setBookingFeeDateOpen(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editLead]);
 
   // ── Auto-fill time dari session + event type (wedding only) ────────────────

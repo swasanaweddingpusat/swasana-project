@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -152,23 +152,57 @@ function DatePill({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/**
+ * Outer wrapper: owns the Dialog open/close. The interactive content is a
+ * separate component keyed by lead.id so that selecting a different lead
+ * remounts it with fresh state — no init effect / setState-in-effect needed.
+ */
 export function DealConfirmModal({
   lead,
   isProcessing,
   onConfirm,
   onClose,
 }: DealConfirmModalProps) {
-  // ── Selection state ──────────────────────────────────────────────────────
-  const [selectedVenueId, setSelectedVenueId] = useState<string>("");
-  const [selectedEventDate, setSelectedEventDate] = useState<string>(""); // "YYYY-MM-DD"
-  const [selectedSession, setSelectedSession] = useState<WeddingSession | "">("");
+  const isOpen = !!lead;
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        {lead && (
+          <DealConfirmContent
+            key={lead.id}
+            lead={lead}
+            isProcessing={isProcessing}
+            onConfirm={onConfirm}
+            onClose={onClose}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DealConfirmContent({
+  lead,
+  isProcessing,
+  onConfirm,
+  onClose,
+}: {
+  lead: LeadItem;
+  isProcessing?: boolean;
+  onConfirm: (selection: DealSelection) => void;
+  onClose: () => void;
+}) {
+  // ── Selection state — initialised once from the lead (component is keyed by
+  //    lead.id, so a different lead remounts with fresh initial values). ──────
+  const [selectedVenueId, setSelectedVenueId] = useState<string>(lead.venue?.id ?? "");
+  const [selectedEventDate, setSelectedEventDate] = useState<string>(makeDateKey(lead.eventDate)); // "YYYY-MM-DD"
+  const [selectedSession, setSelectedSession] = useState<WeddingSession | "">(
+    (lead.weddingSession as WeddingSession | null) ?? "",
+  );
 
   // Async availability result, keyed by "venueId|date|session" to discard stale results.
-  // Set ONLY inside the fetch callback — never synchronously in effect body.
+  // Set ONLY inside the fetch callback — never synchronously in an effect body.
   const [asyncResult, setAsyncResult] = useState<AsyncResult>(null);
-
-  // Track which lead the current selection belongs to — reset selection when lead changes.
-  const initLeadIdRef = useRef<string | null>(null);
 
   // ── Availability map (for session pills) ────────────────────────────────
   const month = selectedVenueId && selectedEventDate
@@ -179,49 +213,21 @@ export function DealConfirmModal({
     month,
   );
 
-  // ── Init / reset selection when lead changes ─────────────────────────────
-  // Use callback to avoid capturing stale state in the effect.
-  const initSelection = useCallback((l: LeadItem) => {
-    const primaryVenueId = l.venue?.id ?? "";
-    const primaryDate = makeDateKey(l.eventDate);
+  // ── Derive the effective session ─────────────────────────────────────────
+  // If the currently picked session is no longer available for the chosen
+  // venue+date, treat it as unselected (derived, not stored — avoids
+  // setState-in-effect). The pills reflect this via SessionPillRadio.
+  const availableSessions = getAvailableSessions(avail, selectedEventDate);
+  const effectiveSession: WeddingSession | "" =
+    selectedSession && avail && !availableSessions.has(selectedSession)
+      ? ""
+      : selectedSession;
 
-    setSelectedVenueId(primaryVenueId);
-    setSelectedEventDate(primaryDate);
-    // Initialise session to lead's primary session (may be cleared if unavailable later).
-    setSelectedSession((l.weddingSession as WeddingSession | null) ?? "");
-    setAsyncResult(null);
-  }, []);
-
+  // ── Re-run slot check when the (effective) selection is complete ─────────
   useEffect(() => {
-    if (!lead) {
-      initLeadIdRef.current = null;
-      return;
-    }
-    if (lead.id !== initLeadIdRef.current) {
-      initLeadIdRef.current = lead.id;
-      initSelection(lead);
-    }
-  }, [lead, initSelection]);
+    if (!selectedVenueId || !selectedEventDate || !effectiveSession) return;
 
-  // ── Clear pre-selected session when it becomes unavailable ──────────────
-  // Runs when avail map or date/venue change. Avoids leaving an unavailable session selected.
-  useEffect(() => {
-    if (!selectedSession || !selectedVenueId || !selectedEventDate || !avail) return;
-    const available = getAvailableSessions(avail, selectedEventDate);
-    if (!available.has(selectedSession)) {
-      setSelectedSession("");
-      setAsyncResult(null);
-    }
-  }, [avail, selectedEventDate, selectedVenueId, selectedSession]);
-
-  // ── Re-run slot check when selection is complete ─────────────────────────
-  useEffect(() => {
-    if (!lead || !selectedVenueId || !selectedEventDate || !selectedSession) {
-      setAsyncResult(null);
-      return;
-    }
-
-    const key = `${selectedVenueId}|${selectedEventDate}|${selectedSession}`;
+    const key = `${selectedVenueId}|${selectedEventDate}|${effectiveSession}`;
     const category = lead.eventType?.category ?? lead.category;
 
     let cancelled = false;
@@ -229,7 +235,7 @@ export function DealConfirmModal({
     void checkSlotAvailability({
       venueId: selectedVenueId,
       eventDate: selectedEventDate,
-      session: selectedSession,
+      session: effectiveSession,
       category,
     }).then((res) => {
       if (cancelled) return;
@@ -243,18 +249,16 @@ export function DealConfirmModal({
     });
 
     return () => { cancelled = true; };
-  }, [lead, selectedVenueId, selectedEventDate, selectedSession]);
+  }, [lead, selectedVenueId, selectedEventDate, effectiveSession]);
 
   // ── Derived check state ──────────────────────────────────────────────────
-  let checkState: CheckState;
-  const selectionKey = selectedVenueId && selectedEventDate && selectedSession
-    ? `${selectedVenueId}|${selectedEventDate}|${selectedSession}`
+  const selectionKey = selectedVenueId && selectedEventDate && effectiveSession
+    ? `${selectedVenueId}|${selectedEventDate}|${effectiveSession}`
     : null;
 
-  if (!lead) {
-    checkState = { status: "idle" };
-  } else if (!selectedSession) {
-    // Not yet "checking" — user still needs to pick a session
+  let checkState: CheckState;
+  if (!effectiveSession) {
+    // User still needs to pick (or re-pick) a session.
     checkState = { status: "idle" };
   } else if (asyncResult && asyncResult.key === selectionKey) {
     checkState = asyncResult.state;
@@ -266,11 +270,11 @@ export function DealConfirmModal({
 
   // ── Build venue + date options ───────────────────────────────────────────
   const venueOptions: { id: string; name: string }[] = [];
-  if (lead?.venue) venueOptions.push({ id: lead.venue.id, name: lead.venue.name });
-  if (lead?.venueSecondary) venueOptions.push({ id: lead.venueSecondary.id, name: lead.venueSecondary.name });
+  if (lead.venue) venueOptions.push({ id: lead.venue.id, name: lead.venue.name });
+  if (lead.venueSecondary) venueOptions.push({ id: lead.venueSecondary.id, name: lead.venueSecondary.name });
 
-  const primaryDate = makeDateKey(lead?.eventDate);
-  const altDate = makeDateKey(lead?.eventDateAlt);
+  const primaryDate = makeDateKey(lead.eventDate);
+  const altDate = makeDateKey(lead.eventDateAlt);
   const dateOptions: { dateStr: string; label: string }[] = [];
   if (primaryDate) dateOptions.push({ dateStr: primaryDate, label: formatDateDisplay(primaryDate) });
   if (altDate && altDate !== primaryDate) dateOptions.push({ dateStr: altDate, label: `${formatDateDisplay(altDate)} (Alt)` });
@@ -279,7 +283,6 @@ export function DealConfirmModal({
   function handleVenueSelect(id: string) {
     setSelectedVenueId(id);
     setAsyncResult(null);
-    // Don't clear session here — let the availability effect handle it if unavailable
   }
 
   function handleDateSelect(dateStr: string) {
@@ -288,13 +291,10 @@ export function DealConfirmModal({
     // Prefill session berdasarkan tanggal yang dipilih:
     //   - tanggal utama → pakai weddingSession dari lead
     //   - tanggal alt → pakai weddingSessionAlt dari lead
-    if (lead) {
-      const primaryDate = makeDateKey(lead.eventDate);
-      if (dateStr === primaryDate) {
-        setSelectedSession((lead.weddingSession as WeddingSession | null) ?? "");
-      } else {
-        setSelectedSession((lead.weddingSessionAlt as WeddingSession | null) ?? "");
-      }
+    if (dateStr === makeDateKey(lead.eventDate)) {
+      setSelectedSession((lead.weddingSession as WeddingSession | null) ?? "");
+    } else {
+      setSelectedSession((lead.weddingSessionAlt as WeddingSession | null) ?? "");
     }
   }
 
@@ -304,32 +304,30 @@ export function DealConfirmModal({
   }
 
   function handleConfirm() {
-    if (!selectedVenueId || !selectedEventDate || !selectedSession) return;
-    onConfirm({ venueId: selectedVenueId, eventDate: selectedEventDate, session: selectedSession });
+    if (!selectedVenueId || !selectedEventDate || !effectiveSession) return;
+    onConfirm({ venueId: selectedVenueId, eventDate: selectedEventDate, session: effectiveSession });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const isOpen = !!lead;
   const canConfirm =
     !!selectedVenueId &&
     !!selectedEventDate &&
-    !!selectedSession &&
+    !!effectiveSession &&
     checkState.status === "available" &&
     !isProcessing;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <HandShake weight="BoldDuotone" className="h-5 w-5 text-foreground" />
-            Tandai sebagai Deal
-          </DialogTitle>
-          <DialogDescription>
-            Pilih venue, tanggal, dan session untuk lead <strong>{lead?.name}</strong>.
-            Booking draft akan dibuat berdasarkan pilihan ini.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <HandShake weight="BoldDuotone" className="h-5 w-5 text-foreground" />
+          Tandai sebagai Deal
+        </DialogTitle>
+        <DialogDescription>
+          Pilih venue, tanggal, dan session untuk lead <strong>{lead.name}</strong>.
+          Booking draft akan dibuat berdasarkan pilihan ini.
+        </DialogDescription>
+      </DialogHeader>
 
         <div className="flex flex-col gap-5 py-1">
 
@@ -392,7 +390,7 @@ export function DealConfirmModal({
             <SessionPillRadio
               label="Session"
               required
-              value={selectedSession}
+              value={effectiveSession}
               onChange={handleSessionChange}
               venueId={selectedVenueId || undefined}
               eventDate={selectedEventDate || undefined}
@@ -468,7 +466,6 @@ export function DealConfirmModal({
             {isProcessing ? "Memproses..." : "Tandai Deal & Buat Booking"}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </>
   );
 }

@@ -297,7 +297,6 @@ export function MiceBookingDrawer({
   // Watch venueId and eventDate from form to drive availability + session filtering
   const watchedVenueId = form.watch("venueId");
   const watchedEventDate = form.watch("eventDate");
-  const watchedMiceSession = form.watch("miceSession");
 
   // In edit mode, pass the current booking id as `exclude` so the booking being
   // edited does not block its own slot in the availability response.
