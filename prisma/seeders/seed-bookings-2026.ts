@@ -100,7 +100,6 @@ async function main(): Promise<void> {
 
     const booking = await prisma.booking.create({
       data: {
-        bookingDate,
         eventDate: bookingDate,
         bookingStatus: "Pending",
         paymentStatus: "Belum Bayar",

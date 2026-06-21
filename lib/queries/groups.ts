@@ -225,7 +225,22 @@ type FinancialAggRow = {
   total_revenue: bigint;
 };
 
-export async function getGroupPerformance(groupId: string, startDate?: Date, endDate?: Date) {
+export async function getMemberAnnualTargets(profileId: string) {
+  // No "use cache" here — this function is called from an API route handler,
+  // not an RSC. Server-action revalidateTag does not reliably bust "use cache"
+  // entries accessed via API routes. Client-side caching is handled by TanStack
+  // Query (queryKey: ["member-annual-targets", profileId]).
+  const targets = await db.userTarget.findMany({
+    where: { profileId, type: "sales" },
+    orderBy: { year: "desc" },
+    select: { year: true, amount: true },
+    take: 20,
+  });
+
+  return targets.map((t) => ({ year: t.year, amount: Number(t.amount) }));
+}
+
+export async function getGroupPerformance(groupId: string, startDate?: Date, endDate?: Date, year?: number) {
   "use cache";
   cacheTag("groups", "bookings");
   cacheLife("minutes");
@@ -247,8 +262,11 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
 
   const dateFilter =
     startDate && endDate
-      ? Prisma.sql`AND b."bookingDate" >= ${startDate} AND b."bookingDate" <= ${endDate}`
+      ? Prisma.sql`AND b."eventDate" >= ${startDate} AND b."eventDate" <= ${endDate}`
       : Prisma.empty;
+
+  // Derive target year: use explicit year param, else derive from startDate, else current year
+  const targetYear = year ?? (startDate ? startDate.getFullYear() : new Date().getFullYear());
 
   const [bookingAgg, targets] = await Promise.all([
     db.$queryRaw<BookingAggRow[]>`
@@ -268,18 +286,15 @@ export async function getGroupPerformance(groupId: string, startDate?: Date, end
       GROUP BY b."salesId"
     `,
     db.userTarget.findMany({
-      where: { profileId: { in: profileIds }, type: "sales" },
-      orderBy: { createdAt: "desc" },
+      where: { profileId: { in: profileIds }, type: "sales", year: targetYear },
       select: { profileId: true, amount: true },
     }),
   ]);
 
-  // Map target by profileId — first-write-wins (ordered by createdAt desc → latest first)
+  // Map target by profileId for the given year
   const targetBySalesId = new Map<string, number>();
   for (const t of targets) {
-    if (!targetBySalesId.has(t.profileId)) {
-      targetBySalesId.set(t.profileId, Number(t.amount));
-    }
+    targetBySalesId.set(t.profileId, Number(t.amount));
   }
 
   const aggBySalesId = new Map<string, BookingAggRow>();
@@ -316,6 +331,7 @@ export async function getGroupsWithPerformance(
   profileId: string | undefined,
   startDate?: Date,
   endDate?: Date,
+  year?: number,
 ) {
   "use cache";
   cacheTag("groups", "bookings");
@@ -355,7 +371,7 @@ export async function getGroupsWithPerformance(
 
   const dateFilter =
     startDate && endDate
-      ? Prisma.sql`AND b."bookingDate" >= ${startDate} AND b."bookingDate" <= ${endDate}`
+      ? Prisma.sql`AND b."eventDate" >= ${startDate} AND b."eventDate" <= ${endDate}`
       : Prisma.empty;
 
   // ── Query 2: DB-level booking aggregation per salesId ───────────────────────
@@ -421,12 +437,15 @@ export async function getGroupsWithPerformance(
         ${dateFilter}
       GROUP BY b."salesId"
     `,
-    // ── Query 4: all relevant targets ───────────────────────────────────────
-    db.userTarget.findMany({
-      where: { profileId: { in: allSalesIds }, type: "sales" },
-      orderBy: { createdAt: "desc" },
-      select: { profileId: true, amount: true },
-    }),
+    // ── Query 4: all relevant targets for the target year ──────────────────
+    // Derive target year: explicit year param → startDate year → current year
+    (() => {
+      const targetYear = year ?? (startDate ? startDate.getFullYear() : new Date().getFullYear());
+      return db.userTarget.findMany({
+        where: { profileId: { in: allSalesIds }, type: "sales", year: targetYear },
+        select: { profileId: true, amount: true },
+      });
+    })(),
   ]);
 
   // ── In-memory map assembly (from aggregated DB rows) ─────────────────────────
@@ -441,13 +460,10 @@ export async function getGroupsWithPerformance(
     financialBySalesId.set(row.sales_id, row);
   }
 
-  // Map target by profileId — first-write-wins because allTargets is ordered by createdAt desc
-  // so the first entry per profileId is the latest (most recent) target
+  // Map target by profileId — one row per (profileId, type, year) after the migration
   const targetBySalesId = new Map<string, number>();
   for (const t of allTargets) {
-    if (!targetBySalesId.has(t.profileId)) {
-      targetBySalesId.set(t.profileId, Number(t.amount));
-    }
+    targetBySalesId.set(t.profileId, Number(t.amount));
   }
 
   return groupsWithMembers.map((g) => {
@@ -546,3 +562,4 @@ export type GroupPerformanceItem = Awaited<ReturnType<typeof getGroupPerformance
 export type GroupWithPerformance = Awaited<ReturnType<typeof getGroupsWithPerformance>>[number];
 export type AvailableSalesProfile = Awaited<ReturnType<typeof getAvailableSalesProfiles>>[number];
 export type EligibleLeader = Awaited<ReturnType<typeof getEligibleLeaders>>[number];
+export type MemberAnnualTarget = Awaited<ReturnType<typeof getMemberAnnualTargets>>[number];

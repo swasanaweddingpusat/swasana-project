@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
     const pdfBooking: import("@/components/pdf/POPdfDocument").POPdfBooking = {
       poNumber: booking.poNumber,
-      bookingDate: booking.bookingDate,
+      bookingDate: booking.eventDate!, // confirmed bookings always have eventDate
       weddingSession: booking.weddingSession,
       weddingType: booking.weddingType,
       eventTime: booking.eventTime ?? null,

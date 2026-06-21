@@ -194,9 +194,9 @@ function buildDateFilter(dateFrom?: string, dateTo?: string): Prisma.BookingWher
   // dateFrom/dateTo are full ISO instants (local day start/end) computed client-side.
   const gte = dateFrom ? new Date(dateFrom) : undefined;
   const lte = dateTo ? new Date(dateTo) : undefined;
-  if (gte && lte) return { bookingDate: { gte, lte } };
-  if (gte) return { bookingDate: { gte } };
-  return { bookingDate: { lte: lte! } };
+  if (gte && lte) return { eventDate: { gte, lte } };
+  if (gte) return { eventDate: { gte } };
+  return { eventDate: { lte: lte! } };
 }
 
 async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {

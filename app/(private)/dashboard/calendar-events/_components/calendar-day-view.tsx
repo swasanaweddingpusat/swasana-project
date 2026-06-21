@@ -28,7 +28,7 @@ function getStatusVariant(status: string): 'default' | 'secondary' | 'destructiv
 }
 
 export function CalendarDayView({ events, date }: CalendarDayViewProps) {
-  const dayEvents = events.filter((e) => isSameDay(new Date(e.bookingDate), date));
+  const dayEvents = events.filter((e) => e.eventDate && isSameDay(new Date(e.eventDate), date));
 
   const grouped = dayEvents.reduce<Record<string, CalendarEventsResult>>((acc, e) => {
     const key = e.weddingSession ?? 'other';

@@ -1,13 +1,16 @@
 import { Prisma } from "@prisma/client";
 
 /** Names of the partial unique indexes that guard against double-booking a venue
- *  slot. Two indexes cooperate:
- *    - booking_venue_date_session_active_idx    (sessioned slots, migration 20260530000001)
- *    - bookings_active_slot_nosession_unique    (NULL-session legacy MICE, migration 20260606130000)
+ *  slot. Indexes (old → new) cooperate to catch P2002 regardless of which
+ *  migration the DB is on:
+ *    - booking_venue_date_session_active_idx  (sessioned, migration 20260530000001)
+ *    - bookings_active_slot_nosession_unique  (NULL-session MICE, migration 20260606130000)
+ *    - bookings_unique_active_slot            (consolidated, migration 20260620150000_normalize_event_date)
  */
 const SLOT_INDEXES = [
   "booking_venue_date_session_active_idx",
   "bookings_active_slot_nosession_unique",
+  "bookings_unique_active_slot",
 ];
 
 /** User-facing message shown when a slot collision is caught at the DB layer.

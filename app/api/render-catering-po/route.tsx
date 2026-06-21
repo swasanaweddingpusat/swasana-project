@@ -53,7 +53,7 @@ export async function POST(req: Request) {
           customerName,
           venueName: booking.snapVenue?.venueName ?? "-",
           brandName: booking.snapVenue?.brandName ?? "-",
-          bookingDate: format(booking.bookingDate, "dd MMM yyyy"),
+          bookingDate: format(booking.eventDate!, "dd MMM yyyy"),
           weddingSession: booking.weddingSession,
           packageName: booking.snapPackage?.packageName ?? "-",
           pax: booking.snapPackagePricing?.pax ?? 0,

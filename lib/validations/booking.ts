@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const bookingSchema = z.object({
-  bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
+  eventDate: z.string().min(1, "Tanggal event wajib diisi"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   weddingType: z.string().optional().nullable(),
   customerId: z.string().optional().default(""),
@@ -63,7 +63,7 @@ export const bookingSchema = z.object({
 
 export const updateBookingSchema = z.object({
   id: z.string().min(1),
-  bookingDate: z.string().optional(),
+  eventDate: z.string().optional(),
   bookingStatus: z.enum(["Pending", "Uploaded", "Confirmed", "Rejected", "Canceled", "Lost"]).optional(),
   paymentStatus: z.string().optional(),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
@@ -76,7 +76,7 @@ export const updateBookingSchema = z.object({
 
 export const editBookingSchema = z.object({
   id: z.string().min(1),
-  bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
+  eventDate: z.string().min(1, "Tanggal event wajib diisi"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   weddingType: z.string().optional().nullable(),
   venueId: z.string().min(1, "Venue wajib dipilih"),

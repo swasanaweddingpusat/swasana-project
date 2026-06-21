@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
-import { type DropResult } from "@hello-pangea/dnd";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -17,17 +16,17 @@ import {
 import { cn } from "@/lib/utils";
 import { LeadDrawer } from "./lead-drawer";
 import { CreateLeadDrawer } from "./CreateLeadDrawer";
-import { LeadsFilters, type ViewMode } from "./leads-filters";
+import { LeadsFilters } from "./leads-filters";
 import { LeadsListView } from "./leads-list-view";
-import { LeadsPipelineView } from "./leads-pipeline-view";
 import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
 import { MiceBookingDrawer } from "@/app/(private)/dashboard/booking-mice/_components/MiceBookingDrawer";
 import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
 import { createDraftBooking } from "@/actions/booking-draft";
 import { createDraftMiceBooking } from "@/actions/booking-mice-draft";
 import { DealConfirmModal } from "./DealConfirmModal";
+import type { DealSelection } from "./DealConfirmModal";
+import { LeadDetailModal } from "./LeadDetailModal";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
-import { useIsMobile } from "@/hooks/use-mobile";
 import type { LeadItem } from "@/lib/queries/leads";
 import type { LeadListItem, BookingPrefillLead, ContactNumber } from "@/types/lead";
 import type { LeadScope } from "@/lib/validations/lead";
@@ -37,10 +36,6 @@ export type { LeadItem };
 // ─── Main orchestrator ────────────────────────────────────────────────────────
 
 export function LeadsTable() {
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const isMobile = useIsMobile();
-  // On mobile, always render list view regardless of viewMode state
-  const effectiveViewMode: ViewMode = isMobile ? "list" : viewMode;
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<LeadScope>("active");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -55,6 +50,7 @@ export function LeadsTable() {
   const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
   const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
   const [resetTarget, setResetTarget] = useState<LeadItem | null>(null);
+  const [detailLead, setDetailLead] = useState<LeadItem | null>(null);
   const [isMarkingStatus, setIsMarkingStatus] = useState(false);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
   // Booking creation from a lead — routed to wedding or MICE drawer by category.
@@ -87,43 +83,8 @@ export function LeadsTable() {
   const { mutateAsync: updateStatus } = useUpdateLeadStatus();
   const { mutateAsync: deleteLeadMut, isPending: isDeleting } = useDeleteLead();
 
-  // Non-final statuses go in pipeline
-  const pipelineStatuses = statuses.filter((s) => !s.isFinal);
-
   const leads = useMemo(() => leadsData?.items ?? [], [leadsData?.items]);
   const totalPages = leadsData?.totalPages ?? 1;
-
-  const handleDragEnd = useCallback(
-    (result: DropResult) => {
-      const { draggableId, destination } = result;
-      if (!destination) return;
-      const newStatusId = destination.droppableId;
-      const newStatus = statuses.find((s) => s.id === newStatusId);
-      if (!newStatus) return;
-
-      const lead = leads.find((l) => l.id === draggableId);
-      if (!lead || lead.status.id === newStatusId) return;
-
-      if (newStatus.isSystem) {
-        toast.error(`Status "${newStatus.name}" tidak dapat diubah lewat drag.`);
-        return;
-      }
-
-      // Fire-and-forget: the card moves instantly via optimistic cache update
-      // in useUpdateLeadStatus. The API runs in the background; on failure the
-      // mutation rolls back the cache and we surface the error.
-      updateStatus({ id: draggableId, statusId: newStatusId })
-        .then((res) => {
-          if (res.success) {
-            toast.success(`${lead.name} dipindahkan ke ${newStatus.name}`);
-          } else {
-            toast.error(res.error ?? "Gagal memindahkan lead.");
-          }
-        })
-        .catch(() => toast.error("Gagal memindahkan lead."));
-    },
-    [leads, statuses, updateStatus]
-  );
 
   function handleAdd() {
     // Opens the new redesigned CreateLeadDrawer (frontend-only UI for review)
@@ -134,10 +95,6 @@ export function LeadsTable() {
   function handleEdit(lead: LeadItem) {
     setEditLead(lead as unknown as LeadListItem);
     setDrawerOpen(true);
-  }
-
-  function handleBuatQuotation(lead: LeadItem) {
-    toast.info(`Buat Quotation untuk ${lead.name} — coming soon.`);
   }
 
   // Find the system Deal and Lost status IDs from the loaded statuses list.
@@ -171,31 +128,19 @@ export function LeadsTable() {
     setLostTarget(lead);
   }
 
-  async function handleConfirmDeal() {
+  async function handleConfirmDeal(selection: DealSelection) {
     if (!dealTarget) return;
     if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
 
     const lead = dealTarget;
     const category = lead.eventType?.category ?? lead.category;
 
-    // Guard: venue dan tanggal wajib ada sebelum buat draft booking
-    if (!lead.venue?.id || !lead.eventDate) {
-      toast.error("Lengkapi data lead (venue & tanggal event) dulu sebelum tandai Deal.");
-      return;
-    }
-
-    // Guard: wedding wajib punya session
-    if (category !== "MICE" && !lead.weddingSession) {
-      toast.error("Lengkapi data lead (session nikah: pagi/malam/fullday) dulu sebelum tandai Deal.");
-      return;
-    }
-
     setIsMarkingStatus(true);
 
     // Check if lead already has a booking — reopen existing draft instead of creating duplicate
     if (lead.convertedToBooking?.id) {
-      // Lead already converted — reopen existing booking drawer
-      const prefill = buildPrefill(lead);
+      // Lead already converted — reopen existing booking drawer using the user's selection
+      const prefill = buildPrefill(lead, selection);
       toast.info("Lead sudah punya booking. Membuka draft yang ada...");
       if (category === "MICE") {
         setMicePrefill(prefill);
@@ -217,12 +162,9 @@ export function LeadsTable() {
         return;
       }
 
-      // Step 2: Create draft booking from lead data
+      // Step 2: Create draft booking using the user-selected venue/date/session
       // Route to MICE draft action for MICE leads (different permission: booking-mice:create)
-      const prefill = buildPrefill(lead);
-      const bookingDate = lead.eventDate
-        ? new Date(lead.eventDate).toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0];
+      const prefill = buildPrefill(lead, selection);
 
       let draftRes: { success: boolean; draftId?: string; error?: string };
 
@@ -230,10 +172,10 @@ export function LeadsTable() {
         draftRes = await createDraftMiceBooking({
           leadId: lead.id,
           clientName: lead.name,
-          bookingDate,
-          venueId: lead.venue?.id ?? "",
+          eventDate: selection.eventDate,
+          venueId: selection.venueId,
           eventTypeId: lead.eventType?.id ?? "",
-          miceSession: lead.weddingSession as "morning" | "evening" | "fullday" | null ?? null,
+          miceSession: selection.session,
           salesId: lead.assignedTo?.id ?? null,
           sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
           estimatedPax: lead.estimatedPax ?? null,
@@ -243,10 +185,10 @@ export function LeadsTable() {
         draftRes = await createDraftBooking({
           leadId: lead.id,
           customerName: lead.name,
-          bookingDate,
-          venueId: lead.venue?.id ?? "",
+          eventDate: selection.eventDate,
+          venueId: selection.venueId,
           category,
-          weddingSession: lead.weddingSession ?? null,
+          weddingSession: selection.session,
           salesId: lead.assignedTo?.id ?? null,
           packageId: lead.package?.id ?? null,
           sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
@@ -277,7 +219,22 @@ export function LeadsTable() {
     }
   }
 
-  function buildPrefill(lead: LeadItem): BookingPrefillLead {
+  /**
+   * Build the BookingPrefillLead payload.
+   * When `selection` is provided (Deal flow), override venue/eventDate/weddingSession
+   * with the user's chosen values so the booking drawer opens in a consistent state.
+   */
+  function buildPrefill(lead: LeadItem, selection?: DealSelection): BookingPrefillLead {
+    // Resolve the venue object matching the selected venueId (could be primary or secondary)
+    let resolvedVenue = lead.venue;
+    if (selection) {
+      if (lead.venue?.id === selection.venueId) {
+        resolvedVenue = lead.venue;
+      } else if (lead.venueSecondary?.id === selection.venueId) {
+        resolvedVenue = lead.venueSecondary;
+      }
+    }
+
     return {
       leadId: lead.id,
       name: lead.name,
@@ -285,12 +242,13 @@ export function LeadsTable() {
       email: lead.email,
       address: lead.address,
       bitrixId: lead.bitrixId,
-      eventDate: lead.eventDate,
+      // Override with selection if provided, else fall back to lead values
+      eventDate: selection ? selection.eventDate : lead.eventDate,
       time: lead.time,
       estimatedPax: lead.estimatedPax,
       notes: lead.notes,
-      weddingSession: lead.weddingSession,
-      venue: lead.venue,
+      weddingSession: selection ? selection.session : lead.weddingSession,
+      venue: resolvedVenue ?? null,
       package: lead.package,
       eventType: lead.eventType,
       sourceOfInformation: lead.sourceOfInformation,
@@ -407,8 +365,6 @@ export function LeadsTable() {
       <Card>
         <CardContent className="p-0">
           <LeadsFilters
-            viewMode={viewMode}
-            onViewModeChange={(mode) => { setViewMode(mode); }}
             scope={scope}
             onScopeChange={handleScopeChange}
             search={search}
@@ -426,35 +382,21 @@ export function LeadsTable() {
             isRefreshing={isManualRefresh}
           />
 
-          {effectiveViewMode === "list" && (
-            <LeadsListView
-              leads={leads}
-              search={search}
-              currentPage={currentPage}
-              pageSize={pageSize}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              onEdit={handleEdit}
-              onDelete={setDeleteTarget}
-              onBuatQuotation={handleBuatQuotation}
-              onMarkDeal={handleMarkDeal}
-              onMarkLost={handleMarkLost}
-              onReset={handleReset}
-              isLoading={leadsLoading || isManualRefresh}
-            />
-          )}
-
-          {effectiveViewMode === "pipeline" && (
-            <LeadsPipelineView
-              leads={leads}
-              statuses={pipelineStatuses}
-              onDragEnd={handleDragEnd}
-              onEdit={handleEdit}
-              onMarkDeal={handleMarkDeal}
-              onMarkLost={handleMarkLost}
-              isLoading={leadsLoading || isManualRefresh}
-            />
-          )}
+          <LeadsListView
+            leads={leads}
+            search={search}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            onEdit={handleEdit}
+            onDelete={setDeleteTarget}
+            onMarkDeal={handleMarkDeal}
+            onMarkLost={handleMarkLost}
+            onReset={handleReset}
+            onViewDetail={setDetailLead}
+            isLoading={leadsLoading || isManualRefresh}
+          />
         </CardContent>
       </Card>
 
@@ -511,6 +453,17 @@ export function LeadsTable() {
           }}
         />
       )}
+
+      {/* Lead detail modal — opens on row click */}
+      <LeadDetailModal
+        open={!!detailLead}
+        lead={detailLead}
+        onClose={() => setDetailLead(null)}
+        onEdit={(lead) => {
+          setDetailLead(null);
+          handleEdit(lead);
+        }}
+      />
 
       {/* Deal confirm modal — replaces simple AlertDialog */}
       <DealConfirmModal

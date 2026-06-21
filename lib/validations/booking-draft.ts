@@ -6,7 +6,7 @@ export const createDraftStep1Schema = z.object({
   /** Client-generated idempotency key. When provided, server uses it as the booking id
    *  so that retries don't create duplicate draft rows. */
   id: z.string().optional().nullable(),
-  bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
+  eventDate: z.string().min(1, "Tanggal event wajib diisi"),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   packageId: z.string().optional().nullable(),

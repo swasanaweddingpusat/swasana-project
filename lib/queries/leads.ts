@@ -1,24 +1,54 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
+import { resolveAvatarUrl } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
 import type { LeadFilterInput } from "@/lib/validations/lead";
 import type { DataScope } from "@/types/user";
+
+/**
+ * Resolve bookingFeeEvidenceUrl from a stored S3 key (or a legacy full URL) to a
+ * displayable full URL. Uses resolveAvatarUrl which handles both forms:
+ *   - relative key → getPublicUrl(key)
+ *   - full URL from current host → passthrough
+ *   - full URL from a different/legacy host → null (file gone)
+ * This is safe even if the DB value is already a full URL (idempotent).
+ */
+function resolveLeadEvidenceUrl<T extends { bookingFeeEvidenceUrl: string | null }>(
+  lead: T,
+): T {
+  return {
+    ...lead,
+    bookingFeeEvidenceUrl: resolveAvatarUrl(lead.bookingFeeEvidenceUrl),
+  };
+}
 
 const leadSelect = {
   id: true,
   name: true,
   contactNumbers: true,
   email: true,
+  emailCpp: true,
+  emailCpw: true,
+  nikCpp: true,
+  nikCpw: true,
+  addressCpp: true,
+  addressCpw: true,
   address: true,
   eventDate: true,
+  eventDateAlt: true,
   time: true,
   estimatedPax: true,
   budgetRange: true,
   notes: true,
   category: true,
   weddingSession: true,
+  weddingSessionAlt: true,
   bitrixId: true,
   instansi: true,
+  isDateLocked: true,
+  bookingFeeAmount: true,
+  bookingFeeDate: true,
+  bookingFeeEvidenceUrl: true,
   convertedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -28,11 +58,14 @@ const leadSelect = {
   venue: {
     select: { id: true, name: true },
   },
+  venueSecondary: {
+    select: { id: true, name: true },
+  },
   package: {
     select: { id: true, packageName: true },
   },
   eventType: {
-    select: { id: true, name: true, category: true },
+    select: { id: true, name: true, category: true, code: true },
   },
   sourceOfInformation: {
     select: { id: true, name: true },
@@ -102,7 +135,6 @@ export async function getLeads(
   // NOTE: "use cache" intentionally removed — this function may receive an
   // identity-scoped filter (callerProfileId + dataScope). Caching a per-user
   // result set without a per-user cache key would leak data across callers.
-  // The upstream cache (cacheLife("seconds")) also had near-zero TTL value.
   // Callers that need caching should cache at a higher layer with identity in key.
 
   const { search, scope, statusId, venueId, eventTypeId, assignedToId, page, pageSize } = filter;
@@ -153,7 +185,7 @@ export async function getLeads(
   ]);
 
   return {
-    items,
+    items: items.map(resolveLeadEvidenceUrl),
     total,
     page,
     pageSize,
@@ -166,10 +198,12 @@ export async function getLeadById(id: string) {
   cacheTag("leads");
   cacheLife("seconds");
 
-  return db.lead.findUnique({
+  const lead = await db.lead.findUnique({
     where: { id },
     select: leadSelect,
   });
+  if (!lead) return null;
+  return resolveLeadEvidenceUrl(lead);
 }
 
 export async function getLeadStatuses() {

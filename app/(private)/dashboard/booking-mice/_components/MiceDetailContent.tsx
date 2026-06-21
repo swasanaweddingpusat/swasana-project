@@ -112,7 +112,7 @@ export function MiceDetailContent({
           <InfoRow label="Tanggal Event" value={fmtDate(booking.eventDate)} />
           <InfoRow
             label="Tanggal Booking"
-            value={fmtDate(booking.bookingDate)}
+            value={fmtDate(booking.createdAt)}
           />
           {booking.sourceOfInformation && (
             <InfoRow

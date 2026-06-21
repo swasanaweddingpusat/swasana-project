@@ -167,7 +167,6 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
       db.booking.create({
         data: {
           id: draftId,
-          bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
           recordStatus: "draft",
           bookingStatus: "Pending",
           category: "MICE",
@@ -318,13 +317,14 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
 
     if (!draft) return { success: false, error: "Draft MICE tidak ditemukan atau sudah difinalisasi." };
     if (!draft.venueId) return { success: false, error: "Draft belum memiliki venue." };
+    if (!draft.eventDate) return { success: false, error: "Event date wajib diisi sebelum finalisasi." };
 
     const customer = draft.customer;
     const venue = draft.venue;
 
     // MICE slot conflict check: only if session is set (saved-only, same as wedding)
     if (draft.weddingSession) {
-      const bookingDateObj = new Date(draft.bookingDate);
+      const eventDateObj = new Date(draft.eventDate);
       const sessionOrConditions =
         draft.weddingSession === "fullday"
           ? [
@@ -341,7 +341,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
         where: {
           id: { not: draftId },
           venueId: draft.venueId,
-          bookingDate: bookingDateObj,
+          eventDate: eventDateObj,
           recordStatus: "saved",
           bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
           OR: sessionOrConditions,

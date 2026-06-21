@@ -117,7 +117,9 @@ export async function DELETE(
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
 
   try {
-    await db.$transaction([db.lead.delete({ where: { id } })]);
+    await db.$transaction([
+      db.lead.delete({ where: { id } }),
+    ]);
 
     await logAudit({
       userId: session.user.profileId,

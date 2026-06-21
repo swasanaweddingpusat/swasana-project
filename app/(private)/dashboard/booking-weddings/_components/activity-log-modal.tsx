@@ -35,7 +35,7 @@ const ACTION_BADGE: Record<string, { label: string; color: string }> = {
 const FIELD_LABEL: Record<string, string> = {
   bookingStatus: "Status Booking",
   paymentStatus: "Status Pembayaran",
-  bookingDate: "Tanggal Event",
+  eventDate: "Tanggal Event",
   salesId: "Sales PIC",
   fromSales: "Dari Sales",
   toSales: "Ke Sales",

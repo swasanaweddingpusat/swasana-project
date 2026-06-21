@@ -68,7 +68,7 @@ export interface DraftBookingDetail {
   eventTime: string | null;
   notes: string | null;
   sourceOfInformationId: string | null;
-  bookingDate: string | null;
+  eventDate: string | null;
   paymentMethodId: string | null;
   discountName: string | null;
   discountAmount: number;
@@ -290,7 +290,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
         db.booking.update({
           where: { id: draftId },
           data: {
-            bookingDate: new Date(`${input.bookingDate}T00:00:00.000Z`),
+            eventDate: new Date(`${input.eventDate}T00:00:00.000Z`),
             salesId,
             managerId,
             customerId,
@@ -311,7 +311,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
         action: "booking.draft_updated",
         entityType: "booking",
         entityId: draftId,
-        changes: { venueId: input.venueId, bookingDate: input.bookingDate },
+        changes: { venueId: input.venueId, eventDate: input.eventDate },
         description: `Updated booking draft for ${input.customerName ?? customerId}`,
       });
       revalidateTag("bookings", "max");
@@ -322,7 +322,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
       db.booking.create({
         data: {
           id: draftId,
-          bookingDate: new Date(input.bookingDate),
+          eventDate: new Date(input.eventDate),
           recordStatus: "draft",
           bookingStatus: "Pending",
           category: input.category ?? "WEDDINGS",
@@ -625,12 +625,12 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
 
     // Venue conflict check for weddings (MICE has no session constraint)
     if (draft.weddingSession) {
-      const bookingDateObj = new Date(draft.bookingDate);
+      const eventDateObj = new Date(draft.eventDate!);
       const conflictingBooking = await db.booking.findFirst({
         where: {
           id: { not: draftId },
           venueId: draft.venueId,
-          bookingDate: bookingDateObj,
+          eventDate: eventDateObj,
           recordStatus: "saved",
           bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
           OR:
@@ -1131,7 +1131,7 @@ export async function getDraftBookingDetail(
       eventTime: true,
       notes: true,
       sourceOfInformationId: true,
-      bookingDate: true,
+      eventDate: true,
       paymentMethodId: true,
       discountName: true,
       discountAmount: true,
@@ -1229,8 +1229,8 @@ export async function getDraftBookingDetail(
     eventTime: draft.eventTime ?? null,
     notes: draft.notes ?? null,
     sourceOfInformationId: draft.sourceOfInformationId ?? null,
-    bookingDate: draft.bookingDate
-      ? `${draft.bookingDate.getUTCFullYear()}-${String(draft.bookingDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.bookingDate.getUTCDate()).padStart(2, "0")}`
+    eventDate: draft.eventDate
+      ? `${draft.eventDate.getUTCFullYear()}-${String(draft.eventDate.getUTCMonth() + 1).padStart(2, "0")}-${String(draft.eventDate.getUTCDate()).padStart(2, "0")}`
       : null,
     paymentMethodId: draft.paymentMethodId ?? null,
     discountName: draft.discountName ?? null,

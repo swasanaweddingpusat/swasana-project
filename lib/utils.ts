@@ -75,7 +75,7 @@ export function generatePoNumber(prefix: string = "PO"): string {
  * The date the user sees in the calendar (June 15) is what gets stored,
  * regardless of the client's timezone offset.
  *
- * Use this for bookingDate (wedding/MICE event date) — NOT for timestamps or dueDates
+ * Use this for eventDate (wedding/MICE event date) — NOT for timestamps or dueDates
  * that legitimately need a full datetime.
  */
 export function toDateOnly(date: Date): string {

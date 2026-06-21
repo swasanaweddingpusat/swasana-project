@@ -11,20 +11,13 @@ import {
 import {
   AddCircle,
   Magnifer,
-  List,
-  Widget,
   Refresh,
   Filter,
-  HandShake,
-  CloseCircle,
-  UsersGroupRounded,
 } from "@solar-icons/react";
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { cn } from "@/lib/utils";
 import type { LeadScope } from "@/lib/validations/lead";
-
-export type ViewMode = "list" | "pipeline";
 
 interface StatusCount {
   id: string;
@@ -33,8 +26,6 @@ interface StatusCount {
 }
 
 interface LeadsFiltersProps {
-  viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
   scope: LeadScope;
   onScopeChange: (scope: LeadScope) => void;
   search: string;
@@ -53,49 +44,11 @@ interface LeadsFiltersProps {
 }
 
 
-const SCOPE_TABS: { value: LeadScope; label: string; icon: React.ElementType }[] = [
-  { value: "active", label: "Active", icon: UsersGroupRounded },
-  { value: "deal", label: "Deal", icon: HandShake },
-  { value: "lost", label: "Lost", icon: CloseCircle },
+const SCOPE_OPTIONS: { value: LeadScope; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "deal", label: "Deal" },
+  { value: "lost", label: "Lost" },
 ];
-
-// ─── Scope segmented control (shared between mobile & desktop) ────────────────
-
-function ScopeTabs({
-  scope,
-  onScopeChange,
-}: {
-  scope: LeadScope;
-  onScopeChange: (s: LeadScope) => void;
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Lead scope"
-      className="flex items-center rounded-xl border border-border p-0.5"
-    >
-      {SCOPE_TABS.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          type="button"
-          role="tab"
-          aria-selected={scope === value}
-          onClick={() => onScopeChange(value)}
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            scope === value
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Icon weight="BoldDuotone" aria-hidden="true" className="size-3.5" />
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 interface Venue { id: string; name: string; }
 interface EventType { id: string; name: string; category: string; }
@@ -104,6 +57,7 @@ interface EventType { id: string; name: string; category: string; }
 
 function FilterPanelContent({
   scope,
+  onScopeChange,
   statusFilter,
   onStatusChange,
   venueFilter,
@@ -117,6 +71,7 @@ function FilterPanelContent({
   onReset,
 }: {
   scope: LeadScope;
+  onScopeChange: (s: LeadScope) => void;
   statusFilter: string;
   onStatusChange: (v: string) => void;
   venueFilter: string;
@@ -142,6 +97,28 @@ function FilterPanelContent({
             Reset
           </button>
         )}
+      </div>
+
+      {/* Scope filter */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Status Deal</label>
+        <div className="flex items-center gap-1.5">
+          {SCOPE_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onScopeChange(value)}
+              className={cn(
+                "flex-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                scope === value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Venue filter */}
@@ -207,8 +184,6 @@ function FilterPanelContent({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function LeadsFilters({
-  viewMode,
-  onViewModeChange,
   scope,
   onScopeChange,
   search,
@@ -228,7 +203,6 @@ export function LeadsFilters({
   const { data: venues = [] } = useVenues();
   const { data: eventTypes = [] } = useEventTypes();
 
-  // Only count active (non-"all") filters — statusId irrelevant in deal/lost scope
   const activeCount =
     (venueFilter !== "all" ? 1 : 0) +
     (scope === "active" && statusFilter !== "all" ? 1 : 0) +
@@ -270,15 +244,12 @@ export function LeadsFilters({
     <div className="border-b">
       {/* ════════════════════════════════════════════════════════════════
           MOBILE TOOLBAR  (visible < sm)
-          Row 1: [scope tabs] ──── [filter icon] [refresh icon] [add button]
+          Row 1: [count] ──── [filter icon] [refresh icon] [add button]
           Row 2: [search full-width]
       ════════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col gap-2 px-4 pb-3 sm:hidden">
         {/* Row 1 */}
         <div className="flex items-center gap-2">
-          {/* Scope tabs — shrink to fit, no label on small */}
-          <ScopeTabs scope={scope} onScopeChange={onScopeChange} />
-
           {/* Count badge */}
           <span className="text-xs font-medium bg-muted text-muted-foreground px-2.5 py-1 border border-border rounded-full shrink-0">
             {totalFiltered}
@@ -293,6 +264,7 @@ export function LeadsFilters({
             <PopoverContent align="end" className="w-72 p-3">
               <FilterPanelContent
                 scope={scope}
+                onScopeChange={onScopeChange}
                 statusFilter={statusFilter}
                 onStatusChange={onStatusChange}
                 venueFilter={venueFilter}
@@ -325,7 +297,6 @@ export function LeadsFilters({
             />
           </Button>
 
-          {/* Add */}
           <Button onClick={onAdd} size="icon" className="shrink-0" aria-label="Tambah lead">
             <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
           </Button>
@@ -351,52 +322,9 @@ export function LeadsFilters({
 
       {/* ════════════════════════════════════════════════════════════════
           DESKTOP TOOLBAR  (visible sm+)
-          Single row: [scope tabs] [view toggle] [count] | [refresh] [filter] [search] →→ [add]
+          Single row: [view toggle] [count] | [refresh] [filter] [search] →→ [add]
       ════════════════════════════════════════════════════════════════ */}
       <div className="hidden sm:flex items-center gap-2 px-6 pb-3">
-        {/* Scope segmented control */}
-        <ScopeTabs scope={scope} onScopeChange={onScopeChange} />
-
-        {/* View mode toggle */}
-        <div
-          role="tablist"
-          aria-label="View mode"
-          className="flex items-center rounded-xl border border-border p-0.5"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === "list"}
-            onClick={() => onViewModeChange("list")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              viewMode === "list"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <List weight="BoldDuotone" aria-hidden="true" className="size-3.5" />
-            List
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === "pipeline"}
-            onClick={() => onViewModeChange("pipeline")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              viewMode === "pipeline"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Widget weight="BoldDuotone" aria-hidden="true" className="size-3.5" />
-            Pipeline
-          </button>
-        </div>
-
         {/* Count badge */}
         <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full shrink-0">
           {totalFiltered} leads
@@ -442,6 +370,7 @@ export function LeadsFilters({
           <PopoverContent align="end" className="w-72 p-3">
             <FilterPanelContent
               scope={scope}
+              onScopeChange={onScopeChange}
               statusFilter={statusFilter}
               onStatusChange={onStatusChange}
               venueFilter={venueFilter}
@@ -474,7 +403,6 @@ export function LeadsFilters({
           />
         </div>
 
-        {/* Tambah Lead — pushed to far right */}
         <Button onClick={onAdd} className="ml-auto shrink-0">
           <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
           Tambah Lead
