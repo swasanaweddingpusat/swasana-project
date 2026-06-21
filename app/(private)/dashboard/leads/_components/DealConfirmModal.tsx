@@ -205,12 +205,16 @@ function DealConfirmContent({
   const [asyncResult, setAsyncResult] = useState<AsyncResult>(null);
 
   // ── Availability map (for session pills) ────────────────────────────────
+  // Exclude the lead itself from the locked-lead check so its own slot lock
+  // doesn't prevent the sales rep from picking the same session in Deal modal.
   const month = selectedVenueId && selectedEventDate
     ? selectedEventDate.slice(0, 7)
     : undefined;
   const { data: avail, isFetching: isAvailFetching } = useVenueAvailability(
     selectedVenueId || null,
     month,
+    undefined,
+    lead.id,
   );
 
   // ── Derive the effective session ─────────────────────────────────────────
@@ -394,6 +398,7 @@ function DealConfirmContent({
               onChange={handleSessionChange}
               venueId={selectedVenueId || undefined}
               eventDate={selectedEventDate || undefined}
+              excludeLeadId={lead.id}
             />
           </div>
 

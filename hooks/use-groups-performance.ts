@@ -12,22 +12,28 @@ export function useGroupsPerformance(year?: number) {
   });
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 export function useGroupPerformance(
   groupId: string,
   initialData?: GroupPerformanceItem[],
   year?: number,
 ) {
+  // initialData comes from the server component and is always for the current year.
+  // Only inject it when the selected year matches, so switching to a different year
+  // always triggers a real fetch instead of reusing server-rendered data.
+  const resolvedYear = year ?? CURRENT_YEAR;
+  const safeInitialData = resolvedYear === CURRENT_YEAR ? initialData : undefined;
+
   return useQuery<GroupPerformanceItem[]>({
-    queryKey: ["groups", "performance", groupId, year ?? "default"],
+    queryKey: ["groups", "performance", groupId, resolvedYear],
     queryFn: async () => {
-      const url = year
-        ? `/api/groups/${groupId}/performance?year=${year}`
-        : `/api/groups/${groupId}/performance`;
+      const url = `/api/groups/${groupId}/performance?year=${resolvedYear}`;
       const res = await fetch(url);
-      if (!res.ok) return initialData ?? [];
+      if (!res.ok) return safeInitialData ?? [];
       return res.json() as Promise<GroupPerformanceItem[]>;
     },
-    initialData,
+    initialData: safeInitialData,
     staleTime: 60_000,
     enabled: !!groupId,
   });

@@ -21,8 +21,10 @@ import { LeadsListView } from "./leads-list-view";
 import { BookingDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/booking-drawer";
 import { MiceBookingDrawer } from "@/app/(private)/dashboard/booking-mice/_components/MiceBookingDrawer";
 import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads";
-import { createDraftBooking } from "@/actions/booking-draft";
-import { createDraftMiceBooking } from "@/actions/booking-mice-draft";
+import {
+  convertLeadToDraftBooking,
+  convertLeadToDraftMiceBooking,
+} from "@/actions/lead-conversion";
 import { DealConfirmModal } from "./DealConfirmModal";
 import type { DealSelection } from "./DealConfirmModal";
 import { LeadDetailModal } from "./LeadDetailModal";
@@ -155,54 +157,37 @@ export function LeadsTable() {
     }
 
     try {
-      // Step 1: Update lead status to Deal
-      const statusRes = await updateStatus({ id: lead.id, statusId: dealStatus.id });
-      if (!statusRes.success) {
-        toast.error(statusRes.error ?? "Gagal mengubah status lead.");
-        return;
-      }
-
-      // Step 2: Create draft booking using the user-selected venue/date/session
-      // Route to MICE draft action for MICE leads (different permission: booking-mice:create)
+      // Atomic: flip status to Deal + create the draft booking in one server action
+      // (single db.$transaction). If booking creation fails, the status change rolls
+      // back — no "floating Deal with no booking" slot. Route by category to the
+      // matching permission (booking:create vs booking-mice:create).
       const prefill = buildPrefill(lead, selection);
 
-      let draftRes: { success: boolean; draftId?: string; error?: string };
-
-      if (category === "MICE") {
-        draftRes = await createDraftMiceBooking({
-          leadId: lead.id,
-          clientName: lead.name,
-          eventDate: selection.eventDate,
-          venueId: selection.venueId,
-          eventTypeId: lead.eventType?.id ?? "",
-          miceSession: selection.session,
-          salesId: lead.assignedTo?.id ?? null,
-          sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
-          estimatedPax: lead.estimatedPax ?? null,
-          notes: lead.notes ?? null,
-        });
-      } else {
-        draftRes = await createDraftBooking({
-          leadId: lead.id,
-          customerName: lead.name,
-          eventDate: selection.eventDate,
-          venueId: selection.venueId,
-          category,
-          weddingSession: selection.session,
-          salesId: lead.assignedTo?.id ?? null,
-          packageId: lead.package?.id ?? null,
-          sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
-        });
-      }
+      const draftRes =
+        category === "MICE"
+          ? await convertLeadToDraftMiceBooking({
+              leadId: lead.id,
+              eventDate: selection.eventDate,
+              venueId: selection.venueId,
+              miceSession: selection.session,
+            })
+          : await convertLeadToDraftBooking({
+              leadId: lead.id,
+              eventDate: selection.eventDate,
+              venueId: selection.venueId,
+              category,
+              weddingSession: selection.session,
+            });
 
       if (!draftRes.success || !draftRes.draftId) {
-        toast.error(draftRes.error ?? "Gagal membuat draft booking.");
+        // Failure → toast only. Do NOT open the drawer (no draft to resume).
+        toast.error(draftRes.error ?? "Gagal mengkonversi lead menjadi Deal.");
         return;
       }
 
       toast.success(`${lead.name} ditandai sebagai Deal. Draft booking dibuat.`);
 
-      // Step 3: Open matching drawer with prefill + initialDraftId
+      // Success → open matching drawer with prefill + initialDraftId
       if (category === "MICE") {
         setMicePrefill(prefill);
         setMiceInitialDraftId(draftRes.draftId);
@@ -235,6 +220,17 @@ export function LeadsTable() {
       }
     }
 
+    // Resolve bookingFeeDate: DB stores as DateTime, convert to "YYYY-MM-DD" string
+    const bookingFeeDateStr = lead.bookingFeeDate
+      ? (() => {
+          const d = new Date(lead.bookingFeeDate);
+          const y = d.getUTCFullYear();
+          const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+          const day = String(d.getUTCDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        })()
+      : null;
+
     return {
       leadId: lead.id,
       name: lead.name,
@@ -253,6 +249,10 @@ export function LeadsTable() {
       eventType: lead.eventType,
       sourceOfInformation: lead.sourceOfInformation,
       assignedTo: lead.assignedTo,
+      // Booking fee — only populated when lead has isDateLocked (received booking fee)
+      bookingFeeAmount: lead.bookingFeeAmount ?? null,
+      bookingFeeDate: bookingFeeDateStr,
+      bookingFeeEvidenceUrl: lead.bookingFeeEvidenceUrl ?? null,
     };
   }
 

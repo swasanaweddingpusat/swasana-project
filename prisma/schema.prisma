@@ -569,6 +569,10 @@ model Booking {
   packageId             String?
   paymentMethodId       String?
   sourceOfInformationId String?
+  // When a booking draft was created from a lead (Deal flow), leadId is set.
+  // This allows the availability endpoint to block the slot even for drafts
+  // (only draft-from-lead blocks; manually created drafts do not).
+  leadId                String?
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles  Json?                // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries  Json?                // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
@@ -585,6 +589,7 @@ model Booking {
   paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
+  lead                Lead?                @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -619,6 +624,7 @@ model Booking {
   @@index([packageId])
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
+  @@index([leadId])
   @@index([bookingStatus])
   @@index([recordStatus])
   @@index([category])
@@ -1295,6 +1301,7 @@ model Lead {
   assignedTo            Profile?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   convertedToCustomer   Customer?            @relation("LeadConvertedCustomer", fields: [convertedToCustomerId], references: [id], onDelete: SetNull)
   convertedToBooking    Booking?             @relation("LeadConvertedBooking", fields: [convertedToBookingId], references: [id], onDelete: SetNull)
+  bookingsFromLead      Booking[]            @relation("BookingFromLead")
 
   @@index([statusId])
   @@index([createdById])

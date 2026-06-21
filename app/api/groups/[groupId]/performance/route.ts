@@ -18,7 +18,8 @@ export async function GET(
   const year = yearParam ? parseInt(yearParam, 10) : now.getFullYear();
 
   const startDate = new Date(year, 0, 1);
-  const endDate = new Date(year, 11, 31, 23, 59, 59);
+  // Exclusive upper bound: start of next year (query uses eventDate < endDate)
+  const endDate = new Date(year + 1, 0, 1);
 
   const performance = await getGroupPerformance(groupId, startDate, endDate, year);
   return Response.json(performance);
