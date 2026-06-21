@@ -734,15 +734,24 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 </View>
               </>
             )}
-            {/* Booking fee */}
-            <View style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
-              <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Booking fee via {booking.paymentMethod?.bankName ?? ""} {(() => { const bf = booking.termOfPayments[0]; const d = bf?.dueDate ?? createdAt; return new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" }); })()}</Text>
-              <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{(() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })()}</Text>
-            </View>
-            {/* Sisa Bayar */}
+            {/* Pembayaran yang sudah masuk — satu baris per TOP berstatus "paid"
+                (booking fee, DP, dan cicilan lain yang sudah dibayar saat ini). */}
+            {booking.termOfPayments
+              .filter((t) => t.paymentStatus === "paid")
+              .map((t) => {
+                const d = t.dueDate ?? createdAt;
+                const tgl = new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
+                return (
+                  <View key={t.id} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{t.name} via {booking.paymentMethod?.bankName ?? ""} {tgl}</Text>
+                    <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{fmtRp(t.amount)}</Text>
+                  </View>
+                );
+              })}
+            {/* Sisa Bayar = total (setelah diskon) − seluruh TOP yang sudah paid */}
             <View style={{ flexDirection: "row" }}>
               <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Sisa Bayar</Text>
-              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const bf = booking.termOfPayments[0]; return fmtRp(Math.max(0, totalPrice - (bf?.amount ?? 0))); })()}</Text>
+              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const paidTotal = booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0); return fmtRp(Math.max(0, totalPrice - paidTotal)); })()}</Text>
             </View>
           </View>
 
