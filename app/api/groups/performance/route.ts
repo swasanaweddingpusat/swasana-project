@@ -19,7 +19,8 @@ export async function GET(request: Request) {
   const year = yearParam ? parseInt(yearParam, 10) : now.getFullYear();
 
   const defaultStart = new Date(year, 0, 1);
-  const defaultEnd = new Date(year, 11, 31, 23, 59, 59);
+  // Exclusive upper bound: start of next year (query uses eventDate < endDate)
+  const defaultEnd = new Date(year + 1, 0, 1);
 
   const startDate = searchParams.get("startDate")
     ? new Date(searchParams.get("startDate")!)
