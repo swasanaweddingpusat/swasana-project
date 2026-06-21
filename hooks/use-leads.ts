@@ -5,6 +5,9 @@ import { createLead, updateLead, deleteLead, updateLeadStatus } from "@/actions/
 import type { CreateLeadInput, UpdateLeadInput, UpdateLeadStatusInput, LeadScope } from "@/lib/validations/lead";
 import type { LeadsResult, LeadStatusItem } from "@/lib/queries/leads";
 
+// Re-export so consumers can import from here without touching the validation schema directly
+export type { LeadScope };
+
 interface LeadFilter {
   search?: string;
   scope?: LeadScope;

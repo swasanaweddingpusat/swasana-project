@@ -61,7 +61,8 @@ export function CalendarMonthView({
 
   const eventsByDate = new Map<string, CalendarEventItem[]>();
   for (const event of events) {
-    const key = new Date(event.bookingDate).toDateString();
+    if (!event.eventDate) continue;
+    const key = new Date(event.eventDate).toDateString();
     const list = eventsByDate.get(key);
     if (list) {
       list.push(event);

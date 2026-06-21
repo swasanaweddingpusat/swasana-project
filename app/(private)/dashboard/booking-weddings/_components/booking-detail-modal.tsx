@@ -260,7 +260,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     {/* Event & Status */}
                     <MobileCard title="Event & Status" icon={<CalendarMark weight="BoldDuotone" className="h-4 w-4" />}>
                       <MobileField label="Event Date">
-                        {fmtDate(booking.bookingDate, "long")}
+                        {fmtDate(booking.eventDate, "long")}
                       </MobileField>
                       <MobileField label="Session">
                         {booking.weddingSession ?? "-"}
@@ -390,7 +390,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                     {/* Col 2 */}
                     <div>
                       <p className={lbl}>Event Date</p>
-                      <p className={val}>{fmtDate(booking.bookingDate, "long")}</p>
+                      <p className={val}>{fmtDate(booking.eventDate, "long")}</p>
                       <p className={lbl + " mt-4"}>Session</p>
                       <p className={val}>{booking.weddingSession ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Status Booking</p>

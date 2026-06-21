@@ -25,7 +25,6 @@ import {
   ArrowLeft,
   ArrowRight,
   UsersGroupRounded,
-  FileText,
   CalendarMark,
   UserCircle,
   TrashBinTrash,
@@ -52,10 +51,10 @@ interface LeadsListViewProps {
   onPageChange: (page: number) => void;
   onEdit: (lead: LeadItem) => void;
   onDelete: (lead: LeadItem) => void;
-  onBuatQuotation: (lead: LeadItem) => void;
   onMarkDeal: (lead: LeadItem) => void;
   onMarkLost: (lead: LeadItem) => void;
   onReset: (lead: LeadItem) => void;
+  onViewDetail: (lead: LeadItem) => void;
   isLoading?: boolean;
 }
 
@@ -132,19 +131,19 @@ function MobileLeadCard({
   rowNumber,
   onEdit,
   onDelete,
-  onBuatQuotation,
   onMarkDeal,
   onMarkLost,
   onReset,
+  onViewDetail,
 }: {
   lead: LeadItem;
   rowNumber: number;
   onEdit: (lead: LeadItem) => void;
   onDelete: (lead: LeadItem) => void;
-  onBuatQuotation: (lead: LeadItem) => void;
   onMarkDeal: (lead: LeadItem) => void;
   onMarkLost: (lead: LeadItem) => void;
   onReset: (lead: LeadItem) => void;
+  onViewDetail: (lead: LeadItem) => void;
 }) {
   const firstContact = Array.isArray(lead.contactNumbers)
     ? (lead.contactNumbers[0] as { number?: string } | undefined)?.number ?? ""
@@ -154,11 +153,13 @@ function MobileLeadCard({
     ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
     : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—");
 
-  const showBuatQuotation = lead.status.name === "Hot" && !lead.status.isFinal;
   const showFinalActions = !lead.status.isFinal;
 
   return (
-    <Card className="rounded-lg border bg-card">
+    <Card
+      className="rounded-lg border bg-card cursor-pointer hover:shadow-md transition-shadow"
+      onClick={() => onViewDetail(lead)}
+    >
       <CardContent className="px-3 py-2 space-y-1.5">
         {/* Row 1: Nama + Status */}
         <div className="flex items-start justify-between gap-2">
@@ -183,13 +184,18 @@ function MobileLeadCard({
         </div>
 
         {/* Row 2: Venue + Event Type badge */}
-        <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-          <span>{lead.venue?.name ?? "Venue —"}</span>
+        <div className="flex items-start gap-1.5 flex-wrap text-xs text-muted-foreground">
+          <span className="flex flex-col gap-0.5 min-w-0">
+            <span className="truncate">{lead.venue?.name ?? "Venue —"}</span>
+            {lead.venueSecondary && (
+              <span className="text-muted-foreground/70 truncate">{lead.venueSecondary.name}</span>
+            )}
+          </span>
           {lead.eventType && (
             <>
-              <span aria-hidden="true">·</span>
-              <span className="text-foreground/70">{lead.eventType.name}</span>
-              <Badge variant="outline" className="text-[10px] px-1 py-0">
+              <span aria-hidden="true" className="mt-0.5">·</span>
+              <span className="text-foreground/70 mt-0.5">{lead.eventType.name}</span>
+              <Badge variant="outline" className="text-[10px] px-1 py-0 mt-0.5">
                 {lead.eventType.category === "MICE" ? "MICE" : "Wedding"}
               </Badge>
             </>
@@ -198,12 +204,15 @@ function MobileLeadCard({
 
         {/* Row 3: Tanggal + Pax */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              <span>{formatEventDate(lead.eventDate)}</span>
-              {lead.time && (
-                <span className="block text-muted-foreground">{lead.time}</span>
+          <span className="flex items-start gap-1">
+            <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0 mt-px" />
+            <span className="flex flex-col gap-0.5">
+              <span>
+                {formatEventDate(lead.eventDate)}
+                {lead.time && <span className="text-muted-foreground"> · {lead.time}</span>}
+              </span>
+              {lead.eventDateAlt && (
+                <span className="text-muted-foreground/70">alt: {formatEventDate(lead.eventDateAlt)}</span>
               )}
             </span>
           </span>
@@ -220,7 +229,10 @@ function MobileLeadCard({
         </div>
 
         {/* Footer: Actions */}
-        <div className="flex items-center gap-2 pt-1 border-t border-border">
+        <div
+          className="flex items-center gap-2 pt-1 border-t border-border"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Button
             variant="outline"
             className="h-9 flex-1 text-xs"
@@ -230,17 +242,6 @@ function MobileLeadCard({
             <Pen weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1" />
             Edit
           </Button>
-          {showBuatQuotation && (
-            <Button
-              variant="outline"
-              className="h-9 flex-1 text-xs"
-              onClick={() => onBuatQuotation(lead)}
-              aria-label={`Buat quotation untuk ${lead.name}`}
-            >
-              <FileText weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 mr-1" />
-              Quotation
-            </Button>
-          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -300,10 +301,10 @@ export function LeadsListView({
   onPageChange,
   onEdit,
   onDelete,
-  onBuatQuotation,
   onMarkDeal,
   onMarkLost,
   onReset,
+  onViewDetail,
   isLoading,
 }: LeadsListViewProps) {
   // ── Loading state ──
@@ -352,10 +353,10 @@ export function LeadsListView({
               rowNumber={rowNumber}
               onEdit={onEdit}
               onDelete={onDelete}
-              onBuatQuotation={onBuatQuotation}
               onMarkDeal={onMarkDeal}
               onMarkLost={onMarkLost}
               onReset={onReset}
+              onViewDetail={onViewDetail}
             />
           );
         })}
@@ -368,61 +369,94 @@ export function LeadsListView({
             <TableRow className="bg-muted/50">
               {/* No — hidden on mobile (already handled by block/hidden wrapper) */}
               <TableHead className="px-4 whitespace-nowrap w-12 text-right hidden sm:table-cell">No</TableHead>
-              {/* Nama — always visible (within sm+ context) */}
-              <TableHead className="px-4 whitespace-nowrap">Nama</TableHead>
-              {/* Venue — tablet+: hidden lg, shown at lg */}
+              {/* Client — always visible; sub-row embeds pax + sumber */}
+              <TableHead className="px-4 whitespace-nowrap">Client</TableHead>
+              {/* Tanggal Event — md+ (freed up after Pax/Sumber removed) */}
+              <TableHead className="px-4 whitespace-nowrap hidden md:table-cell">Tanggal Event</TableHead>
+              {/* Venue — lg+ */}
               <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Venue</TableHead>
-              {/* Event Type — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Event Type</TableHead>
-              {/* Tanggal Event — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Tanggal Event</TableHead>
-              {/* Pax — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap text-right hidden lg:table-cell">Pax</TableHead>
+              {/* Event Type — xl+ (push out to give lg breathing room) */}
+              <TableHead className="px-4 whitespace-nowrap hidden xl:table-cell">Event Type</TableHead>
               {/* Status — always visible */}
               <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
-              {/* Sales — sm+ */}
-              <TableHead className="px-4 whitespace-nowrap w-24 hidden sm:table-cell">Sales</TableHead>
-              {/* Sumber Info — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Sumber Info</TableHead>
+              {/* Sales — md+ */}
+              <TableHead className="px-4 whitespace-nowrap w-24 hidden md:table-cell">Sales</TableHead>
               {/* Action — always visible */}
               <TableHead className="px-4 whitespace-nowrap w-20 text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {leads.map((lead, index) => {
-              const firstContact = Array.isArray(lead.contactNumbers)
-                ? (lead.contactNumbers[0] as { number?: string } | undefined)?.number ?? ""
-                : "";
               const rowNumber = (currentPage - 1) * pageSize + index + 1;
               return (
-                <TableRow key={lead.id} className="hover:bg-muted/40">
+                <TableRow
+                  key={lead.id}
+                  className="hover:bg-muted/40 cursor-pointer"
+                  onClick={() => onViewDetail(lead)}
+                >
                   {/* No */}
                   <TableCell className="px-4 text-right tabular-nums text-muted-foreground hidden sm:table-cell">
                     {rowNumber}
                   </TableCell>
 
-                  {/* Nama — with HP + tanggal subtext for tablet (where date col is hidden) */}
-                  <TableCell className="px-4 font-medium max-w-48 truncate" title={lead.name}>
-                    <div className="truncate">{lead.name}</div>
-                    {firstContact && (
-                      <div className="text-xs text-muted-foreground">+{firstContact}</div>
+                  {/* Client — primary: name bold; sub: pax · sumber */}
+                  <TableCell className="px-4 max-w-52" title={lead.name}>
+                    <div className="font-medium truncate">{lead.name}</div>
+                    {(() => {
+                      const paxPart = lead.estimatedPax
+                        ? `${lead.estimatedPax.toLocaleString("id-ID")} pax`
+                        : null;
+                      const sumberPart = lead.sourceOfInformation?.name ?? null;
+                      const subParts: string[] = [];
+                      if (paxPart) subParts.push(paxPart);
+                      if (sumberPart) subParts.push(sumberPart);
+                      if (subParts.length > 0) {
+                        return (
+                          <div className="text-xs text-muted-foreground truncate mt-0.5">
+                            {subParts.join(" · ")}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </TableCell>
+
+                  {/* Tanggal Event — md+ */}
+                  <TableCell className="px-4 text-foreground/80 hidden md:table-cell">
+                    <div className="whitespace-nowrap">{formatEventDate(lead.eventDate)}</div>
+                    {lead.time && (
+                      <div className="text-xs text-muted-foreground">{lead.time}</div>
                     )}
-                    {/* Tablet only: show event date inline since Tanggal Event col is hidden at md */}
-                    <div className="text-xs text-muted-foreground mt-0.5 lg:hidden">
-                      {formatEventDate(lead.eventDate)}
-                      {lead.time && (
-                        <span className="block text-muted-foreground">{lead.time}</span>
-                      )}
-                    </div>
+                    {lead.eventDateAlt && (
+                      <div className="text-xs text-muted-foreground/70 whitespace-nowrap">
+                        alt: {formatEventDate(lead.eventDateAlt)}
+                      </div>
+                    )}
                   </TableCell>
 
-                  {/* Venue */}
-                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden lg:table-cell">
-                    {lead.venue?.name ?? <span className="text-muted-foreground">—</span>}
+                  {/* Venue — lg+ */}
+                  <TableCell className="px-4 text-foreground/80 hidden lg:table-cell">
+                    {lead.venue ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="truncate max-w-36" title={lead.venue.name}>
+                          {lead.venue.name}
+                        </span>
+                        {lead.venueSecondary && (
+                          <span
+                            className="text-xs text-muted-foreground/70 truncate max-w-36"
+                            title={lead.venueSecondary.name}
+                          >
+                            {lead.venueSecondary.name}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
 
-                  {/* Event Type */}
-                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden lg:table-cell">
+                  {/* Event Type — xl+ */}
+                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden xl:table-cell">
                     {lead.eventType ? (
                       <span className="flex items-center gap-1.5">
                         {lead.eventType.name}
@@ -435,47 +469,32 @@ export function LeadsListView({
                     )}
                   </TableCell>
 
-                  {/* Tanggal Event */}
-                  <TableCell className="px-4 text-foreground/80 hidden lg:table-cell">
-                    <div>{formatEventDate(lead.eventDate)}</div>
-                    {lead.time && (
-                      <div className="text-xs text-muted-foreground">{lead.time}</div>
-                    )}
-                  </TableCell>
-
-                  {/* Pax */}
-                  <TableCell className="px-4 text-right whitespace-nowrap text-foreground/80 hidden lg:table-cell">
-                    {lead.estimatedPax ? lead.estimatedPax.toLocaleString("id-ID") : "—"}
-                  </TableCell>
-
-                  {/* Status */}
+                  {/* Status — pill style */}
                   <TableCell className="px-4">
-                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium"
+                      style={{ backgroundColor: `${lead.status.color}1A`, color: lead.status.color }}
+                    >
                       <span
                         aria-hidden="true"
-                        className="inline-block w-2 h-2 rounded-full shrink-0"
+                        className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
                         style={{ backgroundColor: lead.status.color }}
                       />
-                      <span className="text-xs text-foreground/80">{lead.status.name}</span>
+                      {lead.status.name}
                     </span>
                   </TableCell>
 
-                  {/* Sales */}
-                  <TableCell className="px-4 text-muted-foreground align-top hidden sm:table-cell">
-                    <div className="w-24 whitespace-normal break-words leading-tight">
+                  {/* Sales — md+ */}
+                  <TableCell className="px-4 text-muted-foreground align-top hidden md:table-cell">
+                    <div className="w-24 whitespace-normal break-words leading-tight text-sm">
                       {lead.assignedTo
                         ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "—")
                         : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "—")}
                     </div>
                   </TableCell>
 
-                  {/* Sumber Info */}
-                  <TableCell className="px-4 text-muted-foreground whitespace-nowrap hidden lg:table-cell">
-                    {lead.sourceOfInformation?.name ?? "—"}
-                  </TableCell>
-
-                  {/* Action */}
-                  <TableCell className="px-4">
+                  {/* Action — stopPropagation prevents row click from opening detail. */}
+                  <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
@@ -485,16 +504,6 @@ export function LeadsListView({
                       >
                         <Pen weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
                       </Button>
-                      {lead.status.name === "Hot" && !lead.status.isFinal && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onBuatQuotation(lead)}
-                          aria-label={`Buat quotation untuk ${lead.name}`}
-                        >
-                          <FileText weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button

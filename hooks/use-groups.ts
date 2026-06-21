@@ -11,8 +11,9 @@ import {
   addGroupMember,
   removeGroupMember,
   setMemberTarget,
+  deleteMemberTarget,
 } from "@/actions/groups";
-import type { CreateGroupInput, UpdateGroupInput, SetMemberTargetInput } from "@/lib/validations/group";
+import type { CreateGroupInput, UpdateGroupInput, SetMemberTargetInput, DeleteMemberTargetInput } from "@/lib/validations/group";
 
 export function useGroups(initialData?: GroupsQueryResult) {
   return useQuery({
@@ -81,9 +82,22 @@ export function useSetMemberTarget() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: SetMemberTargetInput) => setMemberTarget(data),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
       queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
+      queryClient.invalidateQueries({ queryKey: ["member-annual-targets", variables.profileId] });
+    },
+  });
+}
+
+export function useDeleteMemberTarget() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DeleteMemberTargetInput) => deleteMemberTarget(data),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "performance"] });
+      queryClient.invalidateQueries({ queryKey: ["member-annual-targets", variables.profileId] });
     },
   });
 }

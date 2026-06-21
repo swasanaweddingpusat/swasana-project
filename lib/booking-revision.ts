@@ -37,7 +37,7 @@ export async function createBookingRevision(
 
   const snapshotData = {
     poNumber: booking.poNumber,
-    bookingDate: booking.bookingDate,
+    eventDate: booking.eventDate,
     weddingSession: booking.weddingSession,
     weddingType: booking.weddingType,
     signingLocation: booking.signingLocation,

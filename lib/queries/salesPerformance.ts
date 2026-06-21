@@ -74,7 +74,7 @@ export async function getTopSalesByRecentBooking(
   const candidateBookings = await db.booking.findMany({
     where: {
       recordStatus: "saved",
-      bookingDate: { gte: startDate, lte: endDate },
+      eventDate: { gte: startDate, lte: endDate },
       ...(allowedProfileIds ? { salesId: { in: allowedProfileIds } } : {}),
     },
     select: { salesId: true },
@@ -91,7 +91,7 @@ export async function getTopSalesByRecentBooking(
       where: {
         recordStatus: "saved",
         salesId: { in: candidateSalesIds },
-        bookingDate: { gte: startDate, lte: endDate },
+        eventDate: { gte: startDate, lte: endDate },
         bookingStatus: { not: BookingStatus.Canceled },
       },
       select: {

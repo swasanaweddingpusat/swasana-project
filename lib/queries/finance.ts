@@ -78,7 +78,7 @@ export async function getCompanyFinanceSummary(
     where: {
       recordStatus: "saved",
       bookingStatus: { not: BookingStatus.Canceled },
-      ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
+      ...(startDate && endDate ? { eventDate: { gte: startDate, lte: endDate } } : {}),
     },
     select: {
       bookingStatus: true,
@@ -179,7 +179,7 @@ export async function getGroupsFinanceBreakdown(
       recordStatus: "saved",
       salesId: { in: allSalesIds },
       bookingStatus: { not: BookingStatus.Canceled },
-      ...(startDate && endDate ? { bookingDate: { gte: startDate, lte: endDate } } : {}),
+      ...(startDate && endDate ? { eventDate: { gte: startDate, lte: endDate } } : {}),
     },
     select: {
       salesId: true,

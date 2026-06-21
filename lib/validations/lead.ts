@@ -21,8 +21,27 @@ const baseLeadSchema = z.object({
     .min(1, "Minimal 1 nomor HP/WA wajib diisi")
     .max(10),
   email: z.string().trim().email("Format email tidak valid").optional().or(z.literal("")),
+  emailCpp: z.string().trim().email("Format email CP Pria tidak valid").optional().or(z.literal("")),
+  emailCpw: z.string().trim().email("Format email CP Wanita tidak valid").optional().or(z.literal("")),
+  nikCpp: z
+    .string()
+    .trim()
+    .length(16, "NIK CP Pria harus 16 digit")
+    .regex(/^\d+$/, "NIK CP Pria hanya boleh berisi angka")
+    .optional()
+    .or(z.literal("")),
+  nikCpw: z
+    .string()
+    .trim()
+    .length(16, "NIK CP Wanita harus 16 digit")
+    .regex(/^\d+$/, "NIK CP Wanita hanya boleh berisi angka")
+    .optional()
+    .or(z.literal("")),
+  addressCpp: z.string().trim().max(1000).optional(),
+  addressCpw: z.string().trim().max(1000).optional(),
   address: z.string().trim().max(500).optional(),
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
+  eventDateAlt: z.string().optional().nullable(),
   time: z.string().trim().max(100).optional(),
   estimatedPax: z.coerce.number().int().min(1).optional().nullable(),
   budgetRange: z.string().trim().max(100).optional(),
@@ -30,13 +49,20 @@ const baseLeadSchema = z.object({
   instansi: z.string().trim().max(200).optional(),
   category: z.enum(["WEDDINGS", "MICE"]).default("WEDDINGS"),
   venueId: z.string().optional(),
+  venueSecondaryId: z.string().optional().nullable(),
   packageId: z.string().optional().nullable(),
   eventTypeId: z.string().min(1, "Event type wajib dipilih"),
   sourceOfInformationId: z.string().min(1, "Sumber informasi wajib dipilih"),
   assignedToId: z.string().min(1, "Assign ke sales wajib dipilih"),
   statusId: z.string().min(1, "Status wajib dipilih"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional(),
+  weddingSessionAlt: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   bitrixId: z.string().trim().max(100).optional().nullable(),
+  // Date locking & booking fee
+  isDateLocked: z.boolean().default(false),
+  bookingFeeAmount: z.coerce.number().int().min(0).optional().nullable(),
+  bookingFeeDate: z.string().optional().nullable(),
+  bookingFeeEvidenceUrl: z.string().trim().max(500).optional().nullable(),
 });
 
 // Weddings require a session; MICE does not.
@@ -53,12 +79,86 @@ const requireWeddingSession = (
   }
 };
 
-export const createLeadSchema = baseLeadSchema.superRefine(requireWeddingSession);
+// When isDateLocked is true, bookingFeeAmount, bookingFeeDate, and bookingFeeEvidenceUrl
+// are all required. Evidence URL is set server-side after upload; client passes it explicitly.
+const requireBookingFeeWhenLocked = (
+  data: {
+    isDateLocked?: boolean;
+    bookingFeeAmount?: number | null;
+    bookingFeeDate?: string | null;
+    bookingFeeEvidenceUrl?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (!data.isDateLocked) return;
+  if (!data.bookingFeeAmount || data.bookingFeeAmount <= 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["bookingFeeAmount"],
+      message: "Nominal booking fee wajib diisi saat tanggal dikunci",
+    });
+  }
+  if (!data.bookingFeeDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["bookingFeeDate"],
+      message: "Tanggal terima booking fee wajib diisi",
+    });
+  }
+  if (!data.bookingFeeEvidenceUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["bookingFeeEvidenceUrl"],
+      message: "Bukti bayar wajib diunggah saat tanggal dikunci",
+    });
+  }
+};
+
+// For WEDDINGS: weddingSessionAlt is required when eventDateAlt is provided.
+const requireAltSession = (
+  data: {
+    category?: "WEDDINGS" | "MICE";
+    eventDateAlt?: string | null;
+    weddingSessionAlt?: "morning" | "evening" | "fullday" | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.category === "WEDDINGS" && data.eventDateAlt && !data.weddingSessionAlt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["weddingSessionAlt"],
+      message: "Session tanggal alternatif wajib dipilih untuk wedding",
+    });
+  }
+};
+
+// Alternative event date, when provided, must differ from the primary event date.
+const requireDistinctEventDates = (
+  data: { eventDate?: string; eventDateAlt?: string | null },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.eventDateAlt && data.eventDate && data.eventDateAlt === data.eventDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["eventDateAlt"],
+      message: "Tanggal alternatif tidak boleh sama dengan tanggal utama",
+    });
+  }
+};
+
+export const createLeadSchema = baseLeadSchema
+  .superRefine(requireWeddingSession)
+  .superRefine(requireAltSession)
+  .superRefine(requireBookingFeeWhenLocked)
+  .superRefine(requireDistinctEventDates);
 
 export const updateLeadSchema = baseLeadSchema
   .partial()
   .extend({ id: z.string().min(1) })
-  .superRefine(requireWeddingSession);
+  .superRefine(requireWeddingSession)
+  .superRefine(requireAltSession)
+  .superRefine(requireBookingFeeWhenLocked)
+  .superRefine(requireDistinctEventDates);
 
 export const leadFilterSchema = z.object({
   search: z.string().optional(),
@@ -103,3 +203,5 @@ export type LeadFilterInput = z.infer<typeof leadFilterSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
 export type CreateLeadStatusInput = z.infer<typeof createLeadStatusSchema>;
 export type UpdateLeadStatusInput2 = z.infer<typeof updateLeadStatusSchema2>;
+export type BaseLeadInput = z.infer<typeof baseLeadSchema>;
+export type WeddingSessionAltInput = "morning" | "evening" | "fullday" | null | undefined;

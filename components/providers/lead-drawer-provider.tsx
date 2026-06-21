@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { LeadDrawer } from "@/app/(private)/dashboard/leads/_components/lead-drawer";
+import { CreateLeadDrawer } from "@/app/(private)/dashboard/leads/_components/CreateLeadDrawer";
 import { useDrawerController, type OpenDrawerOptions } from "@/hooks/use-drawer-controller";
 
 interface LeadDrawerContextValue {
@@ -17,10 +17,9 @@ export function LeadDrawerProvider({ children }: { children: ReactNode }) {
     <LeadDrawerContext.Provider value={{ openLeadDrawer: openDrawer }}>
       {children}
       {open && (
-        <LeadDrawer
+        <CreateLeadDrawer
           open={open}
           onOpenChange={setOpen}
-          editLead={null}
           onSuccess={handleSuccess}
         />
       )}

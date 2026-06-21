@@ -294,21 +294,27 @@ export function MiceBookingDrawer({
     return salesMice.find((s) => s.id === user.profileId)?.fullName ?? user.name ?? null;
   }, [currentUserIsSalesMice, salesMice, user]);
 
-  // Watch venueId from form to trigger availability fetch
+  // Watch venueId and eventDate from form to drive availability + session filtering
   const watchedVenueId = form.watch("venueId");
+  const watchedEventDate = form.watch("eventDate");
 
-  // Fetch venue availability whenever venue or visible month changes
+  // In edit mode, pass the current booking id as `exclude` so the booking being
+  // edited does not block its own slot in the availability response.
+  const excludeBookingId = isEdit && booking ? booking.id : null;
+
+  // Fetch venue availability whenever venue, visible month, or excludeId changes
   useEffect(() => {
     if (!watchedVenueId) { setAvailability({}); return; }
     setAvailLoading(true);
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
     const params = new URLSearchParams({ month });
+    if (excludeBookingId) params.set("exclude", excludeBookingId);
     fetch(`/api/venues/${watchedVenueId}/availability?${params}`)
       .then((r) => r.json())
       .then((data: Record<string, DayAvail>) => setAvailability(data))
       .catch(() => setAvailability({}))
       .finally(() => setAvailLoading(false));
-  }, [watchedVenueId, visibleMonth]);
+  }, [watchedVenueId, visibleMonth, excludeBookingId]);
 
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | null {
     const key = format(d, "yyyy-MM-dd");
@@ -318,6 +324,21 @@ export function MiceBookingDrawer({
     if (count === 0) return "unavailable";
     if (count === 3) return "available";
     return "partial";
+  }
+
+  /**
+   * Returns only session keys that are still available for the given date.
+   * Mirrors the wedding drawer's getAvailableSessions() pattern.
+   * fullday is available only when BOTH morning and evening are free.
+   */
+  function getAvailableSessions(dateStr: string): Array<"morning" | "evening" | "fullday"> {
+    const a = availability[dateStr];
+    if (!a) return ["morning", "evening", "fullday"];
+    const result: Array<"morning" | "evening" | "fullday"> = [];
+    if (a.morning) result.push("morning");
+    if (a.evening) result.push("evening");
+    if (a.fullday && a.morning && a.evening) result.push("fullday");
+    return result;
   }
 
   // Pre-compute terms from booking OUTSIDE the effect so the effect body
@@ -412,7 +433,7 @@ export function MiceBookingDrawer({
           clientPhone: booking.customer.phone,
           venueId: booking.venue.id,
           eventTypeId: "",
-          // bookingDate is stored as UTC midnight — use UTC getters to recover the date string.
+          // eventDate is stored as UTC midnight — use UTC getters to recover the date string.
           eventDate: booking.eventDate ? (() => { const d = new Date(booking.eventDate!); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; })() : "",
           time: "",
           estimatedPax: "",
@@ -507,7 +528,6 @@ export function MiceBookingDrawer({
 
         const draftData = {
           id: pendingDraftId,
-          bookingDate: values.eventDate || new Date().toISOString().split("T")[0],
           venueId: values.venueId,
           eventTypeId: values.eventTypeId,
           salesId: resolvedSalesId || null,
@@ -610,7 +630,6 @@ export function MiceBookingDrawer({
         venueId: values.venueId,
         eventTypeId: values.eventTypeId,
         eventDate: values.eventDate,
-        bookingDate: new Date().toISOString().split("T")[0],
         estimatedPax: values.estimatedPax ? Number(values.estimatedPax) : null,
         salesId: resolvedSalesId ?? null,
         salesSignature: signatureRef.current ?? null,
@@ -878,29 +897,52 @@ export function MiceBookingDrawer({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <FormField control={form.control} name="miceSession" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sesi Event</FormLabel>
-                        <FormControl>
-                          <SearchableSelect
-                            options={[
-                              { id: "morning", name: "Pagi (Morning)" },
-                              { id: "evening", name: "Malam (Evening)" },
-                              { id: "fullday", name: "Fullday" },
-                            ]}
-                            value={field.value}
-                            onChange={(v) => field.onChange(v as "morning" | "evening" | "fullday" | "")}
-                            placeholder="Pilih sesi event..."
-                            searchPlaceholder="Cari sesi..."
-                            emptyText="Tidak ada opsi"
-                          />
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Sesi menentukan slot venue — pagi dan malam bisa diisi event berbeda, fullday mengunci seluruh hari.
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField control={form.control} name="miceSession" render={({ field }) => {
+                      const SESSION_LABELS: Record<string, string> = {
+                        morning: "Pagi (Morning)",
+                        evening: "Malam (Evening)",
+                        fullday: "Fullday",
+                      };
+                      const ALL_SESSIONS = ["morning", "evening", "fullday"] as const;
+                      const availableSessions = watchedEventDate
+                        ? getAvailableSessions(watchedEventDate)
+                        : ALL_SESSIONS;
+                      const sessionOptions = availableSessions.map((s) => ({
+                        id: s,
+                        name: SESSION_LABELS[s],
+                      }));
+                      // Warn if the currently selected session became unavailable
+                      // (e.g., user picked date first, then session slot got taken)
+                      const selectedSessionUnavailable =
+                        !!watchedEventDate &&
+                        !!field.value &&
+                        !availableSessions.includes(field.value as "morning" | "evening" | "fullday");
+                      return (
+                        <FormItem>
+                          <FormLabel>Sesi Event</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              options={sessionOptions}
+                              value={field.value}
+                              onChange={(v) => field.onChange(v as "morning" | "evening" | "fullday" | "")}
+                              placeholder={!watchedEventDate ? "Pilih tanggal dulu" : "Pilih sesi event..."}
+                              searchPlaceholder="Cari sesi..."
+                              emptyText="Semua sesi penuh untuk tanggal ini"
+                              disabled={!watchedEventDate}
+                            />
+                          </FormControl>
+                          {selectedSessionUnavailable && (
+                            <p className="text-xs text-destructive mt-1">
+                              Sesi ini sudah penuh untuk tanggal yang dipilih. Silakan pilih sesi lain.
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Sesi menentukan slot venue — pagi dan malam bisa diisi event berbeda, fullday mengunci seluruh hari.
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }} />
                     <FormField control={form.control} name="time" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Waktu Acara</FormLabel>

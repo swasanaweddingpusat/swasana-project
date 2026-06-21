@@ -13,7 +13,7 @@ const stats = [
   { label: 'Total Events', icon: Calendar, getValue: (e: CalendarEventsResult) => e.length },
   { label: 'Confirmed', icon: CalendarMark, getValue: (e: CalendarEventsResult) => e.filter((ev) => ev.bookingStatus === 'Confirmed').length },
   { label: 'Pending', icon: ClockCircle, getValue: (e: CalendarEventsResult) => e.filter((ev) => ev.bookingStatus === 'Pending' || ev.bookingStatus === 'Uploaded').length },
-  { label: 'Event Days', icon: Calendar, getValue: (e: CalendarEventsResult) => new Set(e.map((ev) => new Date(ev.bookingDate).toDateString())).size },
+  { label: 'Event Days', icon: Calendar, getValue: (e: CalendarEventsResult) => new Set(e.filter((ev) => ev.eventDate).map((ev) => new Date(ev.eventDate!).toDateString())).size },
 ] as const;
 
 export function CalendarStats({ events }: CalendarStatsProps) {

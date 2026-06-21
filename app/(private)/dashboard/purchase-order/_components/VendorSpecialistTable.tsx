@@ -198,7 +198,7 @@ export function VendorSpecialistTable({
                               </ul>
                             </TooltipContent>
                           </Tooltip>
-                          <p className={cn("text-xs", "text-muted-foreground", "mt-0.5", "sm:hidden")}>{format(new Date(booking.bookingDate), "dd MMM yyyy")}</p>
+                          <p className={cn("text-xs", "text-muted-foreground", "mt-0.5", "sm:hidden")}>{booking.eventDate ? format(new Date(booking.eventDate), "dd MMM yyyy") : "—"}</p>
                           <div className={cn("flex", "flex-wrap", "items-center", "gap-1", "mt-1")}>
                             <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium bg-background", STATUS_TEXT[booking.bookingStatus] ?? "text-muted-foreground border-border")}>
                               <span className={cn("w-1 h-1 rounded-full mr-1", STATUS_DOT[booking.bookingStatus] ?? "bg-muted-foreground")} />
@@ -250,7 +250,7 @@ export function VendorSpecialistTable({
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell", "whitespace-nowrap", "text-sm")}>
-                        {format(new Date(booking.bookingDate), "dd MMM yyyy")}
+                        {booking.eventDate ? format(new Date(booking.eventDate), "dd MMM yyyy") : "—"}
                       </TableCell>
 
                       <TableCell className={cn("px-2", "py-2", "hidden", "sm:table-cell")}>

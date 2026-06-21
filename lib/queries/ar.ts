@@ -41,7 +41,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
     select: {
       id: true,
       poNumber: true,
-      bookingDate: true,
+      eventDate: true,
       bookingStatus: true,
       salesId: true,
       venueId: true,
@@ -136,7 +136,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
       customerEvent: b.snapCustomer?.name ?? "-",
       customerEmail: b.snapCustomer?.emailCpp ?? b.snapCustomer?.emailCpw ?? "",
       customerPhone: b.snapCustomer?.mobileNumber ?? "",
-      customerDate: b.bookingDate.toISOString(),
+      customerDate: b.eventDate!.toISOString(), // AR bookings are confirmed, always have eventDate
       namaEvent: b.snapVenue?.venueName ?? "-",
       brandName: b.snapVenue?.brandName ?? null,
       venueId: b.snapVenue?.venueId ?? b.venueId,

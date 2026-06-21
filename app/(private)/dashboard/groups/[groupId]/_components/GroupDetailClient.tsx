@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGroupPerformance } from "@/hooks/use-groups-performance";
+import { useGroupPerformance, useMemberAnnualTargets } from "@/hooks/use-groups-performance";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -28,17 +29,22 @@ import {
   CalendarMark,
   Settings,
   UserCircle,
+  AddCircle,
+  PenNewSquare,
+  TrashBinTrash,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChangeLeaderDialog } from "./ChangeLeaderDialog";
 import { GroupSalesMasterDetail } from "./GroupSalesMasterDetail";
+import { GroupYearSelector } from "@/app/(private)/dashboard/groups/_components/GroupYearSelector";
 import type { SalesListMember } from "./GroupSalesListItem";
 import {
   useUpdateGroup,
   useAddGroupMember,
   useRemoveGroupMember,
   useSetMemberTarget,
+  useDeleteMemberTarget,
 } from "@/hooks/use-groups";
 import type {
   GroupDetail,
@@ -90,14 +96,19 @@ export function GroupDetailClient({
   const addMemberMutation = useAddGroupMember();
   const removeMemberMutation = useRemoveGroupMember();
   const setTargetMutation = useSetMemberTarget();
+  const deleteTargetMutation = useDeleteMemberTarget();
 
   const isPending =
     updateGroupMutation.isPending ||
     addMemberMutation.isPending ||
     removeMemberMutation.isPending ||
-    setTargetMutation.isPending;
+    setTargetMutation.isPending ||
+    deleteTargetMutation.isPending;
 
-  const { data: performance = initialPerformance } = useGroupPerformance(group.id, initialPerformance);
+  // Year selector — drives both performance data and target display
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const { data: performance = initialPerformance } = useGroupPerformance(group.id, initialPerformance, selectedYear);
 
   // ── Dialog state ─────────────────────────────────────────────────────────────
 
@@ -109,45 +120,46 @@ export function GroupDetailClient({
   const [changeLeaderOpen, setChangeLeaderOpen] = useState(false);
 
   type MemberRow = { profileId: string; name: string; target: number };
+
+  // ── Multi-year target dialog state ───────────────────────────────────────────
+
   const [editTargetMember, setEditTargetMember] = useState<MemberRow | null>(null);
-  const [targetInput, setTargetInput] = useState("");
+
+  // Sub-state inside the multi-year dialog
+  // "add" mode: form tambah tahun baru
+  // "edit" mode: edit amount existing entry
+  const [targetDialogSubMode, setTargetDialogSubMode] = useState<
+    | { mode: "list" }
+    | { mode: "add"; year: number | null; amount: string }
+    | { mode: "edit"; year: number; amount: string }
+  >({ mode: "list" });
+
+  const [deleteTargetYear, setDeleteTargetYear] = useState<number | null>(null);
 
   const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
 
   // Master-detail selection state
   const [selectedSalesId, setSelectedSalesId] = useState<string | null>(null);
 
-  // ── Local members mirror ───────────────────────────────────────────────────
-  // The list, the member counter, and the hero all read from `members`. We mirror
-  // the server prop into local state so add/remove reflect instantly (optimistic),
-  // then re-sync whenever the server prop changes (after router.refresh() lands).
-  // Reset-on-prop-change is done during render (React's "adjust state while rendering"
-  // pattern) instead of an effect, so there is no extra render pass.
-  type GroupMember = Props["group"]["members"][number];
-  const [members, setMembers] = useState<GroupMember[]>(group.members);
-  const [syncedMembers, setSyncedMembers] = useState(group.members);
-  if (syncedMembers !== group.members) {
-    setSyncedMembers(group.members);
-    setMembers(group.members);
-  }
-
   // ── Derived data ─────────────────────────────────────────────────────────────
 
-  const memberRows = members.map((m) => {
-    const perf = performance.find((p) => p.profileId === m.userId);
-    return {
-      profileId: m.userId,
-      name: m.profile.fullName ?? m.userId,
-      email: m.profile.email ?? null,
-      roleName: m.profile.role?.name ?? null,
-      avatarUrl: m.profile.avatarUrl ?? undefined,
-      target: perf?.target ?? 0,
-      actual: perf?.actual ?? 0,
-      bookings: perf?.bookings ?? 0,
-      confirmed: perf?.confirmed ?? 0,
-      pendingApproval: perf?.pendingApproval ?? 0,
-    };
-  });
+  const memberRows = group.members
+    .filter((m) => m.userId !== group.leaderId)
+    .map((m) => {
+      const perf = performance.find((p) => p.profileId === m.userId);
+      return {
+        profileId: m.userId,
+        name: m.profile.fullName ?? m.userId,
+        email: m.profile.email ?? null,
+        roleName: m.profile.role?.name ?? null,
+        avatarUrl: m.profile.avatarUrl ?? undefined,
+        target: perf?.target ?? 0,
+        actual: perf?.actual ?? 0,
+        bookings: perf?.bookings ?? 0,
+        confirmed: perf?.confirmed ?? 0,
+        pendingApproval: perf?.pendingApproval ?? 0,
+      };
+    });
 
   const sorted = [...memberRows].sort((a, b) => b.actual - a.actual);
 
@@ -183,7 +195,6 @@ export function GroupDetailClient({
   }
 
   function handleAddMember(profileId: string) {
-    const profile = availableProfiles.find((p) => p.id === profileId);
     addMemberMutation.mutate(
       { groupId: group.id, userId: profileId },
       {
@@ -191,27 +202,6 @@ export function GroupDetailClient({
           if (res.success) {
             toast.success("Anggota berhasil ditambahkan");
             setAddOpen(false);
-            // Optimistic: show the new member immediately, then re-sync from the server
-            // prop once router.refresh() lands.
-            if (profile) {
-              setMembers((prev) =>
-                prev.some((m) => m.userId === profileId)
-                  ? prev
-                  : [
-                      ...prev,
-                      {
-                        userId: profile.id,
-                        profile: {
-                          id: profile.id,
-                          fullName: profile.fullName,
-                          email: profile.email,
-                          avatarUrl: profile.avatarUrl,
-                          role: null,
-                        },
-                      } as GroupMember,
-                    ],
-              );
-            }
             void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
           } else {
@@ -232,8 +222,6 @@ export function GroupDetailClient({
             toast.success(`${deleteMember.name} dihapus dari grup`);
             const removedId = deleteMember.profileId;
             setDeleteMember(null);
-            // Optimistic: drop the member immediately; the server prop re-syncs after refresh.
-            setMembers((prev) => prev.filter((m) => m.userId !== removedId));
             if (selectedSalesId === removedId) setSelectedSalesId(null);
             void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
             router.refresh();
@@ -245,27 +233,81 @@ export function GroupDetailClient({
     );
   }
 
-  function handleSaveTarget() {
+  // ── Multi-year target handlers ────────────────────────────────────────────────
+
+  function openEditTargetDialog(member: SalesListMember) {
+    setEditTargetMember({
+      profileId: member.profileId,
+      name: member.name,
+      target: member.target,
+    });
+    setTargetDialogSubMode({ mode: "list" });
+    setDeleteTargetYear(null);
+  }
+
+  function handleAddTargetYear() {
     if (!editTargetMember) return;
+    if (targetDialogSubMode.mode !== "add") return;
+    const { year, amount } = targetDialogSubMode;
+    if (!year) return;
+    const numAmount = Number(amount) || 0;
     setTargetMutation.mutate(
-      {
-        groupId: group.id,
-        profileId: editTargetMember.profileId,
-        amount: Number(targetInput) || 0,
-      },
+      { groupId: group.id, profileId: editTargetMember.profileId, year, amount: numAmount },
       {
         onSuccess: (res) => {
           if (res.success) {
-            toast.success("Target berhasil disimpan");
-            setEditTargetMember(null);
-            void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
-            router.refresh();
+            toast.success(`Target ${year} berhasil ditambahkan`);
+            setTargetDialogSubMode({ mode: "list" });
           } else {
             toast.error(res.error ?? "Terjadi kesalahan");
           }
         },
       },
     );
+  }
+
+  function handleEditTargetYear() {
+    if (!editTargetMember) return;
+    if (targetDialogSubMode.mode !== "edit") return;
+    const { year, amount } = targetDialogSubMode;
+    const numAmount = Number(amount) || 0;
+    setTargetMutation.mutate(
+      { groupId: group.id, profileId: editTargetMember.profileId, year, amount: numAmount },
+      {
+        onSuccess: (res) => {
+          if (res.success) {
+            toast.success(`Target ${year} berhasil diperbarui`);
+            setTargetDialogSubMode({ mode: "list" });
+          } else {
+            toast.error(res.error ?? "Terjadi kesalahan");
+          }
+        },
+      },
+    );
+  }
+
+  function handleDeleteTargetYear() {
+    if (!editTargetMember || deleteTargetYear === null) return;
+    const yearToDelete = deleteTargetYear;
+    deleteTargetMutation.mutate(
+      { groupId: group.id, profileId: editTargetMember.profileId, year: yearToDelete },
+      {
+        onSuccess: (res) => {
+          if (res.success) {
+            toast.success(`Target ${yearToDelete} dihapus`);
+            setDeleteTargetYear(null);
+          } else {
+            toast.error(res.error ?? "Terjadi kesalahan");
+          }
+        },
+      },
+    );
+  }
+
+  function closeTargetDialog() {
+    setEditTargetMember(null);
+    setTargetDialogSubMode({ mode: "list" });
+    setDeleteTargetYear(null);
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -288,7 +330,10 @@ export function GroupDetailClient({
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Year selector — drives performance data year (wired to API). */}
+          <GroupYearSelector value={selectedYear} onChange={setSelectedYear} />
+
           {isSuperAdmin && (
             <Button
               variant="ghost"
@@ -316,7 +361,7 @@ export function GroupDetailClient({
         </div>
       </div>
 
-      {/* Team Pace — hero: achievement ring (gold) + supporting stats */}
+      {/* Team Pace — hero: achievement ring (gold) + supporting stats. */}
       <TeamPaceHero
         pct={overallPct}
         totalSales={totalSales}
@@ -324,6 +369,7 @@ export function GroupDetailClient({
         totalConfirmed={totalConfirmed}
         totalBookings={totalBookings}
         memberCount={memberRows.length}
+        year={selectedYear}
       />
 
       {/* Master-Detail split view */}
@@ -333,14 +379,7 @@ export function GroupDetailClient({
         selectedSalesId={selectedSalesId}
         onSelectSales={setSelectedSalesId}
         onAddMember={() => setAddOpen(true)}
-        onEditTarget={(member) => {
-          setEditTargetMember({
-            profileId: member.profileId,
-            name: member.name,
-            target: member.target,
-          });
-          setTargetInput(member.target.toString());
-        }}
+        onEditTarget={(member) => openEditTargetDialog(member)}
         onRemoveMember={(member) =>
           setDeleteMember({
             profileId: member.profileId,
@@ -461,52 +500,20 @@ export function GroupDetailClient({
         </Dialog>
       )}
 
-      {/* Edit Target Dialog */}
-      {canManage && (
-        <Dialog
-          open={!!editTargetMember}
-          onOpenChange={(open) => {
-            if (!open) setEditTargetMember(null);
-          }}
-        >
-          <DialogContent className="w-[calc(100vw-2rem)] max-w-sm max-h-[90vh] overflow-y-auto">
-            <DialogTitle>Edit Target — {editTargetMember?.name}</DialogTitle>
-            <div className="space-y-3 mt-2">
-              <div>
-                <Label htmlFor="target-amount" className="text-sm">Target Penjualan</Label>
-                <div className="relative mt-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    Rp
-                  </span>
-                  <Input
-                    id="target-amount"
-                    type="text"
-                    className="pl-9 text-base sm:text-sm"
-                    value={targetInput ? Number(targetInput).toLocaleString("id-ID") : ""}
-                    onChange={(e) => setTargetInput(e.target.value.replace(/\D/g, ""))}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setEditTargetMember(null)}
-              >
-                Batal
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={isPending}
-                onClick={handleSaveTarget}
-              >
-                Simpan
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      {/* Edit Target Dialog — multi-year per member */}
+      {canManage && editTargetMember && (
+        <MemberAnnualTargetDialog
+          member={editTargetMember}
+          subMode={targetDialogSubMode}
+          deleteYear={deleteTargetYear}
+          onSubModeChange={setTargetDialogSubMode}
+          onDeleteYearChange={setDeleteTargetYear}
+          onAdd={handleAddTargetYear}
+          onEdit={handleEditTargetYear}
+          onDelete={handleDeleteTargetYear}
+          onClose={closeTargetDialog}
+          isMutating={setTargetMutation.isPending || deleteTargetMutation.isPending}
+        />
       )}
 
       {/* Remove Member Confirm */}
@@ -526,6 +533,361 @@ export function GroupDetailClient({
   );
 }
 
+// ─── Member Annual Target Dialog ─────────────────────────────────────────────
+// Multi-year target per individual member. Opens from "Edit Target" in the kebab menu.
+// Three sub-modes inside one Dialog: list → add form / edit form. Delete uses ConfirmDialog.
+
+type SubMode =
+  | { mode: "list" }
+  | { mode: "add"; year: number | null; amount: string }
+  | { mode: "edit"; year: number; amount: string };
+
+interface TargetEntry {
+  year: number;
+  amount: number;
+}
+
+interface MemberAnnualTargetDialogProps {
+  member: { profileId: string; name: string; target: number };
+  subMode: SubMode;
+  deleteYear: number | null;
+  onSubModeChange: (m: SubMode) => void;
+  onDeleteYearChange: (y: number | null) => void;
+  onAdd: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+  isMutating?: boolean;
+}
+
+function formatRpShort(n: number): string {
+  if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}M`;
+  if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(0)}jt`;
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+function formatRpFull(n: number): string {
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+function MemberAnnualTargetDialog({
+  member,
+  subMode,
+  deleteYear,
+  onSubModeChange,
+  onDeleteYearChange,
+  onAdd,
+  onEdit,
+  onDelete,
+  onClose,
+  isMutating = false,
+}: MemberAnnualTargetDialogProps): React.JSX.Element {
+  const currentYear = new Date().getFullYear();
+  const { data: targets = [], isLoading: targetsLoading } = useMemberAnnualTargets(member.profileId);
+  const sorted = [...targets].sort((a, b) => b.year - a.year);
+
+  // Compute available years: full range minus years that already have a target
+  const usedYears = new Set(targets.map((t) => t.year));
+  const availableYears: number[] = [];
+  for (let y = currentYear + 3; y >= 2023; y--) {
+    if (!usedYears.has(y)) availableYears.push(y);
+  }
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogTitle>
+            Target Tahunan — {member.name}
+          </DialogTitle>
+
+          {/* ── LIST view ── */}
+          {subMode.mode === "list" && (
+            <div className="mt-2 space-y-3">
+              {/* Target list */}
+              {targetsLoading ? (
+                <div className="py-6 flex items-center justify-center">
+                  <p className="text-sm text-muted-foreground">Memuat...</p>
+                </div>
+              ) : sorted.length === 0 ? (
+                <div className="py-6 flex flex-col items-center gap-2 text-center">
+                  <p className="text-sm text-muted-foreground">Belum ada target tahunan</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border rounded-2xl border border-border overflow-hidden">
+                  {sorted.map((t) => {
+                    const isThisYear = t.year === currentYear;
+                    const isPast = t.year < currentYear;
+                    return (
+                      <div
+                        key={t.year}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-3 transition-colors",
+                          isThisYear && "bg-secondary/30",
+                        )}
+                      >
+                        {/* Year column */}
+                        <div className="shrink-0 flex flex-col items-start gap-0.5 w-14">
+                          <span
+                            className={cn(
+                              "text-lg font-bold tabular-nums font-heading leading-none",
+                              isThisYear
+                                ? "text-[var(--brand-gold)]"
+                                : isPast
+                                  ? "text-muted-foreground"
+                                  : "text-foreground",
+                            )}
+                          >
+                            {t.year}
+                          </span>
+                          {isThisYear && (
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] px-1 py-0 h-3.5 border-[var(--brand-gold)]/50 text-[var(--brand-gold)]"
+                            >
+                              aktif
+                            </Badge>
+                          )}
+                          {isPast && (
+                            <span className="text-[9px] font-medium text-muted-foreground/60">
+                              lalu
+                            </span>
+                          )}
+                          {!isThisYear && !isPast && (
+                            <span className="text-[9px] font-medium text-muted-foreground/60">
+                              akan datang
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Amount column */}
+                        <div className="flex-1 min-w-0">
+                          <p className={cn(
+                            "text-sm font-bold font-heading tabular-nums leading-tight",
+                            isPast ? "text-muted-foreground" : "text-foreground",
+                          )}>
+                            {formatRpShort(t.amount)}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {formatRpFull(t.amount)}
+                          </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isMutating}
+                            aria-label={`Edit target ${t.year}`}
+                            onClick={() =>
+                              onSubModeChange({ mode: "edit", year: t.year, amount: String(t.amount) })
+                            }
+                            className="flex items-center justify-center h-8 w-8 rounded-xl hover:bg-accent transition-colors disabled:opacity-50"
+                          >
+                            <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isMutating}
+                            aria-label={`Hapus target ${t.year}`}
+                            onClick={() => onDeleteYearChange(t.year)}
+                            className="flex items-center justify-center h-8 w-8 rounded-xl hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
+                          >
+                            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add button */}
+              {availableYears.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={targetsLoading || isMutating}
+                  className="w-full h-9 gap-1.5 text-xs rounded-xl"
+                  onClick={() =>
+                    onSubModeChange({
+                      mode: "add",
+                      year: availableYears[0] ?? currentYear + 1,
+                      amount: "",
+                    })
+                  }
+                >
+                  <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                  Tambah Target Tahun
+                </Button>
+              ) : (
+                <p className="text-xs text-center text-muted-foreground py-1">
+                  Semua tahun sudah memiliki target
+                </p>
+              )}
+
+              <Button
+                variant="ghost"
+                className="w-full h-9 text-sm rounded-xl"
+                onClick={onClose}
+              >
+                Tutup
+              </Button>
+            </div>
+          )}
+
+          {/* ── ADD form ── */}
+          {subMode.mode === "add" && (
+            <div className="mt-2 space-y-4">
+              <div>
+                <Label htmlFor="add-member-target-year" className="text-sm font-medium">
+                  Tahun
+                </Label>
+                <select
+                  id="add-member-target-year"
+                  value={subMode.year ?? ""}
+                  onChange={(e) =>
+                    onSubModeChange({ ...subMode, year: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y === currentYear ? `${y} (tahun ini)` : String(y)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="add-member-target-amount" className="text-sm font-medium">
+                  Target Penjualan
+                </Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    Rp
+                  </span>
+                  <Input
+                    id="add-member-target-amount"
+                    type="text"
+                    className="pl-9 rounded-xl text-base sm:text-sm"
+                    value={subMode.amount ? Number(subMode.amount).toLocaleString("id-ID") : ""}
+                    onChange={(e) =>
+                      onSubModeChange({ ...subMode, amount: e.target.value.replace(/\D/g, "") })
+                    }
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+                {subMode.amount && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatRpFull(Number(subMode.amount))}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl"
+                  onClick={() => onSubModeChange({ mode: "list" })}
+                >
+                  Batal
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl"
+                  disabled={!subMode.year || !subMode.amount || isMutating}
+                  onClick={onAdd}
+                >
+                  {isMutating ? "Menyimpan..." : "Simpan"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── EDIT form ── */}
+          {subMode.mode === "edit" && (
+            <div className="mt-2 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Tahun</span>
+                <span
+                  className={cn(
+                    "text-sm font-bold font-heading tabular-nums",
+                    subMode.year === currentYear
+                      ? "text-[var(--brand-gold)]"
+                      : "text-foreground",
+                  )}
+                >
+                  {subMode.year}
+                </span>
+                {subMode.year === currentYear && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] px-1.5 py-0 h-4 border-[var(--brand-gold)]/50 text-[var(--brand-gold)]"
+                  >
+                    aktif
+                  </Badge>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="edit-member-target-amount" className="text-sm font-medium">
+                  Target Penjualan
+                </Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    Rp
+                  </span>
+                  <Input
+                    id="edit-member-target-amount"
+                    type="text"
+                    className="pl-9 rounded-xl text-base sm:text-sm"
+                    value={subMode.amount ? Number(subMode.amount).toLocaleString("id-ID") : ""}
+                    onChange={(e) =>
+                      onSubModeChange({ ...subMode, amount: e.target.value.replace(/\D/g, "") })
+                    }
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+                {subMode.amount && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatRpFull(Number(subMode.amount))}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl"
+                  onClick={() => onSubModeChange({ mode: "list" })}
+                >
+                  Batal
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl"
+                  disabled={!subMode.amount || isMutating}
+                  onClick={onEdit}
+                >
+                  {isMutating ? "Menyimpan..." : "Simpan"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete year confirm — rendered outside the main dialog so it stacks on top */}
+      <ConfirmDialog
+        open={deleteYear !== null}
+        onOpenChange={(o) => { if (!o) onDeleteYearChange(null); }}
+        title="Hapus Target"
+        description={`Yakin ingin menghapus target tahun ${deleteYear ?? ""}?`}
+        confirmLabel="Hapus"
+        onConfirm={onDelete}
+        destructive
+      />
+    </>
+  );
+}
+
 // ─── Team Pace Hero ───────────────────────────────────────────────────────────
 // Bank Jago vibe: one hero number (team achievement) carried by a progress ring in
 // the brand gold, with the rest demoted to quiet supporting stats. The ring IS the
@@ -538,6 +900,7 @@ function TeamPaceHero({
   totalConfirmed,
   totalBookings,
   memberCount,
+  year,
 }: {
   pct: number;
   totalSales: number;
@@ -545,7 +908,9 @@ function TeamPaceHero({
   totalConfirmed: number;
   totalBookings: number;
   memberCount: number;
+  year?: number;
 }) {
+  const currentYear = new Date().getFullYear();
   const onTrack = pct >= 80;
   return (
     <div className="rounded-3xl border border-border bg-card shadow-sm overflow-hidden">
@@ -556,6 +921,9 @@ function TeamPaceHero({
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Pencapaian Tim
+              {year && year !== currentYear && (
+                <span className="ml-1 font-normal">· {year}</span>
+              )}
             </p>
             <p className="text-sm font-medium text-foreground mt-1 leading-snug">
               {onTrack ? "Tim on track" : pct > 0 ? "Di bawah target" : "Belum ada penjualan"}

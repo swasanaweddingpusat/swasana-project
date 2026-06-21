@@ -62,7 +62,8 @@ export function CalendarWeekView({
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEventItem[]>();
     for (const event of events) {
-      const key = new Date(event.bookingDate).toDateString();
+      if (!event.eventDate) continue;
+      const key = new Date(event.eventDate).toDateString();
       const list = map.get(key);
       if (list) {
         list.push(event);

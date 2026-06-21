@@ -6,7 +6,6 @@ export const createMiceDraftStep1Schema = z.object({
   /** Client-generated idempotency key. When provided, server uses it as the booking id
    *  so that retries don't create duplicate draft rows. */
   id: z.string().optional().nullable(),
-  bookingDate: z.string().min(1, "Tanggal booking wajib diisi"),
   venueId: z.string().min(1, "Venue wajib dipilih"),
   eventTypeId: z.string().optional().nullable(),
   salesId: z.string().optional().nullable(),
