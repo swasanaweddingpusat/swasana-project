@@ -44,7 +44,7 @@ export async function createBooking(data: unknown) {
 
     if (leadId) {
       leadRecord = await db.lead.findUnique({
-        where: { id: leadId, deletedAt: null },
+        where: { id: leadId },
         select: {
           id: true,
           name: true,
@@ -153,7 +153,7 @@ export async function createBooking(data: unknown) {
           venueId: input.venueId,
           recordStatus: "saved",
           eventDate: eventDateObj,
-          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
           OR: input.weddingSession === "fullday"
             ? [
                 { weddingSession: "morning" },
@@ -1091,7 +1091,7 @@ export async function editBooking(data: unknown) {
           venueId: rest.venueId,
           recordStatus: "saved",
           eventDate: eventDateObj,
-          bookingStatus: { notIn: ["Canceled", "Lost"] },
+          bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
           OR: rest.weddingSession === "fullday"
             ? [
                 { weddingSession: "morning" },

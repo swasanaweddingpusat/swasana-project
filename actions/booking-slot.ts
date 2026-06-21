@@ -33,7 +33,7 @@ export interface CheckSlotResult {
 /**
  * Check if a venue slot is available for a given date + session.
  * Rules:
- * - Only bookings with recordStatus:"saved" and bookingStatus NOT IN [Canceled, Lost] count as conflicts.
+ * - Only bookings with recordStatus:"saved" and bookingStatus NOT IN [Canceled, Lost, Rejected] count as conflicts.
  * - WEDDINGS: weddingSession conflict (fullday blocks morning+evening+fullday; morning/evening blocked by fullday).
  * - MICE: same weddingSession field, same session granularity (morning/evening blocks same session or fullday).
  * - No session provided → just check if venue+date has any saved booking (informational).
