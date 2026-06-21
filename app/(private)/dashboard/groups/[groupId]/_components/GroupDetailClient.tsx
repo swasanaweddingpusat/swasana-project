@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -28,11 +29,15 @@ import {
   CalendarMark,
   Settings,
   UserCircle,
+  AddCircle,
+  PenNewSquare,
+  TrashBinTrash,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChangeLeaderDialog } from "./ChangeLeaderDialog";
 import { GroupSalesMasterDetail } from "./GroupSalesMasterDetail";
+import { GroupYearSelector } from "@/app/(private)/dashboard/groups/_components/GroupYearSelector";
 import type { SalesListMember } from "./GroupSalesListItem";
 import {
   useUpdateGroup,
@@ -108,9 +113,51 @@ export function GroupDetailClient({
   const [addSearch, setAddSearch] = useState("");
   const [changeLeaderOpen, setChangeLeaderOpen] = useState(false);
 
+  // Year selector — UI state only; TODO: wire to API year param when backend supports it
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
   type MemberRow = { profileId: string; name: string; target: number };
+
+  // ── Multi-year target dialog state ───────────────────────────────────────────
+
+  // Dummy per-member annual targets. Key = profileId.
+  // TODO: replace with server-fetched data (year-keyed per-member targets) when backend ready.
+  const [memberAnnualTargets, setMemberAnnualTargets] = useState<
+    Record<string, Array<{ year: number; amount: number }>>
+  >({
+    // Seeded with different dummy data per member so UI terlihat bervariasi
+    __dummy_seed__: [],
+  });
+
+  function getMemberTargets(profileId: string): Array<{ year: number; amount: number }> {
+    if (memberAnnualTargets[profileId]) return memberAnnualTargets[profileId];
+    // Dummy seed: member pertama (rank 1) punya data 2 tahun, sisanya random 1 tahun
+    const currentYear = new Date().getFullYear();
+    const seed = profileId.charCodeAt(0) % 3;
+    if (seed === 0) {
+      return [
+        { year: currentYear - 1, amount: 1_200_000_000 },
+        { year: currentYear, amount: 1_800_000_000 },
+      ];
+    }
+    if (seed === 1) {
+      return [{ year: currentYear, amount: 900_000_000 }];
+    }
+    return [];
+  }
+
   const [editTargetMember, setEditTargetMember] = useState<MemberRow | null>(null);
-  const [targetInput, setTargetInput] = useState("");
+
+  // Sub-state inside the multi-year dialog
+  // "add" mode: form tambah tahun baru
+  // "edit" mode: edit amount existing entry
+  const [targetDialogSubMode, setTargetDialogSubMode] = useState<
+    | { mode: "list" }
+    | { mode: "add"; year: number | null; amount: string }
+    | { mode: "edit"; year: number; amount: string }
+  >({ mode: "list" });
+
+  const [deleteTargetYear, setDeleteTargetYear] = useState<number | null>(null);
 
   const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
 
@@ -245,27 +292,81 @@ export function GroupDetailClient({
     );
   }
 
-  function handleSaveTarget() {
+  // ── Multi-year target handlers ────────────────────────────────────────────────
+
+  function buildAvailableYears(profileId: string): number[] {
+    const currentYear = new Date().getFullYear();
+    const targets = getMemberTargets(profileId);
+    const usedYears = new Set(targets.map((t) => t.year));
+    const opts: number[] = [];
+    for (let y = currentYear + 3; y >= 2023; y--) {
+      if (!usedYears.has(y)) opts.push(y);
+    }
+    return opts;
+  }
+
+  function openEditTargetDialog(member: SalesListMember) {
+    setEditTargetMember({
+      profileId: member.profileId,
+      name: member.name,
+      target: member.target,
+    });
+    setTargetDialogSubMode({ mode: "list" });
+    setDeleteTargetYear(null);
+  }
+
+  function handleAddTargetYear() {
     if (!editTargetMember) return;
-    setTargetMutation.mutate(
-      {
-        groupId: group.id,
-        profileId: editTargetMember.profileId,
-        amount: Number(targetInput) || 0,
-      },
-      {
-        onSuccess: (res) => {
-          if (res.success) {
-            toast.success("Target berhasil disimpan");
-            setEditTargetMember(null);
-            void queryClient.invalidateQueries({ queryKey: ["groups", "performance", group.id] });
-            router.refresh();
-          } else {
-            toast.error(res.error ?? "Terjadi kesalahan");
-          }
-        },
-      },
-    );
+    if (targetDialogSubMode.mode !== "add") return;
+    const { year, amount } = targetDialogSubMode;
+    if (!year) return;
+    const numAmount = Number(amount) || 0;
+    // TODO: wire to backend — call setMemberAnnualTarget(groupId, profileId, year, numAmount) server action
+    setMemberAnnualTargets((prev) => {
+      const existing = getMemberTargets(editTargetMember.profileId);
+      const updated = [...existing.filter((t) => t.year !== year), { year, amount: numAmount }].sort(
+        (a, b) => b.year - a.year,
+      );
+      return { ...prev, [editTargetMember.profileId]: updated };
+    });
+    toast.success(`Target ${year} berhasil ditambahkan`);
+    setTargetDialogSubMode({ mode: "list" });
+  }
+
+  function handleEditTargetYear() {
+    if (!editTargetMember) return;
+    if (targetDialogSubMode.mode !== "edit") return;
+    const { year, amount } = targetDialogSubMode;
+    const numAmount = Number(amount) || 0;
+    // TODO: wire to backend — call setMemberAnnualTarget(groupId, profileId, year, numAmount) server action
+    setMemberAnnualTargets((prev) => {
+      const existing = getMemberTargets(editTargetMember.profileId);
+      const updated = existing.map((t) => (t.year === year ? { ...t, amount: numAmount } : t));
+      return { ...prev, [editTargetMember.profileId]: updated };
+    });
+    toast.success(`Target ${year} berhasil diperbarui`);
+    setTargetDialogSubMode({ mode: "list" });
+  }
+
+  function handleDeleteTargetYear() {
+    if (!editTargetMember || deleteTargetYear === null) return;
+    const yearToDelete = deleteTargetYear;
+    // TODO: wire to backend — call deleteMemberAnnualTarget(groupId, profileId, year) server action
+    setMemberAnnualTargets((prev) => {
+      const existing = getMemberTargets(editTargetMember.profileId);
+      return {
+        ...prev,
+        [editTargetMember.profileId]: existing.filter((t) => t.year !== yearToDelete),
+      };
+    });
+    toast.success(`Target ${yearToDelete} dihapus`);
+    setDeleteTargetYear(null);
+  }
+
+  function closeTargetDialog() {
+    setEditTargetMember(null);
+    setTargetDialogSubMode({ mode: "list" });
+    setDeleteTargetYear(null);
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -288,7 +389,10 @@ export function GroupDetailClient({
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Year selector — switches performance view year. TODO: pass to API. */}
+          <GroupYearSelector value={selectedYear} onChange={setSelectedYear} />
+
           {isSuperAdmin && (
             <Button
               variant="ghost"
@@ -316,7 +420,8 @@ export function GroupDetailClient({
         </div>
       </div>
 
-      {/* Team Pace — hero: achievement ring (gold) + supporting stats */}
+      {/* Team Pace — hero: achievement ring (gold) + supporting stats.
+          TODO: pass selectedYear to API so performance data reflects chosen year. */}
       <TeamPaceHero
         pct={overallPct}
         totalSales={totalSales}
@@ -324,6 +429,7 @@ export function GroupDetailClient({
         totalConfirmed={totalConfirmed}
         totalBookings={totalBookings}
         memberCount={memberRows.length}
+        year={selectedYear}
       />
 
       {/* Master-Detail split view */}
@@ -333,14 +439,7 @@ export function GroupDetailClient({
         selectedSalesId={selectedSalesId}
         onSelectSales={setSelectedSalesId}
         onAddMember={() => setAddOpen(true)}
-        onEditTarget={(member) => {
-          setEditTargetMember({
-            profileId: member.profileId,
-            name: member.name,
-            target: member.target,
-          });
-          setTargetInput(member.target.toString());
-        }}
+        onEditTarget={(member) => openEditTargetDialog(member)}
         onRemoveMember={(member) =>
           setDeleteMember({
             profileId: member.profileId,
@@ -461,52 +560,21 @@ export function GroupDetailClient({
         </Dialog>
       )}
 
-      {/* Edit Target Dialog */}
-      {canManage && (
-        <Dialog
-          open={!!editTargetMember}
-          onOpenChange={(open) => {
-            if (!open) setEditTargetMember(null);
-          }}
-        >
-          <DialogContent className="w-[calc(100vw-2rem)] max-w-sm max-h-[90vh] overflow-y-auto">
-            <DialogTitle>Edit Target — {editTargetMember?.name}</DialogTitle>
-            <div className="space-y-3 mt-2">
-              <div>
-                <Label htmlFor="target-amount" className="text-sm">Target Penjualan</Label>
-                <div className="relative mt-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    Rp
-                  </span>
-                  <Input
-                    id="target-amount"
-                    type="text"
-                    className="pl-9 text-base sm:text-sm"
-                    value={targetInput ? Number(targetInput).toLocaleString("id-ID") : ""}
-                    onChange={(e) => setTargetInput(e.target.value.replace(/\D/g, ""))}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setEditTargetMember(null)}
-              >
-                Batal
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={isPending}
-                onClick={handleSaveTarget}
-              >
-                Simpan
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      {/* Edit Target Dialog — multi-year per member */}
+      {canManage && editTargetMember && (
+        <MemberAnnualTargetDialog
+          member={editTargetMember}
+          targets={getMemberTargets(editTargetMember.profileId)}
+          subMode={targetDialogSubMode}
+          availableYears={buildAvailableYears(editTargetMember.profileId)}
+          deleteYear={deleteTargetYear}
+          onSubModeChange={setTargetDialogSubMode}
+          onDeleteYearChange={setDeleteTargetYear}
+          onAdd={handleAddTargetYear}
+          onEdit={handleEditTargetYear}
+          onDelete={handleDeleteTargetYear}
+          onClose={closeTargetDialog}
+        />
       )}
 
       {/* Remove Member Confirm */}
@@ -526,6 +594,348 @@ export function GroupDetailClient({
   );
 }
 
+// ─── Member Annual Target Dialog ─────────────────────────────────────────────
+// Multi-year target per individual member. Opens from "Edit Target" in the kebab menu.
+// Three sub-modes inside one Dialog: list → add form / edit form. Delete uses ConfirmDialog.
+
+type SubMode =
+  | { mode: "list" }
+  | { mode: "add"; year: number | null; amount: string }
+  | { mode: "edit"; year: number; amount: string };
+
+interface TargetEntry {
+  year: number;
+  amount: number;
+}
+
+interface MemberAnnualTargetDialogProps {
+  member: { profileId: string; name: string; target: number };
+  targets: TargetEntry[];
+  subMode: SubMode;
+  availableYears: number[];
+  deleteYear: number | null;
+  onSubModeChange: (m: SubMode) => void;
+  onDeleteYearChange: (y: number | null) => void;
+  onAdd: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+function formatRpShort(n: number): string {
+  if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}M`;
+  if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(0)}jt`;
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+function formatRpFull(n: number): string {
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+function MemberAnnualTargetDialog({
+  member,
+  targets,
+  subMode,
+  availableYears,
+  deleteYear,
+  onSubModeChange,
+  onDeleteYearChange,
+  onAdd,
+  onEdit,
+  onDelete,
+  onClose,
+}: MemberAnnualTargetDialogProps): React.JSX.Element {
+  const currentYear = new Date().getFullYear();
+  const sorted = [...targets].sort((a, b) => b.year - a.year);
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogTitle>
+            Target Tahunan — {member.name}
+          </DialogTitle>
+
+          {/* ── LIST view ── */}
+          {subMode.mode === "list" && (
+            <div className="mt-2 space-y-3">
+              {/* Target list */}
+              {sorted.length === 0 ? (
+                <div className="py-6 flex flex-col items-center gap-2 text-center">
+                  <p className="text-sm text-muted-foreground">Belum ada target tahunan</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border rounded-2xl border border-border overflow-hidden">
+                  {sorted.map((t) => {
+                    const isThisYear = t.year === currentYear;
+                    const isPast = t.year < currentYear;
+                    return (
+                      <div
+                        key={t.year}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-3 transition-colors",
+                          isThisYear && "bg-secondary/30",
+                        )}
+                      >
+                        {/* Year column */}
+                        <div className="shrink-0 flex flex-col items-start gap-0.5 w-14">
+                          <span
+                            className={cn(
+                              "text-lg font-bold tabular-nums font-heading leading-none",
+                              isThisYear
+                                ? "text-[var(--brand-gold)]"
+                                : isPast
+                                  ? "text-muted-foreground"
+                                  : "text-foreground",
+                            )}
+                          >
+                            {t.year}
+                          </span>
+                          {isThisYear && (
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] px-1 py-0 h-3.5 border-[var(--brand-gold)]/50 text-[var(--brand-gold)]"
+                            >
+                              aktif
+                            </Badge>
+                          )}
+                          {isPast && (
+                            <span className="text-[9px] font-medium text-muted-foreground/60">
+                              lalu
+                            </span>
+                          )}
+                          {!isThisYear && !isPast && (
+                            <span className="text-[9px] font-medium text-muted-foreground/60">
+                              akan datang
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Amount column */}
+                        <div className="flex-1 min-w-0">
+                          <p className={cn(
+                            "text-sm font-bold font-heading tabular-nums leading-tight",
+                            isPast ? "text-muted-foreground" : "text-foreground",
+                          )}>
+                            {formatRpShort(t.amount)}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {formatRpFull(t.amount)}
+                          </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            aria-label={`Edit target ${t.year}`}
+                            onClick={() =>
+                              onSubModeChange({ mode: "edit", year: t.year, amount: String(t.amount) })
+                            }
+                            className="flex items-center justify-center h-8 w-8 rounded-xl hover:bg-accent transition-colors"
+                          >
+                            <PenNewSquare weight="BoldDuotone" className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Hapus target ${t.year}`}
+                            onClick={() => onDeleteYearChange(t.year)}
+                            className="flex items-center justify-center h-8 w-8 rounded-xl hover:bg-destructive/10 text-destructive transition-colors"
+                          >
+                            <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add button */}
+              {availableYears.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full h-9 gap-1.5 text-xs rounded-xl"
+                  onClick={() =>
+                    onSubModeChange({
+                      mode: "add",
+                      year: availableYears[0] ?? currentYear + 1,
+                      amount: "",
+                    })
+                  }
+                >
+                  <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                  Tambah Target Tahun
+                </Button>
+              ) : (
+                <p className="text-xs text-center text-muted-foreground py-1">
+                  Semua tahun sudah memiliki target
+                </p>
+              )}
+
+              <Button
+                variant="ghost"
+                className="w-full h-9 text-sm rounded-xl"
+                onClick={onClose}
+              >
+                Tutup
+              </Button>
+            </div>
+          )}
+
+          {/* ── ADD form ── */}
+          {subMode.mode === "add" && (
+            <div className="mt-2 space-y-4">
+              <div>
+                <Label htmlFor="add-member-target-year" className="text-sm font-medium">
+                  Tahun
+                </Label>
+                <select
+                  id="add-member-target-year"
+                  value={subMode.year ?? ""}
+                  onChange={(e) =>
+                    onSubModeChange({ ...subMode, year: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y === currentYear ? `${y} (tahun ini)` : String(y)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="add-member-target-amount" className="text-sm font-medium">
+                  Target Penjualan
+                </Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    Rp
+                  </span>
+                  <Input
+                    id="add-member-target-amount"
+                    type="text"
+                    className="pl-9 rounded-xl text-base sm:text-sm"
+                    value={subMode.amount ? Number(subMode.amount).toLocaleString("id-ID") : ""}
+                    onChange={(e) =>
+                      onSubModeChange({ ...subMode, amount: e.target.value.replace(/\D/g, "") })
+                    }
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+                {subMode.amount && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatRpFull(Number(subMode.amount))}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl"
+                  onClick={() => onSubModeChange({ mode: "list" })}
+                >
+                  Batal
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl"
+                  disabled={!subMode.year || !subMode.amount}
+                  onClick={onAdd}
+                >
+                  Simpan
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── EDIT form ── */}
+          {subMode.mode === "edit" && (
+            <div className="mt-2 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Tahun</span>
+                <span
+                  className={cn(
+                    "text-sm font-bold font-heading tabular-nums",
+                    subMode.year === currentYear
+                      ? "text-[var(--brand-gold)]"
+                      : "text-foreground",
+                  )}
+                >
+                  {subMode.year}
+                </span>
+                {subMode.year === currentYear && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] px-1.5 py-0 h-4 border-[var(--brand-gold)]/50 text-[var(--brand-gold)]"
+                  >
+                    aktif
+                  </Badge>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="edit-member-target-amount" className="text-sm font-medium">
+                  Target Penjualan
+                </Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    Rp
+                  </span>
+                  <Input
+                    id="edit-member-target-amount"
+                    type="text"
+                    className="pl-9 rounded-xl text-base sm:text-sm"
+                    value={subMode.amount ? Number(subMode.amount).toLocaleString("id-ID") : ""}
+                    onChange={(e) =>
+                      onSubModeChange({ ...subMode, amount: e.target.value.replace(/\D/g, "") })
+                    }
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+                {subMode.amount && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatRpFull(Number(subMode.amount))}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl"
+                  onClick={() => onSubModeChange({ mode: "list" })}
+                >
+                  Batal
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl"
+                  disabled={!subMode.amount}
+                  onClick={onEdit}
+                >
+                  Simpan
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete year confirm — rendered outside the main dialog so it stacks on top */}
+      <ConfirmDialog
+        open={deleteYear !== null}
+        onOpenChange={(o) => { if (!o) onDeleteYearChange(null); }}
+        title="Hapus Target"
+        description={`Yakin ingin menghapus target tahun ${deleteYear ?? ""}?`}
+        confirmLabel="Hapus"
+        onConfirm={onDelete}
+        destructive
+      />
+    </>
+  );
+}
+
 // ─── Team Pace Hero ───────────────────────────────────────────────────────────
 // Bank Jago vibe: one hero number (team achievement) carried by a progress ring in
 // the brand gold, with the rest demoted to quiet supporting stats. The ring IS the
@@ -538,6 +948,7 @@ function TeamPaceHero({
   totalConfirmed,
   totalBookings,
   memberCount,
+  year,
 }: {
   pct: number;
   totalSales: number;
@@ -545,7 +956,9 @@ function TeamPaceHero({
   totalConfirmed: number;
   totalBookings: number;
   memberCount: number;
+  year?: number;
 }) {
+  const currentYear = new Date().getFullYear();
   const onTrack = pct >= 80;
   return (
     <div className="rounded-3xl border border-border bg-card shadow-sm overflow-hidden">
@@ -556,6 +969,9 @@ function TeamPaceHero({
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Pencapaian Tim
+              {year && year !== currentYear && (
+                <span className="ml-1 font-normal">· {year}</span>
+              )}
             </p>
             <p className="text-sm font-medium text-foreground mt-1 leading-snug">
               {onTrack ? "Tim on track" : pct > 0 ? "Di bawah target" : "Belum ada penjualan"}
