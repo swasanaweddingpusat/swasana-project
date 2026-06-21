@@ -24,6 +24,7 @@ import { useLeads, useUpdateLeadStatus, useDeleteLead } from "@/hooks/use-leads"
 import { createDraftBooking } from "@/actions/booking-draft";
 import { createDraftMiceBooking } from "@/actions/booking-mice-draft";
 import { DealConfirmModal } from "./DealConfirmModal";
+import type { DealSelection } from "./DealConfirmModal";
 import { LeadDetailModal } from "./LeadDetailModal";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import type { LeadItem } from "@/lib/queries/leads";
@@ -127,31 +128,19 @@ export function LeadsTable() {
     setLostTarget(lead);
   }
 
-  async function handleConfirmDeal() {
+  async function handleConfirmDeal(selection: DealSelection) {
     if (!dealTarget) return;
     if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
 
     const lead = dealTarget;
     const category = lead.eventType?.category ?? lead.category;
 
-    // Guard: venue dan tanggal wajib ada sebelum buat draft booking
-    if (!lead.venue?.id || !lead.eventDate) {
-      toast.error("Lengkapi data lead (venue & tanggal event) dulu sebelum tandai Deal.");
-      return;
-    }
-
-    // Guard: wedding wajib punya session
-    if (category !== "MICE" && !lead.weddingSession) {
-      toast.error("Lengkapi data lead (session nikah: pagi/malam/fullday) dulu sebelum tandai Deal.");
-      return;
-    }
-
     setIsMarkingStatus(true);
 
     // Check if lead already has a booking — reopen existing draft instead of creating duplicate
     if (lead.convertedToBooking?.id) {
-      // Lead already converted — reopen existing booking drawer
-      const prefill = buildPrefill(lead);
+      // Lead already converted — reopen existing booking drawer using the user's selection
+      const prefill = buildPrefill(lead, selection);
       toast.info("Lead sudah punya booking. Membuka draft yang ada...");
       if (category === "MICE") {
         setMicePrefill(prefill);
@@ -173,12 +162,9 @@ export function LeadsTable() {
         return;
       }
 
-      // Step 2: Create draft booking from lead data
+      // Step 2: Create draft booking using the user-selected venue/date/session
       // Route to MICE draft action for MICE leads (different permission: booking-mice:create)
-      const prefill = buildPrefill(lead);
-      const eventDate = lead.eventDate
-        ? new Date(lead.eventDate).toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0];
+      const prefill = buildPrefill(lead, selection);
 
       let draftRes: { success: boolean; draftId?: string; error?: string };
 
@@ -186,10 +172,10 @@ export function LeadsTable() {
         draftRes = await createDraftMiceBooking({
           leadId: lead.id,
           clientName: lead.name,
-          eventDate,
-          venueId: lead.venue?.id ?? "",
+          eventDate: selection.eventDate,
+          venueId: selection.venueId,
           eventTypeId: lead.eventType?.id ?? "",
-          miceSession: lead.weddingSession as "morning" | "evening" | "fullday" | null ?? null,
+          miceSession: selection.session,
           salesId: lead.assignedTo?.id ?? null,
           sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
           estimatedPax: lead.estimatedPax ?? null,
@@ -199,10 +185,10 @@ export function LeadsTable() {
         draftRes = await createDraftBooking({
           leadId: lead.id,
           customerName: lead.name,
-          eventDate,
-          venueId: lead.venue?.id ?? "",
+          eventDate: selection.eventDate,
+          venueId: selection.venueId,
           category,
-          weddingSession: lead.weddingSession ?? null,
+          weddingSession: selection.session,
           salesId: lead.assignedTo?.id ?? null,
           packageId: lead.package?.id ?? null,
           sourceOfInformationId: lead.sourceOfInformation?.id ?? null,
@@ -233,7 +219,22 @@ export function LeadsTable() {
     }
   }
 
-  function buildPrefill(lead: LeadItem): BookingPrefillLead {
+  /**
+   * Build the BookingPrefillLead payload.
+   * When `selection` is provided (Deal flow), override venue/eventDate/weddingSession
+   * with the user's chosen values so the booking drawer opens in a consistent state.
+   */
+  function buildPrefill(lead: LeadItem, selection?: DealSelection): BookingPrefillLead {
+    // Resolve the venue object matching the selected venueId (could be primary or secondary)
+    let resolvedVenue = lead.venue;
+    if (selection) {
+      if (lead.venue?.id === selection.venueId) {
+        resolvedVenue = lead.venue;
+      } else if (lead.venueSecondary?.id === selection.venueId) {
+        resolvedVenue = lead.venueSecondary;
+      }
+    }
+
     return {
       leadId: lead.id,
       name: lead.name,
@@ -241,12 +242,13 @@ export function LeadsTable() {
       email: lead.email,
       address: lead.address,
       bitrixId: lead.bitrixId,
-      eventDate: lead.eventDate,
+      // Override with selection if provided, else fall back to lead values
+      eventDate: selection ? selection.eventDate : lead.eventDate,
       time: lead.time,
       estimatedPax: lead.estimatedPax,
       notes: lead.notes,
-      weddingSession: lead.weddingSession,
-      venue: lead.venue,
+      weddingSession: selection ? selection.session : lead.weddingSession,
+      venue: resolvedVenue ?? null,
       package: lead.package,
       eventType: lead.eventType,
       sourceOfInformation: lead.sourceOfInformation,

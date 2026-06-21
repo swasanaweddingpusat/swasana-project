@@ -44,6 +44,7 @@ import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
 import { useSalesUsers } from "@/hooks/use-sales-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCreateLead } from "@/hooks/use-leads";
 import {
   SectionHeader,
@@ -88,9 +89,11 @@ interface CreateLeadFormState {
   notes: string;
   bitrixId: string;
   weddingSession: WeddingSession | "";
+  weddingSessionAlt: WeddingSession | "";
   packageId: string;
   instansi: string;
   miceSession: WeddingSession | "";
+  miceSessionAlt: WeddingSession | "";
   isDateLocked: boolean;
   bookingFeeAmount: number;
   bookingFeeDate: string;
@@ -121,9 +124,11 @@ const DEFAULT_FORM: CreateLeadFormState = {
   notes: "",
   bitrixId: "",
   weddingSession: "",
+  weddingSessionAlt: "",
   packageId: "",
   instansi: "",
   miceSession: "",
+  miceSessionAlt: "",
   isDateLocked: false,
   bookingFeeAmount: 5000000,
   bookingFeeDate: "",
@@ -191,7 +196,28 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
   const { data: eventTypesData } = useEventTypes(category ?? undefined);
   const { data: leadStatuses = [] } = useLeadStatuses();
   const { users: salesUsers } = useSalesUsers();
+  const { user: currentUser } = useCurrentUser();
   const createLead = useCreateLead();
+
+  // ── Sales PIC lock ───────────────────────────────────────────────────────────
+  // When the logged-in user is a sales rep, the PIC is forced to themselves and
+  // locked. AssignableSalesUser.id and session.user.profileId are both profile ids.
+  const isSalesRole =
+    currentUser?.roleName === "sales" || currentUser?.roleName === "sales-mice";
+  const isSelfAssignableSales =
+    isSalesRole &&
+    !!currentUser?.profileId &&
+    salesUsers.some((u) => u.id === currentUser.profileId);
+
+  // Force assignedToId to the sales rep once the drawer is open and data is ready.
+  useEffect(() => {
+    if (!open || !isSelfAssignableSales || !currentUser?.profileId) return;
+    setForm((prev) =>
+      prev.assignedToId === currentUser.profileId
+        ? prev
+        : { ...prev, assignedToId: currentUser.profileId! },
+    );
+  }, [open, isSelfAssignableSales, currentUser?.profileId]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const isWedding = category === "WEDDINGS";
@@ -235,7 +261,9 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
     !form.assignedToId ||
     !form.statusId ||
     (isWedding && !form.weddingSession) ||
+    (isWedding && !!form.eventDateAlt && !form.weddingSessionAlt) ||
     (isBitrixSource && !form.bitrixId.trim()) ||
+    (!!form.eventDateAlt && form.eventDateAlt === form.eventDate) ||
     isLockIncomplete;
 
   // ── Auto-fill time from session + event type ────────────────────────────────
@@ -271,6 +299,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
       ...prev,
       eventTypeId: "",
       weddingSession: "",
+      weddingSessionAlt: "",
       packageId: "",
       emailCpp: "",
       emailCpw: "",
@@ -280,6 +309,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
       addressCpw: "",
       instansi: "",
       miceSession: "",
+      miceSessionAlt: "",
       time: "",
     }));
   }
@@ -310,6 +340,8 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
     setSubmitError(null);
   }
 
+
+
   function handleClose() {
     resetForm();
     onOpenChange(false);
@@ -331,6 +363,10 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
       const effectiveSession = isWedding
         ? (form.weddingSession || undefined)
         : (form.miceSession || undefined);
+
+      const effectiveSessionAlt = isWedding
+        ? (form.weddingSessionAlt || null)
+        : (form.miceSessionAlt || null);
 
       // 3. Call createLead server action
       const result = await createLead.mutateAsync({
@@ -360,6 +396,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
         assignedToId: form.assignedToId,
         statusId: form.statusId,
         weddingSession: effectiveSession as "morning" | "evening" | "fullday" | undefined,
+        weddingSessionAlt: effectiveSessionAlt as "morning" | "evening" | "fullday" | null,
         bitrixId: isBitrixSource ? (form.bitrixId || null) : null,
         isDateLocked: form.isDateLocked,
         bookingFeeAmount: form.isDateLocked ? form.bookingFeeAmount : null,
@@ -733,6 +770,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                 <div className="flex flex-col gap-4">
                   <SectionHeader icon={CalendarDate} title="Tanggal Event" />
 
+                  {/* Tanggal Utama + session-nya */}
                   <AvailabilityDatePickerField
                     label="Tanggal Utama"
                     required
@@ -742,20 +780,77 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                     venueId={form.venueId || undefined}
                   />
 
+                  {isWedding && (
+                    <SessionPillRadio
+                      label="Sesi Acara (Tanggal Utama)"
+                      required
+                      value={form.weddingSession}
+                      onChange={(v) => setField("weddingSession", v)}
+                      venueId={form.venueId || undefined}
+                      eventDate={form.eventDate || undefined}
+                    />
+                  )}
+
+                  {isMice && (
+                    <SessionPillRadio
+                      label="Sesi Event (Tanggal Utama)"
+                      value={form.miceSession}
+                      onChange={(v) => setField("miceSession", v)}
+                      venueId={form.venueId || undefined}
+                      eventDate={form.eventDate || undefined}
+                    />
+                  )}
+
+                  {/* Tanggal Alternatif + session-nya */}
                   {showDateAlt ? (
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-3">
                       <AvailabilityDatePickerField
                         label="Tanggal Alternatif"
                         value={form.eventDateAlt}
-                        onChange={(v) => setField("eventDateAlt", v)}
+                        onChange={(v) => {
+                          setField("eventDateAlt", v);
+                          if (!v) {
+                            setField("weddingSessionAlt", "");
+                            setField("miceSessionAlt", "");
+                          }
+                        }}
                         placeholder="Pilih tanggal alternatif..."
                         venueId={form.venueId || undefined}
                       />
+                      {form.eventDateAlt && form.eventDateAlt === form.eventDate && (
+                        <p className="text-xs text-destructive">
+                          Tanggal alternatif tidak boleh sama dengan tanggal utama.
+                        </p>
+                      )}
+
+                      {isWedding && form.eventDateAlt && (
+                        <SessionPillRadio
+                          label="Sesi Acara (Tanggal Alternatif)"
+                          required
+                          value={form.weddingSessionAlt}
+                          onChange={(v) => setField("weddingSessionAlt", v)}
+                          venueId={form.venueId || undefined}
+                          eventDate={form.eventDateAlt || undefined}
+                        />
+                      )}
+
+                      {isMice && form.eventDateAlt && (
+                        <SessionPillRadio
+                          label="Sesi Event (Tanggal Alternatif)"
+                          value={form.miceSessionAlt}
+                          onChange={(v) => setField("miceSessionAlt", v)}
+                          venueId={form.venueId || undefined}
+                          eventDate={form.eventDateAlt || undefined}
+                        />
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
                           setShowDateAlt(false);
                           setField("eventDateAlt", "");
+                          setField("weddingSessionAlt", "");
+                          setField("miceSessionAlt", "");
                         }}
                         className="self-start text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
                       >
@@ -772,27 +867,6 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
                       Tambah Tanggal Alternatif
                     </button>
-                  )}
-
-                  {isWedding && (
-                    <SessionPillRadio
-                      label="Sesi Acara"
-                      required
-                      value={form.weddingSession}
-                      onChange={(v) => setField("weddingSession", v)}
-                      venueId={form.venueId || undefined}
-                      eventDate={form.eventDate || undefined}
-                    />
-                  )}
-
-                  {isMice && (
-                    <SessionPillRadio
-                      label="Sesi Event"
-                      value={form.miceSession}
-                      onChange={(v) => setField("miceSession", v)}
-                      venueId={form.venueId || undefined}
-                      eventDate={form.eventDate || undefined}
-                    />
                   )}
                 </div>
 
@@ -1121,7 +1195,13 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       placeholder="Pilih sales PIC..."
                       searchPlaceholder="Cari sales..."
                       emptyText="Sales tidak ditemukan"
+                      disabled={isSelfAssignableSales}
                     />
+                    {isSelfAssignableSales && (
+                      <p className="text-xs text-muted-foreground">
+                        Lead otomatis ditugaskan ke Anda.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1.5">

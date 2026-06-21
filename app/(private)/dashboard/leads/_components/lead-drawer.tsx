@@ -87,7 +87,9 @@ interface EditLeadFormState {
   notes: string;
   bitrixId: string;
   weddingSession: WeddingSession | "";
+  weddingSessionAlt: WeddingSession | "";
   miceSession: WeddingSession | "";
+  miceSessionAlt: WeddingSession | "";
   instansi: string;
   isDateLocked: boolean;
   bookingFeeAmount: number;
@@ -109,6 +111,19 @@ async function uploadBookingFeeEvidence(file: File): Promise<string> {
   }
   const { key } = (await res.json()) as { key: string };
   return key;
+}
+
+/**
+ * Extract the storage key from an already-resolved full URL.
+ * The query layer resolves stored keys to full URLs before serving the UI.
+ * When re-saving without a file change, we must strip the base URL back to
+ * a key so the DB stays consistent (key-only pattern, not full URL).
+ */
+function extractStorageKey(fullUrl: string): string {
+  const base = (process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "").replace(/\/$/, "");
+  if (base && fullUrl.startsWith(base + "/")) return fullUrl.slice(base.length + 1);
+  // Fallback: return as-is (e.g. key was already relative, no base configured)
+  return fullUrl;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -162,7 +177,9 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     notes: "",
     bitrixId: "",
     weddingSession: "",
+    weddingSessionAlt: "",
     miceSession: "",
+    miceSessionAlt: "",
     instansi: "",
     isDateLocked: false,
     bookingFeeAmount: 0,
@@ -241,6 +258,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
 
     const isWed = cat === "WEDDINGS";
     const rawSession = (editLead.weddingSession ?? "") as WeddingSession | "";
+    const rawSessionAlt = (editLead.weddingSessionAlt ?? "") as WeddingSession | "";
 
     setForm({
       name: editLead.name ?? "",
@@ -264,9 +282,11 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       statusId: editLead.status.id,
       notes: editLead.notes ?? "",
       bitrixId: editLead.bitrixId ?? "",
-      // Wedding pakai weddingSession, MICE pakai miceSession (keduanya dari field yang sama di DB)
+      // Wedding pakai weddingSession/weddingSessionAlt, MICE pakai miceSession/miceSessionAlt
       weddingSession: isWed ? rawSession : "",
+      weddingSessionAlt: isWed ? rawSessionAlt : "",
       miceSession: !isWed ? rawSession : "",
+      miceSessionAlt: !isWed ? rawSessionAlt : "",
       instansi: editLead.instansi ?? "",
       isDateLocked: editLead.isDateLocked ?? false,
       bookingFeeAmount: editLead.bookingFeeAmount
@@ -333,7 +353,9 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
     !form.assignedToId ||
     !form.statusId ||
     (isWedding && !form.weddingSession) ||
+    (isWedding && !!form.eventDateAlt && !form.weddingSessionAlt) ||
     (isBitrixSource && !form.bitrixId.trim()) ||
+    (!!form.eventDateAlt && form.eventDateAlt === form.eventDate) ||
     isLockIncomplete;
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -375,11 +397,12 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
       let evidenceUrl: string | null | undefined = undefined;
       if (form.isDateLocked) {
         if (bookingFeeEvidence) {
-          // Ada file baru → upload & replace
+          // Ada file baru → upload & replace; API returns a storage key
           evidenceUrl = await uploadBookingFeeEvidence(bookingFeeEvidence);
         } else if (existingEvidenceUrl) {
-          // Tidak ada file baru → pakai existing URL
-          evidenceUrl = existingEvidenceUrl;
+          // Tidak ada file baru → pakai existing, tapi strip full URL ke storage key
+          // (query layer resolves key → full URL; we must save key back, not full URL)
+          evidenceUrl = extractStorageKey(existingEvidenceUrl);
         } else {
           evidenceUrl = null;
         }
@@ -388,10 +411,14 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         evidenceUrl = null;
       }
 
-      // 2. Effective session (wedding: weddingSession, MICE: miceSession)
+      // 2. Effective session (wedding: weddingSession/weddingSessionAlt, MICE: miceSession/miceSessionAlt)
       const effectiveSession = isWedding
         ? (form.weddingSession || undefined)
         : (form.miceSession || undefined);
+
+      const effectiveSessionAlt = isWedding
+        ? (form.weddingSessionAlt || null)
+        : (form.miceSessionAlt || null);
 
       // 3. Panggil updateLead
       const result = await updateLead.mutateAsync({
@@ -421,6 +448,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
         assignedToId: form.assignedToId,
         statusId: form.statusId,
         weddingSession: effectiveSession as "morning" | "evening" | "fullday" | undefined,
+        weddingSessionAlt: effectiveSessionAlt as "morning" | "evening" | "fullday" | null,
         bitrixId: isBitrixSource ? (form.bitrixId || null) : null,
         isDateLocked: form.isDateLocked,
         bookingFeeAmount: form.isDateLocked ? form.bookingFeeAmount : null,
@@ -789,6 +817,7 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
             <div className="flex flex-col gap-4">
               <SectionHeader icon={CalendarDate} title="Tanggal Event" />
 
+              {/* Tanggal Utama + session-nya */}
               <AvailabilityDatePickerField
                 label="Tanggal Utama"
                 required
@@ -798,20 +827,77 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                 venueId={form.venueId || undefined}
               />
 
+              {isWedding && (
+                <SessionPillRadio
+                  label="Sesi Acara (Tanggal Utama)"
+                  required
+                  value={form.weddingSession}
+                  onChange={(v) => setField("weddingSession", v)}
+                  venueId={form.venueId || undefined}
+                  eventDate={form.eventDate || undefined}
+                />
+              )}
+
+              {isMice && (
+                <SessionPillRadio
+                  label="Sesi Event (Tanggal Utama)"
+                  value={form.miceSession}
+                  onChange={(v) => setField("miceSession", v)}
+                  venueId={form.venueId || undefined}
+                  eventDate={form.eventDate || undefined}
+                />
+              )}
+
+              {/* Tanggal Alternatif + session-nya */}
               {showDateAlt ? (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-3">
                   <AvailabilityDatePickerField
                     label="Tanggal Alternatif"
                     value={form.eventDateAlt}
-                    onChange={(v) => setField("eventDateAlt", v)}
+                    onChange={(v) => {
+                      setField("eventDateAlt", v);
+                      if (!v) {
+                        setField("weddingSessionAlt", "");
+                        setField("miceSessionAlt", "");
+                      }
+                    }}
                     placeholder="Pilih tanggal alternatif..."
                     venueId={form.venueId || undefined}
                   />
+                  {form.eventDateAlt && form.eventDateAlt === form.eventDate && (
+                    <p className="text-xs text-destructive">
+                      Tanggal alternatif tidak boleh sama dengan tanggal utama.
+                    </p>
+                  )}
+
+                  {isWedding && form.eventDateAlt && (
+                    <SessionPillRadio
+                      label="Sesi Acara (Tanggal Alternatif)"
+                      required
+                      value={form.weddingSessionAlt}
+                      onChange={(v) => setField("weddingSessionAlt", v)}
+                      venueId={form.venueId || undefined}
+                      eventDate={form.eventDateAlt || undefined}
+                    />
+                  )}
+
+                  {isMice && form.eventDateAlt && (
+                    <SessionPillRadio
+                      label="Sesi Event (Tanggal Alternatif)"
+                      value={form.miceSessionAlt}
+                      onChange={(v) => setField("miceSessionAlt", v)}
+                      venueId={form.venueId || undefined}
+                      eventDate={form.eventDateAlt || undefined}
+                    />
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
                       setShowDateAlt(false);
                       setField("eventDateAlt", "");
+                      setField("weddingSessionAlt", "");
+                      setField("miceSessionAlt", "");
                     }}
                     className="self-start text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
                   >
@@ -828,27 +914,6 @@ export function LeadDrawer({ open, onOpenChange, editLead, onSuccess }: LeadDraw
                   <AddCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
                   Tambah Tanggal Alternatif
                 </button>
-              )}
-
-              {isWedding && (
-                <SessionPillRadio
-                  label="Sesi Acara"
-                  required
-                  value={form.weddingSession}
-                  onChange={(v) => setField("weddingSession", v)}
-                  venueId={form.venueId || undefined}
-                  eventDate={form.eventDate || undefined}
-                />
-              )}
-
-              {isMice && (
-                <SessionPillRadio
-                  label="Sesi Event"
-                  value={form.miceSession}
-                  onChange={(v) => setField("miceSession", v)}
-                  venueId={form.venueId || undefined}
-                  eventDate={form.eventDate || undefined}
-                />
               )}
             </div>
 

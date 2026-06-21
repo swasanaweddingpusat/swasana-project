@@ -251,10 +251,15 @@ export function LeadDetailModal({ open, lead, onClose, onEdit }: Props) {
                 </MobileField>
               )}
               {lead.eventDateAlt && (
-                <MobileField label="Tanggal Alternatif">{fmtDate(lead.eventDateAlt)}</MobileField>
+                <MobileField label="Tanggal Alternatif">
+                  {fmtDate(lead.eventDateAlt)}
+                  {isWedding && lead.weddingSessionAlt
+                    ? ` · ${fmtSession(lead.weddingSessionAlt)}`
+                    : ""}
+                </MobileField>
               )}
               {isWedding && lead.weddingSession && (
-                <MobileField label="Session">{fmtSession(lead.weddingSession)}</MobileField>
+                <MobileField label="Session (Utama)">{fmtSession(lead.weddingSession)}</MobileField>
               )}
               {lead.eventType && (
                 <MobileField label="Event Type">{lead.eventType.name}</MobileField>
@@ -393,9 +398,14 @@ export function LeadDetailModal({ open, lead, onClose, onEdit }: Props) {
                   {fmtDate(lead.eventDate)}
                   {lead.time ? <span className="text-muted-foreground"> · {lead.time}</span> : null}
                 </Field>
-                <Field label="Tanggal Alternatif">{fmtDate(lead.eventDateAlt)}</Field>
+                <Field label="Tanggal Alternatif">
+                  {fmtDate(lead.eventDateAlt)}
+                  {isWedding && lead.weddingSessionAlt && lead.eventDateAlt ? (
+                    <span className="text-muted-foreground"> · {fmtSession(lead.weddingSessionAlt)}</span>
+                  ) : null}
+                </Field>
                 {isWedding && (
-                  <Field label="Session">{fmtSession(lead.weddingSession)}</Field>
+                  <Field label="Session (Utama)">{fmtSession(lead.weddingSession)}</Field>
                 )}
                 <Field label="Event Type">{lead.eventType?.name ?? "-"}</Field>
                 <Field label="Estimasi Tamu">

@@ -45,6 +45,9 @@ function sessionOverlapOr(
  *   2. Other active locked leads (isDateLocked, status not final, not converted),
  *      excluding the lead being edited itself via excludeLeadId.
  *
+ * For leads: primary date uses weddingSession; alt date uses weddingSessionAlt.
+ * The check covers both fields separately so session-per-date is enforced correctly.
+ *
  * Returns an error string when the slot is taken, or null when free.
  * Only call this when the lead being saved is itself date-locked with a venue,
  * date, and (wedding) session — an unlocked lead reserves nothing.
@@ -77,20 +80,33 @@ async function findLeadSlotConflict(params: {
     return "Slot venue di tanggal & sesi tersebut sudah dibooking.";
   }
 
+  // Check conflicts against other locked leads.
+  // Primary date conflict: check against weddingSession (per-date session).
+  // Alt date conflict: check against weddingSessionAlt (per-date session for alt).
+  // Both must be checked separately because they use different session fields.
+  const sessionIn = overlapOr ? overlapOr.map((o) => o.weddingSession) : undefined;
+
   const leadConflict = await db.lead.findFirst({
     where: {
       ...(excludeLeadId ? { id: { not: excludeLeadId } } : {}),
       isDateLocked: true,
       status: { isFinal: false },
       convertedAt: null,
-      // Either the primary or secondary venue locked on this exact date.
+      // Match: primary date via weddingSession, OR alt date via weddingSessionAlt
       OR: [
-        { venueId, eventDate },
-        { venueSecondaryId: venueId, eventDate },
-        { venueId, eventDateAlt: eventDate },
-        { venueSecondaryId: venueId, eventDateAlt: eventDate },
+        // Primary date (weddingSession field) at primary or secondary venue
+        {
+          eventDate,
+          OR: [{ venueId }, { venueSecondaryId: venueId }],
+          ...(sessionIn ? { weddingSession: { in: sessionIn } } : {}),
+        },
+        // Alt date (weddingSessionAlt field) at primary or secondary venue
+        {
+          eventDateAlt: eventDate,
+          OR: [{ venueId }, { venueSecondaryId: venueId }],
+          ...(sessionIn ? { weddingSessionAlt: { in: sessionIn } } : {}),
+        },
       ],
-      ...(overlapOr ? { weddingSession: { in: overlapOr.map((o) => o.weddingSession) } } : {}),
     },
     select: { id: true },
   });
@@ -138,6 +154,7 @@ export async function createLead(data: CreateLeadInput) {
     notes,
     category,
     weddingSession,
+    weddingSessionAlt,
     venueId,
     venueSecondaryId,
     packageId,
@@ -185,6 +202,7 @@ export async function createLead(data: CreateLeadInput) {
           notes: notes || null,
           category,
           weddingSession,
+          weddingSessionAlt: weddingSessionAlt ?? null,
           venueId: venueId || null,
           venueSecondaryId: venueSecondaryId || null,
           packageId: packageId || null,
@@ -294,6 +312,7 @@ export async function updateLead(data: UpdateLeadInput) {
           }),
           ...(fields.category !== undefined && { category: fields.category }),
           ...(fields.weddingSession !== undefined && { weddingSession: fields.weddingSession }),
+          ...(fields.weddingSessionAlt !== undefined && { weddingSessionAlt: fields.weddingSessionAlt ?? null }),
           ...(fields.assignedToId !== undefined && { assignedToId: fields.assignedToId || null }),
           ...(fields.statusId !== undefined && { statusId: fields.statusId }),
           ...(fields.bitrixId !== undefined && { bitrixId: fields.bitrixId || null }),

@@ -1,22 +1,24 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
-import { getPublicUrl } from "@/lib/storage";
+import { resolveAvatarUrl } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
 import type { LeadFilterInput } from "@/lib/validations/lead";
 import type { DataScope } from "@/types/user";
 
 /**
- * Resolve bookingFeeEvidenceUrl from a stored S3 key to a full public URL.
- * Consistent with how paymentEvidence is handled in booking queries/actions.
+ * Resolve bookingFeeEvidenceUrl from a stored S3 key (or a legacy full URL) to a
+ * displayable full URL. Uses resolveAvatarUrl which handles both forms:
+ *   - relative key → getPublicUrl(key)
+ *   - full URL from current host → passthrough
+ *   - full URL from a different/legacy host → null (file gone)
+ * This is safe even if the DB value is already a full URL (idempotent).
  */
 function resolveLeadEvidenceUrl<T extends { bookingFeeEvidenceUrl: string | null }>(
   lead: T,
 ): T {
   return {
     ...lead,
-    bookingFeeEvidenceUrl: lead.bookingFeeEvidenceUrl
-      ? getPublicUrl(lead.bookingFeeEvidenceUrl)
-      : null,
+    bookingFeeEvidenceUrl: resolveAvatarUrl(lead.bookingFeeEvidenceUrl),
   };
 }
 
@@ -40,6 +42,7 @@ const leadSelect = {
   notes: true,
   category: true,
   weddingSession: true,
+  weddingSessionAlt: true,
   bitrixId: true,
   instansi: true,
   isDateLocked: true,

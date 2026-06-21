@@ -71,12 +71,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
 
     // Also check eventDateAlt for locked leads — secondary date also blocks.
+    // NOTE: alt-date uses weddingSessionAlt (per-date session), NOT weddingSession.
     const lockedLeadsAlt = await db.lead.findMany({
       where: {
         ...lockedLeadWhere,
         eventDateAlt: { gte: start, lte: end, not: null },
       },
-      select: { eventDateAlt: true, weddingSession: true },
+      select: { eventDateAlt: true, weddingSessionAlt: true },
     });
 
     // Init all dates in month as fully available.
@@ -136,12 +137,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       applyBlock(key, l.weddingSession);
     }
 
-    // Apply locked leads (alternative event date)
+    // Apply locked leads (alternative event date) — use weddingSessionAlt for session
     for (const l of lockedLeadsAlt) {
       if (!l.eventDateAlt) continue;
       const ld = l.eventDateAlt;
       const key = `${ld.getUTCFullYear()}-${String(ld.getUTCMonth() + 1).padStart(2, "0")}-${String(ld.getUTCDate()).padStart(2, "0")}`;
-      applyBlock(key, l.weddingSession);
+      applyBlock(key, l.weddingSessionAlt);
     }
 
     return Response.json(availability);

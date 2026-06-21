@@ -57,6 +57,7 @@ export type LeadListItem = {
   notes: string | null;
   category: "WEDDINGS" | "MICE";
   weddingSession: WeddingSession | null;
+  weddingSessionAlt: WeddingSession | null;
   bitrixId: string | null;
   instansi: string | null;
   isDateLocked: boolean;

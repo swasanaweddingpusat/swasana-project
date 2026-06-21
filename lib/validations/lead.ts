@@ -56,6 +56,7 @@ const baseLeadSchema = z.object({
   assignedToId: z.string().min(1, "Assign ke sales wajib dipilih"),
   statusId: z.string().min(1, "Status wajib dipilih"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional(),
+  weddingSessionAlt: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
   bitrixId: z.string().trim().max(100).optional().nullable(),
   // Date locking & booking fee
   isDateLocked: z.boolean().default(false),
@@ -113,15 +114,51 @@ const requireBookingFeeWhenLocked = (
   }
 };
 
+// For WEDDINGS: weddingSessionAlt is required when eventDateAlt is provided.
+const requireAltSession = (
+  data: {
+    category?: "WEDDINGS" | "MICE";
+    eventDateAlt?: string | null;
+    weddingSessionAlt?: "morning" | "evening" | "fullday" | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.category === "WEDDINGS" && data.eventDateAlt && !data.weddingSessionAlt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["weddingSessionAlt"],
+      message: "Session tanggal alternatif wajib dipilih untuk wedding",
+    });
+  }
+};
+
+// Alternative event date, when provided, must differ from the primary event date.
+const requireDistinctEventDates = (
+  data: { eventDate?: string; eventDateAlt?: string | null },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.eventDateAlt && data.eventDate && data.eventDateAlt === data.eventDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["eventDateAlt"],
+      message: "Tanggal alternatif tidak boleh sama dengan tanggal utama",
+    });
+  }
+};
+
 export const createLeadSchema = baseLeadSchema
   .superRefine(requireWeddingSession)
-  .superRefine(requireBookingFeeWhenLocked);
+  .superRefine(requireAltSession)
+  .superRefine(requireBookingFeeWhenLocked)
+  .superRefine(requireDistinctEventDates);
 
 export const updateLeadSchema = baseLeadSchema
   .partial()
   .extend({ id: z.string().min(1) })
   .superRefine(requireWeddingSession)
-  .superRefine(requireBookingFeeWhenLocked);
+  .superRefine(requireAltSession)
+  .superRefine(requireBookingFeeWhenLocked)
+  .superRefine(requireDistinctEventDates);
 
 export const leadFilterSchema = z.object({
   search: z.string().optional(),
@@ -167,3 +204,4 @@ export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
 export type CreateLeadStatusInput = z.infer<typeof createLeadStatusSchema>;
 export type UpdateLeadStatusInput2 = z.infer<typeof updateLeadStatusSchema2>;
 export type BaseLeadInput = z.infer<typeof baseLeadSchema>;
+export type WeddingSessionAltInput = "morning" | "evening" | "fullday" | null | undefined;
