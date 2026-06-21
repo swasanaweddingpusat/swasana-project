@@ -98,6 +98,11 @@ export type BookingPrefillLead = {
   eventType: { id: string; name: string; category: "WEDDINGS" | "MICE" } | null;
   sourceOfInformation: { id: string; name: string } | null;
   assignedTo: { id: string; fullName: string | null; nickName: string | null } | null;
+  // Booking fee fields — prefilled when the lead has isDateLocked=true
+  bookingFeeAmount?: number | null;
+  /** ISO date string "YYYY-MM-DD" or full ISO from DB */
+  bookingFeeDate?: string | null;
+  bookingFeeEvidenceUrl?: string | null;
 };
 
 // Paginated response

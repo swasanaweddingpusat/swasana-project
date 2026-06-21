@@ -29,15 +29,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
     const excludeId = searchParams.get("exclude"); // booking ID to exclude (for edit mode)
+    const excludeLeadId = searchParams.get("excludeLeadId"); // lead ID to exclude from locked-lead check (Deal modal)
 
-    // ── Source 1: Confirmed/active bookings ────────────────────────────────────
+    // ── Source 1: Bookings that block slots ───────────────────────────────────
     // Availability is per-venue (1 venue = 1 physical space).
     // We intentionally do NOT filter by packageId —
     // any active booking at this venue blocks the slot, regardless of package.
+    //
+    // A booking blocks the slot when:
+    //   (a) recordStatus = "saved" (finalized booking), OR
+    //   (b) recordStatus = "draft" AND leadId IS NOT NULL (draft created from a
+    //       Deal flow — the lead has received booking fee, so the slot should be
+    //       held even before finalization).
+    // Manually created drafts (leadId = null) do NOT block so they don't interfere
+    // with availability while the sales rep is still filling in the form.
     const bookings = await db.booking.findMany({
       where: {
         venueId: id,
-        recordStatus: "saved",
+        OR: [
+          { recordStatus: "saved" },
+          { recordStatus: "draft", leadId: { not: null } },
+        ],
         eventDate: { gte: start, lte: end },
         bookingStatus: { notIn: ["Canceled", "Lost", "Rejected"] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
@@ -55,11 +67,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // date: a Lost lead is dead, and a Deal lead's hold is carried by the booking
     // it converted into (Source 1). `convertedAt: null` is kept as defence in
     // depth alongside the status filter.
+    //
+    // `excludeLeadId` allows the Deal confirm modal to exclude the lead being
+    // converted so it doesn't block its own slot when picking session.
     const lockedLeadWhere = {
       isDateLocked: true,
       status: { isFinal: false },
       convertedAt: null,
       OR: [{ venueId: id }, { venueSecondaryId: id }],
+      ...(excludeLeadId ? { id: { not: excludeLeadId } } : {}),
     };
 
     const lockedLeads = await db.lead.findMany({

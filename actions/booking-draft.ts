@@ -338,6 +338,7 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           notes: input.notes ?? null,
           discountName: input.specialBonusName ?? null,
           discountAmount: input.specialBonusAmount ?? 0,
+          ...(input.leadId ? { leadId: input.leadId } : {}),
         },
       }),
     ]);

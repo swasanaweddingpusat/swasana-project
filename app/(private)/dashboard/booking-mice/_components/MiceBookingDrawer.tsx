@@ -466,7 +466,28 @@ export function MiceBookingDrawer({
           salesId: autoSalesId,
           notes: prefillLead.notes ?? "",
         });
-        setTerms(makeDefaultTerms());
+        // Prefill booking fee into terms[0] when the lead has a received booking fee
+        const defaultTerms = makeDefaultTerms();
+        if (prefillLead.bookingFeeAmount != null && prefillLead.bookingFeeAmount > 0) {
+          const bookingFeeDueDateStr = prefillLead.bookingFeeDate
+            ? (() => {
+                const d = new Date(prefillLead.bookingFeeDate);
+                const y = d.getUTCFullYear();
+                const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+                const dy = String(d.getUTCDate()).padStart(2, "0");
+                return `${y}-${mo}-${dy}`;
+              })()
+            : defaultTerms[0]?.dueDate ?? "";
+          if (defaultTerms[0]) {
+            defaultTerms[0] = {
+              ...defaultTerms[0],
+              amount: prefillLead.bookingFeeAmount,
+              dueDate: bookingFeeDueDateStr,
+              paymentStatus: "paid",
+            };
+          }
+        }
+        setTerms(defaultTerms);
         setSigningLocation("");
         setSelectedCustomerId("");
       } else {
