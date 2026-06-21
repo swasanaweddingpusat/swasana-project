@@ -9,14 +9,17 @@ import type { VenueAvailability } from "@/app/api/venues/[id]/availability/route
  * Merges bookings + locked leads (both primary + secondary venue) into a single
  * Record<"YYYY-MM-DD", { morning, evening, fullday }> map.
  *
- * @param venueId   - ID venue yang dicek. Pass null/undefined buat skip fetch.
- * @param month     - Format "YYYY-MM". Defaults to current month if omitted.
- * @param excludeId - Booking ID to exclude from check (edit mode).
+ * @param venueId       - ID venue yang dicek. Pass null/undefined buat skip fetch.
+ * @param month         - Format "YYYY-MM". Defaults to current month if omitted.
+ * @param excludeId     - Booking ID to exclude from check (edit mode).
+ * @param excludeLeadId - Lead ID to exclude from locked-lead check (Deal modal:
+ *                        the lead being converted should not block its own slot).
  */
 export function useVenueAvailability(
   venueId: string | null | undefined,
   month?: string,
   excludeId?: string,
+  excludeLeadId?: string,
 ) {
   const targetMonth =
     month ??
@@ -26,10 +29,11 @@ export function useVenueAvailability(
     })();
 
   return useQuery<VenueAvailability>({
-    queryKey: ["venue-availability", venueId, targetMonth, excludeId ?? null] as const,
+    queryKey: ["venue-availability", venueId, targetMonth, excludeId ?? null, excludeLeadId ?? null] as const,
     queryFn: async () => {
       const params = new URLSearchParams({ month: targetMonth });
       if (excludeId) params.set("exclude", excludeId);
+      if (excludeLeadId) params.set("excludeLeadId", excludeLeadId);
       const res = await fetch(`/api/venues/${venueId}/availability?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch venue availability");
       return res.json();

@@ -178,6 +178,7 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
           // MICE uses weddingSession field for session (morning/evening)
           weddingSession: input.miceSession ?? null,
           eventTime: input.eventTime ?? null,
+          ...(input.leadId ? { leadId: input.leadId } : {}),
         },
       }),
     ]);

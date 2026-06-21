@@ -84,10 +84,8 @@ export function SectionHeader({
  * Fullday is only available when BOTH morning AND evening are free
  * (same logic as booking-drawer.tsx `getAvailableSessions`).
  *
- * `excludeId` is intentionally NOT supported here because the availability
- * endpoint only accepts a booking ID for exclusion, not a lead ID.
- * Locked leads that block their own session in edit mode are an accepted
- * limitation until the endpoint is extended to support lead exclusion.
+ * `excludeLeadId` allows the Deal confirm modal to exclude the lead being
+ * converted so it doesn't block its own slot in the session pills.
  */
 export function SessionPillRadio({
   label,
@@ -96,6 +94,7 @@ export function SessionPillRadio({
   onChange,
   venueId,
   eventDate,
+  excludeLeadId,
 }: {
   label: string;
   required?: boolean;
@@ -105,6 +104,8 @@ export function SessionPillRadio({
   venueId?: string;
   /** Optional: "YYYY-MM-DD" for availability check */
   eventDate?: string;
+  /** Optional: lead ID to exclude from locked-lead blocking (Deal modal). */
+  excludeLeadId?: string;
 }) {
   // Derive the YYYY-MM string from eventDate for the hook
   const month = eventDate ? eventDate.slice(0, 7) : undefined;
@@ -112,6 +113,8 @@ export function SessionPillRadio({
   const { data: avail, isFetching } = useVenueAvailability(
     venueId ?? null,
     month,
+    undefined,
+    excludeLeadId,
   );
 
   /**

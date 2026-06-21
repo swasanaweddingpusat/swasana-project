@@ -573,13 +573,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       retryWriteRef.current = null;
 
       // Deal flow: initialDraftId injected — resume that draft, no resume prompt.
-      // Prefill step 1 fields from lead so they're populated when user navigates
-      // back, then jump to step 2 (draft already created by handleConfirmDeal).
+      // Prefill all steps from lead so the user can review from step 1 before proceeding.
+      // Draft is already created by handleConfirmDeal in leads-table, so step 2 "Continue"
+      // will update the existing draft (idempotency path) instead of creating a new one.
       if (initialDraftId) {
         resetToClean();
         setDraftId(initialDraftId);
         saveWeddingDraftToStorage(initialDraftId);
-        // Always prefill step 1 form from lead so data is visible if user goes back
+        // Prefill step 1 + step 2 form from lead
         if (prefillLead) {
           setCustomerName(prefillLead.name);
           setSelectedLeadId(prefillLead.leadId);
@@ -605,10 +606,32 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           if (prefillLead.eventType) form.setValue("weddingType", mapEventTypeNameToWeddingType(prefillLead.eventType.name));
           if (prefillLead.weddingSession) form.setValue("weddingSession", prefillLead.weddingSession);
           if (prefillLead.eventDate) form.setValue("eventDate", toDateOnly(new Date(prefillLead.eventDate)));
+
+          // Prefill booking fee into terms[0] when the lead has received a booking fee.
+          // Only override when bookingFeeAmount is provided (lead with isDateLocked=true);
+          // otherwise keep makeDefaultTerms() default (5_000_000).
+          if (prefillLead.bookingFeeAmount != null && prefillLead.bookingFeeAmount > 0) {
+            setTerms((prev) => {
+              const updated = [...prev];
+              if (updated[0]) {
+                updated[0] = {
+                  ...updated[0],
+                  amount: prefillLead.bookingFeeAmount!,
+                  dueDate: prefillLead.bookingFeeDate ?? updated[0].dueDate,
+                  paymentStatus: "paid",
+                  ...(prefillLead.bookingFeeEvidenceUrl
+                    ? { paymentEvidence: prefillLead.bookingFeeEvidenceUrl }
+                    : {}),
+                };
+              }
+              return updated;
+            });
+          }
         }
-        // Jump to step 3 (Takeout) — draft already persisted by Deal flow in leads-table,
-        // and lead prefill already includes venue + package from the lead record.
-        setCurrentStep(3);
+        // Start at step 1 so the user can review all data before proceeding.
+        // The draft is already persisted, so step 2 "Continue" will update it
+        // via the idempotency path in createDraftBooking.
+        setCurrentStep(1);
         return;
       }
 

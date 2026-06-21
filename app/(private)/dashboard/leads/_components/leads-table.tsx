@@ -235,6 +235,17 @@ export function LeadsTable() {
       }
     }
 
+    // Resolve bookingFeeDate: DB stores as DateTime, convert to "YYYY-MM-DD" string
+    const bookingFeeDateStr = lead.bookingFeeDate
+      ? (() => {
+          const d = new Date(lead.bookingFeeDate);
+          const y = d.getUTCFullYear();
+          const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+          const day = String(d.getUTCDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        })()
+      : null;
+
     return {
       leadId: lead.id,
       name: lead.name,
@@ -253,6 +264,10 @@ export function LeadsTable() {
       eventType: lead.eventType,
       sourceOfInformation: lead.sourceOfInformation,
       assignedTo: lead.assignedTo,
+      // Booking fee — only populated when lead has isDateLocked (received booking fee)
+      bookingFeeAmount: lead.bookingFeeAmount ?? null,
+      bookingFeeDate: bookingFeeDateStr,
+      bookingFeeEvidenceUrl: lead.bookingFeeEvidenceUrl ?? null,
     };
   }
 
