@@ -59,7 +59,7 @@ export async function createMiceBooking(
 
     if (input.leadId) {
       leadRecord = await db.lead.findUnique({
-        where: { id: input.leadId, deletedAt: null },
+        where: { id: input.leadId },
         select: { id: true, convertedToCustomerId: true },
       });
       if (!leadRecord) return { success: false, error: "Lead tidak ditemukan." };

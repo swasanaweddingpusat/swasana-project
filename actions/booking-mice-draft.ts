@@ -65,7 +65,7 @@ export async function createDraftMiceBooking(data: unknown): Promise<MiceDraftRe
 
     if (input.leadId) {
       leadRecord = await db.lead.findUnique({
-        where: { id: input.leadId, deletedAt: null },
+        where: { id: input.leadId },
         select: {
           id: true,
           name: true,
