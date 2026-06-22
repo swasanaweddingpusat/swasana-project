@@ -12,11 +12,8 @@ import {
   Bell,
   CheckCircle,
   Refresh,
-  Forbidden,
-  MinusCircle,
   DownloadMinimalistic,
   FileSend,
-  ClipboardCheck,
   Wallet,
 } from "@solar-icons/react";
 import {
@@ -30,14 +27,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { acknowledgePayment } from "@/actions/payment-ack";
-import type {
-  ARBooking,
-  ARBookingStatus,
-  ARTermin,
-  ARInvoiceStatus,
-  ARTerminStatus,
-  ARTerminAckStatus,
-} from "@/types/finance";
+import {
+  fmtRp,
+  fmtDate,
+  getTerminBadge,
+  getInvoiceBadge,
+  getAckBadge,
+  getBookingStatusBadge,
+  StatusBadge,
+} from "./ar-format";
+import type { ARBooking, ARTermin } from "@/types/finance";
 
 interface ARTableProps {
   bookings: ARBooking[];
@@ -51,200 +50,6 @@ interface ARTableProps {
   onPageChange: (page: number) => void;
   canAck?: boolean; // finance-ar:edit permission
   canEditKeuangan?: boolean; // booking:edit OR finance-ar:edit
-}
-
-function fmtRp(n: number): string {
-  return `Rp${new Intl.NumberFormat("id-ID").format(n)}`;
-}
-
-function fmtDate(d: string): string {
-  if (!d || d === "-") return "-";
-  try {
-    return new Date(d).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return d;
-  }
-}
-
-/* ─── Status Badge Helpers ─────────────────────────────────────────────────── */
-
-interface BadgeConfig {
-  label: string;
-  bg: string;
-  border: string;
-  text: string;
-  Icon: typeof CheckCircle;
-}
-
-function getTerminBadge(status: ARTerminStatus): BadgeConfig {
-  const map: Record<ARTerminStatus, BadgeConfig> = {
-    paid: {
-      label: "Lunas",
-      bg: "bg-primary",
-      border: "border-primary",
-      text: "text-primary-foreground",
-      Icon: CheckCircle,
-    },
-    partial: {
-      label: "Partial",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-foreground",
-      Icon: Refresh,
-    },
-    overdue: {
-      label: "Aging",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-    unpaid: {
-      label: "Unpaid",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-    not_due_yet: {
-      label: "Not Due Yet",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-muted-foreground",
-      Icon: MinusCircle,
-    },
-  };
-  return map[status];
-}
-
-function getInvoiceBadge(status: ARInvoiceStatus): BadgeConfig {
-  const map: Record<ARInvoiceStatus, BadgeConfig> = {
-    paid: {
-      label: "Paid",
-      bg: "bg-primary",
-      border: "border-primary",
-      text: "text-primary-foreground",
-      Icon: CheckCircle,
-    },
-    partial: {
-      label: "Partial",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-foreground",
-      Icon: Refresh,
-    },
-    unpaid: {
-      label: "Unpaid",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-    unissued: {
-      label: "Unissued",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-muted-foreground",
-      Icon: ClipboardCheck,
-    },
-  };
-  return map[status] ?? map.unissued;
-}
-
-function getAckBadge(status: ARTerminAckStatus): BadgeConfig {
-  const map: Record<ARTerminAckStatus, BadgeConfig> = {
-    acknowledged: {
-      label: "Acknowledged",
-      bg: "bg-primary",
-      border: "border-primary",
-      text: "text-primary-foreground",
-      Icon: CheckCircle,
-    },
-    pending: {
-      label: "Pending Ack",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-muted-foreground",
-      Icon: MinusCircle,
-    },
-    rejected: {
-      label: "Rejected",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-  };
-  return map[status] ?? map.pending;
-}
-
-function getBookingStatusBadge(status: ARBookingStatus): BadgeConfig {
-  const map: Record<ARBookingStatus, BadgeConfig> = {
-    Confirmed: {
-      label: "Confirmed",
-      bg: "bg-primary",
-      border: "border-primary",
-      text: "text-primary-foreground",
-      Icon: CheckCircle,
-    },
-    Uploaded: {
-      label: "Uploaded",
-      bg: "bg-secondary",
-      border: "border-primary/20",
-      text: "text-primary",
-      Icon: FileSend,
-    },
-    Pending: {
-      label: "Pending",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-muted-foreground",
-      Icon: MinusCircle,
-    },
-    Rejected: {
-      label: "Rejected",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-    Canceled: {
-      label: "Canceled",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-muted-foreground",
-      Icon: MinusCircle,
-    },
-    Lost: {
-      label: "Lost",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-  };
-  return map[status] ?? map.Pending;
-}
-
-function StatusBadge({ config }: { config: BadgeConfig }) {
-  const { label, bg, border, text, Icon } = config;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded-full border py-0.5 pl-1.5 pr-2 text-xs font-medium",
-        bg,
-        border,
-        text
-      )}
-    >
-      <Icon weight="BoldDuotone" className="size-3" />
-      {label}
-    </span>
-  );
 }
 
 /* ─── Pagination ───────────────────────────────────────────────────────────── */
