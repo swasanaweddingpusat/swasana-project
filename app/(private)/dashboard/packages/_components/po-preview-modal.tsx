@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Refresh, ArrowRightUp, CloseCircle, Printer } from "@solar-icons/react";
+import { Refresh, ArrowRightUp, CloseCircle, Printer, DownloadMinimalistic } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -34,8 +34,15 @@ interface POPreviewModalProps {
   target: POPreviewTarget | null;
 }
 
+/** Extract the filename from a Content-Disposition header, falling back to a default. */
+function parseFileName(contentDisposition: string | null): string {
+  const match = contentDisposition?.match(/filename="?([^"]+)"?/i);
+  return match?.[1] ?? "PO.pdf";
+}
+
 export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalProps): React.ReactElement | null {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string>("PO.pdf");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
@@ -63,6 +70,7 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
           const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
           throw new Error(errBody?.error ?? `Failed to load PDF (${res.status})`);
         }
+        setFileName(parseFileName(res.headers.get("Content-Disposition")));
         const blob = await res.blob();
         if (revoked) return;
         createdUrl = URL.createObjectURL(blob);
@@ -86,6 +94,16 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
 
   function handleOpenNewTab(): void {
     if (blobUrl) window.open(blobUrl, "_blank");
+  }
+
+  function handleDownload(): void {
+    if (!blobUrl) return;
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   const handlePrint = useCallback((): void => {
@@ -152,6 +170,16 @@ export function POPreviewModal({ open, onOpenChange, target }: POPreviewModalPro
                 ) : (
                   <Printer weight="BoldDuotone" className="h-5 w-5 text-primary-foreground" />
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={!blobUrl}
+                title="Unduh PDF"
+                className="h-11 w-11 rounded-full flex items-center justify-center cursor-pointer bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Unduh PDF"
+              >
+                <DownloadMinimalistic weight="BoldDuotone" className="h-5 w-5 text-foreground" />
               </button>
               <button
                 type="button"
