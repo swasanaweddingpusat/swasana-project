@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Refresh, CloseCircle, ArrowRightUp, Printer } from "@solar-icons/react";
+import { Refresh, CloseCircle, ArrowRightUp, Printer, DownloadMinimalistic } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -37,12 +37,19 @@ interface BookingPOPreviewModalProps {
   target: BookingPOPreviewTarget | null;
 }
 
+/** Extract the filename from a Content-Disposition header, falling back to a default. */
+function parseFileName(contentDisposition: string | null): string {
+  const match = contentDisposition?.match(/filename="?([^"]+)"?/i);
+  return match?.[1] ?? "PO.pdf";
+}
+
 export function BookingPOPreviewModal({
   open,
   onOpenChange,
   target,
 }: BookingPOPreviewModalProps): React.ReactElement | null {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string>("PO.pdf");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
@@ -71,6 +78,7 @@ export function BookingPOPreviewModal({
           const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
           throw new Error(errBody?.error ?? `Gagal memuat PDF (${res.status})`);
         }
+        setFileName(parseFileName(res.headers.get("Content-Disposition")));
         const blob = await res.blob();
         if (revoked) return;
         createdUrl = URL.createObjectURL(blob);
@@ -93,6 +101,16 @@ export function BookingPOPreviewModal({
 
   function handleOpenNewTab(): void {
     if (blobUrl) window.open(blobUrl, "_blank");
+  }
+
+  function handleDownload(): void {
+    if (!blobUrl) return;
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   const handlePrint = useCallback((): void => {
@@ -162,6 +180,16 @@ export function BookingPOPreviewModal({
                 ) : (
                   <Printer weight="BoldDuotone" className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={!blobUrl}
+                title="Unduh PDF"
+                className="h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center cursor-pointer bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Unduh PDF"
+              >
+                <DownloadMinimalistic weight="BoldDuotone" className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
               </button>
               <button
                 type="button"
