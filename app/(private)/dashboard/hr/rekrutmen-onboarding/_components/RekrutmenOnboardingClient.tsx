@@ -136,7 +136,14 @@ export function RekrutmenOnboardingClient() {
   const assignOnboardingMutation = useAssignOnboarding();
   const completeTaskMutation = useCompleteOnboardingTask();
 
-  const employees = employeesResult?.data ?? [];
+  const employees = useMemo(() => employeesResult?.data ?? [], [employeesResult?.data]);
+
+  function handleViewJobPostingCandidates(jobPostingId: string) {
+    setSelectedJobPostingId(jobPostingId);
+    setCandidatePostingFilter(jobPostingId);
+    setCandidateForm((current) => ({ ...current, jobPostingId }));
+    setActiveTab("kandidat");
+  }
 
   const [jobPostingForm, setJobPostingForm] = useState<JobPostingForm>({
     title: "",
@@ -169,6 +176,8 @@ export function RekrutmenOnboardingClient() {
   const [candidatePostingFilter, setCandidatePostingFilter] = useState("all");
   const [candidateStageFilter, setCandidateStageFilter] = useState("all");
   const [candidateStageDrafts, setCandidateStageDrafts] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState("lowongan");
+  const [selectedJobPostingId, setSelectedJobPostingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!candidateForm.jobPostingId && jobPostings[0]?.id) {
@@ -191,12 +200,16 @@ export function RekrutmenOnboardingClient() {
   useEffect(() => {
     setCandidateStageDrafts((current) => {
       const next = { ...current };
+      let hasChanges = false;
       for (const candidate of candidates) {
-        if (!next[candidate.id]) next[candidate.id] = candidate.stage;
+        if (!next[candidate.id]) {
+          next[candidate.id] = candidate.stage;
+          hasChanges = true;
+        }
       }
-      return next;
+      return hasChanges ? next : current;
     });
-  }, [candidates]);
+  }, [candidates.length]);
 
   const visibleCandidates = useMemo(() => {
     return candidates.filter((candidate) => {
@@ -390,7 +403,7 @@ export function RekrutmenOnboardingClient() {
         <Card className="rounded-2xl shadow-sm"><CardContent className="flex items-start gap-3 p-5"><div className="rounded-full bg-muted p-3 text-foreground"><CheckCircle weight="BoldDuotone" className="h-5 w-5" /></div><div><p className="text-sm text-muted-foreground">Onboarding saya</p><p className="text-2xl font-heading font-semibold">{myOnboarding ? `${completedTasks}/${totalTasks}` : "-"}</p></div></CardContent></Card>
       </div>
 
-      <Tabs defaultValue="lowongan" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl p-1">
           <TabsTrigger value="lowongan" className="rounded-xl gap-2"><Buildings weight="BoldDuotone" className="h-4 w-4" />Lowongan</TabsTrigger>
           <TabsTrigger value="kandidat" className="rounded-xl gap-2"><UserPlus weight="BoldDuotone" className="h-4 w-4" />Kandidat</TabsTrigger>
@@ -424,10 +437,19 @@ export function RekrutmenOnboardingClient() {
                     {jobPostings.length === 0 ? (
                       <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">Belum ada lowongan.</TableCell></TableRow>
                     ) : jobPostings.map((posting: JobPostingItem) => (
-                      <TableRow key={posting.id}>
-                        <TableCell><div className="flex flex-col gap-0.5"><span className="font-medium text-foreground">{posting.title}</span><span className="text-xs text-muted-foreground">{posting.department?.name ?? posting.position?.name ?? "Umum"}</span></div></TableCell>
+                      <TableRow 
+                        key={posting.id} 
+                        onClick={() => handleViewJobPostingCandidates(posting.id)}
+                        className="group cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
+                        <TableCell><div className="flex flex-col gap-0.5"><button onClick={(e) => { e.stopPropagation(); handleViewJobPostingCandidates(posting.id); }} className="font-medium text-foreground hover:text-primary hover:underline text-left transition-colors">{posting.title}</button><span className="text-xs text-muted-foreground">{posting.department?.name ?? posting.position?.name ?? "Umum"}</span></div></TableCell>
                         <TableCell><Badge variant={posting.status === "open" ? "default" : "secondary"} className="rounded-full">{posting.status === "open" ? "Open" : posting.status}</Badge></TableCell>
-                        <TableCell>{posting._count.candidates}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-between gap-2">
+                            <span>{posting._count.candidates} kandidat</span>
+                            <ArrowRight weight="BoldDuotone" className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </TableCell>
                         <TableCell><div className="flex flex-col gap-0.5 text-xs text-muted-foreground"><span>{posting.location ?? "Lokasi belum diisi"}</span><span>{formatCurrency(posting.salaryRangeMin ? Number(posting.salaryRangeMin) : null)} - {formatCurrency(posting.salaryRangeMax ? Number(posting.salaryRangeMax) : null)}</span><span>Open: {formatDate(posting.openDate)}</span></div></TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">

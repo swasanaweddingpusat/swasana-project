@@ -20,9 +20,36 @@ export async function createJobPosting(
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
+    // Validate department exists if provided
+    if (parsed.data.departmentId) {
+      const dept = await db.department.findUnique({ where: { id: parsed.data.departmentId } });
+      if (!dept) return { success: false, error: "Departemen tidak ditemukan" };
+    }
+
+    // Validate position exists if provided
+    if (parsed.data.positionId) {
+      const pos = await db.position.findUnique({ where: { id: parsed.data.positionId } });
+      if (!pos) return { success: false, error: "Posisi tidak ditemukan" };
+    }
+
+    // Ensure salary min <= salary max if both provided
+    if (
+      parsed.data.salaryRangeMin != null &&
+      parsed.data.salaryRangeMax != null &&
+      parsed.data.salaryRangeMin > parsed.data.salaryRangeMax
+    ) {
+      return { success: false, error: "Gaji minimum tidak boleh lebih tinggi dari gaji maksimum" };
+    }
+
     const posting = await db.jobPosting.create({
       data: {
-        ...parsed.data,
+        title: parsed.data.title,
+        description: parsed.data.description || null,
+        requirements: parsed.data.requirements || null,
+        location: parsed.data.location || null,
+        employmentType: parsed.data.employmentType || null,
+        salaryRangeMin: parsed.data.salaryRangeMin ?? null,
+        salaryRangeMax: parsed.data.salaryRangeMax ?? null,
         departmentId: parsed.data.departmentId || null,
         positionId: parsed.data.positionId || null,
         createdBy: session!.user.profileId,
@@ -40,8 +67,14 @@ export async function createJobPosting(
     revalidateTag("job-postings", "max");
     return { success: true };
   } catch (e) {
-    console.error("[createJobPosting]", e);
-    return { success: false, error: "Terjadi kesalahan." };
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("[createJobPosting] Error:", {
+      message: errorMessage,
+      data: parsed.data,
+      timestamp: new Date().toISOString(),
+      stack: e instanceof Error ? e.stack : undefined,
+    });
+    return { success: false, error: "Gagal membuat lowongan. Silakan periksa data Anda." };
   }
 }
 

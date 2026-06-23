@@ -14,7 +14,16 @@ export async function GET(): Promise<Response> {
   try {
     const result = await getJobPostings();
     return Response.json(result);
-  } catch {
-    return Response.json({ error: "Failed to fetch job postings" }, { status: 500 });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[GET /api/hr/job-postings] Error:", {
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    });
+    return Response.json(
+      { error: "Failed to fetch job postings", details: errorMessage },
+      { status: 500 }
+    );
   }
 }

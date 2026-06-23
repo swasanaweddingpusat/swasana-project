@@ -13,7 +13,7 @@ import {
 
 export function useCandidates(params?: { jobPostingId?: string; stage?: string }) {
   return useQuery({
-    queryKey: ["candidates", params],
+    queryKey: ["candidates", params?.jobPostingId, params?.stage],
     queryFn: () => fetchCandidates(params),
     staleTime: 5 * 60 * 1000,
   });
