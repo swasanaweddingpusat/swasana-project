@@ -6,11 +6,6 @@ import {
   Ticket,
   CalendarDate,
   Wallet,
-  PieChart,
-  CardReceive,
-  CardSend,
-  Buildings2,
-  Buildings,
   Documents,
   ShopMinimalistic,
   CartLarge,
@@ -144,44 +139,12 @@ export const navItems: NavItem[] = [
     permission: { module: "vendor", action: "view" },
   },
   {
+    // Finance is its own area with an internal secondary sidebar.
+    // Submenus live in finance/_components/finance-nav-config.ts, not here.
     name: "Finance",
     href: "/dashboard/finance",
     icon: Wallet,
     permission: { module: "finance-ar", action: "view" },
-    submenu: [
-      {
-        name: "Overview",
-        href: "/dashboard/finance",
-        icon: PieChart,
-        permission: { module: "finance-ar", action: "view" },
-      },
-      {
-        name: "Accounts Receivable",
-        href: "/dashboard/finance/accounts-receivable",
-        icon: CardReceive,
-        permission: { module: "finance-ar", action: "view" },
-      },
-      {
-        name: "Accounts Payable",
-        href: "/dashboard/finance/accounts-payable",
-        icon: CardSend,
-        permission: { module: "finance-ar", action: "view" },
-        submenu: [
-          {
-            name: "Rekening Vendor",
-            href: "/dashboard/finance/accounts-payable/rekening-vendor",
-            icon: Buildings2,
-            permission: { module: "finance-ar", action: "view" },
-          },
-          {
-            name: "Rekening Venue",
-            href: "/dashboard/finance/accounts-payable/rekening-venue",
-            icon: Buildings,
-            permission: { module: "finance-ar", action: "view" },
-          },
-        ],
-      },
-    ],
   },
   {
     name: "Maintenance",

@@ -118,6 +118,36 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola piutang dan pembayaran masuk",
     parent: "/dashboard/finance",
   },
+  "/dashboard/finance/accounts-receivable/termin": {
+    title: "Termin",
+    subtitle: "Status termin pembayaran per booking",
+    parent: "/dashboard/finance/accounts-receivable",
+  },
+  "/dashboard/finance/accounts-receivable/aging": {
+    title: "Aging",
+    subtitle: "Umur piutang per booking",
+    parent: "/dashboard/finance/accounts-receivable",
+  },
+  "/dashboard/finance/accounts-receivable/client": {
+    title: "Client",
+    subtitle: "Piutang per client",
+    parent: "/dashboard/finance/accounts-receivable",
+  },
+  "/dashboard/finance/accounts-payable": {
+    title: "Accounts Payable",
+    subtitle: "Kelola hutang dan pembayaran keluar",
+    parent: "/dashboard/finance",
+  },
+  "/dashboard/finance/accounts-payable/rekening-vendor": {
+    title: "Rekening Vendor",
+    subtitle: "Daftar rekening pembayaran vendor",
+    parent: "/dashboard/finance/accounts-payable",
+  },
+  "/dashboard/finance/accounts-payable/rekening-venue": {
+    title: "Rekening Venue",
+    subtitle: "Daftar rekening pembayaran venue",
+    parent: "/dashboard/finance/accounts-payable",
+  },
 
   // ─── Notifications ─────────────────────────────────────────────────────────
   "/dashboard/notifications": {
