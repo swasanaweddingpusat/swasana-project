@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { uploadToR2, deleteFromR2, extractKeyFromUrl } from "@/lib/r2";
+import { uploadToStorage, deleteFromStorage, extractKeyFromUrl } from "@/lib/storage";
 import { getBaseUrl } from "@/lib/url";
 import {
   createEmployeeSchema,
@@ -379,7 +379,7 @@ export async function uploadEmployeeDocument(
     const ext = file.name.split(".").pop() ?? "bin";
     const key = `employees/${profileId}/documents/${metaParsed.data.type}-${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const fileUrl = await uploadToR2(buffer, key, file.type);
+    const fileUrl = await uploadToStorage(buffer, key, file.type);
 
     const doc = await db.employeeDocument.create({
       data: {
@@ -426,7 +426,7 @@ export async function deleteEmployeeDocument(
     if (!doc) return { success: false, error: "Dokumen tidak ditemukan." };
 
     try {
-      await deleteFromR2(extractKeyFromUrl(doc.fileUrl));
+      await deleteFromStorage(extractKeyFromUrl(doc.fileUrl));
     } catch (r2Err) {
       console.error("[deleteEmployeeDocument] R2 delete failed:", r2Err);
     }

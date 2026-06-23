@@ -4,7 +4,7 @@ import { clockOutSchema } from "@/lib/validations/attendance";
 import { getAttendanceToday, getAttendanceSettings, todayMidnightUTC } from "@/lib/queries/attendance";
 import { validateGpsAgainstLocations } from "@/lib/attendance-helpers";
 import { db } from "@/lib/db";
-import { uploadToR2 } from "@/lib/r2";
+import { uploadToStorage } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
   let photoUrl: string;
   try {
-    photoUrl = await uploadToR2(photoBuffer, photoKey, "image/jpeg");
+    photoUrl = await uploadToStorage(photoBuffer, photoKey, "image/jpeg");
   } catch (err) {
     console.error("[clock-out] R2 upload error:", err);
     return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });

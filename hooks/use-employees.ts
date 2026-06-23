@@ -26,7 +26,16 @@ export function useEmployees(params: {
   employmentType?: string;
 }) {
   return useQuery({
-    queryKey: ["employees", params],
+    queryKey: [
+      "employees",
+      params.page ?? 1,
+      params.limit ?? 50,
+      params.search ?? "",
+      params.departmentId ?? "",
+      params.positionId ?? "",
+      params.status ?? "",
+      params.employmentType ?? "",
+    ],
     queryFn: () => fetchEmployees(params),
     staleTime: 60 * 1000,
   });
