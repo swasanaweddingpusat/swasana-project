@@ -34,7 +34,7 @@ export async function GET(req: Request) {
         isActive: true,
         createdAt: true,
       },
-      orderBy: { name: "asc" },
+      orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

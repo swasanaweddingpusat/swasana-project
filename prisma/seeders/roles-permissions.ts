@@ -86,6 +86,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     booking: ["view", "create", "edit", "delete", "print", "approve", "mark-lost", "restore", "transfer", "reject", "comment", "client-agreement", "edit-package", "edit-set-harga"],
     customers: ["view", "create", "edit", "delete"],
     groups: ["view", "create", "edit", "delete"],
+    leads: ["view", "create", "edit", "delete"],
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
@@ -140,7 +141,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "term-&-condition"],
     vendor: ["view"],
     "settings-source-of-information": ["view", "create", "edit", "delete"],
-    // leads intentionally removed for now — only sales-mice keeps leads access.
+    leads: ["view", "create", "edit", "delete"],
     // quotations intentionally removed — sales role no longer has quotation access.
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
     // but master data management (edit/delete) is reserved for direktur-sales and above.

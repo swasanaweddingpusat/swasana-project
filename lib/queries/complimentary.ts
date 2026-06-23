@@ -16,7 +16,7 @@ export async function getComplimentaries() {
       isActive: true,
       createdAt: true,
     },
-    orderBy: { name: "asc" },
+    orderBy: { createdAt: "desc" },
     take: 500,
   });
 }
