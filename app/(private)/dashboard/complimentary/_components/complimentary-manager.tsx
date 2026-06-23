@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { AddCircle, PenNewSquare, TrashBinTrash, Refresh } from "@solar-icons/react";
+import { AddCircle, PenNewSquare, TrashBinTrash, Refresh, Magnifer } from "@solar-icons/react";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { createComplimentary, updateComplimentary, deleteComplimentary } from "@/actions/complimentary";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -43,6 +43,7 @@ export function ComplimentaryManager({ initialData }: Props) {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ComplimentaryItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -62,8 +63,11 @@ export function ComplimentaryManager({ initialData }: Props) {
     }
   }, []);
 
-  const totalPages = Math.ceil(items.length / ROWS_PER_PAGE);
-  const paginatedItems = items.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const filteredItems = search.trim()
+    ? items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
+    : items;
+  const totalPages = Math.ceil(filteredItems.length / ROWS_PER_PAGE);
+  const paginatedItems = filteredItems.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
   function handleOpenAdd() {
     setEditingItem(null);
@@ -138,9 +142,18 @@ export function ComplimentaryManager({ initialData }: Props) {
             <div className={cn("flex", "flex-col", "sm:flex-row", "items-start", "sm:items-center", "justify-between", "px-4", "sm:px-6", "py-4", "gap-3", "border-b")}>
               <div className={cn("flex", "items-center", "gap-2")}>
                 <h2 className={cn("text-base", "font-bold", "text-foreground")}>Complimentary</h2>
-                <span className={cn("text-sm", "text-muted-foreground")}>({items.length})</span>
+                <span className={cn("text-sm", "text-muted-foreground")}>({filteredItems.length})</span>
               </div>
               <div className={cn("flex", "items-center", "gap-2")}>
+                <div className="relative">
+                  <Magnifer weight="BoldDuotone" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                    placeholder="Cari nama..."
+                    className="pl-8 h-9 w-48 rounded-xl"
+                  />
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
