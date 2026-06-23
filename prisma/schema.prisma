@@ -818,7 +818,7 @@ model SnapBonus {
 
 model Complimentary {
   id            String              @id @default(uuid())
-  name          String              @unique
+  name          String
   price         Int                 @default(0)
   description   String?
   isShowPrice   Boolean             @default(false)
