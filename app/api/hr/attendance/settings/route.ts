@@ -5,7 +5,7 @@ import { attendanceSettingsSchema } from "@/lib/validations/attendance";
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 
-export async function GET(req: Request) {
+export async function GET() {
   const { session, response } = await requirePermissionForRoute({
     module: "hr",
     action: "view",

@@ -19,6 +19,8 @@ export const attendanceSettingsSchema = z.object({
   officeLatitude: z.number().min(-90).max(90),
   officeLongitude: z.number().min(-180).max(180),
   officeRadiusMeters: z.number().int().min(10).max(5000),
+  defaultLateToleranceMinutes: z.number().int().min(0).max(120).optional(),
+  requireClockOutLocation: z.boolean().optional(),
 });
 
 export const attendanceListQuerySchema = z.object({
@@ -30,7 +32,13 @@ export const attendanceListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(50),
 });
 
+export const globalAttendanceSettingsSchema = z.object({
+  defaultLateToleranceMinutes: z.number().int().min(0).max(120).default(15),
+  requireClockOutLocation: z.boolean().default(false),
+});
+
 export type ClockInInput = z.infer<typeof clockInSchema>;
 export type ClockOutInput = z.infer<typeof clockOutSchema>;
 export type AttendanceSettingsInput = z.infer<typeof attendanceSettingsSchema>;
 export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
+export type GlobalAttendanceSettingsInput = z.infer<typeof globalAttendanceSettingsSchema>;

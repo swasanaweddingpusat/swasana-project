@@ -1,25 +1,11 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { clockOutSchema } from "@/lib/validations/attendance";
-import { getAttendanceToday, getAttendanceSettings } from "@/lib/queries/attendance";
+import { getAttendanceToday, getAttendanceSettings, todayMidnightUTC } from "@/lib/queries/attendance";
+import { validateGpsAgainstLocations } from "@/lib/attendance-helpers";
 import { db } from "@/lib/db";
 import { uploadToR2 } from "@/lib/r2";
 import { logAudit } from "@/lib/audit";
-
-function haversineDistance(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
-): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 export async function POST(req: Request) {
   const { session, response } = await requirePermissionForRoute({
@@ -46,21 +32,17 @@ export async function POST(req: Request) {
     return Response.json({ error: "Profile tidak ditemukan" }, { status: 404 });
   }
 
+  // Optional GPS validation based on requireClockOutLocation setting
   const settings = await getAttendanceSettings();
-  if (!settings) {
-    return Response.json({ error: "Settings absensi belum dikonfigurasi" }, { status: 409 });
-  }
-
-  const distance = haversineDistance(
-    parsed.data.lat, parsed.data.lng,
-    settings.officeLatitude, settings.officeLongitude,
-  );
-
-  if (distance > settings.officeRadiusMeters) {
-    return Response.json(
-      { error: `Anda berada di luar area kantor (${Math.round(distance)}m dari kantor)` },
-      { status: 403 },
-    );
+  if (settings?.requireClockOutLocation) {
+    const today = todayMidnightUTC();
+    const gpsResult = await validateGpsAgainstLocations(profileId, parsed.data.lat, parsed.data.lng, today, null);
+    if (!gpsResult.valid) {
+      return Response.json(
+        { error: `Anda berada di luar area lokasi kerja (${Math.round(gpsResult.distance)}m dari lokasi terdekat)` },
+        { status: 403 },
+      );
+    }
   }
 
   const existing = await getAttendanceToday(profileId);
@@ -74,7 +56,6 @@ export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   const now = new Date();
   const dateStr = existing.date.toISOString().slice(0, 10);
-
   const base64Data = parsed.data.photoBase64.replace(/^data:image\/\w+;base64,/, "");
   const photoBuffer = Buffer.from(base64Data, "base64");
   const photoKey = `attendance/${profileId}/${dateStr}/clock-out-${Date.now()}.jpg`;
@@ -82,7 +63,8 @@ export async function POST(req: Request) {
   let photoUrl: string;
   try {
     photoUrl = await uploadToR2(photoBuffer, photoKey, "image/jpeg");
-  } catch {
+  } catch (err) {
+    console.error("[clock-out] R2 upload error:", err);
     return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });
   }
 

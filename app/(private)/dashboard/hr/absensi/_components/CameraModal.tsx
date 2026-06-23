@@ -68,9 +68,36 @@ export function CameraModal({ open, onClose, onCapture }: CameraModalProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Draw mirrored video frame
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(video, 0, 0);
+
+    // Reset transform sebelum gambar timestamp
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const now = new Date();
+    const timestamp = now.toLocaleString("id-ID", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    const fontSize = Math.max(13, Math.round(canvas.width * 0.024));
+    const pad = 8;
+    const barH = fontSize + pad * 2;
+
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `${fontSize}px monospace`;
+    ctx.textBaseline = "middle";
+    ctx.fillText(timestamp, pad, canvas.height - barH / 2);
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
     setPreview(dataUrl);

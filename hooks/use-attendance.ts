@@ -10,11 +10,11 @@ import {
   clockOut,
   updateAttendanceSettings,
 } from "@/services/attendance-service";
-import type { AttendanceTodayResult, AttendanceSettingsResult, AttendanceListResult, MyAttendanceHistoryResult } from "@/lib/queries/attendance";
+import type { AttendanceTodayResponse, AttendanceSettingsResult, AttendanceListResult, MyAttendanceHistoryResult } from "@/lib/queries/attendance";
 import type { AttendanceListQuery } from "@/lib/validations/attendance";
 
 export function useAttendanceToday() {
-  return useQuery<AttendanceTodayResult>({
+  return useQuery<AttendanceTodayResponse>({
     queryKey: ["attendance-today"],
     queryFn: fetchAttendanceToday,
     staleTime: 30 * 1000,

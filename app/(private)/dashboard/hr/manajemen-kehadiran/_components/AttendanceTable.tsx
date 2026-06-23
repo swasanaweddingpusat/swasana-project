@@ -34,10 +34,12 @@ export function AttendanceTable() {
 
   const month = Number(searchParams.get("month")) || (new Date().getMonth() + 1);
   const year = Number(searchParams.get("year")) || new Date().getFullYear();
+  const profileId = searchParams.get("profileId") ?? undefined;
 
   const { data, isLoading } = useAttendanceList({
     month,
     year,
+    profileId,
     page,
     limit: 50,
   });
@@ -81,6 +83,8 @@ export function AttendanceTable() {
                       <TableHead>Clock In</TableHead>
                       <TableHead>Clock Out</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Lokasi</TableHead>
+                      <TableHead>Shift</TableHead>
                       <TableHead className="w-16">Foto</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -98,6 +102,8 @@ export function AttendanceTable() {
                           <TableCell>
                             <Badge variant={badge.variant}>{badge.label}</Badge>
                           </TableCell>
+                          <TableCell>{record.workLocation?.name ?? "-"}</TableCell>
+                          <TableCell>{record.workShift?.name ?? "-"}</TableCell>
                           <TableCell>
                             {(record.clockInPhotoUrl || record.clockOutPhotoUrl) && (
                               <Button

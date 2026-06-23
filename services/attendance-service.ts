@@ -1,12 +1,12 @@
 import type {
-  AttendanceTodayResult,
+  AttendanceTodayResponse,
   AttendanceSettingsResult,
   AttendanceListResult,
   MyAttendanceHistoryResult,
 } from "@/lib/queries/attendance";
 import type { AttendanceListQuery, ClockInInput, ClockOutInput, AttendanceSettingsInput } from "@/lib/validations/attendance";
 
-export async function fetchAttendanceToday(): Promise<AttendanceTodayResult> {
+export async function fetchAttendanceToday(): Promise<AttendanceTodayResponse> {
   const res = await fetch("/api/hr/attendance/today");
   if (!res.ok) throw new Error("Gagal mengambil data absensi hari ini");
   return res.json();

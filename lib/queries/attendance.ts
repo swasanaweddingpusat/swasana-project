@@ -10,6 +10,10 @@ export async function getAttendanceToday(profileId: string) {
   const today = todayMidnightUTC();
   return db.attendance.findUnique({
     where: { profileId_date: { profileId, date: today } },
+    include: {
+      workLocation: { select: { id: true, name: true } },
+      workShift: { select: { id: true, name: true, startTime: true, endTime: true } },
+    },
   });
 }
 
@@ -48,6 +52,8 @@ export async function getAttendanceList(params: AttendanceListQuery) {
         profile: {
           select: { id: true, fullName: true, avatarUrl: true },
         },
+        workLocation: { select: { id: true, name: true } },
+        workShift: { select: { id: true, name: true } },
       },
     }),
     db.attendance.count({ where }),
@@ -77,3 +83,18 @@ export type AttendanceListResult = Awaited<ReturnType<typeof getAttendanceList>>
 export type AttendanceListItem = AttendanceListResult["data"][number];
 export type MyAttendanceHistoryResult = Awaited<ReturnType<typeof getMyAttendanceHistory>>;
 export type MyAttendanceHistoryItem = MyAttendanceHistoryResult[number];
+
+export type AttendanceTodayShift = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  lateToleranceMinutes: number;
+  isOvernight: boolean;
+};
+
+export type AttendanceTodayResponse = {
+  attendance: AttendanceTodayResult;
+  shift: AttendanceTodayShift | null;
+  shiftSource: "override" | "assignment" | null;
+};

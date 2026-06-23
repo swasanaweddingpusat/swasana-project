@@ -1,11 +1,15 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Restart } from "@solar-icons/react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Restart, AltArrowDown, CheckCircle } from "@solar-icons/react";
+import { useEmployees } from "@/hooks/use-employees";
+import { cn } from "@/lib/utils";
 
 const MONTHS = [
   { value: "1", label: "Januari" }, { value: "2", label: "Februari" },
@@ -27,9 +31,21 @@ function getYearOptions(): { value: string; label: string }[] {
 export function AttendanceFilter() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const currentMonth = searchParams.get("month") ?? String(new Date().getMonth() + 1);
   const currentYear = searchParams.get("year") ?? String(new Date().getFullYear());
+  const currentProfileId = searchParams.get("profileId") ?? "";
+
+  const { data: employeeData } = useEmployees({
+    search: search || undefined,
+    limit: 20,
+    status: "active",
+  });
+
+  const employees = employeeData?.data ?? [];
+  const selectedEmployee = employees.find((e) => e.id === currentProfileId);
 
   const updateParam = useCallback((key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -72,6 +88,64 @@ export function AttendanceFilter() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Karyawan</label>
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger
+                role="combobox"
+                aria-expanded={open}
+                className={cn(buttonVariants({ variant: "outline" }), "w-56 rounded-xl justify-between font-normal")}
+              >
+                <span className={cn("truncate", !currentProfileId && "text-muted-foreground")}>
+                  {currentProfileId && selectedEmployee
+                    ? selectedEmployee.fullName ?? selectedEmployee.email
+                    : "Semua karyawan"}
+                </span>
+                <AltArrowDown weight="BoldDuotone" className="h-4 w-4 shrink-0 opacity-50" />
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Cari karyawan..."
+                    value={search}
+                    onValueChange={setSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>Karyawan tidak ditemukan</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value=""
+                        onSelect={() => {
+                          const params = new URLSearchParams(searchParams.toString());
+                          params.delete("profileId");
+                          params.delete("page");
+                          router.push(`?${params.toString()}`);
+                          setOpen(false);
+                        }}
+                      >
+                        <CheckCircle weight="BoldDuotone" className={cn("mr-2 h-4 w-4", !currentProfileId ? "opacity-100" : "opacity-0")} />
+                        Semua karyawan
+                      </CommandItem>
+                      {employees.map((emp) => (
+                        <CommandItem
+                          key={emp.id}
+                          value={emp.id}
+                          onSelect={(val) => {
+                            updateParam("profileId", val);
+                            setOpen(false);
+                          }}
+                        >
+                          <CheckCircle weight="BoldDuotone" className={cn("mr-2 h-4 w-4", currentProfileId === emp.id ? "opacity-100" : "opacity-0")} />
+                          {emp.fullName ?? emp.email}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <Button variant="ghost" size="sm" onClick={handleReset} className="rounded-full">

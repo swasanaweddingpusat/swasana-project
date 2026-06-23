@@ -1,38 +1,14 @@
 import { requirePermissionForRoute } from "@/lib/permissions";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { clockInSchema } from "@/lib/validations/attendance";
-import { getAttendanceToday, getAttendanceSettings, todayMidnightUTC } from "@/lib/queries/attendance";
+import { getAttendanceToday, todayMidnightUTC } from "@/lib/queries/attendance";
+import { resolveEmployeeShift, validateGpsAgainstLocations, determineStatus } from "@/lib/attendance-helpers";
 import { db } from "@/lib/db";
 import { uploadToR2 } from "@/lib/r2";
 import { logAudit } from "@/lib/audit";
 
-function haversineDistance(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
-): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function determineStatus(
-  clockInAt: Date,
-  workStartTime: string,
-  lateToleranceMinutes: number,
-): "on_time" | "late" {
-  const [h, m] = workStartTime.split(":").map(Number);
-  const deadline = new Date(clockInAt);
-  deadline.setHours(h, m + lateToleranceMinutes, 0, 0);
-  return clockInAt <= deadline ? "on_time" : "late";
-}
-
 export async function POST(req: Request) {
+  // 1. Auth + rate limit
   const { session, response } = await requirePermissionForRoute({
     module: "hr",
     action: "view",
@@ -40,6 +16,7 @@ export async function POST(req: Request) {
   if (response) return response;
   if (!mutationLimiter.check(`clock-in:${session.user.id}`)) return rateLimitResponse();
 
+  // 2. Parse body
   let body: unknown;
   try {
     body = await req.json();
@@ -57,33 +34,39 @@ export async function POST(req: Request) {
     return Response.json({ error: "Profile tidak ditemukan" }, { status: 404 });
   }
 
-  const settings = await getAttendanceSettings();
-  if (!settings) {
-    return Response.json({ error: "Settings absensi belum dikonfigurasi" }, { status: 409 });
+  const today = todayMidnightUTC();
+
+  // 3. Resolve shift
+  const resolved = await resolveEmployeeShift(profileId, today);
+  if (!resolved) {
+    return Response.json({ error: "Anda belum di-assign ke shift/lokasi kerja" }, { status: 409 });
   }
 
-  const distance = haversineDistance(
-    parsed.data.lat, parsed.data.lng,
-    settings.officeLatitude, settings.officeLongitude,
+  // 4. Validate GPS against assigned locations
+  const gpsResult = await validateGpsAgainstLocations(
+    profileId,
+    parsed.data.lat,
+    parsed.data.lng,
+    today,
+    resolved.workLocationId,
   );
-
-  if (distance > settings.officeRadiusMeters) {
+  if (!gpsResult.valid) {
     return Response.json(
-      { error: `Anda berada di luar area kantor (${Math.round(distance)}m dari kantor)` },
+      { error: `Anda berada di luar area lokasi kerja (${Math.round(gpsResult.distance)}m dari lokasi terdekat)` },
       { status: 403 },
     );
   }
 
+  // 5. Check existing clock-in
   const existing = await getAttendanceToday(profileId);
   if (existing?.clockInAt) {
     return Response.json({ error: "Anda sudah melakukan clock in hari ini" }, { status: 409 });
   }
 
+  // 6. Upload photo
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   const now = new Date();
-  const today = todayMidnightUTC();
   const dateStr = today.toISOString().slice(0, 10);
-
   const base64Data = parsed.data.photoBase64.replace(/^data:image\/\w+;base64,/, "");
   const photoBuffer = Buffer.from(base64Data, "base64");
   const photoKey = `attendance/${profileId}/${dateStr}/clock-in-${Date.now()}.jpg`;
@@ -91,12 +74,20 @@ export async function POST(req: Request) {
   let photoUrl: string;
   try {
     photoUrl = await uploadToR2(photoBuffer, photoKey, "image/jpeg");
-  } catch {
+  } catch (err) {
+    console.error("[clock-in] R2 upload error:", err);
     return Response.json({ error: "Gagal mengupload foto" }, { status: 500 });
   }
 
-  const status = determineStatus(now, settings.workStartTime, settings.lateToleranceMinutes);
+  // 7. Determine status
+  const status = determineStatus(
+    now,
+    resolved.workShift.startTime,
+    resolved.workShift.lateToleranceMinutes,
+    resolved.workShift.isOvernight,
+  );
 
+  // 8. Upsert attendance with workLocationId and workShiftId
   try {
     const attendance = await db.attendance.upsert({
       where: { profileId_date: { profileId, date: today } },
@@ -108,6 +99,8 @@ export async function POST(req: Request) {
         clockInLat: parsed.data.lat,
         clockInLng: parsed.data.lng,
         status,
+        workLocationId: gpsResult.nearestLocationId,
+        workShiftId: resolved.workShiftId,
       },
       update: {
         clockInAt: now,
@@ -115,6 +108,8 @@ export async function POST(req: Request) {
         clockInLat: parsed.data.lat,
         clockInLng: parsed.data.lng,
         status,
+        workLocationId: gpsResult.nearestLocationId,
+        workShiftId: resolved.workShiftId,
       },
     });
 

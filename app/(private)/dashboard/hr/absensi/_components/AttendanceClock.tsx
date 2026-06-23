@@ -26,10 +26,14 @@ export function AttendanceClock() {
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
 
-  const { data: todayRecord, isLoading: todayLoading } = useAttendanceToday();
+  const { data: todayData, isLoading: todayLoading } = useAttendanceToday();
   const { data: settings } = useAttendanceSettings();
   const clockInMutation = useClockIn();
   const clockOutMutation = useClockOut();
+
+  const attendance = todayData?.attendance ?? null;
+  const shift = todayData?.shift ?? null;
+  const shiftSource = todayData?.shiftSource ?? null;
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -40,11 +44,11 @@ export function AttendanceClock() {
 
   const getStatusBadge = useCallback(() => {
     if (todayLoading) return <Badge variant="secondary">Memuat...</Badge>;
-    if (!todayRecord) return <Badge variant="outline">Belum Absen</Badge>;
-    if (todayRecord.status === "on_time") return <Badge variant="default">Tepat Waktu</Badge>;
-    if (todayRecord.status === "late") return <Badge variant="secondary">Terlambat</Badge>;
+    if (!attendance) return <Badge variant="outline">Belum Absen</Badge>;
+    if (attendance.status === "on_time") return <Badge variant="default">Tepat Waktu</Badge>;
+    if (attendance.status === "late") return <Badge variant="secondary">Terlambat</Badge>;
     return <Badge variant="outline">Belum Absen</Badge>;
-  }, [todayRecord, todayLoading]);
+  }, [attendance, todayLoading]);
 
   const handleAction = useCallback((action: ClockAction) => {
     if (!settings) {
@@ -105,9 +109,9 @@ export function AttendanceClock() {
     setGpsCoords(null);
   }, []);
 
-  const canClockIn = !todayRecord?.clockInAt;
-  const canClockOut = !!todayRecord?.clockInAt && !todayRecord?.clockOutAt;
-  const isDone = !!todayRecord?.clockOutAt;
+  const canClockIn = !attendance?.clockInAt;
+  const canClockOut = !!attendance?.clockInAt && !attendance?.clockOutAt;
+  const isDone = !!attendance?.clockOutAt;
 
   return (
     <>
@@ -130,17 +134,45 @@ export function AttendanceClock() {
             {getStatusBadge()}
           </div>
 
-          {todayRecord?.clockInAt && (
-            <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Login3 weight="BoldDuotone" className="h-4 w-4" />
-                Masuk: {formatTime(new Date(todayRecord.clockInAt))}
+          {shift ? (
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <ClockCircle weight="BoldDuotone" className="h-4 w-4 shrink-0" />
+              <span>
+                Shift: <span className="text-foreground font-medium">{shift.name}</span>{" "}
+                ({shift.startTime} - {shift.endTime})
               </span>
-              {todayRecord.clockOutAt && (
+              {shiftSource === "override" && (
+                <Badge variant="secondary" className="text-xs">Override</Badge>
+              )}
+            </div>
+          ) : (
+            !todayLoading && (
+              <div className="rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground text-center">
+                <ClockCircle weight="BoldDuotone" className="inline h-4 w-4 mr-1" />
+                Anda belum di-assign ke shift/lokasi kerja
+              </div>
+            )
+          )}
+
+          {attendance?.clockInAt && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Logout3 weight="BoldDuotone" className="h-4 w-4" />
-                  Keluar: {formatTime(new Date(todayRecord.clockOutAt))}
+                  <Login3 weight="BoldDuotone" className="h-4 w-4" />
+                  Masuk: {formatTime(new Date(attendance.clockInAt))}
                 </span>
+                {attendance.clockOutAt && (
+                  <span className="flex items-center gap-1">
+                    <Logout3 weight="BoldDuotone" className="h-4 w-4" />
+                    Keluar: {formatTime(new Date(attendance.clockOutAt))}
+                  </span>
+                )}
+              </div>
+              {attendance.workLocation && (
+                <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                  <MapPoint weight="BoldDuotone" className="h-4 w-4 shrink-0" />
+                  <span>Lokasi: <span className="text-foreground font-medium">{attendance.workLocation.name}</span></span>
+                </div>
               )}
             </div>
           )}
