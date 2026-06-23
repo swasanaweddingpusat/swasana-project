@@ -322,7 +322,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
 
   let alphaCounter = 0;
   mergedItems.forEach((item) => {
-    const letter = String.fromCharCode(66 + alphaCounter);
+    const letter = String.fromCharCode(65 + alphaCounter);
     alphaCounter++;
     if (item.type === "internal") {
       rows.push({ no: "", desc: `${letter}. ${item.itemName} `, descBold: true, total: "" });
