@@ -3,6 +3,7 @@ import type {
   AttendanceSettingsResult,
   AttendanceListResult,
   MyAttendanceHistoryResult,
+  AttendanceExportItem,
 } from "@/lib/queries/attendance";
 import type { AttendanceListQuery, ClockInInput, ClockOutInput, AttendanceSettingsInput } from "@/lib/validations/attendance";
 
@@ -69,4 +70,21 @@ export async function updateAttendanceSettings(data: AttendanceSettingsInput): P
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan settings");
   return json;
+}
+
+export async function fetchAttendanceExport(params: {
+  date?: string;
+  month?: number;
+  year?: number;
+  profileId?: string;
+}): Promise<AttendanceExportItem[]> {
+  const sp = new URLSearchParams();
+  if (params.profileId) sp.set("profileId", params.profileId);
+  if (params.date) sp.set("date", params.date);
+  if (params.month) sp.set("month", String(params.month));
+  if (params.year) sp.set("year", String(params.year));
+
+  const res = await fetch(`/api/hr/attendance/export?${sp.toString()}`);
+  if (!res.ok) throw new Error("Gagal mengambil data export");
+  return res.json() as Promise<AttendanceExportItem[]>;
 }
