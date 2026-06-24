@@ -195,14 +195,20 @@ export async function hireCandidate(
     const newProfileId = user.profile!.id;
 
     // 4. Update candidate: stage=hired, hiredAt=now, hiredProfileId
-    await db.candidate.update({
-      where: { id: candidateId },
-      data: {
-        stage: "hired",
-        hiredAt: new Date(),
-        hiredProfileId: newProfileId,
-      },
-    });
+    // If this fails, roll back the created user to avoid orphaned accounts.
+    try {
+      await db.candidate.update({
+        where: { id: candidateId },
+        data: {
+          stage: "hired",
+          hiredAt: new Date(),
+          hiredProfileId: newProfileId,
+        },
+      });
+    } catch (updateErr) {
+      await db.user.delete({ where: { id: user.id } }).catch(() => {});
+      throw updateErr;
+    }
 
     // 5. Auto-assign default OnboardingTemplate if one exists
     const defaultTemplate = await db.onboardingTemplate.findFirst({

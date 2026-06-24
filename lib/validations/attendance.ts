@@ -37,12 +37,16 @@ export const globalAttendanceSettingsSchema = z.object({
   requireClockOutLocation: z.boolean().default(false),
 });
 
-export const attendanceExportQuerySchema = z.object({
-  profileId: z.string().optional(),
-  date: z.string().optional(),
-  month: z.coerce.number().int().min(1).max(12).optional(),
-  year: z.coerce.number().int().min(2020).max(2100).optional(),
-});
+export const attendanceExportQuerySchema = z
+  .object({
+    profileId: z.string().optional(),
+    date: z.string().optional(),
+    month: z.coerce.number().int().min(1).max(12).optional(),
+    year: z.coerce.number().int().min(2020).max(2100).optional(),
+  })
+  .refine((d) => !!d.year || !!d.date, {
+    message: "Tahun wajib diisi untuk export",
+  });
 
 export type ClockInInput = z.infer<typeof clockInSchema>;
 export type ClockOutInput = z.infer<typeof clockOutSchema>;

@@ -35,7 +35,7 @@ export async function generatePayrollForPeriod(
     if (existing.status === "finalized" || existing.status === "paid") {
       throw new Error("Periode ini sudah difinalisasi dan tidak bisa di-generate ulang.");
     }
-    // Delete existing draft
+    // Delete existing draft or stuck processing period before recreating
     await db.payrollPeriod.delete({ where: { id: existing.id } });
   }
 
@@ -43,10 +43,18 @@ export async function generatePayrollForPeriod(
   const settings = await db.payrollSettings.findFirst();
   if (!settings) throw new Error("Payroll settings belum dikonfigurasi.");
 
-  // 3. Create period
-  const period = await db.payrollPeriod.create({
-    data: { month, year, status: "processing", generatedBy, generatedAt: new Date() },
-  });
+  // 3. Create period — catch P2002 so concurrent requests don't leave a stuck "processing" period
+  let period;
+  try {
+    period = await db.payrollPeriod.create({
+      data: { month, year, status: "processing", generatedBy, generatedAt: new Date() },
+    });
+  } catch (e) {
+    if (e instanceof Error && "code" in e && (e as { code: string }).code === "P2002") {
+      throw new Error("Payroll untuk periode ini sedang dalam proses generate. Tunggu sebentar dan coba lagi.");
+    }
+    throw e;
+  }
 
   // 4. Get active employees
   const employees = await db.profile.findMany({

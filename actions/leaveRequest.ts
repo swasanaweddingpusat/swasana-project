@@ -141,6 +141,15 @@ export async function managerApproveLeave(data: unknown): Promise<{ success: boo
   if (!profileId) return { success: false, error: "Profile tidak ditemukan." };
 
   try {
+    // JWT only checks token existence; verify the manager's account is still active
+    const callerProfile = await db.profile.findUnique({
+      where: { id: profileId },
+      select: { status: true },
+    });
+    if (!callerProfile || callerProfile.status !== "active") {
+      return { success: false, error: "Akun Anda tidak aktif." };
+    }
+
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
       select: { id: true, status: true, profileId: true, profile: { select: { managerId: true } } },
@@ -189,6 +198,14 @@ export async function managerRejectLeave(data: unknown): Promise<{ success: bool
   if (!profileId) return { success: false, error: "Profile tidak ditemukan." };
 
   try {
+    const callerProfile = await db.profile.findUnique({
+      where: { id: profileId },
+      select: { status: true },
+    });
+    if (!callerProfile || callerProfile.status !== "active") {
+      return { success: false, error: "Akun Anda tidak aktif." };
+    }
+
     const request = await db.leaveRequest.findUnique({
       where: { id: parsed.data.requestId },
       select: { id: true, status: true, profile: { select: { managerId: true } } },
@@ -265,9 +282,14 @@ export async function hrApproveLeave(data: unknown): Promise<{ success: boolean;
             year: currentYear,
           },
         },
-        select: { id: true },
+        select: { id: true, totalDays: true, usedDays: true, carryOverDays: true, adjustmentDays: true },
       });
       if (balance) {
+        // Re-validate at approval time to prevent overdraft from concurrent approvals
+        const available = getAvailableBalance(balance);
+        if (request.totalDays > available) {
+          return { success: false, error: "Saldo cuti tidak mencukupi untuk disetujui." };
+        }
         ops.push(
           db.leaveBalance.update({
             where: { id: balance.id },

@@ -12,7 +12,6 @@ import {
   updateOnboardingTemplateTaskSchema,
   assignOnboardingSchema,
 } from "@/lib/validations/onboarding";
-import type { Prisma } from "@prisma/client";
 
 // ─── Create Onboarding Template ───────────────────────────────────────────────
 
@@ -27,16 +26,13 @@ export async function createOnboardingTemplate(
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
   try {
-    const ops: Prisma.PrismaPromise<unknown>[] = [];
-
-    // If this template is default, unset other defaults first
+    // Clear other defaults BEFORE creating the new one to avoid a window
+    // where two templates are simultaneously marked as default.
     if (parsed.data.isDefault) {
-      ops.push(
-        db.onboardingTemplate.updateMany({
-          where: { isDefault: true },
-          data: { isDefault: false },
-        })
-      );
+      await db.onboardingTemplate.updateMany({
+        where: { isDefault: true },
+        data: { isDefault: false },
+      });
     }
 
     const template = await db.onboardingTemplate.create({
@@ -46,10 +42,6 @@ export async function createOnboardingTemplate(
         isDefault: parsed.data.isDefault,
       },
     });
-
-    if (ops.length > 0) {
-      await db.$transaction(ops);
-    }
 
     await logAudit({
       userId: session!.user.profileId,
