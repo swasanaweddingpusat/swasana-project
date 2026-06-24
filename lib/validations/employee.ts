@@ -43,7 +43,7 @@ export const updateEmployeeSchema = createEmployeeSchema.omit({ email: true }).p
 
 export const employeeListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
   search: z.string().optional(),
   departmentId: z.string().optional(),
   positionId: z.string().optional(),
