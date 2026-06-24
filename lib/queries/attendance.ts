@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import type { AttendanceListQuery } from "@/lib/validations/attendance";
+import type { AttendanceListQuery, AttendanceExportQuery } from "@/lib/validations/attendance";
 
 export function todayMidnightUTC(): Date {
   const now = new Date();
@@ -39,6 +39,10 @@ export async function getAttendanceList(params: AttendanceListQuery) {
   } else if (month && year) {
     const start = new Date(Date.UTC(year, month - 1, 1));
     const end = new Date(Date.UTC(year, month, 1));
+    where.date = { gte: start, lt: end };
+  } else if (year) {
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
     where.date = { gte: start, lt: end };
   }
 
@@ -98,3 +102,46 @@ export type AttendanceTodayResponse = {
   shift: AttendanceTodayShift | null;
   shiftSource: "override" | "assignment" | null;
 };
+
+export async function getAttendanceForExport(params: AttendanceExportQuery) {
+  const { profileId, date, month, year } = params;
+
+  const where: Record<string, unknown> = {};
+
+  if (profileId) {
+    where.profileId = profileId;
+  }
+
+  if (date) {
+    const d = new Date(date);
+    const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const end = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1));
+    where.date = { gte: start, lt: end };
+  } else if (month && year) {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 1));
+    where.date = { gte: start, lt: end };
+  } else if (year) {
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
+    where.date = { gte: start, lt: end };
+  }
+
+  return db.attendance.findMany({
+    where,
+    orderBy: [{ date: "asc" }, { profile: { fullName: "asc" } }],
+    take: 5000,
+    select: {
+      id: true,
+      date: true,
+      clockInAt: true,
+      clockOutAt: true,
+      status: true,
+      profile: { select: { fullName: true } },
+      workLocation: { select: { name: true } },
+      workShift: { select: { name: true } },
+    },
+  });
+}
+
+export type AttendanceExportItem = Awaited<ReturnType<typeof getAttendanceForExport>>[number];
