@@ -32,11 +32,16 @@ export function AttendanceTable() {
   const [page, setPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<AttendanceListItem | null>(null);
 
-  const month = Number(searchParams.get("month")) || (new Date().getMonth() + 1);
+  const mode = searchParams.get("mode") ?? "month";
+  const date = mode === "date" ? (searchParams.get("date") ?? undefined) : undefined;
+  const month = mode === "month"
+    ? (Number(searchParams.get("month")) || (new Date().getMonth() + 1))
+    : undefined;
   const year = Number(searchParams.get("year")) || new Date().getFullYear();
   const profileId = searchParams.get("profileId") ?? undefined;
 
   const { data, isLoading } = useAttendanceList({
+    date,
     month,
     year,
     profileId,
