@@ -50,7 +50,6 @@ export function CameraModal({ open, onClose, onCapture }: CameraModalProps) {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCameraError(null);
       const timer = setTimeout(() => startCamera(), 300);
       return () => clearTimeout(timer);
