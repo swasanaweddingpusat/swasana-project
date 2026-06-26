@@ -160,19 +160,24 @@ export const navItems: NavItem[] = [
     hidden: true,
   },
   {
+    name: "Absensi",
+    href: "/dashboard/hr/absensi",
+    icon: CheckSquare,
+    permission: { module: "hr", action: "view" },
+  },
+  {
     name: "HR & Payroll",
     href: "/dashboard/hr",
     icon: Accessibility,
     permission: { module: "hr", action: "view" },
-    hidden: true, // TODO: sementara disembunyiin — balikin ke false/hapus buat munculin lagi
+    hidden: false,
     submenu: [
       { name: "Database Karyawan", href: "/dashboard/hr/database-karyawan", icon: UsersGroupRounded, permission: { module: "hr", action: "view" } },
       { name: "Manajemen Kehadiran", href: "/dashboard/hr/manajemen-kehadiran", icon: ClockCircle, permission: { module: "hr", action: "view" } },
-      { name: "Absensi", href: "/dashboard/hr/absensi", icon: CheckSquare, permission: { module: "hr", action: "view" } },
       { name: "Penggajian & Perpajakan", href: "/dashboard/hr/penggajian-perpajakan", icon: Dollar, permission: { module: "hr", action: "view" } },
       { name: "Slip Gaji", href: "/dashboard/hr/slip-gaji", icon: FileText, permission: { module: "hr", action: "view" } },
       { name: "Sistem Cuti", href: "/dashboard/hr/sistem-cuti", icon: CalendarDate, permission: { module: "hr", action: "view" } },
-      { name: "Rekrutmen & Onboarding", href: "/dashboard/hr/rekrutmen-onboarding", icon: UserPlus, permission: { module: "hr", action: "view" } },
+      { name: "Rekrutmen & Onboarding", href: "/dashboard/hr/rekrutmen-onboarding", icon: UserPlus, permission: { module: "hr-recruitment", action: "view" } },
       { name: "Pengembangan SDM", href: "/dashboard/hr/pengembangan-sdm", icon: GraphUp, permission: { module: "hr", action: "view" } },
       { name: "Manajemen Kinerja", href: "/dashboard/hr/manajemen-kinerja", icon: CupStar, permission: { module: "hr", action: "view" } },
       { name: "Manajemen Kesehatan", href: "/dashboard/hr/manajemen-kesehatan", icon: Heart, permission: { module: "hr", action: "view" } },
