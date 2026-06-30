@@ -1126,12 +1126,21 @@ export async function editBooking(data: unknown) {
     const oldEventDate = `${ed.getUTCFullYear()}-${String(ed.getUTCMonth() + 1).padStart(2, "0")}-${String(ed.getUTCDate()).padStart(2, "0")}`;
     const eventDateChanged = newEventDate !== oldEventDate;
 
-    // Compare discount
+    // Compare discount — ONLY when the caller actually sent discount fields.
+    // Since the TOP-drawer refactor, discount is owned by updateTermOfPayments
+    // (actions/term-of-payment.ts); the edit-booking-drawer (venue/package step)
+    // and SalesSignatureDrawer omit these. If we treated an absent field as
+    // "reset to 0", saving those steps would silently wipe an existing discount
+    // AND spuriously trigger a re-approval revision. Distinguish undefined
+    // (not provided → leave untouched) from a real value.
+    const discountProvided =
+      rest.specialBonusName !== undefined || rest.specialBonusAmount !== undefined;
     const newDiscountName = rest.specialBonusName ?? null;
     const newDiscountAmount = rest.specialBonusAmount ?? 0;
     const discountChanged =
-      newDiscountName !== booking.discountName ||
-      newDiscountAmount !== (booking.discountAmount ?? 0);
+      discountProvided &&
+      (newDiscountName !== booking.discountName ||
+        newDiscountAmount !== (booking.discountAmount ?? 0));
 
     // Compare takeout toggles against current snapPackageCategoryPrices
     let takeoutChanged = false;
@@ -1296,8 +1305,13 @@ export async function editBooking(data: unknown) {
           signingLocation: rest.signingLocation ?? null,
           ...(rest.eventTime !== undefined && { eventTime: rest.eventTime || null }),
           ...(rest.notes !== undefined && { notes: rest.notes || null }),
-          discountName: rest.specialBonusName ?? null,
-          discountAmount: rest.specialBonusAmount ?? 0,
+          // Only overwrite discount when the caller actually sent it (TOP drawer
+          // path). Absent fields leave the existing discount untouched — see the
+          // discountProvided note above.
+          ...(discountProvided && {
+            discountName: newDiscountName,
+            discountAmount: newDiscountAmount,
+          }),
         },
       }),
       // Update customer snapshot

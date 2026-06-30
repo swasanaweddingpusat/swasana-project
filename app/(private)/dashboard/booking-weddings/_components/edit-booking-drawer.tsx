@@ -304,8 +304,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         // Pass empty arrays — server skips TOP/takeout when empty (booking.ts line 1138 & 1583)
         termOfPayments: [],
         categoryToggles: [],
-        specialBonusName: null,
-        specialBonusAmount: null,
+        // Discount (specialBonusName/Amount) is intentionally OMITTED — it's owned by
+        // the TOP drawer (updateTermOfPayments). Sending null here would wipe the
+        // existing discount to 0 and spuriously trigger a re-approval revision.
         signatureSales: null,
       });
       if (!r.success) { toast.error(r.error); return; }
