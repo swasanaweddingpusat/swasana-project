@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useBookingDetail } from "@/hooks/use-booking-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,8 +109,8 @@ interface Props {
 }
 
 export function BookingDetailModal({ open, onClose, bookingId }: Props) {
-  const [booking, setBooking] = useState<BookingDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { data, isLoading: loading, refetch } = useBookingDetail(bookingId, open);
+  const booking = data ?? null;
   const [activeTab, setActiveTab] = useState<"booking" | "vendor" | "payment" | "documents" | "agreement">("booking");
   const [deleteDocTarget, setDeleteDocTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -117,21 +118,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
-  const fetchBooking = (id: string) => {
-    setLoading(true);
-    fetch(`/api/bookings/${id}`)
-      .then((r) => r.json())
-      .then((data: BookingDetail) => setBooking(data))
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
-  };
-
   useEffect(() => {
     if (!open || !bookingId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveTab("booking");
     setSelectedDocIds(new Set());
-    fetchBooking(bookingId);
   }, [open, bookingId]);
 
   if (!open) return null;
@@ -169,7 +160,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               </h2>
               {bookingId && (
                 <button
-                  onClick={() => fetchBooking(bookingId)}
+                  onClick={() => { void refetch(); }}
                   className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Refresh"
                 >
@@ -931,7 +922,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           if (!result.success) { toast.error(result.error); return; }
           toast.success("Dokumen berhasil dihapus");
           setDeleteDocTarget(null);
-          if (bookingId) fetchBooking(bookingId);
+          void refetch();
         }}
       />
       <ConfirmDialog
@@ -949,7 +940,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           toast.success(`${result.count} file berhasil dihapus`);
           setShowBulkConfirm(false);
           setSelectedDocIds(new Set());
-          if (bookingId) fetchBooking(bookingId);
+          void refetch();
         }}
       />
     </div>

@@ -1,7 +1,6 @@
 import { getBookings } from "@/lib/queries/bookings";
 import { requirePermissionForRoute, canViewSalesBookings } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { db } from "@/lib/db";
 import { getPublicUrl } from "@/lib/storage";
 import type { DataScope } from "@/types/user";
 
@@ -30,11 +29,10 @@ export async function GET(request: Request) {
   const dateTo = rawDateTo && !Number.isNaN(Date.parse(rawDateTo)) ? rawDateTo : undefined;
 
   const profileId = session.user.profileId ?? undefined;
-  let dataScope: DataScope = "own";
-  if (profileId) {
-    const profile = await db.profile.findUnique({ where: { id: profileId }, select: { dataScope: true } });
-    if (profile) dataScope = profile.dataScope as DataScope;
-  }
+  // dataScope is already carried on the JWT/session (refreshed from DB every 10
+  // min in lib/auth.ts), so read it straight from the session instead of an extra
+  // per-request DB round-trip. Falls back to "own" defensively.
+  const dataScope: DataScope = session.user.dataScope ?? "own";
 
   const rawApprovalStatus = searchParams.get("approvalStatus");
   const approvalStatus: "pending" | "approved" | undefined =
@@ -77,13 +75,11 @@ export async function GET(request: Request) {
     ...result,
     data: result.data.map((booking) => ({
       ...booking,
+      // partialPayments dropped from the list include — only paymentEvidence on the
+      // TOP base fields needs URL resolution for the list view.
       termOfPayments: booking.termOfPayments.map((t) => ({
         ...t,
         paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
-        partialPayments: t.partialPayments.map((p) => ({
-          ...p,
-          evidence: p.evidence ? getPublicUrl(p.evidence) : null,
-        })),
       })),
     })),
   };

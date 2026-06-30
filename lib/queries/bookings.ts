@@ -13,7 +13,23 @@ const bookingListInclude = {
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
   clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
-  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true, partialPayments: { orderBy: { paidAt: "asc" as const }, select: { id: true, amount: true, paidAt: true, evidence: true, notes: true } } } },
+  // List rows only need the TOP base fields (table computes paid/total + edit drawer
+  // hydrates from these). The nested partialPayments are NOT consumed from list items
+  // (the edit-finance drawer fetches them via useBookingFinanceDetail), so they're
+  // dropped here to keep the list payload small. snapPackageCategoryPrices likewise is
+  // only read from BookingDetail — kept on bookingDetailInclude below, not the list.
+  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true } },
+  editDraft: { select: { id: true, editorProfileId: true, formState: true, pendingUploads: true, updatedAt: true } },
+} as const;
+
+const bookingDetailInclude = {
+  ...bookingListInclude,
+  snapCustomer: true,
+  customer: { select: { bitrixId: true, cppNik: true, cpwNik: true, cppAddress: true, cpwAddress: true } },
+  snapVenue: true,
+  snapPackage: true,
+  // Re-added here (dropped from bookingListInclude for payload size): the detail
+  // view's SetHargaBookingDrawer / edit-booking-drawer read snapPackageCategoryPrices.
   snapPackageCategoryPrices: {
     select: {
       id: true,
@@ -26,15 +42,6 @@ const bookingListInclude = {
     },
     orderBy: { sortOrder: "asc" as const },
   },
-  editDraft: { select: { id: true, editorProfileId: true, formState: true, pendingUploads: true, updatedAt: true } },
-} as const;
-
-const bookingDetailInclude = {
-  ...bookingListInclude,
-  snapCustomer: true,
-  customer: { select: { bitrixId: true, cppNik: true, cpwNik: true, cppAddress: true, cpwAddress: true } },
-  snapVenue: true,
-  snapPackage: true,
   snapPackagePricing: {
     select: {
       id: true,
@@ -73,13 +80,54 @@ const bookingDetailInclude = {
   paymentMethod: true,
   sourceOfInformation: true,
   clientAgreement: true,
+  // editDraft (formState + pendingUploads — large JSON) is inherited via the spread
+  // above for the draft badge in the LIST. The detail view never reads it (the edit
+  // drawer hydrates editDraft from the list row, not from BookingDetail), so drop it
+  // here to keep the detail payload small.
+  editDraft: false,
 } as const;
 
 import type { DataScope } from "@/types/user";
 import type { Prisma, BookingStatus } from "@prisma/client";
 
+// Minimal select for the page-scoped approval fetch (Fix #1). ApprovalRecord is
+// polymorphic (linked to a booking via module + entityId, no FK) so Prisma cannot
+// `include` it on the booking query. We fetch only the ~10 records for the active
+// page and attach them per row. decidedBy / createdBy are intentionally omitted —
+// the bookings table never reads them.
+const bookingApprovalSelect = {
+  id: true,
+  entityId: true,
+  status: true,
+  steps: {
+    orderBy: { stepOrder: "asc" as const },
+    select: {
+      id: true,
+      stepOrder: true,
+      approverType: true,
+      approverRoleId: true,
+      approverUserId: true,
+      status: true,
+      signature: true,
+      decidedAt: true,
+      notes: true,
+      revisionId: true,
+      approverRole: { select: { id: true, name: true } },
+      approverUser: { select: { id: true, fullName: true } },
+    },
+  },
+} as const;
+
+export type BookingApproval = Awaited<
+  ReturnType<typeof db.approvalRecord.findMany<{ select: typeof bookingApprovalSelect }>>
+>[number];
+
+type BookingListRow = Awaited<
+  ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude }>>
+>[number];
+
 export interface PaginatedBookings {
-  data: Awaited<ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude }>>>;
+  data: (BookingListRow & { bookingApprovals: BookingApproval | null })[];
   total: number;
 }
 
@@ -153,21 +201,44 @@ export async function getBookings(
   // So we fetch only the lightweight ordering keys for ALL matching rows, sort + paginate
   // in-app, then hydrate the page with the full include. Reuses the exact same `where`
   // (scope/search/filters) — no SQL duplication.
+  // Cap the key fetch so it can never load an unbounded set. The PO sequence resets
+  // yearly so we can't express the true sort as a native orderBy — we still sort with
+  // comparePoDesc + paginate in-app below. orderBy createdAt desc here just makes the
+  // cap deterministic (newest rows kept). 5000 is far above realistic project scale,
+  // so for any normal dataset this is zero behavior change. The real latency wins are
+  // Fix #1 (page-scoped approvals) and Fix #4 (slimmer include), not this guard.
+  const KEY_FETCH_CAP = 5000;
   const keys = await db.booking.findMany({
     where,
     select: { id: true, poNumber: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: KEY_FETCH_CAP,
   });
   const total = keys.length;
   keys.sort(comparePoDesc);
   const pageIds = keys.slice((page - 1) * pageSize, page * pageSize).map((k) => k.id);
 
-  const rows = await db.booking.findMany({
-    where: { id: { in: pageIds } },
-    include: bookingListInclude,
-  });
+  const [rows, approvals] = await Promise.all([
+    db.booking.findMany({
+      where: { id: { in: pageIds } },
+      include: bookingListInclude,
+    }),
+    // Page-scoped approval fetch (Fix #1): only the active page's bookings, replacing
+    // the old client-side /api/approval-records call that pulled ALL booking records.
+    pageIds.length > 0
+      ? db.approvalRecord.findMany({
+          where: { module: "booking", entityId: { in: pageIds } },
+          select: bookingApprovalSelect,
+        })
+      : Promise.resolve([] as BookingApproval[]),
+  ]);
+  const approvalByEntityId = new Map(approvals.map((a) => [a.entityId, a]));
   // findMany ignores the order of `in`, so re-order to match the paginated key order.
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const data = pageIds.map((id) => byId.get(id)!).filter(Boolean);
+  const data = pageIds
+    .map((id) => byId.get(id))
+    .filter((r): r is BookingListRow => Boolean(r))
+    .map((r) => ({ ...r, bookingApprovals: approvalByEntityId.get(r.id) ?? null }));
 
   return { data, total };
 }

@@ -17,8 +17,12 @@ export function usePoll(): { notificationCount: number } {
   const { data } = useQuery({
     queryKey: ["poll"],
     queryFn: fetchPoll,
-    refetchInterval: 30_000,
-    refetchOnWindowFocus: false,
+    // Pause polling while the tab is hidden — no point hammering Neon in the
+    // background. Re-evaluates to 30s once the tab becomes visible again.
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? false : 30_000,
+    // Refetch once on tab refocus so the notification bell is fresh after idle.
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {

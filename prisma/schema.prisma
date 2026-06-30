@@ -1282,6 +1282,7 @@ model ApprovalRecord {
   @@unique([module, entityId])
   @@index([createdById])
   @@index([updatedById])
+  @@index([module, status])
   @@map("approval_records")
 }
 
