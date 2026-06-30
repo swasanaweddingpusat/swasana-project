@@ -189,9 +189,22 @@ function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice
   );
 }
 
-// ─── Shell ────────────────────────────────────────────────────────────────────
+// ─── Content (no Drawer shell) ──────────────────────────────────────────────────
+// Fetches the booking detail and renders the takeout body WITHOUT a Sheet of its
+// own, so it can be embedded inside another drawer's single Sheet (the edit-booking
+// continue flow) as well as wrapped by the standalone shell below.
 
-export function EditTakeoutDrawer({ isOpen, onClose, onPrevious, bookingId, customerName, step, totalSteps }: EditTakeoutDrawerProps): React.ReactElement {
+export function EditTakeoutContent({
+  active,
+  bookingId,
+  onClose,
+  onPrevious,
+}: {
+  active: boolean;
+  bookingId: string;
+  onClose: () => void;
+  onPrevious?: () => void;
+}): React.ReactElement {
   const { data: bookingDetail, isLoading } = useQuery<BookingDetail>({
     queryKey: ["booking-detail", bookingId],
     queryFn: async () => {
@@ -199,7 +212,7 @@ export function EditTakeoutDrawer({ isOpen, onClose, onPrevious, bookingId, cust
       if (!res.ok) throw new Error("Failed to fetch booking detail");
       return res.json() as Promise<BookingDetail>;
     },
-    enabled: isOpen && !!bookingId,
+    enabled: active && !!bookingId,
     staleTime: 30_000,
   });
 
@@ -216,6 +229,32 @@ export function EditTakeoutDrawer({ isOpen, onClose, onPrevious, bookingId, cust
     takeoutNominal: Number(c.takeoutNominal ?? c.basePrice),
   }));
 
+  if (isLoading) {
+    return (
+      <div className="space-y-3 p-4">
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  return (
+    <TakeoutContent
+      key={bookingId}
+      bookingId={bookingId}
+      onClose={onClose}
+      onPrevious={onPrevious}
+      initialRows={initialRows}
+      fullPrice={fullPrice}
+    />
+  );
+}
+
+// ─── Shell ────────────────────────────────────────────────────────────────────
+
+export function EditTakeoutDrawer({ isOpen, onClose, onPrevious, bookingId, customerName, step, totalSteps }: EditTakeoutDrawerProps): React.ReactElement {
   return (
     <Drawer
       isOpen={isOpen}
@@ -226,23 +265,7 @@ export function EditTakeoutDrawer({ isOpen, onClose, onPrevious, bookingId, cust
         <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
       ) : undefined}
     >
-      {isLoading ? (
-        <div className="space-y-3 p-4">
-          <Skeleton className="h-24 w-full rounded-2xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
-      ) : (
-        <TakeoutContent
-          key={bookingId}
-          bookingId={bookingId}
-          onClose={onClose}
-          onPrevious={onPrevious}
-          initialRows={initialRows}
-          fullPrice={fullPrice}
-        />
-      )}
+      <EditTakeoutContent active={isOpen} bookingId={bookingId} onClose={onClose} onPrevious={onPrevious} />
     </Drawer>
   );
 }

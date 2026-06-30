@@ -23,6 +23,33 @@ interface Props {
 }
 
 export function SalesSignatureDrawer({ isOpen, bookingId, onDone, onPrevious, step, totalSteps }: Props): React.ReactElement {
+  return (
+    <Drawer
+      isOpen={isOpen}
+      onClose={onDone}
+      title="Tanda Tangan Sales"
+      headerActions={step && totalSteps ? (
+        <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
+      ) : undefined}
+    >
+      <SalesSignatureContent bookingId={bookingId} onDone={onDone} onPrevious={onPrevious} />
+    </Drawer>
+  );
+}
+
+// ─── Content (no Drawer shell) ──────────────────────────────────────────────────
+// Body without a Sheet of its own, so it can be embedded inside another drawer's
+// single Sheet (the edit-booking continue flow).
+
+export function SalesSignatureContent({
+  bookingId,
+  onDone,
+  onPrevious,
+}: {
+  bookingId: string;
+  onDone: () => void;
+  onPrevious?: () => void;
+}): React.ReactElement {
   const qc = useQueryClient();
   const { defaultSignature } = useMySignature();
 
@@ -55,15 +82,7 @@ export function SalesSignatureDrawer({ isOpen, bookingId, onDone, onPrevious, st
   }
 
   return (
-    <Drawer
-      isOpen={isOpen}
-      onClose={handleSkip}
-      title="Tanda Tangan Sales"
-      headerActions={step && totalSteps ? (
-        <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
-      ) : undefined}
-    >
-      <div className="flex flex-col gap-4 px-1 pb-4">
+    <div className="flex flex-col gap-4 px-1 pb-4">
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">
             Lokasi Tanda Tangan <span className="text-destructive">*</span>
@@ -127,7 +146,6 @@ export function SalesSignatureDrawer({ isOpen, bookingId, onDone, onPrevious, st
             {saving ? "Menyimpan..." : "Selesai"}
           </Button>
         </div>
-      </div>
-    </Drawer>
+    </div>
   );
 }

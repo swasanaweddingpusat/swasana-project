@@ -19,9 +19,9 @@ import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { SalesSignatureDrawer } from "./SalesSignatureDrawer";
-import { EditTopDrawerById } from "./edit-top-drawer";
-import { EditTakeoutDrawer } from "./EditTakeoutDrawer";
+import { SalesSignatureContent } from "./SalesSignatureDrawer";
+import { EditTopContentById } from "./edit-top-drawer";
+import { EditTakeoutContent } from "./EditTakeoutDrawer";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 
@@ -338,19 +338,36 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     salesUsers.find((s) => s.id === salesId)?.fullName ??
     (isSalesPIC ? (currentUser?.name ?? "—") : "—");
 
+  // ── Single-drawer header: title + step indicator swap with the continue flow ──
+  // The whole Edit → Takeout → TOP → Signature sequence lives in ONE Sheet so the
+  // panel never closes/reopens between steps (no flash, no title jump, no stray
+  // toast surfacing behind a fresh sheet). Only the body + header text swap.
+  const flowStepIndex =
+    continueFlowStep === "takeout" ? 1 : continueFlowStep === "top" ? 2 : continueFlowStep === "signature" ? 3 : 0;
+  const drawerTitle =
+    continueFlowStep === null
+      ? "Edit Booking"
+      : continueFlowStep === "takeout"
+        ? "Edit Takeout"
+        : continueFlowStep === "top"
+          ? "Term of Payment"
+          : "Tanda Tangan Sales";
+  const stepHeader = continueFlowStep === null ? `Step ${currentStep} / ${totalSteps}` : `Step ${flowStepIndex} / 3`;
+
+  function handleCloseAll() {
+    setContinueFlowStep(null);
+    onOpenChange(false);
+  }
+
   return (
-    <>
-      <Drawer
-        isOpen={open && continueFlowStep === null}
-        onClose={() => onOpenChange(false)}
-        title="Edit Booking"
-        maxWidth="sm:max-w-xl"
-        headerActions={
-          <span className="text-sm text-muted-foreground">
-            Step {currentStep} / {totalSteps}
-          </span>
-        }
-      >
+    <Drawer
+      isOpen={open}
+      onClose={handleCloseAll}
+      title={drawerTitle}
+      maxWidth="sm:max-w-xl"
+      headerActions={<span className="text-sm text-muted-foreground">{stepHeader}</span>}
+    >
+      {continueFlowStep === null && (
         <div className={cn("flex", "flex-col", "justify-between", "h-full")}>
 
           {/* ─── Tab Navigator ─── */}
@@ -665,42 +682,35 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             </div>
           </div>
         </div>
-      </Drawer>
+      )}
 
-      {/* ─── Continue flow: takeout → top (hanya muncul setelah save dengan perubahan venue/paket) ─── */}
-      {booking && (
-        <EditTakeoutDrawer
-          isOpen={continueFlowStep === "takeout"}
+      {/* ─── Continue flow embedded in the SAME drawer: takeout → top → signature ───
+       * Only the body swaps; the Sheet stays mounted so there is no close/reopen
+       * flash between steps. Each step fetches its own data when it becomes active. */}
+      {booking && continueFlowStep === "takeout" && (
+        <EditTakeoutContent
+          active
+          bookingId={booking.id}
           onClose={() => setContinueFlowStep("top")}
           onPrevious={() => setContinueFlowStep(null)}
-          bookingId={booking.id}
-          customerName={booking.snapCustomer?.name ?? ""}
-          step={1}
-          totalSteps={3}
         />
       )}
-      {booking && (
-        <EditTopDrawerById
-          isOpen={continueFlowStep === "top"}
-          onClose={() => setContinueFlowStep("signature")}
+      {booking && continueFlowStep === "top" && (
+        <EditTopContentById
+          active
+          bookingId={booking.id}
+          onSaved={() => setContinueFlowStep("signature")}
           onPrevious={() => setContinueFlowStep("takeout")}
-          bookingId={booking.id}
-          customerName={booking.snapCustomer?.name ?? ""}
           saveLabel="Continue"
-          step={2}
-          totalSteps={3}
         />
       )}
-      {booking && (
-        <SalesSignatureDrawer
-          isOpen={continueFlowStep === "signature"}
+      {booking && continueFlowStep === "signature" && (
+        <SalesSignatureContent
           bookingId={booking.id}
-          onDone={() => { setContinueFlowStep(null); onOpenChange(false); }}
+          onDone={handleCloseAll}
           onPrevious={() => setContinueFlowStep("top")}
-          step={3}
-          totalSteps={3}
         />
       )}
-    </>
+    </Drawer>
   );
 }

@@ -92,6 +92,10 @@ interface TopContentProps {
   discountAmount: number;
   saveLabel?: string;
   onPrevious?: () => void;
+  /** When provided, called after a successful save instead of leaving the drawer
+   *  open — used by the edit-booking continue flow to advance to the next step.
+   *  Omitted in standalone usage (Finance AR / row menu), where the drawer stays open. */
+  onSaved?: () => void;
 }
 
 function TopContent({
@@ -102,6 +106,7 @@ function TopContent({
   discountAmount: initialDiscountAmount,
   saveLabel = "Update",
   onPrevious,
+  onSaved,
 }: TopContentProps): React.ReactElement {
   const qc = useQueryClient();
   const [terms, setTerms] = useState<FinanceTerm[]>([]);
@@ -308,7 +313,10 @@ function TopContent({
     }
     toast.success("TOP berhasil diupdate");
     qc.invalidateQueries({ queryKey: ["bookings"] });
-    // Drawer stays open — user closes manually
+    qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+    // Continue flow: advance to the next step. Standalone usage omits onSaved, so
+    // the drawer stays open and the user closes it manually.
+    onSaved?.();
   };
 
   return (
@@ -1102,8 +1110,6 @@ export function EditTopDrawerById({
   step,
   totalSteps,
 }: EditTopDrawerByIdProps): React.ReactElement {
-  const { data, isLoading, error } = useBookingFinanceDetail(isOpen ? bookingId : null);
-
   return (
     <Drawer
       isOpen={isOpen}
@@ -1113,27 +1119,60 @@ export function EditTopDrawerById({
         <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
       ) : undefined}
     >
-      {isLoading && (
-        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-          Memuat data...
-        </div>
-      )}
-      {error && !isLoading && (
-        <div className="flex items-center justify-center h-32 text-sm text-destructive">
-          Gagal memuat data. Coba tutup dan buka kembali.
-        </div>
-      )}
-      {data && !isLoading && (
-        <TopContent
-          bookingId={data.id}
-          initialTerms={data.terms}
-          packagePrice={data.packagePrice}
-          discountName={data.discountName}
-          discountAmount={data.discountAmount}
-          saveLabel={saveLabel}
-          onPrevious={onPrevious}
-        />
-      )}
+      <EditTopContentById active={isOpen} bookingId={bookingId} onPrevious={onPrevious} saveLabel={saveLabel} />
     </Drawer>
+  );
+}
+
+/* ─── EditTopContentById (no Drawer shell) ────────────────────────────────────
+ * Fetches finance detail and renders the TOP body WITHOUT a Sheet of its own, so
+ * it can be embedded inside another drawer's single Sheet (the edit-booking
+ * continue flow). `active` gates the fetch (was `isOpen`).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+export function EditTopContentById({
+  active,
+  bookingId,
+  onPrevious,
+  onSaved,
+  saveLabel,
+}: {
+  active: boolean;
+  bookingId: string;
+  onPrevious?: () => void;
+  /** Continue flow only: advance to the next step after a successful save.
+   *  Standalone usage (Finance AR / row menu) omits it and the drawer stays open. */
+  onSaved?: () => void;
+  saveLabel?: string;
+}): React.ReactElement {
+  const { data, isLoading, error } = useBookingFinanceDetail(active ? bookingId : null);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+        Memuat data...
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-32 text-sm text-destructive">
+        Gagal memuat data. Coba tutup dan buka kembali.
+      </div>
+    );
+  }
+  if (!data) return <></>;
+
+  return (
+    <TopContent
+      bookingId={data.id}
+      initialTerms={data.terms}
+      packagePrice={data.packagePrice}
+      discountName={data.discountName}
+      discountAmount={data.discountAmount}
+      saveLabel={saveLabel}
+      onPrevious={onPrevious}
+      onSaved={onSaved}
+    />
   );
 }
