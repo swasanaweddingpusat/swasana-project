@@ -11,6 +11,7 @@ import {
   saveSnapInternalItemsSchema,
   saveSnapVendorItemsSchema,
   saveSnapComplimentariesSchema,
+  saveSnapTakeoutSchema,
 } from "@/lib/validations/snap-package-items";
 
 // ─── Save snap_package_internal_items ────────────────────────────────────────
@@ -180,5 +181,67 @@ export async function saveSnapComplimentaries(
   } catch (e) {
     console.error("[saveSnapComplimentaries]", e);
     return { success: false, error: "Gagal menyimpan complimentaries." };
+  }
+}
+
+// ─── Save snap takeout ────────────────────────────────────────────────────────
+
+export async function saveSnapTakeout(
+  data: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`snap-takeout:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = saveSnapTakeoutSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+  }
+
+  const { bookingId, items } = parsed.data;
+
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId ?? "", scope, bookingId))) {
+    return { success: false, error: "Booking tidak ditemukan atau akses ditolak." };
+  }
+
+  try {
+    // Fetch existing snapPackageCategoryPrice rows to get their IDs
+    const existingRows = await db.snapPackageCategoryPrice.findMany({
+      where: { bookingId },
+      select: { id: true, categoryName: true },
+    });
+    const rowById = new Map(existingRows.map((r) => [r.categoryName, r.id]));
+
+    // Build update ops for each item that has a matching row
+    const ops: Prisma.PrismaPromise<unknown>[] = items
+      .filter((item) => rowById.has(item.categoryName))
+      .map((item) =>
+        db.snapPackageCategoryPrice.update({
+          where: { id: rowById.get(item.categoryName)! },
+          data: {
+            isTakeout: item.isTakeout,
+            takeoutNominal: item.isTakeout ? item.takeoutNominal : 0,
+          },
+        }),
+      );
+
+    if (ops.length === 0) return { success: false, error: "Tidak ada kategori yang cocok." };
+
+    await db.$transaction(ops);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.snap_takeout_updated",
+      result: "success",
+      entityType: "Booking",
+      entityId: bookingId,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[saveSnapTakeout]", e);
+    return { success: false, error: "Gagal menyimpan takeout." };
   }
 }

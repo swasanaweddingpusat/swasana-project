@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice, Gift } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice, Gift, Tag, HandMoney } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,8 +39,11 @@ import { BookingTCDrawer } from "./booking-tc-drawer";
 import { EditPackageDrawer, type EditPackageTarget } from "./EditPackageDrawer";
 import { SetHargaBookingDrawer } from "./SetHargaBookingDrawer";
 import { EditComplimentaryDrawer, type EditComplimentaryTarget } from "./EditComplimentaryDrawer";
+import { EditTakeoutDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/EditTakeoutDrawer";
+import { EditTopDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-top-drawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { fetchBookingComments } from "@/services/booking-comment-service";
+import { fetchBookingDetail } from "@/services/booking-detail-service";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
@@ -169,6 +172,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
+  // Warm the detail modal's cache on hover/focus so opening a row is instant
+  // (shares the ["booking-detail", id] key + staleTime with useBookingDetail).
+  const prefetchDetail = (id: string) => {
+    qc.prefetchQuery({ queryKey: ["booking-detail", id], queryFn: () => fetchBookingDetail(id), staleTime: 30_000 });
+  };
+  // Mark a booking's cached detail stale after a mutation so the next open/refresh
+  // refetches fresh data instead of serving a pre-mutation snapshot.
+  const invalidateDetail = (id: string) => {
+    qc.invalidateQueries({ queryKey: ["booking-detail", id] });
+  };
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
@@ -178,17 +191,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [editPackageTarget, setEditPackageTarget] = useState<EditPackageTarget | null>(null);
   const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
   const [editComplimentaryTarget, setEditComplimentaryTarget] = useState<EditComplimentaryTarget | null>(null);
-  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
-    queryKey: ["booking-approvals"],
-    queryFn: async () => {
-      const res = await fetch("/api/approval-records?module=booking");
-      if (!res.ok) return [];
-      const json = await res.json();
-      return json.data ?? json;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
+  const [editTakeoutTarget, setEditTakeoutTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [editTopTarget, setEditTopTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
+  // Approval records now ride along on each booking row (Fix #1: getBookings attaches
+  // booking.bookingApprovals for the active page only), so no separate fetch of ALL
+  // approval records is needed here. Build the entityId → record map from the list.
+  const approvalMap = new Map(
+    bookings
+      .map((b: BookingListItem) => b.bookingApprovals)
+      .filter((r): r is NonNullable<BookingListItem["bookingApprovals"]> => r !== null)
+      .map((r) => [r.entityId, r]),
+  );
 
   const APPROVAL_STATUS_OPTIONS: { id: "" | "pending" | "approved"; name: string }[] = [
     { id: "", name: "Semua" },
@@ -325,7 +338,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   function renderMoreItems(booking: BookingListItem): React.ReactNode {
     return (
       <>
-        <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
+        <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)} onMouseEnter={() => prefetchDetail(booking.id)} onFocus={() => prefetchDetail(booking.id)}>
           <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -342,6 +355,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {can("booking", "edit-package") && (
           <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditComplimentaryTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
             <Gift weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Complimentary
+          </DropdownMenuItem>
+        )}
+        {can("booking", "edit") && (
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTakeoutTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
+            <Tag weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Takeout
+          </DropdownMenuItem>
+        )}
+        {can("booking", "edit") && (
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTopTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
+            <HandMoney weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit TOP
           </DropdownMenuItem>
         )}
         {can("booking", "edit-set-harga") && (
@@ -737,7 +760,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+                onClick={() => { refetch(); }}
                 disabled={isFetching}
                 aria-label="Muat ulang data booking"
                 className="shrink-0"
@@ -925,6 +948,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     <TableRow
                       key={booking.id}
                       className={cn('hover:bg-muted/40', 'cursor-pointer')}
+                      onMouseEnter={() => { if (booking.recordStatus !== "draft") prefetchDetail(booking.id); }}
                       onClick={() => {
                         if (booking.recordStatus === "draft") {
                           openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } });
@@ -1097,6 +1121,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   <div
                     key={booking.id}
                     className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', 'cursor-pointer')}
+                    onMouseEnter={() => { if (booking.recordStatus !== "draft") prefetchDetail(booking.id); }}
                     onClick={() => {
                       if (booking.recordStatus === "draft") {
                         openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } });
@@ -1243,6 +1268,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               type="button"
                               className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
                               onClick={() => setDetailTarget(booking.id)}
+                              onMouseEnter={() => prefetchDetail(booking.id)}
+                              onFocus={() => prefetchDetail(booking.id)}
                               aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
                             >
                               <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-5', 'w-5', 'text-primary')} />
@@ -1420,20 +1447,20 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <RejectBookingModal
         open={!!rejectTarget}
         booking={rejectTarget}
-        onClose={() => setRejectTarget(null)}
+        onClose={() => { if (rejectTarget) invalidateDetail(rejectTarget.id); setRejectTarget(null); }}
       />
 
       <MarkLostDialog
         open={!!lostTarget}
         booking={lostTarget}
-        onClose={() => setLostTarget(null)}
+        onClose={() => { if (lostTarget) invalidateDetail(lostTarget.id); setLostTarget(null); }}
       />
 
       {/* Restore Booking Modal */}
       <RestoreBookingDialog
         open={!!restoreTarget}
         booking={restoreTarget}
-        onClose={() => setRestoreTarget(null)}
+        onClose={() => { if (restoreTarget) invalidateDetail(restoreTarget.id); setRestoreTarget(null); }}
       />
 
       {/* Transfer Booking Modal */}
@@ -1441,14 +1468,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         open={!!transferTarget}
         booking={transferTarget}
         salesProfiles={salesProfiles}
-        onClose={() => setTransferTarget(null)}
+        onClose={() => { if (transferTarget) invalidateDetail(transferTarget.id); setTransferTarget(null); }}
       />
 
       {/* Transfer Manager Modal */}
       <TransferManagerModal
         open={!!managerTarget}
         booking={managerTarget}
-        onClose={() => setManagerTarget(null)}
+        onClose={() => { if (managerTarget) invalidateDetail(managerTarget.id); setManagerTarget(null); }}
       />
       {/* Activity Log Modal */}
       <ActivityLogModal
@@ -1469,7 +1496,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <AgreementModal
           bookingId={agreementModal.bookingId}
           customerName={agreementModal.customerName}
-          onClose={() => setAgreementModal(null)}
+          onClose={() => { invalidateDetail(agreementModal.bookingId); setAgreementModal(null); }}
         />
       )}
 
@@ -1510,16 +1537,34 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Edit Package Drawer — key forces remount on booking change, resetting all local state cleanly */}
       <EditPackageDrawer
-        key={editPackageTarget?.bookingId ?? "none"}
+        key={`pkg-${editPackageTarget?.bookingId ?? "none"}`}
         target={editPackageTarget}
-        onClose={() => setEditPackageTarget(null)}
+        onClose={() => { if (editPackageTarget) invalidateDetail(editPackageTarget.bookingId); setEditPackageTarget(null); }}
       />
 
       {/* Edit Complimentary Drawer — key forces remount per booking so lazy-initializer picks up correct data */}
       <EditComplimentaryDrawer
-        key={editComplimentaryTarget?.bookingId ?? "none"}
+        key={`comp-${editComplimentaryTarget?.bookingId ?? "none"}`}
         target={editComplimentaryTarget}
-        onClose={() => setEditComplimentaryTarget(null)}
+        onClose={() => { if (editComplimentaryTarget) invalidateDetail(editComplimentaryTarget.bookingId); setEditComplimentaryTarget(null); }}
+      />
+
+      {/* Edit Takeout Drawer */}
+      <EditTakeoutDrawer
+        key={`takeout-${editTakeoutTarget?.bookingId ?? "none"}`}
+        isOpen={!!editTakeoutTarget}
+        onClose={() => setEditTakeoutTarget(null)}
+        bookingId={editTakeoutTarget?.bookingId ?? ""}
+        customerName={editTakeoutTarget?.customerName ?? ""}
+      />
+
+      {/* Edit TOP Drawer */}
+      <EditTopDrawerById
+        key={`top-${editTopTarget?.bookingId ?? "none"}`}
+        isOpen={!!editTopTarget}
+        onClose={() => setEditTopTarget(null)}
+        bookingId={editTopTarget?.bookingId ?? ""}
+        customerName={editTopTarget?.customerName ?? ""}
       />
 
       {/* Set Harga Booking Drawer */}
@@ -1527,7 +1572,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <SetHargaBookingDrawer
           key={setHargaTarget.bookingId}
           isOpen={!!setHargaTarget}
-          onClose={() => setSetHargaTarget(null)}
+          onClose={() => { invalidateDetail(setHargaTarget.bookingId); setSetHargaTarget(null); }}
           bookingId={setHargaTarget.bookingId}
           customerName={setHargaTarget.customerName}
           packageName={setHargaTarget.packageName}
@@ -1547,7 +1592,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       {approvalDialogTarget && user && (
         <ApprovalDialog
           open={!!approvalDialogTarget}
-          onClose={() => { setApprovalDialogTarget(null); qc.invalidateQueries({ queryKey: ["bookings"] }); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+          onClose={() => { invalidateDetail(approvalDialogTarget.id); setApprovalDialogTarget(null); qc.invalidateQueries({ queryKey: ["bookings"] }); }}
           packageId={approvalDialogTarget.id}
           packageName={approvalDialogTarget.snapCustomer?.name ?? "Booking"}
           userProfileId={user.profileId}
@@ -1563,7 +1608,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           onClose={() => {
             setApproveModal(null);
             qc.invalidateQueries({ queryKey: ["bookings"] });
-            qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+            // approveModal carries no bookingId — broadly invalidate detail caches.
+            qc.invalidateQueries({ queryKey: ["booking-detail"] });
           }}
           stepId={approveModal.stepId}
           stepLabel={approveModal.stepLabel}

@@ -52,3 +52,19 @@ export const saveSnapComplimentariesSchema = z.object({
 
 export type SnapComplimentaryItemInput = z.infer<typeof snapComplimentaryItemSchema>;
 export type SaveSnapComplimentariesInput = z.infer<typeof saveSnapComplimentariesSchema>;
+
+// ─── Takeout ──────────────────────────────────────────────────────────────────
+
+export const snapTakeoutItemSchema = z.object({
+  categoryName: z.string().min(1, "Nama kategori wajib diisi").max(255),
+  isTakeout: z.boolean(),
+  takeoutNominal: z.number().int().min(0).default(0),
+});
+
+export const saveSnapTakeoutSchema = z.object({
+  bookingId: z.string().min(1, "Booking ID wajib diisi"),
+  items: z.array(snapTakeoutItemSchema).min(1, "Minimal satu item wajib dikirim"),
+});
+
+export type SnapTakeoutItemInput = z.infer<typeof snapTakeoutItemSchema>;
+export type SaveSnapTakeoutInput = z.infer<typeof saveSnapTakeoutSchema>;

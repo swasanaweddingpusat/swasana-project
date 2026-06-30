@@ -1156,6 +1156,19 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         setLastAllocatedPrice(step2Price);
       }
 
+      // Ensure all terms have a dueDate before entering the TOP step.
+      // allocatePrice above only updates amounts (spread ...t preserves dueDate).
+      // The recalcTermDates effect fires when wBookingDate changes, but may not
+      // have run yet if the user changed eventDate and the component hasn't re-rendered,
+      // or if allocatePrice replaced the terms array before the effect could apply.
+      // Calling recalcTermDates here guarantees every term with an empty dueDate
+      // gets a date spread between today and the event date — force=false so any
+      // date the user already set manually (or Booking Fee = today) is untouched.
+      // Resume-draft terms already have dates in DB → they are not empty → also untouched.
+      if (wBookingDate) {
+        setTerms((prev) => recalcTermDates(prev, wBookingDate));
+      }
+
       // Advance immediately (optimistic)
       setCurrentStep(4);
 

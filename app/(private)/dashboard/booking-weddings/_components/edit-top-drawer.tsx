@@ -90,6 +90,8 @@ interface TopContentProps {
   packagePrice: number;
   discountName: string | null;
   discountAmount: number;
+  saveLabel?: string;
+  onPrevious?: () => void;
 }
 
 function TopContent({
@@ -98,6 +100,8 @@ function TopContent({
   packagePrice,
   discountName: initialDiscountName,
   discountAmount: initialDiscountAmount,
+  saveLabel = "Update",
+  onPrevious,
 }: TopContentProps): React.ReactElement {
   const qc = useQueryClient();
   const [terms, setTerms] = useState<FinanceTerm[]>([]);
@@ -1019,13 +1023,18 @@ function TopContent({
       </div>
 
       {/* Footer */}
-      <div className="sticky bottom-0 bg-background pt-4">
+      <div className="sticky bottom-0 bg-background pt-4 flex gap-2">
+        {onPrevious && (
+          <Button variant="outline" className="flex-1" onClick={onPrevious}>
+            Previous
+          </Button>
+        )}
         <Button
-          className="w-full"
+          className={onPrevious ? "flex-1" : "w-full"}
           onClick={handleUpdate}
           disabled={loading || !isChanged}
         >
-          {loading ? "Updating..." : "Update"}
+          {loading ? "Menyimpan..." : saveLabel}
         </Button>
       </div>
     </div>
@@ -1075,20 +1084,35 @@ export function EditTopDrawer({
 export interface EditTopDrawerByIdProps {
   isOpen: boolean;
   onClose: () => void;
+  onPrevious?: () => void;
   bookingId: string;
   customerName: string;
+  saveLabel?: string;
+  step?: number;
+  totalSteps?: number;
 }
 
 export function EditTopDrawerById({
   isOpen,
   onClose,
+  onPrevious,
   bookingId,
   customerName,
+  saveLabel,
+  step,
+  totalSteps,
 }: EditTopDrawerByIdProps): React.ReactElement {
   const { data, isLoading, error } = useBookingFinanceDetail(isOpen ? bookingId : null);
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} title={`Term of Payment — ${customerName}`}>
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Term of Payment — ${customerName}`}
+      headerActions={step && totalSteps ? (
+        <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
+      ) : undefined}
+    >
       {isLoading && (
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
           Memuat data...
@@ -1106,6 +1130,8 @@ export function EditTopDrawerById({
           packagePrice={data.packagePrice}
           discountName={data.discountName}
           discountAmount={data.discountAmount}
+          saveLabel={saveLabel}
+          onPrevious={onPrevious}
         />
       )}
     </Drawer>
