@@ -57,6 +57,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { createComplimentary } from "@/actions/complimentary";
 import { usePermissions } from "@/hooks/use-permissions";
+import { ComplimentarySelect } from "@/app/(private)/dashboard/booking-weddings/_components/ComplimentarySelect";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 import type { BookingPrefillLead } from "@/types/lead";
@@ -1976,46 +1977,35 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <div className="space-y-2">
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Complimentary (Bonus)</FormLabel>
 
-                    {/* Pilih dari daftar (dropdown inline) + tombol Tambah */}
+                    {/* Pilih dari daftar (dropdown inline) — "Tambah" muncul di dalam dropdown saat search tidak exact-match */}
                     {complimentaryMode !== "create-new" && (
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                          <SearchableSelect
-                            options={complimentaryOptions
-                              .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                              .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price) }))}
-                            value=""
-                            onChange={(selectedId) => {
-                              const found = complimentaryOptions.find((x) => x.id === selectedId);
-                              if (found) {
-                                setComplimentaries((prev) => [...prev, {
-                                  id: crypto.randomUUID(),
-                                  complimentaryId: found.id,
-                                  name: found.name,
-                                  price: found.price,
-                                  isShowPrice: found.isShowPrice,
-                                  description: found.description ?? "",
-                                  qty: 1,
-                                }]);
-                              }
-                            }}
-                            placeholder="Pilih dari daftar complimentary..."
-                            searchPlaceholder="Cari complimentary..."
-                            emptyText="Tidak ada complimentary"
-                          />
-                        </div>
-                        {canCreateComplimentary && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="shrink-0 rounded-xl"
-                            onClick={() => { setComplimentaryMode("create-new"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); }}
-                          >
-                            <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-                            Tambah
-                          </Button>
-                        )}
-                      </div>
+                      <ComplimentarySelect
+                        options={complimentaryOptions
+                          .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
+                          .map((opt) => ({ id: opt.id, name: opt.name, badge: formatRupiah(opt.price), description: opt.description ?? undefined }))}
+                        value=""
+                        onChange={(selectedId) => {
+                          const found = complimentaryOptions.find((x) => x.id === selectedId);
+                          if (found) {
+                            setComplimentaries((prev) => [...prev, {
+                              id: crypto.randomUUID(),
+                              complimentaryId: found.id,
+                              name: found.name,
+                              price: found.price,
+                              isShowPrice: found.isShowPrice,
+                              description: found.description ?? "",
+                              qty: 1,
+                            }]);
+                          }
+                        }}
+                        onAddTrigger={canCreateComplimentary ? (text) => {
+                          setComplimentaryMode("create-new");
+                          setCreateNewComp({ name: text, price: 0, description: "", isShowPrice: false });
+                        } : undefined}
+                        placeholder="Pilih dari daftar complimentary..."
+                        searchPlaceholder="Cari complimentary..."
+                        emptyText="Tidak ada complimentary"
+                      />
                     )}
 
                     {/* Mode: buat baru */}
@@ -2171,6 +2161,15 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           {/* Body */}
                           <CollapsibleContent>
                             <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
+                              <div>
+                                <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
+                                <Input
+                                  value={c.name}
+                                  onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, name: e.target.value } : x))}
+                                  placeholder="Nama complimentary..."
+                                  className="h-8 text-sm"
+                                />
+                              </div>
                               <div className="flex items-center gap-2">
                                 <div className="relative flex-1">
                                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>

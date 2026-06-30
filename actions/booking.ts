@@ -1255,38 +1255,11 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    // Compare complimentaries: field-based diff against current DB snapshot.
-    // Full-replace write semantics (delete+recreate) means no stable client-side id —
-    // compare by count + content instead. Normalization: trim strings, cast numerics,
-    // treat null/"" as equivalent for description.
-    let complimentaryChanged = false;
-    if (parsed.data.complimentaries !== undefined) {
-      const existing = booking.snapComplimentaries;
-      const incoming = parsed.data.complimentaries;
-      if (existing.length !== incoming.length) {
-        complimentaryChanged = true;
-      } else {
-        for (let ci = 0; ci < existing.length; ci++) {
-          const ex = existing[ci];
-          const inc = incoming[ci];
-          const exDesc = ex.description?.trim() || null;
-          const incDesc = inc.description?.trim() || null;
-          if (
-            ex.name.trim() !== inc.name.trim() ||
-            ex.price !== inc.price ||
-            ex.isShowPrice !== inc.isShowPrice ||
-            exDesc !== incDesc ||
-            ex.qty !== inc.qty
-          ) {
-            complimentaryChanged = true;
-            break;
-          }
-        }
-      }
-    }
-
     // unpaid→paid persists WITHOUT resetting approval; a paid→unpaid reversal IS
     // material (paidReversed) and re-triggers the approval revision flow below.
+    // NOTE: complimentaries are intentionally excluded from material-change detection.
+    // They are managed independently via saveSnapComplimentaries (EditComplimentaryDrawer)
+    // which does NOT reset approval or client agreement.
     const hasMaterialChange =
       venueChanged ||
       packageChanged ||
@@ -1295,8 +1268,7 @@ export async function editBooking(data: unknown) {
       discountChanged ||
       takeoutChanged ||
       topChanged ||
-      paidReversed ||
-      complimentaryChanged;
+      paidReversed;
     // Terms must be re-written whenever structure, status, or sort-order changed.
     // sortOrder-only change (drag reorder) is non-material but still needs a write
     // so the new display order is persisted correctly.
@@ -1599,28 +1571,8 @@ export async function editBooking(data: unknown) {
       );
     }
 
-    // Complimentaries — replace existing atomically within transaction
-    if (parsed.data.complimentaries !== undefined) {
-      ops.push(db.snapComplimentary.deleteMany({ where: { bookingId: id } }));
-      if (parsed.data.complimentaries.length > 0) {
-        ops.push(
-          ...parsed.data.complimentaries.map((c, i) =>
-            db.snapComplimentary.create({
-              data: {
-                bookingId: id,
-                complimentaryId: c.complimentaryId ?? null,
-                name: c.name,
-                price: c.price,
-                isShowPrice: c.isShowPrice,
-                description: c.description ?? null,
-                qty: c.qty,
-                sortOrder: c.sortOrder ?? i,
-              },
-            })
-          )
-        );
-      }
-    }
+    // NOTE: complimentaries are NOT managed here. They are edited independently via
+    // saveSnapComplimentaries (EditComplimentaryDrawer) which does not affect approval.
 
     // Storage keys of payment proofs to delete AFTER the transaction commits (paid→unpaid).
     // Collected here, deleted best-effort post-commit so a failed delete never rolls
@@ -1741,7 +1693,6 @@ export async function editBooking(data: unknown) {
       if (takeoutChanged) reasons.push("takeout");
       if (topChanged) reasons.push("terms of payment");
       if (paidReversed) reasons.push("payment reversed to unpaid");
-      if (complimentaryChanged) reasons.push("complimentary changed");
       const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
       const approvalRecord = await db.approvalRecord.findUnique({

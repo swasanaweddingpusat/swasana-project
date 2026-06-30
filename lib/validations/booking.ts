@@ -104,15 +104,8 @@ export const editBookingSchema = z.object({
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
   })).optional().default([]),
-  complimentaries: z.array(z.object({
-    complimentaryId: z.string().optional().nullable(),
-    name: z.string().min(1),
-    price: z.coerce.number().int().min(0).default(0),
-    isShowPrice: z.boolean().default(false),
-    description: z.string().optional().nullable(),
-    qty: z.coerce.number().int().min(1).default(1),
-    sortOrder: z.coerce.number().int().default(0),
-  })).optional().default([]),
+  // complimentaries intentionally omitted — managed via EditComplimentaryDrawer +
+  // saveSnapComplimentaries which does NOT reset approval or client agreement.
   categoryToggles: z.array(z.object({
     categoryName: z.string().min(1),
     basePrice: z.coerce.number().int().min(0),

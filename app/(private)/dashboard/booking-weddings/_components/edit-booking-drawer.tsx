@@ -26,10 +26,7 @@ import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
 import { editBooking, updateBookingClientInfo } from "@/actions/booking";
 import { updateTermOfPayments } from "@/actions/term-of-payment";
 import { saveEditDraft, discardEditDraft } from "@/actions/booking-edit-draft";
-import { createComplimentary } from "@/actions/complimentary";
 import { computeFullPrice } from "@/lib/package-prices";
-import { useComplimentaries } from "@/hooks/use-complimentaries";
-import { usePermissions } from "@/hooks/use-permissions";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useMySignature } from "@/hooks/use-my-signature";
@@ -46,7 +43,6 @@ interface VenueOption { id: string; name: string }
 interface CategoryPriceEntry { id: string; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }
 interface PackageOption { id: string; packageName: string; pax: number; margin: number; sellingPrice: number; categoryPrices: CategoryPriceEntry[] }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
-interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
 type TermPaymentStatus = "unpaid" | "paid" | "partial" | "refund";
 interface TermRow { uid: string; id?: string; name: string; amount: number; dueDate: string; sortOrder: number; paymentStatus: TermPaymentStatus; ackStatus?: string; paymentEvidence?: File | string | null }
 
@@ -214,11 +210,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Vendor bonus UI sudah di-deprecate (diganti Complimentary). State ini hanya
   // mempreserve snapBonuses lama agar data tidak hilang saat booking lama di-edit.
   const [bonuses, setBonuses] = useState<BonusRow[]>([]);
-  const [complimentaries, setComplimentaries] = useState<ComplimentaryRow[]>([]);
-  const [complimentaryMode, setComplimentaryMode] = useState<"none" | "picker" | "create-new">("none");
-  const [collapsedComplimentaries, setCollapsedComplimentaries] = useState<Set<string>>(new Set());
-  const [createNewComp, setCreateNewComp] = useState({ name: "", price: 0, description: "", isShowPrice: false });
-  const [isCreatingComp, setIsCreatingComp] = useState(false);
 
   // ── Step 3: Takeout ──
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({});
@@ -293,20 +284,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     staleTime: 10 * 60_000,
   });
 
-  const { data: complimentaryData } = useComplimentaries({ activeOnly: true });
-  const complimentaryOptions = complimentaryData?.items ?? [];
-  const { can: canPermission, isAdmin: isPermAdmin } = usePermissions();
-  const canCreateComplimentary = canPermission("complimentary", "create") || isPermAdmin;
-
   const isBitrixSource = sources.find((o) => o.id === sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
-
-  function toggleComplimentaryCollapse(id: string) {
-    setCollapsedComplimentaries((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); } else { next.add(id); }
-      return next;
-    });
-  }
 
   function toggleTerm(idx: number) {
     setCollapsedTerms((prev) => {
@@ -377,11 +355,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     sigSalesRef.current?.clear();
     setCategoryToggles({});
     setTakeoutPrices({});
-    setComplimentaries([]);
-    setComplimentaryMode("none");
-    setCollapsedComplimentaries(new Set());
-    setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false });
-    setIsCreatingComp(false);
     setBonuses([]);
 
     const bTerms = (booking.termOfPayments ?? []).map((t) => ({
@@ -428,12 +401,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       if (Array.isArray(fs.terms)) setTerms((fs.terms as TermRow[]).map((t) => ({ ...t, uid: t.uid ?? t.id ?? crypto.randomUUID() })));
       if (fs.categoryToggles && typeof fs.categoryToggles === "object") setCategoryToggles(fs.categoryToggles as Record<string, boolean>);
       if (fs.takeoutPrices && typeof fs.takeoutPrices === "object") setTakeoutPrices(fs.takeoutPrices as Record<string, number>);
-      if (Array.isArray(fs.complimentaries)) setComplimentaries(fs.complimentaries as ComplimentaryRow[]);
       if (typeof fs.currentStep === "number") setCurrentStep(fs.currentStep);
     }
   }, [open, booking]);
 
-  // ── Init detail fields (email, NIK, address, bitrix, bonuses, complimentaries) ──
+  // ── Init detail fields (email, NIK, address, bitrix, bonuses) ──
   useEffect(() => {
     if (!detail) return;
     const emailCpp = detail.snapCustomer?.emailCpp ?? detail.customer?.emailCpp ?? "";
@@ -468,19 +440,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setContactBitrixId(bitrixId);
     if (mappedBonuses.length && bonuses.length === 0) {
       setBonuses(mappedBonuses);
-    }
-
-    const mappedComplimentaries: ComplimentaryRow[] = (detail.snapComplimentaries ?? []).map((c: Record<string, unknown>) => ({
-      id: c.id as string,
-      complimentaryId: (c.complimentaryId as string | null) ?? null,
-      name: c.name as string,
-      price: Number(c.price) || 0,
-      isShowPrice: Boolean(c.isShowPrice),
-      description: (c.description as string) ?? "",
-      qty: Number(c.qty) || 1,
-    }));
-    if (mappedComplimentaries.length && complimentaries.length === 0) {
-      setComplimentaries(mappedComplimentaries);
     }
 
     if (detail.snapPackageCategoryPrices?.length) {
@@ -797,7 +756,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       // pending file selection is lost on refresh; that's acceptable per spec.
       terms: terms.map((t) => ({ ...t, paymentEvidence: t.paymentEvidence instanceof File ? null : t.paymentEvidence })),
       categoryToggles, takeoutPrices,
-      complimentaries,
       signingLocation,
     };
   }
@@ -915,7 +873,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       contactNumbers: JSON.stringify(contactNumbers),
       contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
-      complimentaries: complimentaries.map((c, i) => ({ complimentaryId: c.complimentaryId ?? null, name: c.name, price: c.price, isShowPrice: c.isShowPrice, description: c.description || null, qty: c.qty, sortOrder: i })),
       // Always send material-change fields so server can detect ALL material changes
       // (discount, takeout, TOP) — not just venue/package.
       termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ id: t.id, name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus, ackStatus: t.ackStatus })),
@@ -1295,132 +1252,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 />
               </div>
 
-              {/* Complimentary */}
-              <div className="space-y-2">
-                <label className={LBL}>Complimentary</label>
-
-                {complimentaryMode !== "create-new" && (
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <SearchableSelect
-                        options={complimentaryOptions
-                          .filter((opt) => !complimentaries.some((c) => c.complimentaryId === opt.id))
-                          .map((opt) => ({ id: opt.id, name: opt.name }))}
-                        value=""
-                        onChange={(cId) => {
-                          const opt = complimentaryOptions.find((c) => c.id === cId);
-                          if (opt) {
-                            setComplimentaries((prev) => [...prev, { id: `new-${Date.now()}`, complimentaryId: opt.id, name: opt.name, price: opt.price, isShowPrice: opt.isShowPrice, description: "", qty: 1 }]);
-                          }
-                        }}
-                        placeholder="Pilih dari daftar complimentary..."
-                        searchPlaceholder="Cari complimentary..."
-                        emptyText="Tidak ada complimentary"
-                      />
-                    </div>
-                    {canCreateComplimentary && (
-                      <Button type="button" variant="outline" className="shrink-0 rounded-xl" onClick={() => { setComplimentaryMode("create-new"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); }}>
-                        <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-                        Tambah
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {complimentaryMode === "create-new" && (
-                  <div className="rounded-xl border border-border bg-card p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">Tambah complimentary baru ke master</p>
-                      <button type="button" className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setComplimentaryMode("none")}>Batal</button>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-foreground block mb-1">Nama <span className="text-destructive">*</span></label>
-                      <Input value={createNewComp.name} onChange={(e) => setCreateNewComp((p) => ({ ...p, name: e.target.value }))} placeholder="Nama complimentary..." className="h-8 text-sm" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
-                        <input
-                          type="text" inputMode="numeric"
-                          className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background"
-                          placeholder="Harga (opsional)"
-                          value={createNewComp.price ? fmtRp(createNewComp.price) : ""}
-                          onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setCreateNewComp((p) => ({ ...p, price: n })); }}
-                        />
-                      </div>
-                      <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                        <Switch checked={createNewComp.isShowPrice} onCheckedChange={(v) => setCreateNewComp((p) => ({ ...p, isShowPrice: v }))} />
-                        <span className="text-xs text-muted-foreground">Tampil harga</span>
-                      </label>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-foreground block mb-1">Deskripsi</label>
-                      <Textarea value={createNewComp.description} onChange={(e) => setCreateNewComp((p) => ({ ...p, description: e.target.value }))} placeholder="Keterangan complimentary (opsional)..." rows={2} className="resize-none text-sm" />
-                    </div>
-                    <Button
-                      type="button"
-                      className="w-full rounded-xl"
-                      disabled={!createNewComp.name.trim() || isCreatingComp}
-                      onClick={async () => {
-                        if (!createNewComp.name.trim() || isCreatingComp) return;
-                        setIsCreatingComp(true);
-                        try {
-                          const result = await createComplimentary({ name: createNewComp.name.trim(), price: createNewComp.price, description: createNewComp.description.trim() || null, isShowPrice: createNewComp.isShowPrice, isActive: true });
-                          if (result.success && result.item) {
-                            setComplimentaries((prev) => [...prev, { id: `new-${Date.now()}`, complimentaryId: result.item!.id, name: result.item!.name, price: result.item!.price, isShowPrice: result.item!.isShowPrice, description: result.item!.description ?? "", qty: 1 }]);
-                            setComplimentaryMode("none");
-                            toast.success(`"${result.item.name}" berhasil ditambahkan`);
-                          } else {
-                            toast.error(result.error ?? "Gagal menambahkan complimentary");
-                          }
-                        } finally {
-                          setIsCreatingComp(false);
-                        }
-                      }}
-                    >
-                      {isCreatingComp ? "Menyimpan..." : "Simpan & Tambahkan"}
-                    </Button>
-                  </div>
-                )}
-
-                {complimentaries.map((c) => {
-                  const isOpen = !collapsedComplimentaries.has(c.id);
-                  return (
-                    <Collapsible key={c.id} open={isOpen} onOpenChange={() => toggleComplimentaryCollapse(c.id)} className="rounded-xl border border-border bg-muted/30 overflow-hidden">
-                      <div className="flex items-center gap-1 px-3 py-2.5">
-                        <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                          <AltArrowDown weight="BoldDuotone" className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                            {!isOpen && <p className="text-xs text-muted-foreground tabular-nums">{c.isShowPrice && c.price ? `Rp${fmtRp(c.price)}` : "Harga tidak ditampilkan"}</p>}
-                          </div>
-                        </CollapsibleTrigger>
-                        <button type="button" className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors" onClick={(e) => { e.stopPropagation(); setComplimentaries((prev) => prev.filter((x) => x.id !== c.id)); setCollapsedComplimentaries((prev) => { const next = new Set(prev); next.delete(c.id); return next; }); }} aria-label="Hapus complimentary">
-                          <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <CollapsibleContent>
-                        <div className="px-3 pb-3 space-y-2 border-t border-border/60 pt-2">
-                          <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
-                              <input type="text" inputMode="numeric" className="w-full pl-8 pr-3 py-1.5 text-sm border border-input rounded-md bg-background" placeholder="Harga" value={c.price ? fmtRp(c.price) : ""} onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, price: n } : x)); }} />
-                            </div>
-                            <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-                              <Switch checked={c.isShowPrice} onCheckedChange={(v) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, isShowPrice: v } : x))} />
-                              <span className="text-xs text-muted-foreground">Tampil harga</span>
-                            </label>
-                          </div>
-                          <Textarea value={c.description} onChange={(e) => setComplimentaries((prev) => prev.map((x) => x.id === c.id ? { ...x, description: e.target.value } : x))} placeholder="Keterangan complimentary..." rows={2} className="resize-none text-sm" />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  );
-                })}
-                {complimentaries.length === 0 && complimentaryMode === "none" && (
-                  <p className="text-xs text-muted-foreground italic text-center py-1">Belum ada complimentary</p>
-                )}
-              </div>
             </div>
           )}
 
