@@ -10,23 +10,21 @@ export function toFullUrl(raw: string): string {
 }
 
 export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: () => void }) {
-  const [prev, setPrev] = useState(src);
-  const [url, setUrl] = useState<string | null>(() => {
-    if (typeof src === "string") return toFullUrl(src);
-    return src.type.startsWith("image/") ? URL.createObjectURL(src) : null;
-  });
+  const [url, setUrl] = useState<string | null>(null);
 
-  if (prev !== src) {
-    if (url && typeof prev !== "string") URL.revokeObjectURL(url);
+  useEffect(() => {
     if (typeof src === "string") {
       setUrl(toFullUrl(src));
-    } else {
-      setUrl(src.type.startsWith("image/") ? URL.createObjectURL(src) : null);
+      return;
     }
-    setPrev(src);
-  }
-
-  useEffect(() => () => { if (url && typeof prev !== "string") URL.revokeObjectURL(url); }, [url, prev]);
+    if (!src.type.startsWith("image/")) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(src);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [src]);
 
   if (!url) return null;
   const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");

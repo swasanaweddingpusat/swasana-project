@@ -246,9 +246,9 @@ function TopContent({
         return;
       }
     }
-    const dpTerm = terms.find((t) => t.name.trim().toUpperCase() === "DP");
-    if (dpTerm && (!dpTerm.amount || dpTerm.amount <= 0)) {
-      toast.error("Nominal DP wajib diisi dan harus lebih dari 0.");
+    const firstTerm = terms[0];
+    if (firstTerm && (!firstTerm.amount || firstTerm.amount <= 0)) {
+      toast.error(`Nominal ${firstTerm.name || "term pertama"} wajib diisi dan harus lebih dari 0.`);
       return;
     }
 
@@ -374,7 +374,7 @@ function TopContent({
               const isAcknowledged = term.ackStatus === "acknowledged";
               const isRefund = term.paymentStatus === "refund";
               const isNew = term.id.startsWith("new-");
-              const isDP = term.name.trim().toUpperCase() === "DP";
+              const isDP = idx === 0;
               const isDPInvalid = isDP && (!term.amount || term.amount <= 0);
               return (
                 <SortableTermItem key={term.id} id={term.id}>
