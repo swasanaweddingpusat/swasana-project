@@ -265,9 +265,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       : allSteps;
     const nonClientSteps = currentRoundSteps.filter((s) => s.approverType !== "client");
     const hasPending = approvalMap.has(booking.id) && !nonClientSteps.every((s) => s.status === "approved");
-    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
-    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
-    const internalApproved = isManagerApproved && isFinanceApproved;
+    // Internal approval = EVERY non-client step (Sales + Manager + Finance) approved.
+    // Previously this only checked manager + finance, so the Client Agreement button
+    // showed while the Sales step was still pending. Deriving it from ALL non-client
+    // steps also stays correct if the flow gains/loses a step.
+    const internalApproved = nonClientSteps.length > 0 && nonClientSteps.every((s) => s.status === "approved");
     return { hasPending, internalApproved };
   }
 
@@ -443,21 +445,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       );
     }
 
-    // Client Agreement is gated on internal approval: it appears only after BOTH
-    // the manager and finance approval steps (current revision) are approved.
-    // Filter steps by currentRevisionId (snapshot approach).
-    // Backward compat: if booking has no currentRevisionId OR all steps have null revisionId,
-    // fall back to showing all steps (legacy data before this feature).
-    const allAgreementSteps = approvalMap.get(booking.id)?.steps ?? [];
-    // booking.currentRevisionId is a scalar field returned by Prisma `include` — no cast needed.
-    const currentRevisionId = booking.currentRevisionId;
-    const hasRevisionedSteps = allAgreementSteps.some((s) => s.revisionId !== null);
-    const currentRoundSteps = (currentRevisionId && hasRevisionedSteps)
-      ? allAgreementSteps.filter((s) => s.revisionId === currentRevisionId)
-      : allAgreementSteps;
-    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
-    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
-    const internalApproved = isManagerApproved && isFinanceApproved;
+    // Client Agreement is gated on internal approval: it appears only after ALL
+    // non-client steps (Sales + Manager + Finance) of the current revision are
+    // approved. Reuse the single source of truth so the two call sites can't drift.
+    const { internalApproved } = getBookingApprovalState(booking);
     return (
       <>
         {/* Agreement modal trigger — hidden on mobile. Shown only once manager +
