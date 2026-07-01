@@ -8,10 +8,7 @@ import { randomUUID } from "crypto";
 import { revalidateTag } from "next/cache";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { logAudit } from "@/lib/audit";
-
-function generateAccessCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
+import { generateAccessCode } from "@/lib/access-code";
 
 function getExpiresAt(): Date {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

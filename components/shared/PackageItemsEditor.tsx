@@ -181,7 +181,7 @@ export function PackageItemsEditor({
   );
 
   const setVendorItemCategory = useCallback(
-    (uid: string, categoryId: string, categoryName: string) => {
+    (uid: string, categoryId: string | null, categoryName: string) => {
       onVendorChange(vendorItems.map((i) => (i.uid === uid ? { ...i, categoryId, categoryName } : i)));
     },
     [vendorItems, onVendorChange],
@@ -302,6 +302,12 @@ export function PackageItemsEditor({
                       options={categoryOptions}
                       value={item.categoryId ?? ""}
                       onChange={(val) => {
+                        if (!val) {
+                          // Defensive: a cleared selection must also clear the stored
+                          // category, otherwise a stale categoryId would be submitted.
+                          setVendorItemCategory(item.uid, null, "");
+                          return;
+                        }
                         const cat = categories.find((c) => c.id === val);
                         if (cat) setVendorItemCategory(item.uid, cat.id, cat.name);
                       }}

@@ -134,11 +134,6 @@ export const editBookingSchema = z.object({
   refreshPackagePrice: z.boolean().optional().default(false),
 });
 
-export const approveBookingSchema = z.object({
-  id: z.string().min(1),
-  signatureManager: z.string().min(1, "Tanda tangan manager wajib diisi"),
-});
-
 /** Client-info-only update: updates snapCustomer + customer master WITHOUT touching
  *  venue/package/TOP or triggering approval reset. Used by Step 1 "Save & Publish". */
 export const updateBookingClientInfoSchema = z.object({
@@ -160,4 +155,3 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 export type EditBookingInput = z.infer<typeof editBookingSchema>;
 export type UpdateBookingClientInfoInput = z.infer<typeof updateBookingClientInfoSchema>;
-export type ApproveBookingInput = z.infer<typeof approveBookingSchema>;

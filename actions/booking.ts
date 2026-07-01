@@ -1,17 +1,17 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
-import { headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema } from "@/lib/validations/booking";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
-import { getNextSequence } from "@/lib/counter";
+import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
+import { generateAccessCode } from "@/lib/access-code";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
@@ -30,6 +30,17 @@ export async function createBooking(data: unknown) {
   const input = parsed.data;
 
   try {
+    // Validate venue + package EXIST before creating the customer / locking the lead.
+    // The main transaction has FK constraints on venueId/packageId; validating first
+    // prevents an orphaned customer + a lead marked "converted" with no booking when
+    // the create fails on a bad FK. (C-01)
+    const [venueOk, packageOk] = await Promise.all([
+      db.venue.findUnique({ where: { id: input.venueId }, select: { id: true } }),
+      db.package.findUnique({ where: { id: input.packageId }, select: { id: true } }),
+    ]);
+    if (!venueOk) return { success: false, error: "Venue tidak ditemukan." };
+    if (!packageOk) return { success: false, error: "Paket tidak ditemukan." };
+
     let customerId = input.customerId;
     let isNewCustomer = false;
     // leadId — set when booking is created from a Lead (not from existing Customer)
@@ -256,16 +267,15 @@ export async function createBooking(data: unknown) {
 
     const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 
-    // Generate invoice numbers atomically before transaction
+    // Generate invoice numbers atomically before transaction. Use the batched
+    // counter (1 round-trip, guaranteed-contiguous ascending block) instead of N
+    // concurrent getNextSequence calls whose completion order is non-deterministic
+    // and could produce out-of-order invoice numbers.
     let invoiceNumbers: string[] = [];
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       const monthRoman = ROMAN[now.getMonth()];
-      invoiceNumbers = await Promise.all(
-        input.termOfPayments.map(async () => {
-          const seq = await getNextSequence(`invoice-${year}`);
-          return `${seq}/INV/${venue.code}/${monthRoman}/${year}`;
-        })
-      );
+      const invoiceSeqs = await getNextSequenceBatch(`invoice-${year}`, input.termOfPayments.length);
+      invoiceNumbers = invoiceSeqs.map((seq) => `${seq}/INV/${venue.code}/${monthRoman}/${year}`);
     }
 
     if (input.withMaterai) {
@@ -600,7 +610,7 @@ export async function createBooking(data: unknown) {
         data: {
           bookingId,
           token: crypto.randomUUID(),
-          accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          accessCode: generateAccessCode(),
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       })
@@ -931,10 +941,15 @@ export async function transferBookingManager(
 
     const targetManager = await db.profile.findUnique({
       where: { id: targetManagerId },
-      select: { fullName: true, role: { select: { name: true } } },
+      select: { fullName: true, roleId: true },
     });
     if (!targetManager) return { success: false, error: "Manager tujuan tidak ditemukan." };
-    if (targetManager.role?.name !== "manager") return { success: false, error: "User yang dipilih bukan manager." };
+    // Manager eligibility via PERMISSION, not role-name string match (a role could be
+    // renamed to bypass a name check — see AGENTS.md §4.4). A valid booking manager is
+    // one whose role can approve bookings (booking:approve).
+    if (!(await hasPermission(targetManager.roleId, "booking", "approve"))) {
+      return { success: false, error: "User yang dipilih tidak berwenang sebagai manager approval." };
+    }
 
     await db.$transaction([db.booking.update({ where: { id: bookingId }, data: { managerId: targetManagerId } })]);
 
@@ -1770,23 +1785,26 @@ export async function editBooking(data: unknown) {
             })
           );
 
-          // Update approval record to pending + booking to Pending + set currentRevisionId.
+          // ONE atomic transaction for the whole re-approval reset: approval record
+          // → pending, booking → Pending + currentRevisionId, new steps, AND the
+          // client-agreement reset (new token, cleared signature). Previously the
+          // clientAgreement reset ran in a SEPARATE call — if it failed after the
+          // steps committed, the agreement kept a stale/signed token while approval
+          // was already pending (client could re-sign a superseded PO). (M-05)
           // (snapshotFrozenAt was already cleared in the main ops transaction above.)
-          // Old steps are kept untouched (snapshot, not reset)
+          // Old steps are kept untouched (snapshot, not reset).
+          const newToken = crypto.randomUUID();
+          const newAccessCode = generateAccessCode();
           await db.$transaction([
             db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
             db.booking.update({ where: { id }, data: { bookingStatus: "Pending", currentRevisionId: revisionId } }),
             ...newStepOps,
+            db.clientAgreement.updateMany({
+              where: { bookingId: id },
+              data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+            }),
           ]);
         }
-
-        // Reset client agreement — invalidate old link, generate new token
-        const newToken = crypto.randomUUID();
-        const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        await db.clientAgreement.updateMany({
-          where: { bookingId: id },
-          data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-        });
       }
     } // end if hasMaterialChange
 
@@ -1849,48 +1867,6 @@ export async function editBooking(data: unknown) {
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mengupdate booking." };
-  }
-}
-
-// ─── Approve Booking ──────────────────────────────────────────────────────────
-
-export async function approveBooking(bookingId: string) {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`booking-approve:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
-  const scope = await getProfileDataScope(session!.user.profileId);
-  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
-    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
-  }
-
-  try {
-    const [booking] = await db.$transaction([
-      db.booking.update({
-        where: { id: bookingId },
-        data: { managerId: session!.user.profileId },
-      }),
-    ]);
-
-    revalidateTag("groups", "max");
-    revalidateTag("bookings", "max");
-
-    const h = await headers();
-    await logAudit({
-      userId: session!.user.profileId,
-      action: "booking.approved",
-      entityType: "booking",
-      entityId: bookingId,
-      description: `Booking disetujui oleh manager`,
-      ipAddress: h.get("x-forwarded-for") ?? undefined,
-      userAgent: h.get("user-agent") ?? undefined,
-    });
-
-    return { success: true, booking };
-  } catch (e) {
-    console.error("[approveBooking]", e);
-    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 

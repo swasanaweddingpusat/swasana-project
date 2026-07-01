@@ -33,6 +33,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
+    // Atomic claim: flip Pending/Sent/Viewed → Signed in ONE guarded write. The
+    // plain status read above is TOCTOU — two concurrent sign requests (double-click)
+    // both read a non-Signed status and both proceed. This updateMany only affects a
+    // row that is still NOT Signed, so exactly one request wins; the loser sees
+    // count===0 and aborts. Also blocks a concurrent generateAgreementToken from
+    // racing the sign (it can't reset a row we've already claimed). (H-03)
+    const claim = await db.clientAgreement.updateMany({
+      where: { token, status: { not: "Signed" } },
+      data: { status: "Signed", signedAt: new Date() },
+    });
+    if (claim.count === 0) {
+      return NextResponse.json({ error: "Agreement sudah ditandatangani" }, { status: 400 });
+    }
+
     // Read everything needed BEFORE writing, so the entire effect can commit as a
     // single atomic transaction. Committing "Signed" on its own (as before) left a
     // window where the agreement read "Signed" but the approval step was never
@@ -47,17 +61,12 @@ export async function POST(req: Request) {
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
 
-    // Always start with the agreement status update + freeze the snapshot layer.
-    // The client has now signed the PO exactly as shown, so SnapCustomer / internal
-    // items / pricing must not change afterwards. snapshotFrozenAt is set regardless
-    // of approval-step state (even legacy bookings without a client step) — the
-    // signature itself is the freeze trigger. On regenerate → re-sign, this stamps a
-    // fresh timestamp for the newly-signed PO.
+    // Agreement is already claimed as Signed above. Now freeze the snapshot layer
+    // and settle approval steps atomically. The client has signed the PO exactly as
+    // shown, so SnapCustomer / internal items / pricing must not change afterwards.
+    // snapshotFrozenAt is set regardless of approval-step state (even legacy bookings
+    // without a client step) — the signature itself is the freeze trigger.
     const ops: Prisma.PrismaPromise<unknown>[] = [
-      db.clientAgreement.update({
-        where: { token },
-        data: { status: "Signed", signedAt: new Date() },
-      }),
       db.booking.update({
         where: { id: agreement.bookingId },
         data: { snapshotFrozenAt: new Date() },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,17 +37,14 @@ function PackageItemsBody({
   onPrevious,
 }: PackageItemsBodyProps): React.ReactElement {
   const qc = useQueryClient();
+  // State seeds once from props. The parent renders this component with
+  // key={bookingId}, so it remounts fresh whenever the booking changes — no reset
+  // effect needed. Dropping the previous JSON.stringify-in-deps effect also stops a
+  // background refetch (staleTime 30s) from clobbering the user's in-progress edits.
   const [internalItems, setInternalItems] = useState<PackageInternalItemDraft[]>(initialInternal);
   const [vendorItems, setVendorItems] = useState<PackageVendorItemDraft[]>(initialVendor);
   const [activeTab, setActiveTab] = useState<PackageItemsTab>("internal");
   const [saving, setSaving] = useState(false);
-
-  // Reset when parent data actually changes (drawer re-opened for same booking).
-  useEffect(() => {
-    setInternalItems(initialInternal);
-    setVendorItems(initialVendor);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(initialInternal), JSON.stringify(initialVendor)]);
 
   const handleSave = async () => {
     if (internalItems.some((i) => !i.itemName.trim())) {

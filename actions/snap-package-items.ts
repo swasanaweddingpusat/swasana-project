@@ -94,9 +94,16 @@ export async function saveSnapVendorItems(
   }
 
   // Vendor items stay editable post-freeze (ops swap a vendor without re-approval).
-  // We still record whether the edit happened on a frozen (client-signed) booking so
-  // there is an audit trail of post-signature vendor swaps.
-  const frozen = await isBookingSnapshotFrozen(bookingId);
+  // Capture freeze + active revision BEFORE writing so we can detect a concurrent
+  // editBooking material-change (which clears freeze, bumps currentRevisionId, and
+  // rebuilds snap vendor rows from the master package). Without this, a vendor swap
+  // saved concurrently with a material-change could be silently wiped. (H-02)
+  const before = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { snapshotFrozenAt: true, currentRevisionId: true },
+  });
+  if (!before) return { success: false, error: "Booking tidak ditemukan." };
+  const frozen = before.snapshotFrozenAt != null;
 
   try {
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -116,6 +123,30 @@ export async function saveSnapVendorItems(
     ];
 
     await db.$transaction(ops);
+
+    // Detect a material-change that landed concurrently: if currentRevisionId moved
+    // between our read and write, editBooking rebuilt the vendor rows from the master
+    // package — our swap may be inconsistent with the new revision. Surface it so the
+    // user can re-apply, instead of silently keeping a superseded write.
+    const after = await db.booking.findUnique({
+      where: { id: bookingId },
+      select: { currentRevisionId: true },
+    });
+    if (after && after.currentRevisionId !== before.currentRevisionId) {
+      await logAudit({
+        userId: session!.user.id,
+        action: "booking.snap_vendor_items_conflict",
+        result: "failure",
+        entityType: "booking",
+        entityId: bookingId,
+        changes: { from: before.currentRevisionId, to: after.currentRevisionId },
+        description: "Vendor items disimpan saat booking sedang berubah (revisi baru) — perubahan mungkin tertimpa.",
+      });
+      return {
+        success: false,
+        error: "Booking baru saja diubah (revisi baru dibuat). Buka ulang & simpan item vendor sekali lagi.",
+      };
+    }
 
     await logAudit({
       userId: session!.user.id,

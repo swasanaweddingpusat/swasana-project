@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { deleteFromStorage, getPublicUrl } from "@/lib/storage";
 import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
+import { generateAccessCode } from "@/lib/access-code";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
@@ -167,6 +168,19 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
   const input = parsed.data;
 
   try {
+    // Validate venue (+ package if given) EXIST before any customer/lead mutation.
+    // The booking.create below has FK constraints on venueId/packageId; if we created
+    // the customer and locked the lead first and THEN the create failed on a bad FK,
+    // we'd leave an orphaned customer and a lead marked "converted" with no booking. (C-01)
+    const [venueExists, packageExists] = await Promise.all([
+      db.venue.findUnique({ where: { id: input.venueId }, select: { id: true } }),
+      input.packageId
+        ? db.package.findUnique({ where: { id: input.packageId }, select: { id: true } })
+        : Promise.resolve(true as const),
+    ]);
+    if (!venueExists) return { success: false, error: "Venue tidak ditemukan." };
+    if (!packageExists) return { success: false, error: "Paket tidak ditemukan." };
+
     let customerId = input.customerId ?? null;
 
     // Handle lead-based customer creation (same race-condition guard as createBooking)
@@ -459,17 +473,23 @@ export async function updateDraftBookingStep3(
     });
     if (!draftCheck) return { success: false, error: "Draft tidak ditemukan." };
 
-    // Upsert terms by sortOrder so IDs remain stable (evidence keys stay linked).
-    // - Existing term with matching sortOrder → UPDATE (preserve paymentEvidence).
-    // - New sortOrder in payload → CREATE.
-    // - Existing term whose sortOrder is gone from payload → DELETE (+ storage cleanup).
+    // Reconcile terms by POSITION in the sorted list (NOT by raw sortOrder value).
+    // The client always sends the complete, ordered list of terms, so aligning
+    // existing DB rows ↔ incoming terms by their position keeps each row's id (and
+    // its uploaded paymentEvidence) stable even when sortOrder values are non-
+    // contiguous. Matching by raw sortOrder value could DELETE an evidence-bearing
+    // term whose sortOrder happens to be missing from the payload (data loss).
     const existingTerms = await db.termOfPayment.findMany({
       where: { bookingId: draftId },
       select: { id: true, sortOrder: true, paymentEvidence: true },
     });
+    const sortedExisting = [...existingTerms].sort((a, b) => a.sortOrder - b.sortOrder);
+    const incoming = (input.termOfPayments ?? [])
+      .map((t, i) => ({ t, effectiveSortOrder: t.sortOrder ?? i }))
+      .sort((a, b) => a.effectiveSortOrder - b.effectiveSortOrder);
 
-    const incomingOrders = new Set((input.termOfPayments ?? []).map((t, i) => t.sortOrder ?? i));
-    const toDelete = existingTerms.filter((e) => !incomingOrders.has(e.sortOrder));
+    // Existing rows beyond the incoming count are removed (user deleted terms).
+    const toDelete = sortedExisting.slice(incoming.length);
 
     // Fire-and-forget: best-effort cleanup of storage orphans for removed terms.
     // We do this OUTSIDE the transaction because object storage is not transactional — a
@@ -491,14 +511,13 @@ export async function updateDraftBookingStep3(
           discountAmount: input.specialBonusAmount ?? 0,
         },
       }),
-      // Delete terms that no longer exist in payload
+      // Delete existing terms beyond the incoming count
       ...(toDelete.length > 0
         ? [db.termOfPayment.deleteMany({ where: { id: { in: toDelete.map((e) => e.id) } } })]
         : []),
-      // Upsert each incoming term by sortOrder
-      ...(input.termOfPayments ?? []).map((t, i) => {
-        const effectiveSortOrder = t.sortOrder ?? i;
-        const existing = existingTerms.find((e) => e.sortOrder === effectiveSortOrder);
+      // Reconcile each incoming term against the existing row at the same position
+      ...incoming.map(({ t, effectiveSortOrder }, k) => {
+        const existing = sortedExisting[k];
         if (existing) {
           return db.termOfPayment.update({
             where: { id: existing.id },
@@ -636,6 +655,9 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
 
     if (!draft) return { success: false, error: "Draft tidak ditemukan atau sudah difinalisasi." };
     if (!draft.venueId) return { success: false, error: "Draft belum memiliki venue." };
+    // Guard: customer bisa null kalau row-nya dihapus admin setelah draft dibuat.
+    // Tanpa ini, akses customer.id di bawah crash + counter PO/invoice keburu bocor.
+    if (!draft.customer) return { success: false, error: "Data customer tidak ditemukan. Draft mungkin sudah tidak valid." };
 
     // Build customer snapshot data
     const customer = draft.customer;
@@ -989,7 +1011,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         data: {
           bookingId: draftId,
           token: crypto.randomUUID(),
-          accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          accessCode: generateAccessCode(),
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       })
@@ -1015,9 +1037,12 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
 
     await db.$transaction(ops);
 
-    // Everything below only depends on the ops transaction being committed, and the
-    // three awaited pieces (audit log, revision snapshot, term-id fetch) are mutually
-    // independent — run them in one parallel batch instead of three sequential awaits.
+    // ── POST-COMMIT ──────────────────────────────────────────────────────────
+    // The booking is now FINALIZED (transaction above committed). Everything below
+    // is follow-up work: revision snapshot, audit log, term-id fetch. A failure here
+    // must NOT surface as "Gagal memfinalisasi" — that made users retry a booking
+    // that was already saved, then hit "sudah difinalisasi". So we isolate the
+    // post-commit work in its own try/catch and ALWAYS return success. (F-14)
     const revisionFlow = async (): Promise<void> => {
       // Create initial revision (WEDDINGS + package required for revision snapshot)
       if (draft.category === "WEDDINGS" && pkg) {
@@ -1039,28 +1064,36 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       }
     };
 
-    const [, , createdTerms] = await Promise.all([
-      logAudit({
-        userId: session!.user.id,
-        action: "booking.finalized",
-        entityType: "booking",
-        entityId: draftId,
-        changes: {
-          poNumber,
-          customerId: draft.customerId,
-          venueId: draft.venueId,
-          ...(input.leadId ? { leadId: input.leadId } : {}),
-        },
-        description: `Finalized booking draft for ${draft.customer?.name ?? draft.customerId}`,
-      }),
-      revisionFlow(),
-      // Term IDs for client-side evidence upload
-      db.termOfPayment.findMany({
-        where: { bookingId: draftId },
-        select: { id: true, sortOrder: true },
-        orderBy: { sortOrder: "asc" },
-      }),
-    ]);
+    let createdTerms: { id: string; sortOrder: number }[] = [];
+    try {
+      const [, , terms] = await Promise.all([
+        logAudit({
+          userId: session!.user.id,
+          action: "booking.finalized",
+          entityType: "booking",
+          entityId: draftId,
+          changes: {
+            poNumber,
+            customerId: draft.customerId,
+            venueId: draft.venueId,
+            ...(input.leadId ? { leadId: input.leadId } : {}),
+          },
+          description: `Finalized booking draft for ${draft.customer?.name ?? draft.customerId}`,
+        }),
+        revisionFlow(),
+        // Term IDs for client-side evidence upload
+        db.termOfPayment.findMany({
+          where: { bookingId: draftId },
+          select: { id: true, sortOrder: true },
+          orderBy: { sortOrder: "asc" },
+        }),
+      ]);
+      createdTerms = terms;
+    } catch (postCommitErr) {
+      // Booking is already committed — log and continue. Evidence upload may need a
+      // manual retry if createdTerms is empty, but the booking itself is valid.
+      console.error("[finalizeDraftBooking] post-commit follow-up failed (booking already saved)", postCommitErr);
+    }
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
