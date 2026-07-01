@@ -67,6 +67,7 @@ export interface FinanceTerm {
   paymentStatus: "unpaid" | "paid" | "partial" | "refund";
   ackStatus: string | null;
   paymentEvidence: string | null;
+  paymentMethodId?: string | null;
   notes: string | null;
   partialPayments?: {
     id: string;

@@ -4,10 +4,11 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -79,7 +80,7 @@ function SortableTermItem({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("space-y-2", isDragging && "opacity-50 relative z-10")}
+      className={cn(isDragging && "opacity-50 relative z-10")}
     >
       {children({ attributes, listeners })}
     </div>
@@ -119,6 +120,34 @@ function TopContent({
   const [partialPayments, setPartialPayments] = useState<Record<string, PartialPayment[]>>({});
   const [expandedTerms, setExpandedTerms] = useState<Set<string>>(new Set());
   const [_uploading, setUploading] = useState<string | null>(null);
+  // Payment method (bank tujuan) per term — UI-only for now, keyed by term id.
+  const [termPaymentMethods, setTermPaymentMethods] = useState<Record<string, string>>({});
+  // Accordion: which term cards are collapsed (paid/locked terms start collapsed).
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
+  // Which locked (paid/acknowledged) terms the user explicitly unlocked to edit.
+  const [unlockedTerms, setUnlockedTerms] = useState<Set<string>>(new Set());
+  function toggleCollapse(id: string): void {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+  function toggleUnlock(id: string): void {
+    setUnlockedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   const [discountName, setDiscountName] = useState(initialDiscountName ?? "Discount");
   const [discountAmount, setDiscountAmount] = useState(initialDiscountAmount);
@@ -156,7 +185,30 @@ function TopContent({
         }
         return map;
       });
+      // Seed per-term payment method from saved data (includes backfilled bank for old terms).
+      setTermPaymentMethods(
+        Object.fromEntries(
+          initialTerms
+            .filter((t) => t.paymentMethodId)
+            .map((t) => [t.id, t.paymentMethodId as string]),
+        ),
+      );
       setExpandedTerms(new Set());
+      // Collapse paid / acknowledged / refund terms by default — they're settled,
+      // so the card starts compact; active (unpaid) terms stay expanded.
+      setCollapsedTerms(
+        new Set(
+          initialTerms
+            .filter(
+              (t) =>
+                t.paymentStatus === "paid" ||
+                t.paymentStatus === "refund" ||
+                t.ackStatus === "acknowledged",
+            )
+            .map((t) => t.id),
+        ),
+      );
+      setUnlockedTerms(new Set());
       setDiscountName(initialDiscountName ?? "Discount");
       setDiscountAmount(initialDiscountAmount);
       setDiscountEditing(false);
@@ -177,7 +229,36 @@ function TopContent({
     [initialTerms],
   );
 
-  const priceAfterDiscount = Math.max(0, packagePrice - discountAmount);
+  // Promo state (multi-select). One payment nominal (uang masuk / cashflow) drives
+  // every promo's potongan; each potongan can be overridden manually per promo.
+  const [selectedPromoIds, setSelectedPromoIds] = useState<string[]>([]);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [promoOverrides, setPromoOverrides] = useState<Record<string, number>>({});
+  const selectedPromos = DUMMY_PROMOS.filter((p) => selectedPromoIds.includes(p.id));
+  function togglePromo(id: string): void {
+    setSelectedPromoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+    // Drop any manual override when a promo is unselected so it recomputes fresh next time.
+    setPromoOverrides((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+  function computePotongan(p: (typeof DUMMY_PROMOS)[number], payment: number): number {
+    return p.discountType === "PERCENTAGE"
+      ? Math.round((payment || 0) * p.discountValue / 100)
+      : p.discountValue; // nominal flat, tidak tergantung pembayaran
+  }
+  function potonganOf(p: (typeof DUMMY_PROMOS)[number]): number {
+    return promoOverrides[p.id] ?? computePotongan(p, paymentAmount);
+  }
+  const totalPromo = selectedPromos.reduce((s, p) => s + potonganOf(p), 0);
+
+  const priceAfterDiscount = Math.max(0, packagePrice - discountAmount - totalPromo);
   // Refund terms are a separate reconciliation, not a billable term — exclude
   // them from the total so the difference reflects the actual billing pool.
   const totalTerms = terms
@@ -207,16 +288,6 @@ function TopContent({
       );
     });
   }, [terms, initialTerms, discountName, initialDiscountName, discountAmount, initialDiscountAmount]);
-
-  // Promo state (multi-select)
-  const [selectedPromoIds, setSelectedPromoIds] = useState<string[]>([]);
-  const [promoOpen, setPromoOpen] = useState(false);
-  const selectedPromos = DUMMY_PROMOS.filter((p) => selectedPromoIds.includes(p.id));
-  function togglePromo(id: string) {
-    setSelectedPromoIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -312,12 +383,14 @@ function TopContent({
         dueDate: t.dueDate,
         paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
         notes: t.notes,
+        paymentMethodId: termPaymentMethods[t.id] ?? null,
         sortOrder,
       })),
       newTerms.map(({ term: t, sortOrder }) => ({
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate,
+        paymentMethodId: termPaymentMethods[t.id] ?? null,
         sortOrder,
       })),
       { discountName, discountAmount },
@@ -486,6 +559,23 @@ function TopContent({
             </PopoverContent>
           </Popover>
 
+          {/* Nominal Pembayaran — one input for all promos (uang masuk / cashflow) */}
+          {selectedPromos.length > 0 && (
+            <div className="mt-3">
+              <label className="text-sm font-medium text-foreground mb-1 block">Nominal Pembayaran</label>
+              <Input
+                value={paymentAmount ? fmtRp(paymentAmount) : ""}
+                onChange={(e) =>
+                  setPaymentAmount(parseInt(e.target.value.replace(/\D/g, ""), 10) || 0)
+                }
+                placeholder="IDR. 0"
+                inputMode="numeric"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Uang masuk dari client (cashflow)</p>
+            </div>
+          )}
+
           {/* Promo Cards (one per selected program) */}
           {selectedPromos.length > 0 && (
             <div className="mt-3 space-y-2">
@@ -521,6 +611,28 @@ function TopContent({
                           {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
                         </p>
                       </div>
+
+                      {/* Potongan — auto dari pembayaran, bisa override manual */}
+                      <div className="mt-2 pt-2 border-t">
+                        <label className="text-xs font-medium text-foreground mb-1 block">Potongan</label>
+                        <Input
+                          value={potonganOf(p) ? fmtRp(potonganOf(p)) : ""}
+                          onChange={(e) =>
+                            setPromoOverrides((prev) => ({
+                              ...prev,
+                              [p.id]: parseInt(e.target.value.replace(/\D/g, ""), 10) || 0,
+                            }))
+                          }
+                          placeholder="IDR. 0"
+                          inputMode="numeric"
+                          className="w-full h-8 text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {p.discountType === "PERCENTAGE"
+                            ? `${p.discountValue}% × Rp${fmtRp(paymentAmount)} = Rp${fmtRp(computePotongan(p, paymentAmount))}`
+                            : "Nominal tetap"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -542,23 +654,105 @@ function TopContent({
               const isNew = term.id.startsWith("new-");
               const isDP = idx === 0;
               const isDPInvalid = isDP && (!term.amount || term.amount <= 0);
+              const isLockable = lockedIds.includes(term.id);
+              const isUnlocked = unlockedTerms.has(term.id);
+              const collapsed = collapsedTerms.has(term.id);
+              const statusLabel =
+                term.paymentStatus.charAt(0).toUpperCase() + term.paymentStatus.slice(1);
               return (
                 <SortableTermItem key={term.id} id={term.id}>
                   {({ attributes, listeners }) => (
-                <>
-                  {/* Term name — inline editable */}
-                  <div className="flex items-center gap-2">
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  {/* Accordion header — click toggles collapse */}
+                  <div
+                    className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-accent/40 transition-colors"
+                    onClick={() => toggleCollapse(term.id)}
+                  >
                     <button
                       type="button"
                       {...attributes}
                       {...listeners}
+                      onClick={(e) => e.stopPropagation()}
                       className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
                       tabIndex={-1}
                       aria-label="Drag to reorder"
                     >
                       <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
                     </button>
-                    <div className="flex items-center gap-0.5 flex-1 min-w-0">
+                    <AltArrowDown
+                      weight="BoldDuotone"
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                        !collapsed && "rotate-180",
+                      )}
+                    />
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {term.name || "Term"}
+                      </span>
+                      {isDP && (
+                        <span className="text-destructive text-xs font-medium shrink-0">*</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {/* Status badge */}
+                      {isRefund ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-[var(--brand-gold)]/10 px-2 py-0.5 text-xs font-medium text-[var(--brand-gold)]">
+                          Refund
+                        </span>
+                      ) : (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium",
+                            term.paymentStatus === "paid"
+                              ? "bg-muted text-foreground"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {isAcknowledged && <CheckCircle weight="BoldDuotone" className="h-3 w-3" />}
+                          {isAcknowledged ? "Acknowledged" : statusLabel}
+                        </span>
+                      )}
+                      {/* Edit-paid pencil toggle — only for locked terms */}
+                      {isLockable && !isRefund && (
+                        <button
+                          type="button"
+                          onClick={() => toggleUnlock(term.id)}
+                          className={cn(
+                            "shrink-0 rounded-lg p-1.5 transition-colors",
+                            isUnlocked
+                              ? "text-[var(--brand-gold)] bg-[var(--brand-gold)]/10"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                          aria-label={isUnlocked ? "Kunci term" : "Edit term"}
+                        >
+                          <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {/* Delete */}
+                      {terms.length > 1 && !locked && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTerms((prev) => prev.filter((t) => t.id !== term.id))
+                          }
+                          className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center h-8 w-8"
+                        >
+                          <TrashBinTrash
+                            weight="BoldDuotone"
+                            className="h-4 w-4 text-muted-foreground"
+                          />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Accordion body */}
+                  {!collapsed && (
+                  <div className="px-3 pb-3 space-y-2 border-t pt-3">
+                  {/* Term name — inline editable (+ status select for existing terms) */}
+                  {!isRefund && (
+                    <div className="flex items-center gap-2">
                       <Input
                         value={term.name}
                         onChange={(e) => handleFieldChange(term.id, "name", e.target.value)}
@@ -566,31 +760,13 @@ function TopContent({
                         disabled={locked}
                         className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
                       />
-                      {isDP && (
-                        <span className="text-destructive text-xs font-medium shrink-0">*</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* Refund badge */}
-                      {isRefund && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-[var(--brand-gold)]/10 px-2 py-0.5 text-xs font-medium text-[var(--brand-gold)]">
-                          Refund
-                        </span>
-                      )}
-                      {/* Acknowledged badge */}
-                      {isAcknowledged && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          <CheckCircle weight="BoldDuotone" className="h-3 w-3" />
-                          Acknowledged
-                        </span>
-                      )}
-                      {!isNew && !isRefund && (
+                      {!isNew && (
                         <Select
                           value={term.paymentStatus}
                           onValueChange={(v) => handleFieldChange(term.id, "paymentStatus", v)}
                           disabled={locked}
                         >
-                          <SelectTrigger className="w-24 h-7">
+                          <SelectTrigger className="w-24 h-7 shrink-0">
                             <span
                               className={cn(
                                 "text-xs font-semibold",
@@ -599,8 +775,7 @@ function TopContent({
                                   : "text-muted-foreground",
                               )}
                             >
-                              {term.paymentStatus.charAt(0).toUpperCase() +
-                                term.paymentStatus.slice(1)}
+                              {statusLabel}
                             </span>
                           </SelectTrigger>
                           <SelectContent>
@@ -612,22 +787,8 @@ function TopContent({
                           </SelectContent>
                         </Select>
                       )}
-                      {terms.length > 1 && !locked && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setTerms((prev) => prev.filter((t) => t.id !== term.id))
-                          }
-                          className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-9 min-w-9"
-                        >
-                          <TrashBinTrash
-                            weight="BoldDuotone"
-                            className="h-4 w-4 text-muted-foreground"
-                          />
-                        </button>
-                      )}
                     </div>
-                  </div>
+                  )}
 
                   {/* Amount + Date row */}
                   <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 sm:items-center">
@@ -687,6 +848,23 @@ function TopContent({
                         </PopoverContent>
                       </Popover>
                     </div>
+                  </div>
+
+                  {/* Payment method (bank tujuan) per term */}
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Metode Pembayaran
+                    </label>
+                    <BankAccountSelect
+                      value={termPaymentMethods[term.id] ?? ""}
+                      onChange={(v) =>
+                        setTermPaymentMethods((prev) => ({ ...prev, [term.id]: v }))
+                      }
+                      placeholder="Pilih metode pembayaran"
+                      disabled={locked}
+                      crossVenue
+                      disableAdd
+                    />
                   </div>
 
                   {/* Upload evidence */}
@@ -1132,9 +1310,9 @@ function TopContent({
                   {isDPInvalid && (
                     <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
                   )}
-                  {/* Divider */}
-                  {idx < terms.length - 1 && <div className="border-b border-border pt-1" />}
-                </>
+                  </div>
+                  )}
+                </div>
                   )}
                 </SortableTermItem>
               );
@@ -1172,6 +1350,14 @@ function TopContent({
               - Rp{fmtRp(discountAmount)}
             </span>
           </div>
+          {totalPromo > 0 && (
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-[var(--brand-gold)]">Potongan Promo:</span>
+              <span className="text-sm font-medium text-[var(--brand-gold)]">
+                - Rp{fmtRp(totalPromo)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between items-center mb-2 border-t pt-2">
             <span className="text-sm font-medium text-foreground">Harga Setelah Discount:</span>
             <span className="text-sm font-medium text-foreground">

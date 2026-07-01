@@ -412,6 +412,7 @@ model PaymentMethod {
   settlements        BookingPaymentSettlement[]
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
+  termOfPayments     TermOfPayment[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -1045,6 +1046,7 @@ model TermOfPayment {
   dueDate         DateTime
   paymentStatus   TermOfPaymentStatus @default(unpaid)
   paymentEvidence String?
+  paymentMethodId String?             // bank tujuan transfer per-term (nullable)
   invoiceNumber   String?
   notes           String?
   sortOrder       Int                 @default(0)
@@ -1057,10 +1059,12 @@ model TermOfPayment {
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   partialPayments  PartialPayment[]
   acknowledgedBy   Profile?            @relation("TOPAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  paymentMethod    PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   @@unique([invoiceNumber])
   @@index([bookingId])
   @@index([acknowledgedById])
+  @@index([paymentMethodId])
   @@map("term_of_payments")
 }
 

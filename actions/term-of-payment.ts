@@ -16,6 +16,8 @@ interface TermUpdate {
   dueDate: string;
   paymentStatus: "unpaid" | "paid" | "partial";
   notes?: string | null;
+  /** Bank tujuan transfer per-term (nullable). Empty string / null clears it. */
+  paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
   sortOrder?: number;
 }
@@ -24,6 +26,8 @@ interface NewTerm {
   name: string;
   amount: number;
   dueDate: string;
+  /** Bank tujuan transfer per-term (nullable). */
+  paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
   sortOrder?: number;
 }
@@ -76,6 +80,7 @@ export async function updateTermOfPayments(
           dueDate: new Date(t.dueDate),
           paymentStatus: t.paymentStatus,
           notes: t.notes ?? null,
+          ...(t.paymentMethodId !== undefined && { paymentMethodId: t.paymentMethodId || null }),
           ...(t.sortOrder !== undefined && { sortOrder: t.sortOrder }),
         },
       });
@@ -94,6 +99,7 @@ export async function updateTermOfPayments(
               name: t.name,
               amount: t.amount,
               dueDate: new Date(t.dueDate),
+              paymentMethodId: t.paymentMethodId ?? null,
               sortOrder: t.sortOrder ?? nextSort++,
             },
           })
