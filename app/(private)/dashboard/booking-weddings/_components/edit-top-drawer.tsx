@@ -208,10 +208,15 @@ function TopContent({
     });
   }, [terms, initialTerms, discountName, initialDiscountName, discountAmount, initialDiscountAmount]);
 
-  // Promo state
-  const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
+  // Promo state (multi-select)
+  const [selectedPromoIds, setSelectedPromoIds] = useState<string[]>([]);
   const [promoOpen, setPromoOpen] = useState(false);
-  const selectedPromo = DUMMY_PROMOS.find((p) => p.id === selectedPromoId);
+  const selectedPromos = DUMMY_PROMOS.filter((p) => selectedPromoIds.includes(p.id));
+  function togglePromo(id: string) {
+    setSelectedPromoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -427,20 +432,15 @@ function TopContent({
             <PopoverTrigger
               className={cn(
                 "w-full flex items-center justify-between rounded-xl border bg-background px-3 h-10 text-sm shadow-sm transition-colors hover:bg-accent",
-                !selectedPromoId && "text-muted-foreground",
+                selectedPromoIds.length === 0 && "text-muted-foreground",
               )}
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">
-                  {selectedPromo ? selectedPromo.name : "Pilih program..."}
-                </span>
-                {selectedPromo && (
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    {selectedPromo.discountType === "PERCENTAGE"
-                      ? `${selectedPromo.discountValue}%`
-                      : `Rp ${(selectedPromo.discountValue / 1_000_000).toFixed(1)}jt`}
-                  </Badge>
+                {selectedPromoIds.length === 0 ? (
+                  <span>Pilih program...</span>
+                ) : (
+                  <span className="text-foreground">{selectedPromoIds.length} program dipilih</span>
                 )}
               </div>
               <AltArrowDown weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground ml-2" />
@@ -451,72 +451,80 @@ function TopContent({
                 <CommandList>
                   <CommandEmpty>Program tidak ditemukan.</CommandEmpty>
                   <CommandGroup>
-                    <CommandItem
-                      value="none"
-                      onSelect={() => { setSelectedPromoId(null); setPromoOpen(false); }}
-                      className="text-muted-foreground"
-                    >
-                      <span>Tidak ada program</span>
-                      {!selectedPromoId && <CheckCircle weight="BoldDuotone" className="ml-auto h-4 w-4 text-primary" />}
-                    </CommandItem>
-                    {DUMMY_PROMOS.map((p) => (
-                      <CommandItem
-                        key={p.id}
-                        value={p.name}
-                        onSelect={() => { setSelectedPromoId(p.id); setPromoOpen(false); }}
-                      >
-                        <div className="flex items-start gap-2 w-full py-0.5">
-                          <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{p.name}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
-                                {p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp ${(p.discountValue / 1_000_000).toFixed(1)}jt`}
-                              </Badge>
-                              {p.minTransaction > 0 && (
-                                <span className="text-xs text-muted-foreground">min. Rp{(p.minTransaction / 1_000_000).toFixed(0)}jt</span>
-                              )}
+                    {DUMMY_PROMOS.map((p) => {
+                      const isSelected = selectedPromoIds.includes(p.id);
+                      return (
+                        <CommandItem
+                          key={p.id}
+                          value={p.name}
+                          onSelect={() => togglePromo(p.id)}
+                        >
+                          <div className="flex items-start gap-2 w-full py-0.5">
+                            <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{p.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+                                  {p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp ${(p.discountValue / 1_000_000).toFixed(1)}jt`}
+                                </Badge>
+                                {p.minTransaction > 0 && (
+                                  <span className="text-xs text-muted-foreground">min. Rp{(p.minTransaction / 1_000_000).toFixed(0)}jt</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                s/d {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                              </p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              s/d {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                            </p>
+                            {isSelected && <CheckCircle weight="BoldDuotone" className="ml-auto h-4 w-4 text-primary shrink-0 mt-0.5" />}
                           </div>
-                          {selectedPromoId === p.id && <CheckCircle weight="BoldDuotone" className="ml-auto h-4 w-4 text-primary shrink-0 mt-0.5" />}
-                        </div>
-                      </CommandItem>
-                    ))}
+                        </CommandItem>
+                      );
+                    })}
                   </CommandGroup>
                 </CommandList>
               </Command>
             </PopoverContent>
           </Popover>
 
-          {/* Promo Card */}
-          {selectedPromo && (
-            <div className="mt-3 rounded-xl border bg-card p-3 shadow-sm">
-              <div className="flex items-start gap-2">
-                <TagPrice weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)] shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium text-foreground">{selectedPromo.name}</p>
-                    <Badge variant="default" className="shrink-0">
-                      {selectedPromo.discountType === "PERCENTAGE"
-                        ? `${selectedPromo.discountValue}%`
-                        : `Rp ${(selectedPromo.discountValue / 1_000_000).toFixed(1)} jt`}
-                    </Badge>
-                  </div>
-                  <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                    {selectedPromo.minTransaction > 0 && (
-                      <p>Min. transaksi: Rp {(selectedPromo.minTransaction / 1_000_000).toFixed(0)} jt</p>
-                    )}
-                    <p>
-                      Berlaku:{" "}
-                      {selectedPromo.periodStart.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} -{" "}
-                      {selectedPromo.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                    </p>
+          {/* Promo Cards (one per selected program) */}
+          {selectedPromos.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {selectedPromos.map((p) => (
+                <div key={p.id} className="rounded-xl border bg-card p-3 shadow-sm">
+                  <div className="flex items-start gap-2">
+                    <TagPrice weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)] shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-foreground">{p.name}</p>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="default">
+                            {p.discountType === "PERCENTAGE"
+                              ? `${p.discountValue}%`
+                              : `Rp ${(p.discountValue / 1_000_000).toFixed(1)} jt`}
+                          </Badge>
+                          <button
+                            type="button"
+                            onClick={() => togglePromo(p.id)}
+                            className="rounded-full p-0.5 hover:bg-muted transition-colors"
+                          >
+                            <CloseCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        {p.minTransaction > 0 && (
+                          <p>Min. transaksi: Rp {(p.minTransaction / 1_000_000).toFixed(0)} jt</p>
+                        )}
+                        <p>
+                          Berlaku:{" "}
+                          {p.periodStart.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} -{" "}
+                          {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ))}
             </div>
           )}
         </div>
