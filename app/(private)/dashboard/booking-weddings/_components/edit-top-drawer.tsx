@@ -255,6 +255,9 @@ function TopContent({
 
     setLoading(true);
 
+    // Upload evidence for EXISTING terms (they already have a stable DB id).
+    // New terms (id "new-…") are handled AFTER the save below, once the server has
+    // assigned them real ids — otherwise their evidence would be silently dropped.
     for (const [termId, file] of Object.entries(pendingFiles)) {
       if (termId.startsWith("new-")) continue;
       setUploading(termId);
@@ -307,11 +310,56 @@ function TopContent({
       { discountName, discountAmount },
     );
 
-    setLoading(false);
     if (!result.success) {
+      setLoading(false);
       toast.error(result.error);
       return;
     }
+
+    // Upload evidence for NEWLY-created terms. The server assigned each a stable id;
+    // previously this was skipped entirely, so a new paid term's proof was lost
+    // without any error. (C-03)
+    //
+    // Robust matching: the brand-new DB rows are exactly those whose id was NOT
+    // present before the save (excludes existing + refund terms, so a refund term's
+    // sortOrder can't be mistaken for a new term's). We then align new DB rows to our
+    // new client terms by ascending sortOrder — unique among the new set.
+    const newTermsWithFile = newTerms.filter(({ term: t }) => pendingFiles[t.id]);
+    if (newTermsWithFile.length > 0) {
+      try {
+        const knownIds = new Set(terms.filter((t) => !t.id.startsWith("new-")).map((t) => t.id));
+        const res = await fetch(`/api/bookings/${bookingId}/terms`);
+        if (!res.ok) throw new Error("fetch terms failed");
+        const dbTerms = (await res.json()) as Array<{ id: string; sortOrder: number }>;
+        const freshDbId = new Map(
+          dbTerms.filter((r) => !knownIds.has(r.id)).map((r) => [r.sortOrder, r.id]),
+        );
+
+        for (const { term: t, sortOrder } of newTermsWithFile) {
+          const dbId = freshDbId.get(sortOrder);
+          const file = pendingFiles[t.id];
+          if (!dbId || !file) continue;
+          setUploading(t.id);
+          const fd = new FormData();
+          fd.set("bookingId", bookingId);
+          fd.set("termId", dbId);
+          fd.set("file", file);
+          const up = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+          if (!up.ok) throw new Error(`upload failed for ${t.name}`);
+          setUploading(null);
+        }
+      } catch {
+        setUploading(null);
+        setLoading(false);
+        // The terms themselves are saved; only the new-term evidence upload failed.
+        toast.error("Term tersimpan, tapi bukti bayar term baru gagal di-upload. Buka lagi & upload ulang.");
+        qc.invalidateQueries({ queryKey: ["bookings"] });
+        qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+        return;
+      }
+    }
+
+    setLoading(false);
     toast.success("TOP berhasil diupdate");
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
