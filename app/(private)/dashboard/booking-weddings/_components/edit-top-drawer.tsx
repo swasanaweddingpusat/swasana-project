@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ import {
   CheckCircle,
   AlignVerticalSpacing,
   Copy,
+  TagPrice,
 } from "@solar-icons/react";
 import {
   DndContext,
@@ -204,6 +206,13 @@ function TopContent({
       );
     });
   }, [terms, initialTerms, discountName, initialDiscountName, discountAmount, initialDiscountAmount]);
+
+  // Promo state
+  const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
+  const selectedPromo = DUMMY_PROMOS.find((p) => p.id === selectedPromoId);
+
+  // Accordion state
+  const [expandedAccordionId, setExpandedAccordionId] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -1041,6 +1050,68 @@ function TopContent({
           </div>
         </div>
 
+        {/* Promo Program */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-foreground mb-2">Program Discount</label>
+          <Select value={selectedPromoId ?? "none"} onValueChange={(v) => setSelectedPromoId(v === "none" ? null : v)}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Pilih program..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Tidak ada program</SelectItem>
+              {DUMMY_PROMOS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <div className="flex items-start gap-2 py-1">
+                    <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+                          {p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp ${(p.discountValue / 1_000_000).toFixed(1)}jt`}
+                        </Badge>
+                        {p.minTransaction && (
+                          <span className="text-xs text-muted-foreground">min. Rp{(p.minTransaction / 1_000_000).toFixed(0)}jt</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        s/d {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Promo Card (when selected) */}
+          {selectedPromo && (
+            <div className="mt-3 rounded-xl border bg-card p-3 shadow-sm">
+              <div className="flex items-start gap-2">
+                <TagPrice weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)] shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground">{selectedPromo.name}</p>
+                    <Badge variant="default" className="shrink-0">
+                      {selectedPromo.discountType === "PERCENTAGE"
+                        ? `${selectedPromo.discountValue}%`
+                        : `Rp ${(selectedPromo.discountValue / 1_000_000).toFixed(1)} jt`}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                    {selectedPromo.minTransaction && (
+                      <p>Min. transaksi: Rp {(selectedPromo.minTransaction / 1_000_000).toFixed(0)} jt</p>
+                    )}
+                    <p>
+                      Berlaku: {selectedPromo.periodStart.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} -{" "}
+                      {selectedPromo.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Summary */}
         <div className="p-3 bg-muted/50 rounded-lg">
           <div className="flex justify-between items-center mb-2">
@@ -1130,6 +1201,29 @@ function TopContent({
     </div>
   );
 }
+
+/* ─── Dummy Promo Data ──────────────────────────────────────────────────────── */
+
+const DUMMY_PROMOS = [
+  {
+    id: "promo-1",
+    name: "June Surprise",
+    discountType: "PERCENTAGE" as const,
+    discountValue: 10,
+    minTransaction: 30_000_000,
+    periodStart: new Date("2026-06-01"),
+    periodEnd: new Date("2026-06-30"),
+  },
+  {
+    id: "promo-2",
+    name: "Early Bird Q3",
+    discountType: "NOMINAL" as const,
+    discountValue: 5_000_000,
+    minTransaction: 50_000_000,
+    periodStart: new Date("2026-07-01"),
+    periodEnd: new Date("2026-09-30"),
+  },
+];
 
 /* ─── EditTopDrawer (props-langsung) ──────────────────────────────────────── */
 

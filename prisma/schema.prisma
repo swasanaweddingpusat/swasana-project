@@ -709,6 +709,8 @@ model Booking {
   withMaterai           Boolean              @default(false)
   discountName          String?
   discountAmount        Int                  @default(0)
+  promoId               String?
+  promoSnapshot         Json?                // snapshot of DiscountProgram at booking creation
   salesId               String
   managerId             String?
   customerId            String
@@ -743,6 +745,7 @@ model Booking {
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   lead                Lead?                @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  promo               DiscountProgram?     @relation(fields: [promoId], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -778,6 +781,7 @@ model Booking {
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
   @@index([leadId])
+  @@index([promoId])
   @@index([bookingStatus])
   @@index([recordStatus])
   @@index([category])
@@ -2356,6 +2360,8 @@ model DiscountProgram {
   description         String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
+
+  bookings Booking[]
 
   @@index([isActive])
   @@index([periodStart, periodEnd])
