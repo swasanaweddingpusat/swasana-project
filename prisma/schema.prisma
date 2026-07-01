@@ -2329,3 +2329,32 @@ model OnboardingTask {
   @@index([assignmentId])
   @@map("onboarding_tasks")
 }
+
+// ─── Discount / Promo ─────────────────────────────────────────────────────────
+
+enum DiscountType {
+  PERCENTAGE
+  NOMINAL
+}
+
+model DiscountProgram {
+  id                  String       @id @default(uuid())
+  name                String
+  isActive            Boolean      @default(true)
+  discountType        DiscountType
+  discountValue       Int
+  minTransaction      Int?
+  periodStart         DateTime
+  periodEnd           DateTime
+  eventEligibleStart  DateTime?
+  eventEligibleEnd    DateTime?
+  quota               Int?
+  usedCount           Int          @default(0)
+  description         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([isActive])
+  @@index([periodStart, periodEnd])
+  @@map("discount_programs")
+}
