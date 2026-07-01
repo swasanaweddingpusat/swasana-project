@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer } from "@/components/shared/drawer";
@@ -209,10 +210,8 @@ function TopContent({
 
   // Promo state
   const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
+  const [promoOpen, setPromoOpen] = useState(false);
   const selectedPromo = DUMMY_PROMOS.find((p) => p.id === selectedPromoId);
-
-  // Accordion state
-  const [expandedAccordionId, setExpandedAccordionId] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -418,6 +417,107 @@ function TopContent({
             <p className="text-xs text-muted-foreground">
               Edit discount lalu klik Update untuk menyimpan.
             </p>
+          )}
+        </div>
+
+        {/* Promo Program */}
+        <div className="mb-4">
+          <label className="text-sm font-medium text-foreground mb-2 block">Program Discount</label>
+          <Popover open={promoOpen} onOpenChange={setPromoOpen}>
+            <PopoverTrigger
+              className={cn(
+                "w-full flex items-center justify-between rounded-xl border bg-background px-3 h-10 text-sm shadow-sm transition-colors hover:bg-accent",
+                !selectedPromoId && "text-muted-foreground",
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">
+                  {selectedPromo ? selectedPromo.name : "Pilih program..."}
+                </span>
+                {selectedPromo && (
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    {selectedPromo.discountType === "PERCENTAGE"
+                      ? `${selectedPromo.discountValue}%`
+                      : `Rp ${(selectedPromo.discountValue / 1_000_000).toFixed(1)}jt`}
+                  </Badge>
+                )}
+              </div>
+              <AltArrowDown weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground ml-2" />
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-72" align="start">
+              <Command>
+                <CommandInput placeholder="Cari program..." />
+                <CommandList>
+                  <CommandEmpty>Program tidak ditemukan.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="none"
+                      onSelect={() => { setSelectedPromoId(null); setPromoOpen(false); }}
+                      className="text-muted-foreground"
+                    >
+                      <span>Tidak ada program</span>
+                      {!selectedPromoId && <CheckCircle weight="BoldDuotone" className="ml-auto h-4 w-4 text-primary" />}
+                    </CommandItem>
+                    {DUMMY_PROMOS.map((p) => (
+                      <CommandItem
+                        key={p.id}
+                        value={p.name}
+                        onSelect={() => { setSelectedPromoId(p.id); setPromoOpen(false); }}
+                      >
+                        <div className="flex items-start gap-2 w-full py-0.5">
+                          <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{p.name}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+                                {p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp ${(p.discountValue / 1_000_000).toFixed(1)}jt`}
+                              </Badge>
+                              {p.minTransaction > 0 && (
+                                <span className="text-xs text-muted-foreground">min. Rp{(p.minTransaction / 1_000_000).toFixed(0)}jt</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              s/d {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          </div>
+                          {selectedPromoId === p.id && <CheckCircle weight="BoldDuotone" className="ml-auto h-4 w-4 text-primary shrink-0 mt-0.5" />}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          {/* Promo Card */}
+          {selectedPromo && (
+            <div className="mt-3 rounded-xl border bg-card p-3 shadow-sm">
+              <div className="flex items-start gap-2">
+                <TagPrice weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)] shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground">{selectedPromo.name}</p>
+                    <Badge variant="default" className="shrink-0">
+                      {selectedPromo.discountType === "PERCENTAGE"
+                        ? `${selectedPromo.discountValue}%`
+                        : `Rp ${(selectedPromo.discountValue / 1_000_000).toFixed(1)} jt`}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                    {selectedPromo.minTransaction > 0 && (
+                      <p>Min. transaksi: Rp {(selectedPromo.minTransaction / 1_000_000).toFixed(0)} jt</p>
+                    )}
+                    <p>
+                      Berlaku:{" "}
+                      {selectedPromo.periodStart.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} -{" "}
+                      {selectedPromo.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
@@ -1048,68 +1148,6 @@ function TopContent({
               Tambah Payment
             </Button>
           </div>
-        </div>
-
-        {/* Promo Program */}
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-foreground mb-2">Program Discount</label>
-          <Select value={selectedPromoId ?? "none"} onValueChange={(v) => setSelectedPromoId(v === "none" ? null : v)}>
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Pilih program..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Tidak ada program</SelectItem>
-              {DUMMY_PROMOS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  <div className="flex items-start gap-2 py-1">
-                    <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{p.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
-                          {p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp ${(p.discountValue / 1_000_000).toFixed(1)}jt`}
-                        </Badge>
-                        {p.minTransaction && (
-                          <span className="text-xs text-muted-foreground">min. Rp{(p.minTransaction / 1_000_000).toFixed(0)}jt</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        s/d {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Promo Card (when selected) */}
-          {selectedPromo && (
-            <div className="mt-3 rounded-xl border bg-card p-3 shadow-sm">
-              <div className="flex items-start gap-2">
-                <TagPrice weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)] shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium text-foreground">{selectedPromo.name}</p>
-                    <Badge variant="default" className="shrink-0">
-                      {selectedPromo.discountType === "PERCENTAGE"
-                        ? `${selectedPromo.discountValue}%`
-                        : `Rp ${(selectedPromo.discountValue / 1_000_000).toFixed(1)} jt`}
-                    </Badge>
-                  </div>
-                  <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                    {selectedPromo.minTransaction && (
-                      <p>Min. transaksi: Rp {(selectedPromo.minTransaction / 1_000_000).toFixed(0)} jt</p>
-                    )}
-                    <p>
-                      Berlaku: {selectedPromo.periodStart.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} -{" "}
-                      {selectedPromo.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Summary */}
