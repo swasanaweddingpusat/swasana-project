@@ -1031,10 +1031,11 @@ function TopContent({
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
+              className={cn("flex-1", "border-dashed", "bg-muted/20")}
               onClick={handleAddTerm}
               disabled={loading}
             >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2 text-muted-foreground" />
               Tambah Payment
             </Button>
           </div>
