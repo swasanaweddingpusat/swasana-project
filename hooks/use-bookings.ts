@@ -13,6 +13,7 @@ interface BookingsParams {
   recordStatus?: "saved" | "draft" | "all";
   dateFrom?: string;
   dateTo?: string;
+  year?: number;
   approvalStatus?: "pending" | "approved";
   salesId?: string;
 }
@@ -26,6 +27,7 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
     ...(params.recordStatus ? { recordStatus: params.recordStatus } : {}),
     ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
     ...(params.dateTo ? { dateTo: params.dateTo } : {}),
+    ...(params.year ? { year: String(params.year) } : {}),
     ...(params.approvalStatus ? { approvalStatus: params.approvalStatus } : {}),
     ...(params.salesId ? { salesId: params.salesId } : {}),
   });
@@ -46,7 +48,7 @@ export function useBookings(params: BookingsParams, initialData?: BookingsResult
     !params.approvalStatus &&
     !params.salesId;
   return useQuery({
-    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.approvalStatus ?? "", params.salesId ?? ""],
+    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.year ?? "", params.approvalStatus ?? "", params.salesId ?? ""],
     queryFn: () => fetchBookings(params),
     initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,

@@ -28,6 +28,11 @@ export async function GET(request: Request) {
   const dateFrom = rawDateFrom && !Number.isNaN(Date.parse(rawDateFrom)) ? rawDateFrom : undefined;
   const dateTo = rawDateTo && !Number.isNaN(Date.parse(rawDateTo)) ? rawDateTo : undefined;
 
+  // Year filter — default to current year if no date filters provided (scalability: avoid fetching all bookings)
+  const rawYear = searchParams.get("year");
+  const parsedYear = rawYear ? Number(rawYear) : undefined;
+  const year = parsedYear && !Number.isNaN(parsedYear) ? parsedYear : (!dateFrom && !dateTo ? new Date().getFullYear() : undefined);
+
   const profileId = session.user.profileId ?? undefined;
   // dataScope is already carried on the JWT/session (refreshed from DB every 10
   // min in lib/auth.ts), so read it straight from the session instead of an extra
@@ -69,7 +74,7 @@ export async function GET(request: Request) {
   // share a group, so visibility is intentional.
   const effectiveScope: DataScope = salesId ? "all" : dataScope;
 
-  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, salesId, approvalStatus });
+  const result = await getBookings(profileId, effectiveScope, { page, pageSize, search, venueId, category: "WEDDINGS", recordStatus, dateFrom, dateTo, year, salesId, approvalStatus });
 
   const transformed = {
     ...result,

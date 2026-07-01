@@ -744,6 +744,10 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
           recordStatus: "saved",
           bookingStatus: "Pending",
           poNumber,
+          // Sortable PO parts — let the DB order by (year desc, seq desc) natively
+          // instead of fetching everything and sorting in-app. (scalability)
+          poYear: year,
+          poSeq,
           signingLocation: input.signingLocation ?? draft.signingLocation ?? null,
           salesSignature: input.signatureSales ?? draft.salesSignature ?? null,
           withMaterai: input.withMaterai ?? draft.withMaterai ?? false,

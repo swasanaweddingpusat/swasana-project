@@ -698,6 +698,8 @@ model Booking {
   eventTime             String?
   notes                 String?
   poNumber              String?
+  poYear                Int?
+  poSeq                 Int?
   eventDate             DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId           String?
   salesSignature        String?
@@ -781,6 +783,7 @@ model Booking {
   @@index([category])
   @@index([eventDate])
   @@index([currentRevisionId])
+  @@index([recordStatus, poYear, poSeq])
   @@map("bookings")
 }
 

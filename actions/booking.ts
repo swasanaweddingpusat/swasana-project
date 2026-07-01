@@ -381,6 +381,9 @@ export async function createBooking(data: unknown) {
           discountAmount: input.specialBonusAmount ?? 0,
           withMaterai: input.withMaterai ?? false,
           poNumber,
+          // Sortable PO parts for native DB ordering (scalability).
+          poYear: year,
+          poSeq,
         },
       }),
       db.snapCustomer.create({
