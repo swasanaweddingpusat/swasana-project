@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { isBookingSnapshotFrozen, frozenSnapshotError } from "@/lib/booking-freeze";
 import {
   saveSnapInternalItemsSchema,
   saveSnapVendorItemsSchema,
@@ -33,6 +34,9 @@ export async function saveSnapInternalItems(
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
+
+  // Internal items are part of the frozen snapshot — locked after client signature.
+  if (await isBookingSnapshotFrozen(bookingId)) return frozenSnapshotError();
 
   try {
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -89,6 +93,11 @@ export async function saveSnapVendorItems(
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
+  // Vendor items stay editable post-freeze (ops swap a vendor without re-approval).
+  // We still record whether the edit happened on a frozen (client-signed) booking so
+  // there is an audit trail of post-signature vendor swaps.
+  const frozen = await isBookingSnapshotFrozen(bookingId);
+
   try {
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.snapPackageVendorItem.deleteMany({ where: { bookingId } }),
@@ -96,6 +105,7 @@ export async function saveSnapVendorItems(
         db.snapPackageVendorItem.create({
           data: {
             bookingId,
+            categoryId: item.categoryId ?? null,
             categoryName: item.categoryName,
             itemText: item.itemText,
             sortOrder: item.sortOrder ?? idx,
@@ -113,8 +123,10 @@ export async function saveSnapVendorItems(
       result: "success",
       entityType: "booking",
       entityId: bookingId,
-      changes: { count: items.length },
-      description: `Updated ${items.length} vendor package items`,
+      changes: { count: items.length, postFreeze: frozen },
+      description: frozen
+        ? `Updated ${items.length} vendor package items (post-signature swap)`
+        : `Updated ${items.length} vendor package items`,
     });
 
     revalidateTag("bookings", "max");
@@ -144,6 +156,9 @@ export async function saveSnapComplimentaries(
   if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
+
+  // Complimentaries carry prices shown on the PO — locked after client signature.
+  if (await isBookingSnapshotFrozen(bookingId)) return frozenSnapshotError();
 
   try {
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -200,17 +215,25 @@ export async function saveSnapTakeout(
 
   const { bookingId, items } = parsed.data;
 
-  const scope = await getProfileDataScope(session!.user.profileId);
-  if (!(await canAccessBooking(session!.user.profileId ?? "", scope, bookingId))) {
-    return { success: false, error: "Booking tidak ditemukan atau akses ditolak." };
-  }
-
   try {
-    // Fetch existing snapPackageCategoryPrice rows to get their IDs
-    const existingRows = await db.snapPackageCategoryPrice.findMany({
-      where: { bookingId },
-      select: { id: true, categoryName: true },
-    });
+    // dataScope and the category-price rows are independent reads — fetch them in
+    // parallel (each DB call is a network round-trip, and the access check below
+    // only needs the resolved scope, not the rows).
+    const [scope, existingRows] = await Promise.all([
+      getProfileDataScope(session!.user.profileId),
+      db.snapPackageCategoryPrice.findMany({
+        where: { bookingId },
+        select: { id: true, categoryName: true },
+      }),
+    ]);
+
+    if (!(await canAccessBooking(session!.user.profileId ?? "", scope, bookingId))) {
+      return { success: false, error: "Booking tidak ditemukan atau akses ditolak." };
+    }
+
+    // Takeout toggles change the PO price — locked after client signature.
+    if (await isBookingSnapshotFrozen(bookingId)) return frozenSnapshotError();
+
     const rowById = new Map(existingRows.map((r) => [r.categoryName, r.id]));
 
     // Build update ops for each item that has a matching row

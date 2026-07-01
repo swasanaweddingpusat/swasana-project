@@ -22,6 +22,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { SalesSignatureContent } from "./SalesSignatureDrawer";
 import { EditTopContentById } from "./edit-top-drawer";
 import { EditTakeoutContent } from "./EditTakeoutDrawer";
+import { EditPackageItemsContent } from "./EditPackageItemsDrawer";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 
@@ -59,10 +60,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     !!currentUser?.profileId && !!booking?.salesId && currentUser.profileId === booking.salesId;
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 2;
 
-  // ── Sub-drawers (continue flow: null → "takeout" → "top" → "signature" → null) ──
-  const [continueFlowStep, setContinueFlowStep] = useState<null | "takeout" | "top" | "signature">(null);
+  // ── Sub-drawers (continue flow: null → "package-items" → "takeout" → "top" → "signature" → null) ──
+  const [continueFlowStep, setContinueFlowStep] = useState<null | "package-items" | "takeout" | "top" | "signature">(null);
 
   // ── Step 1: Client info ──
   const [customerName, setCustomerName] = useState("");
@@ -314,7 +314,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       qc.invalidateQueries({ queryKey: ["booking-detail", booking.id] });
       toast.success("Booking berhasil diupdate");
       if (hasVenueTabChange) {
-        setContinueFlowStep("takeout");
+        setContinueFlowStep("package-items");
       } else {
         onOpenChange(false);
       }
@@ -338,21 +338,31 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     salesUsers.find((s) => s.id === salesId)?.fullName ??
     (isSalesPIC ? (currentUser?.name ?? "—") : "—");
 
-  // ── Single-drawer header: title + step indicator swap with the continue flow ──
-  // The whole Edit → Takeout → TOP → Signature sequence lives in ONE Sheet so the
-  // panel never closes/reopens between steps (no flash, no title jump, no stray
-  // toast surfacing behind a fresh sheet). Only the body + header text swap.
-  const flowStepIndex =
-    continueFlowStep === "takeout" ? 1 : continueFlowStep === "top" ? 2 : continueFlowStep === "signature" ? 3 : 0;
+  // ── Single-drawer header: title + step indicator are CONTINUOUS across the whole
+  // Edit → Item Paket → Takeout → TOP → Signature sequence (1..6), since it all lives in ONE Sheet.
+  // Step 1 Client, 2 Venue & Paket, 3 Item Paket, 4 Takeout, 5 TOP, 6 Tanda Tangan.
+  const TOTAL_FLOW_STEPS = 6;
+  const flowStepNumber =
+    continueFlowStep === "package-items"
+      ? 3
+      : continueFlowStep === "takeout"
+        ? 4
+        : continueFlowStep === "top"
+          ? 5
+          : continueFlowStep === "signature"
+            ? 6
+            : currentStep; // null → still in the Edit Booking body (step 1 or 2)
   const drawerTitle =
     continueFlowStep === null
       ? "Edit Booking"
-      : continueFlowStep === "takeout"
-        ? "Edit Takeout"
-        : continueFlowStep === "top"
-          ? "Term of Payment"
-          : "Tanda Tangan Sales";
-  const stepHeader = continueFlowStep === null ? `Step ${currentStep} / ${totalSteps}` : `Step ${flowStepIndex} / 3`;
+      : continueFlowStep === "package-items"
+        ? "Item Paket"
+        : continueFlowStep === "takeout"
+          ? "Edit Takeout"
+          : continueFlowStep === "top"
+            ? "Term of Payment"
+            : "Tanda Tangan Sales";
+  const stepHeader = `Step ${flowStepNumber} / ${TOTAL_FLOW_STEPS}`;
 
   function handleCloseAll() {
     setContinueFlowStep(null);
@@ -684,15 +694,23 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         </div>
       )}
 
-      {/* ─── Continue flow embedded in the SAME drawer: takeout → top → signature ───
+      {/* ─── Continue flow embedded in the SAME drawer: item paket → takeout → top → signature ───
        * Only the body swaps; the Sheet stays mounted so there is no close/reopen
        * flash between steps. Each step fetches its own data when it becomes active. */}
+      {booking && continueFlowStep === "package-items" && (
+        <EditPackageItemsContent
+          active
+          bookingId={booking.id}
+          onClose={() => setContinueFlowStep("takeout")}
+          onPrevious={() => setContinueFlowStep(null)}
+        />
+      )}
       {booking && continueFlowStep === "takeout" && (
         <EditTakeoutContent
           active
           bookingId={booking.id}
           onClose={() => setContinueFlowStep("top")}
-          onPrevious={() => setContinueFlowStep(null)}
+          onPrevious={() => setContinueFlowStep("package-items")}
         />
       )}
       {booking && continueFlowStep === "top" && (

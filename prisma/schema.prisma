@@ -3,6 +3,10 @@ generator client {
   // native       → local dev (Windows/macOS)
   // debian-...   → Docker runtime (node:20-bookworm-slim)
   binaryTargets = ["native", "debian-openssl-3.0.x"]
+  // relationJoins → opt into relationLoadStrategy: "join" (single LATERAL JOIN
+  // instead of one round-trip per relation). Huge win for deep-include reads over
+  // the Neon HTTP adapter. Applied selectively on heavy read queries.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -717,8 +721,14 @@ model Booking {
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles  Json?                // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries  Json?                // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftInternalItems    Json?                // { itemName: string, itemDescription: string }[] — editable package internal items during draft
+  draftVendorItems      Json?                // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
   currentRevisionId     String?
+  // Set when the client signs the agreement — freezes the snapshot layer (SnapCustomer,
+  // internal items, pricing). After this, only vendor items stay editable (ops swap);
+  // changing internal items / price / pax requires a new revision + re-approval.
+  snapshotFrozenAt      DateTime?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 

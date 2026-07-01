@@ -19,6 +19,7 @@ export type SaveSnapInternalItemsInput = z.infer<typeof saveSnapInternalItemsSch
 // ─── Vendor Items ─────────────────────────────────────────────────────────────
 
 export const snapVendorItemSchema = z.object({
+  categoryId: z.string().nullable().default(null),
   categoryName: z.string().min(1, "Nama kategori wajib diisi").max(255, "Nama kategori maksimal 255 karakter"),
   itemText: z.string().min(1, "Item text wajib diisi").max(1000, "Item text maksimal 1000 karakter"),
   sortOrder: z.number().int().min(0).default(0),

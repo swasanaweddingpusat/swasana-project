@@ -24,6 +24,9 @@ export async function createBookingRevision(
 ): Promise<string> {
   const booking = await db.booking.findUniqueOrThrow({
     where: { id: bookingId },
+    // Single LATERAL JOIN — snapshotInclude pulls ~13 relations; the default
+    // per-relation round-tripping over Neon HTTP made this a major finalize cost.
+    relationLoadStrategy: "join",
     include: snapshotInclude,
   });
 

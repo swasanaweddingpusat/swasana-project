@@ -221,6 +221,9 @@ export async function getBookings(
   const [rows, approvals] = await Promise.all([
     db.booking.findMany({
       where: { id: { in: pageIds } },
+      // Single LATERAL JOIN for the page's ~11 included relations instead of a
+      // round-trip per relation (Neon HTTP). One query for the whole page.
+      relationLoadStrategy: "join",
       include: bookingListInclude,
     }),
     // Page-scoped approval fetch (Fix #1): only the active page's bookings, replacing
@@ -307,6 +310,10 @@ export async function getBookingById(id: string) {
   const [booking, approvalRecord] = await Promise.all([
     db.booking.findUnique({
       where: { id },
+      // Single LATERAL JOIN instead of one round-trip per relation. This detail
+      // include pulls ~20 relations — over the Neon HTTP adapter the default
+      // "query" strategy meant ~20 sequential network hops (the 4-5s we saw).
+      relationLoadStrategy: "join",
       include: bookingDetailInclude,
     }),
     db.approvalRecord.findFirst({

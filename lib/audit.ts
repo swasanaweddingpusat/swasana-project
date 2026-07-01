@@ -16,23 +16,22 @@ export async function logAudit(params: AuditLogInput): Promise<void> {
   try {
     let profileId = params.userId;
     if (profileId) {
-      const profile = await db.profile.findUnique({
-        where: { userId: profileId },
-        select: { id: true },
+      // Callers usually pass session.user.id (a User id) but some pass a profileId.
+      // Resolve both cases in ONE round-trip (was two sequential findUnique calls):
+      // match a profile by userId OR id, preferring the userId match.
+      const raw = profileId;
+      const candidates = await db.profile.findMany({
+        where: { OR: [{ userId: raw }, { id: raw }] },
+        select: { id: true, userId: true },
+        take: 2,
       });
-      if (profile) {
-        profileId = profile.id;
-      } else {
-        // Check if it's already a profileId
-        const directProfile = await db.profile.findUnique({
-          where: { id: profileId },
-          select: { id: true },
-        });
-        if (!directProfile) {
-          // Profile not found — skip audit log silently
-          return;
-        }
+      const resolved =
+        candidates.find((p) => p.userId === raw) ?? candidates.find((p) => p.id === raw);
+      if (!resolved) {
+        // Profile not found — skip audit log silently
+        return;
       }
+      profileId = resolved.id;
     }
 
     await db.activityLog.create({

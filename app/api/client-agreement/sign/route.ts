@@ -47,11 +47,20 @@ export async function POST(req: Request) {
       include: { steps: { orderBy: { stepOrder: "asc" } } },
     });
 
-    // Always start with the agreement status update.
+    // Always start with the agreement status update + freeze the snapshot layer.
+    // The client has now signed the PO exactly as shown, so SnapCustomer / internal
+    // items / pricing must not change afterwards. snapshotFrozenAt is set regardless
+    // of approval-step state (even legacy bookings without a client step) — the
+    // signature itself is the freeze trigger. On regenerate → re-sign, this stamps a
+    // fresh timestamp for the newly-signed PO.
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.clientAgreement.update({
         where: { token },
         data: { status: "Signed", signedAt: new Date() },
+      }),
+      db.booking.update({
+        where: { id: agreement.bookingId },
+        data: { snapshotFrozenAt: new Date() },
       }),
     ];
 

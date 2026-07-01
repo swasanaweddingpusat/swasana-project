@@ -981,12 +981,16 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
+      select: { customerId: true, snapshotFrozenAt: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
     const contactDisplay = serializeContactNumbersToDisplay(contactNumbers ?? "");
     const contactArray = parseContactNumbersToArray(contactNumbers ?? "");
+
+    // This path never triggers a revision/re-approval, so a frozen booking must keep
+    // its client-signed SnapCustomer intact. The Customer master still updates (CRM).
+    const skipSnapCustomerWrite = booking.snapshotFrozenAt != null;
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.booking.update({
@@ -996,19 +1000,23 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
           ...(salesId != null ? { salesId } : {}),
         },
       }),
-      db.snapCustomer.update({
-        where: { bookingId: id },
-        data: {
-          name: customerName,
-          mobileNumber: contactDisplay || "-",
-          emailCpp: contactEmailCpp || null,
-          emailCpw: contactEmailCpw || null,
-          cppNik: contactNikCpp || null,
-          cpwNik: contactNikCpw || null,
-          cppAddress: contactCppAddress || null,
-          cpwAddress: contactCpwAddress || null,
-        },
-      }),
+      ...(skipSnapCustomerWrite
+        ? []
+        : [
+            db.snapCustomer.update({
+              where: { bookingId: id },
+              data: {
+                name: customerName,
+                mobileNumber: contactDisplay || "-",
+                emailCpp: contactEmailCpp || null,
+                emailCpw: contactEmailCpw || null,
+                cppNik: contactNikCpp || null,
+                cpwNik: contactNikCpw || null,
+                cppAddress: contactCppAddress || null,
+                cpwAddress: contactCpwAddress || null,
+              },
+            }),
+          ]),
       db.customer.update({
         where: { id: booking.customerId },
         data: {
@@ -1072,6 +1080,7 @@ export async function editBooking(data: unknown) {
         eventDate: true, weddingSession: true, weddingType: true,
         paymentMethodId: true, sourceOfInformationId: true,
         discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
+        snapshotFrozenAt: true,
         snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
         snapComplimentaries: {
           select: { name: true, price: true, isShowPrice: true, description: true, qty: true },
@@ -1283,6 +1292,16 @@ export async function editBooking(data: unknown) {
     // so the new display order is persisted correctly.
     const termsNeedWrite = topChanged || topStatusChanged || topSortOrderChanged;
 
+    // Snapshot freeze gate. Once the client signs (snapshotFrozenAt set), the frozen
+    // snapshot (SnapCustomer, pricing, internal items) must not be silently overwritten.
+    // A material change is the legitimate re-edit path: it spins a NEW revision the
+    // client re-signs, so the overwrite is allowed and the freeze is lifted below.
+    // A non-material edit on a frozen booking (e.g. tweaking client contact on the
+    // Client step) must leave the SIGNED SnapCustomer untouched — the Customer master
+    // still updates for CRM, but the PO snapshot the client signed stays intact.
+    const isFrozen = booking.snapshotFrozenAt != null;
+    const skipSnapCustomerWrite = isFrozen && !hasMaterialChange;
+
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
       db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
@@ -1312,24 +1331,32 @@ export async function editBooking(data: unknown) {
             discountName: newDiscountName,
             discountAmount: newDiscountAmount,
           }),
+          // A material change opens a new revision the client must re-sign, so lift the
+          // snapshot freeze here (covers legacy bookings without an approval record too).
+          ...(hasMaterialChange && { snapshotFrozenAt: null }),
         },
       }),
-      // Update customer snapshot
-      db.snapCustomer.update({
-        where: { bookingId: id },
-        data: {
-          name: customerName,
-          // snapCustomer.mobileNumber persists as display string: "name: number, ..."
-          mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
-          emailCpp: contactEmailCpp || null,
-          emailCpw: contactEmailCpw || null,
-          cppNik: contactNikCpp || null,
-          cpwNik: contactNikCpw || null,
-          ktpAddress: null,
-          cppAddress: contactCppAddress || null,
-          cpwAddress: contactCpwAddress || null,
-        },
-      }),
+      // Update customer snapshot — SKIPPED when the booking is frozen and this is a
+      // non-material edit, so the client-signed SnapCustomer on the PO stays intact.
+      ...(skipSnapCustomerWrite
+        ? []
+        : [
+            db.snapCustomer.update({
+              where: { bookingId: id },
+              data: {
+                name: customerName,
+                // snapCustomer.mobileNumber persists as display string: "name: number, ..."
+                mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
+                emailCpp: contactEmailCpp || null,
+                emailCpw: contactEmailCpw || null,
+                cppNik: contactNikCpp || null,
+                cpwNik: contactNikCpw || null,
+                ktpAddress: null,
+                cppAddress: contactCppAddress || null,
+                cpwAddress: contactCpwAddress || null,
+              },
+            }),
+          ]),
       // Update actual customer — mobileNumber is a Json column (structured array)
       db.customer.update({
         where: { id: booking.customerId },
@@ -1743,7 +1770,8 @@ export async function editBooking(data: unknown) {
             })
           );
 
-          // Update approval record to pending + booking to Pending + set currentRevisionId
+          // Update approval record to pending + booking to Pending + set currentRevisionId.
+          // (snapshotFrozenAt was already cleared in the main ops transaction above.)
           // Old steps are kept untouched (snapshot, not reset)
           await db.$transaction([
             db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),

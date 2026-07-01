@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { deleteFromStorage, getPublicUrl } from "@/lib/storage";
-import { getNextSequence } from "@/lib/counter";
+import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { createBookingRevision } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
@@ -106,6 +106,15 @@ export interface DraftBookingDetail {
     isShowPrice: boolean;
     description: string | null;
     qty: number;
+  }>;
+  draftInternalItems: Array<{
+    itemName: string;
+    itemDescription: string;
+  }>;
+  draftVendorItems: Array<{
+    categoryId: string | null;
+    categoryName: string;
+    itemText: string;
   }>;
 }
 
@@ -409,6 +418,12 @@ export async function updateDraftBookingStep2(
           draftComplimentaries: (input.draftComplimentaries && input.draftComplimentaries.length > 0)
             ? (input.draftComplimentaries as Prisma.InputJsonValue)
             : Prisma.JsonNull,
+          draftInternalItems: (input.draftInternalItems && input.draftInternalItems.length > 0)
+            ? (input.draftInternalItems as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          draftVendorItems: (input.draftVendorItems && input.draftVendorItems.length > 0)
+            ? (input.draftVendorItems as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         },
       }),
     ]);
@@ -598,9 +613,12 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
   const draftId = input.draftId;
 
   try {
-    // Fetch draft + all needed relations
+    // Fetch draft + all needed relations. Single LATERAL JOIN instead of a
+    // round-trip per relation (customer, venue+brand, package+3 nested item sets,
+    // termOfPayments, sales) — one of the two biggest reads in finalize.
     const draft = await db.booking.findFirst({
       where: { id: draftId, recordStatus: "draft" },
+      relationLoadStrategy: "join",
       include: {
         customer: true,
         venue: { include: { brand: true } },
@@ -653,37 +671,37 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       }
     }
 
-    // Generate PO Number
     const now = new Date();
     const year = now.getFullYear();
-    const poSeq = await getNextSequence(`po-${year}`);
     const dd = now.getDate().toString().padStart(2, "0");
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
     const eventTypeCode = draft.weddingType ?? (draft.category === "WEDDINGS" ? "WDG" : "MICE");
-    const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${eventTypeCode}/${dd}-${mm}-${year}`;
-
     const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-
-    // Generate invoice numbers for existing draft terms
     const terms = draft.termOfPayments;
-    const invoiceNumbers: string[] = [];
-    if (terms.length > 0) {
-      const monthRoman = ROMAN[now.getMonth()];
-      for (const _ of terms) {
-        const seq = await getNextSequence(`invoice-${year}`);
-        invoiceNumbers.push(`${seq}/INV/${venue?.code ?? ""}/${monthRoman}/${year}`);
-      }
-    }
 
-    // Resolve approval steps: conditional Sales + Manager → Finance.
-    // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
-    const bookingApprovalSteps = await buildBookingApprovalSteps({
-      salesId: draft.salesId,
-      creatorProfileId: session!.user.profileId!,
-      signatureSales: input.signatureSales ?? draft.salesSignature,
-      decidedAt: new Date(),
-      includeClientStep: true, // Wedding: client TTD step included
-    });
+    // These three reads are mutually independent — run them in ONE parallel batch
+    // instead of sequential awaits. Invoice numbers use a single batched counter
+    // increment (1 round-trip for N terms, not N). Over Neon HTTP every round-trip
+    // is a network hop, so this collapses ~N+2 hops into effectively one.
+    const [poSeq, invoiceSeqs, bookingApprovalSteps] = await Promise.all([
+      getNextSequence(`po-${year}`),
+      getNextSequenceBatch(`invoice-${year}`, terms.length),
+      // Resolve approval steps: conditional Sales + Manager → Finance.
+      // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
+      buildBookingApprovalSteps({
+        salesId: draft.salesId,
+        creatorProfileId: session!.user.profileId!,
+        signatureSales: input.signatureSales ?? draft.salesSignature,
+        decidedAt: new Date(),
+        includeClientStep: true, // Wedding: client TTD step included
+      }),
+    ]);
+
+    const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${eventTypeCode}/${dd}-${mm}-${year}`;
+    const monthRoman = ROMAN[now.getMonth()];
+    const invoiceNumbers: string[] = invoiceSeqs.map(
+      (seq) => `${seq}/INV/${venue?.code ?? ""}/${monthRoman}/${year}`,
+    );
 
     // Build categoryToggles map from input (for snap creation)
     const toggleMap = new Map(
@@ -795,9 +813,43 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         })
       );
 
-      if (pkg.internalItems.length > 0) {
+      // Prefer draft-edited items (Item Paket step); fall back to the package
+      // template when the user never touched them. Draft columns are JSON blobs.
+      const draftInternal = Array.isArray(draft.draftInternalItems)
+        ? (draft.draftInternalItems as Array<Record<string, unknown>>)
+            .filter((e) => typeof e.itemName === "string")
+            .map((e) => ({
+              itemName: e.itemName as string,
+              itemDescription: typeof e.itemDescription === "string" ? e.itemDescription : "",
+            }))
+        : [];
+      const draftVendor = Array.isArray(draft.draftVendorItems)
+        ? (draft.draftVendorItems as Array<Record<string, unknown>>)
+            .filter((e) => typeof e.categoryName === "string")
+            .map((e) => ({
+              categoryId: typeof e.categoryId === "string" ? e.categoryId : null,
+              categoryName: e.categoryName as string,
+              itemText: typeof e.itemText === "string" ? e.itemText : "",
+            }))
+        : [];
+
+      const internalSource = draftInternal.length > 0
+        ? draftInternal
+        : pkg.internalItems.map((item) => ({
+            itemName: item.itemName,
+            itemDescription: item.itemDescription,
+          }));
+      const vendorSource = draftVendor.length > 0
+        ? draftVendor
+        : pkg.vendorItems.map((item) => ({
+            categoryId: item.categoryId ?? null,
+            categoryName: item.categoryName,
+            itemText: item.itemText,
+          }));
+
+      if (internalSource.length > 0) {
         ops.push(
-          ...pkg.internalItems.map((item, i) =>
+          ...internalSource.map((item, i) =>
             db.snapPackageInternalItem.create({
               data: {
                 bookingId: draftId,
@@ -810,9 +862,9 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         );
       }
 
-      if (pkg.vendorItems.length > 0) {
+      if (vendorSource.length > 0) {
         ops.push(
-          ...pkg.vendorItems.map((item, i) =>
+          ...vendorSource.map((item, i) =>
             db.snapPackageVendorItem.create({
               data: {
                 bookingId: draftId,
@@ -963,44 +1015,58 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
 
     await db.$transaction(ops);
 
-    await logAudit({
-      userId: session!.user.id,
-      action: "booking.finalized",
-      entityType: "booking",
-      entityId: draftId,
-      changes: {
-        poNumber,
-        customerId: draft.customerId,
-        venueId: draft.venueId,
-        ...(input.leadId ? { leadId: input.leadId } : {}),
-      },
-      description: `Finalized booking draft for ${draft.customer?.name ?? draft.customerId}`,
-    });
+    // Everything below only depends on the ops transaction being committed, and the
+    // three awaited pieces (audit log, revision snapshot, term-id fetch) are mutually
+    // independent — run them in one parallel batch instead of three sequential awaits.
+    const revisionFlow = async (): Promise<void> => {
+      // Create initial revision (WEDDINGS + package required for revision snapshot)
+      if (draft.category === "WEDDINGS" && pkg) {
+        const revisionId = await createBookingRevision(
+          draftId,
+          session!.user.profileId!,
+          "Initial booking"
+        );
+        await db.$transaction([
+          db.approvalRecordStep.updateMany({
+            where: { record: { module: "booking", entityId: draftId } },
+            data: { revisionId },
+          }),
+          db.booking.update({
+            where: { id: draftId },
+            data: { currentRevisionId: revisionId },
+          }),
+        ]);
+      }
+    };
 
-    // Create initial revision (WEDDINGS + package required for revision snapshot)
-    if (draft.category === "WEDDINGS" && pkg) {
-      const revisionId = await createBookingRevision(
-        draftId,
-        session!.user.profileId!,
-        "Initial booking"
-      );
-      await db.$transaction([
-        db.approvalRecordStep.updateMany({
-          where: { record: { module: "booking", entityId: draftId } },
-          data: { revisionId },
-        }),
-        db.booking.update({
-          where: { id: draftId },
-          data: { currentRevisionId: revisionId },
-        }),
-      ]);
-    }
+    const [, , createdTerms] = await Promise.all([
+      logAudit({
+        userId: session!.user.id,
+        action: "booking.finalized",
+        entityType: "booking",
+        entityId: draftId,
+        changes: {
+          poNumber,
+          customerId: draft.customerId,
+          venueId: draft.venueId,
+          ...(input.leadId ? { leadId: input.leadId } : {}),
+        },
+        description: `Finalized booking draft for ${draft.customer?.name ?? draft.customerId}`,
+      }),
+      revisionFlow(),
+      // Term IDs for client-side evidence upload
+      db.termOfPayment.findMany({
+        where: { bookingId: draftId },
+        select: { id: true, sortOrder: true },
+        orderBy: { sortOrder: "asc" },
+      }),
+    ]);
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
     if (input.leadId) revalidateTag("leads", "max");
 
-    // Notify super admins
+    // Notify super admins (fire-and-forget — never blocks the response)
     notifySuperAdmins(
       {
         title: "Booking Baru",
@@ -1011,13 +1077,6 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       },
       session!.user.profileId!
     );
-
-    // Return term IDs for client-side evidence upload
-    const createdTerms = await db.termOfPayment.findMany({
-      where: { bookingId: draftId },
-      select: { id: true, sortOrder: true },
-      orderBy: { sortOrder: "asc" },
-    });
 
     return { success: true, bookingId: draftId, termIds: createdTerms };
   } catch (e) {
@@ -1140,6 +1199,8 @@ export async function getDraftBookingDetail(
       withMaterai: true,
       draftCategoryToggles: true,
       draftComplimentaries: true,
+      draftInternalItems: true,
+      draftVendorItems: true,
       customer: {
         select: {
           name: true,
@@ -1218,6 +1279,31 @@ export async function getDraftBookingDetail(
       }));
   }
 
+  // Parse draftInternalItems JSON → typed array
+  const rawInternal = draft.draftInternalItems;
+  let draftInternalItems: Array<{ itemName: string; itemDescription: string }> = [];
+  if (Array.isArray(rawInternal)) {
+    draftInternalItems = (rawInternal as Array<Record<string, unknown>>)
+      .filter((e) => typeof e.itemName === "string")
+      .map((e) => ({
+        itemName: e.itemName as string,
+        itemDescription: typeof e.itemDescription === "string" ? e.itemDescription : "",
+      }));
+  }
+
+  // Parse draftVendorItems JSON → typed array
+  const rawVendor = draft.draftVendorItems;
+  let draftVendorItems: Array<{ categoryId: string | null; categoryName: string; itemText: string }> = [];
+  if (Array.isArray(rawVendor)) {
+    draftVendorItems = (rawVendor as Array<Record<string, unknown>>)
+      .filter((e) => typeof e.categoryName === "string")
+      .map((e) => ({
+        categoryId: typeof e.categoryId === "string" ? e.categoryId : null,
+        categoryName: e.categoryName as string,
+        itemText: typeof e.itemText === "string" ? e.itemText : "",
+      }));
+  }
+
   return {
     id: draft.id,
     customerName: draft.customer?.name ?? null,
@@ -1259,6 +1345,8 @@ export async function getDraftBookingDetail(
     })),
     draftCategoryToggles,
     draftComplimentaries,
+    draftInternalItems,
+    draftVendorItems,
   };
 }
 

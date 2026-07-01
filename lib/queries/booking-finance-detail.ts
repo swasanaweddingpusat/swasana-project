@@ -41,6 +41,10 @@ export async function getBookingFinanceDetail(
 ): Promise<BookingFinanceDetail | null> {
   const booking = await db.booking.findUnique({
     where: { id: bookingId },
+    // Single LATERAL JOIN — pulls snapCustomer, snapPackagePricing, termOfPayments
+    // (+ nested partialPayments) and snapPackageCategoryPrices in one query instead
+    // of a round-trip per relation. Hit every time the TOP drawer opens.
+    relationLoadStrategy: "join",
     select: {
       id: true,
       discountName: true,

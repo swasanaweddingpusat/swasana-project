@@ -58,6 +58,11 @@ import { useComplimentaries } from "@/hooks/use-complimentaries";
 import { createComplimentary } from "@/actions/complimentary";
 import { usePermissions } from "@/hooks/use-permissions";
 import { ComplimentarySelect } from "@/app/(private)/dashboard/booking-weddings/_components/ComplimentarySelect";
+import {
+  PackageItemsEditor,
+  type PackageInternalItemDraft,
+  type PackageVendorItemDraft,
+} from "@/components/shared/PackageItemsEditor";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 import type { BookingPrefillLead } from "@/types/lead";
@@ -107,6 +112,17 @@ interface CategoryPriceEntry {
   sortOrder: number;
   isShow: boolean;
 }
+interface PackageInternalItemEntry {
+  id: string;
+  itemName: string;
+  itemDescription: string;
+}
+interface PackageVendorItemEntry {
+  id: string;
+  categoryId: string | null;
+  categoryName: string;
+  itemText: string;
+}
 interface PackageData {
   id: string;
   packageName: string;
@@ -114,6 +130,8 @@ interface PackageData {
   margin: number;
   sellingPrice: number;
   categoryPrices: CategoryPriceEntry[];
+  internalItems?: PackageInternalItemEntry[];
+  vendorItems?: PackageVendorItemEntry[];
 }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
@@ -342,7 +360,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
@@ -418,6 +436,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [lastAllocatedPrice, setLastAllocatedPrice] = useState(0);
   const [categoryToggles, setCategoryToggles] = useState<Record<string, boolean>>({}); // categoryName -> isTakeout
   const [takeoutPrices, setTakeoutPrices] = useState<Record<string, number>>({}); // categoryName -> editable takeout nominal
+
+  // Step "Item Paket": editable package items (prefilled from template on package pick).
+  const [packageInternalItems, setPackageInternalItems] = useState<PackageInternalItemDraft[]>([]);
+  const [packageVendorItems, setPackageVendorItems] = useState<PackageVendorItemDraft[]>([]);
+  const [packageItemsTab, setPackageItemsTab] = useState<"internal" | "vendor">("internal");
+  // Guard: once the user edits items, don't clobber them by re-prefilling from the
+  // template when the package effect re-runs (or when resuming a draft).
+  const packageItemsDirtyRef = useRef(false);
 
   // Venue availability
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -547,6 +573,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw("");
     setContactCppAddress(""); setContactCpwAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
     setTakeoutPrices({}); setCategoryToggles({}); setTime("");
+    setPackageInternalItems([]); setPackageVendorItems([]); setPackageItemsTab("internal");
+    packageItemsDirtyRef.current = false;
     setDraftId(null);
     setPendingResumeDraftId(null);
     setHasPendingWriteError(false);
@@ -789,8 +817,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // explicitly advances to step 3, making it "sticky" from that point.
   const step2Price = Math.max(0, (originalPackagePrice || selectedPackagePrice) - totalTakeoutNominal);
 
-  // Step 3 complete: takeout (at least one category must remain included)
-  const isStep3Complete =
+  // Step 3 complete: Item Paket — items are optional, so this step never blocks.
+  const isStep3Complete = true;
+
+  // Step 4 complete: takeout (at least one category must remain included)
+  const isStep4Complete =
     visibleCategories.length === 0 ||
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
@@ -798,15 +829,15 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const allPaidTermsHaveEvidence = terms
     .filter(t => (t.paymentStatus ?? "unpaid") === "paid")
     .every(t => t.paymentEvidence instanceof File || typeof t.paymentEvidence === "string");
-  // Step 4 complete: term of payments
-  const isStep4Complete = !!wPaymentMethodId && (
+  // Step 5 complete: term of payments
+  const isStep5Complete = !!wPaymentMethodId && (
     getBasePrice() === 0 || (
       (terms[0]?.paymentStatus ?? "unpaid") === "paid" &&
       allPaidTermsHaveEvidence
     )
   );
-  // Step 5 complete: signing location (+ signature when user IS the sales)
-  const isStep5Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
+  // Step 6 complete: signing location (+ signature when user IS the sales)
+  const isStep6Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
@@ -833,6 +864,31 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       }
     }
   }, [packages, selectedPackageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Prefill "Item Paket" step from the selected package template. Skips when the
+  // user has already edited the items (dirty) or when resuming a draft (items are
+  // restored from the draft instead). Runs on explicit package selection.
+  useEffect(() => {
+    if (!selectedPackageId || packages.length === 0) return;
+    if (packageItemsDirtyRef.current || isResumedDraftRef.current) return;
+    const pkg = packages.find((p) => p.id === selectedPackageId);
+    if (!pkg) return;
+    setPackageInternalItems(
+      (pkg.internalItems ?? []).map((i) => ({
+        uid: safeRandomUUID(),
+        itemName: i.itemName,
+        itemDescription: i.itemDescription,
+      })),
+    );
+    setPackageVendorItems(
+      (pkg.vendorItems ?? []).map((i) => ({
+        uid: safeRandomUUID(),
+        categoryId: i.categoryId ?? null,
+        categoryName: i.categoryName,
+        itemText: i.itemText,
+      })),
+    );
+  }, [packages, selectedPackageId]);
 
   // Auto-fill time dari session + weddingType (weddings only, R/AR saja)
   // GUARD: when resuming a draft, time is already set from draft — skip auto-fill
@@ -977,7 +1033,24 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       })));
     }
 
-    // ── Step 4: signingLocation + withMaterai ──
+    // ── Step 3: package items from draft (fall back to template prefill effect
+    // when the draft carries none, e.g. an older draft created before this step). ──
+    if (resumeDraftDetail.draftInternalItems.length > 0 || resumeDraftDetail.draftVendorItems.length > 0) {
+      packageItemsDirtyRef.current = true;
+      setPackageInternalItems(resumeDraftDetail.draftInternalItems.map((i) => ({
+        uid: safeRandomUUID(),
+        itemName: i.itemName,
+        itemDescription: i.itemDescription,
+      })));
+      setPackageVendorItems(resumeDraftDetail.draftVendorItems.map((i) => ({
+        uid: safeRandomUUID(),
+        categoryId: i.categoryId ?? null,
+        categoryName: i.categoryName,
+        itemText: i.itemText,
+      })));
+    }
+
+    // ── Step 6: signingLocation + withMaterai ──
     if (resumeDraftDetail.signingLocation) {
       setSigningLocation(resumeDraftDetail.signingLocation);
     }
@@ -1036,6 +1109,36 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       }
     }
   }
+
+  // Single source of truth for the step-2 draft payload (package/takeout data +
+  // complimentaries + editable package items). Reused across step 2→3, 3→4, 4→5
+  // background saves so package items are never dropped on any advance.
+  const buildStep2Payload = () => ({
+    packageId: form.getValues("packageId") || null,
+    specialBonusName: specialBonusName || null,
+    specialBonusAmount: specialBonusAmount || null,
+    categoryToggles: allCategoryPrices.map((c) => ({
+      categoryName: c.categoryName,
+      isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
+      takeoutNominal: c.isShow && (categoryToggles[c.categoryName] ?? false)
+        ? (takeoutPrices[c.categoryName] ?? c.basePrice)
+        : 0,
+    })),
+    draftComplimentaries: complimentaries.map((c) => ({
+      complimentaryId: c.complimentaryId ?? null,
+      name: c.name,
+      price: c.price,
+      isShowPrice: c.isShowPrice,
+      description: c.description || null,
+      qty: c.qty,
+    })),
+    draftInternalItems: packageInternalItems
+      .filter((i) => i.itemName.trim())
+      .map((i) => ({ itemName: i.itemName, itemDescription: i.itemDescription })),
+    draftVendorItems: packageVendorItems
+      .filter((i) => i.categoryName.trim() && i.itemText.trim())
+      .map((i) => ({ categoryId: i.categoryId, categoryName: i.categoryName, itemText: i.itemText })),
+  });
 
   const handleNext = async () => {
     // If a prior background save failed, clicking Continue fires the retry instead
@@ -1114,25 +1217,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         setDraftId(confirmedDraftId);
         saveWeddingDraftToStorage(confirmedDraftId);
 
-        // Also persist complimentaries to draft now (step 2 data).
-        // Use updateDraftBookingStep2 in background after the create resolves.
-        const step2Payload = {
-          packageId: form.getValues("packageId") || null,
-          specialBonusName: specialBonusName || null,
-          specialBonusAmount: specialBonusAmount || null,
-          categoryToggles: [],
-          draftComplimentaries: complimentaries.map((c) => ({
-            complimentaryId: c.complimentaryId ?? null,
-            name: c.name,
-            price: c.price,
-            isShowPrice: c.isShowPrice,
-            description: c.description || null,
-            qty: c.qty,
-          })),
-        };
+        // Persist current step-2 data (complimentaries + prefilled package items) to
+        // draft in background so nothing is lost if the user closes before finalize.
         void backgroundSave(
-          () => updateStep2Mut.mutateAsync({ draftId: confirmedDraftId, data: step2Payload }),
-          "Gagal menyimpan data complimentary",
+          () => updateStep2Mut.mutateAsync({ draftId: confirmedDraftId, data: buildStep2Payload() }),
+          "Gagal menyimpan data paket",
         );
       }
 
@@ -1140,13 +1229,28 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 3 → 4: Takeout — optimistic advance, save takeout data in background ──
-    if (currentStep === 3 && !isStep3Complete) {
+    // ── Step 3 → 4: Item Paket — persist edited package items, advance to takeout ──
+    if (currentStep === 3) {
+      // Advance immediately (optimistic) — items are optional.
+      setCurrentStep(4);
+
+      if (draftId) {
+        const capturedDraftId = draftId;
+        void backgroundSave(
+          () => updateStep2Mut.mutateAsync({ draftId: capturedDraftId, data: buildStep2Payload() }),
+          "Gagal menyimpan item paket",
+        );
+      }
+      return;
+    }
+
+    // ── Step 4 → 5: Takeout — optimistic advance, save takeout data in background ──
+    if (currentStep === 4 && !isStep4Complete) {
       toast.error("Minimal satu kategori harus tetap included.");
       return;
     }
 
-    if (currentStep === 3) {
+    if (currentStep === 4) {
       setSelectedPackagePrice(step2Price);
       // Clear the resume guard: the user is now actively editing, so future
       // package/session changes should trigger allocatePrice normally.
@@ -1170,32 +1274,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       }
 
       // Advance immediately (optimistic)
-      setCurrentStep(4);
+      setCurrentStep(5);
 
       if (draftId) {
-        const step2Payload = {
-          packageId: form.getValues("packageId") || null,
-          specialBonusName: specialBonusName || null,
-          specialBonusAmount: specialBonusAmount || null,
-          categoryToggles: allCategoryPrices.map((c) => ({
-            categoryName: c.categoryName,
-            isTakeout: c.isShow ? (categoryToggles[c.categoryName] ?? false) : false,
-            takeoutNominal: c.isShow && (categoryToggles[c.categoryName] ?? false)
-              ? (takeoutPrices[c.categoryName] ?? c.basePrice)
-              : 0,
-          })),
-          draftComplimentaries: complimentaries.map((c) => ({
-            complimentaryId: c.complimentaryId ?? null,
-            name: c.name,
-            price: c.price,
-            isShowPrice: c.isShowPrice,
-            description: c.description || null,
-            qty: c.qty,
-          })),
-        };
         const capturedDraftId = draftId;
         void backgroundSave(
-          () => updateStep2Mut.mutateAsync({ draftId: capturedDraftId, data: step2Payload }),
+          () => updateStep2Mut.mutateAsync({ draftId: capturedDraftId, data: buildStep2Payload() }),
           "Gagal menyimpan data paket",
         );
       }
@@ -1203,14 +1287,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 4 → 5: Term of Payments ──────────────────────────────────────────
+    // ── Step 5 → 6: Term of Payments ──────────────────────────────────────────
     // Flow:
     //   1. Validate (first term, diff check).
     //   2. Save step-3 data to draft (background, awaited before advancing).
     //   3. Upload any File evidence to storage — refetch termIds from the freshly-saved
     //      draft so IDs are stable. Set state to URL string on success.
-    //   4. Advance to step 5.
-    if (currentStep === 4) {
+    //   4. Advance to step 6.
+    if (currentStep === 5) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
         toast.error("Nominal term pertama (Booking Fee) wajib diisi dan harus lebih dari 0.");
@@ -1323,7 +1407,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         }
       }
 
-      setCurrentStep(5);
+      setCurrentStep(6);
       return;
     }
 
@@ -1332,7 +1416,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 5) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
+      if (currentStep === 6) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -1507,10 +1591,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 3 && !isStep3Complete) ||
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && !isStep5Complete) ||
+    (currentStep === 6 && !isStep6Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 4 && isUploadingEvidence) ||
-    (currentStep === 5 && isDraftMutating) ||
-    (currentStep === 5 && isSubmitting);
+    (currentStep === 5 && isUploadingEvidence) ||
+    (currentStep === 6 && isDraftMutating) ||
+    (currentStep === 6 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -1854,7 +1939,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
                       <FormMessage />
                     </FormItem>
@@ -2224,8 +2309,27 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 3: Takeout (Package Prices) ─── */}
+              {/* ─── Step 3: Item Paket (Internal & Vendor items) ─── */}
               {currentStep === 3 && (
+                <div className="space-y-4">
+                  <div>
+                    <p className={cn('text-sm', 'font-medium', 'text-foreground')}>Item Paket</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Item internal & vendor yang tampil di PO booking. Diisi otomatis dari template paket — boleh diubah, ditambah, atau dihapus tanpa mengubah template asli.
+                    </p>
+                  </div>
+                  <PackageItemsEditor
+                    internalItems={packageInternalItems}
+                    vendorItems={packageVendorItems}
+                    onInternalChange={(items) => { packageItemsDirtyRef.current = true; setPackageInternalItems(items); }}
+                    onVendorChange={(items) => { packageItemsDirtyRef.current = true; setPackageVendorItems(items); }}
+                    activeTab={packageItemsTab}
+                    onTabChange={setPackageItemsTab}
+                  />
+                </div>
+              )}
+              {/* ─── Step 4: Takeout (Package Prices) ─── */}
+              {currentStep === 4 && (
                 <div className="space-y-4">
                   {/* Sticky price summary — second sticky (footer is first) */}
                   <div className="sticky top-0 z-10 bg-background pb-2">
@@ -2312,8 +2416,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 4: Term of Payments ─── */}
-              {currentStep === 4 && (
+              {/* ─── Step 5: Term of Payments ─── */}
+              {currentStep === 5 && (
                 <div className="space-y-4">
                   {/* Package price */}
                   <div>
@@ -2605,8 +2709,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 5: Signature ─── */}
-              {currentStep === 5 && (
+              {/* ─── Step 6: Signature ─── */}
+              {currentStep === 6 && (
                 <div className="space-y-6">
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan <span className="text-destructive">*</span></FormLabel>
@@ -2683,8 +2787,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         </div>
         {/* Footer — hidden when showing resume prompt */}
         <div className={cn('bg-background', 'sticky', 'bottom-0', 'z-10', showResumePrompt ? 'hidden' : '')}>
-          {/* Mini price summary — visible only on Step 4 (Term of Payments) */}
-          {currentStep === 4 && (
+          {/* Mini price summary — visible only on the Term of Payments step */}
+          {currentStep === 5 && (
             <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground">Harga Paket</span>

@@ -73,6 +73,27 @@ export const updateDraftStep2Schema = z.object({
     )
     .optional()
     .default([]),
+  // Editable package items (Item Paket step). Snapshotted into snap_package_* on
+  // finalize; empty arrays fall back to the package template at finalize time.
+  draftInternalItems: z
+    .array(
+      z.object({
+        itemName: z.string().min(1),
+        itemDescription: z.string().optional().default(""),
+      })
+    )
+    .optional()
+    .default([]),
+  draftVendorItems: z
+    .array(
+      z.object({
+        categoryId: z.string().optional().nullable(),
+        categoryName: z.string().min(1),
+        itemText: z.string().min(1),
+      })
+    )
+    .optional()
+    .default([]),
 });
 
 export type UpdateDraftStep2Input = z.infer<typeof updateDraftStep2Schema>;
