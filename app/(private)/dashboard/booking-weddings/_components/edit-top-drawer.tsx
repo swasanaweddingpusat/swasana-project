@@ -20,6 +20,7 @@ import {
   CloseCircle,
   CheckCircle,
   AlignVerticalSpacing,
+  Copy,
 } from "@solar-icons/react";
 import {
   DndContext,
@@ -1031,19 +1032,51 @@ function TopContent({
       </div>
 
       {/* Footer */}
-      <div className="sticky bottom-0 bg-background pt-4 flex gap-2">
-        {onPrevious && (
-          <Button variant="outline" className="flex-1" onClick={onPrevious}>
-            Previous
+      <div className="sticky bottom-0 bg-background pt-4">
+        {/* Mini price summary — Harga Paket | Input User | Selisih */}
+        <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+            <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(priceAfterDiscount)}</span>
+          </div>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[10px] text-muted-foreground">Input User</span>
+            <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(totalTerms)}</span>
+          </div>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[10px] text-muted-foreground">Selisih</span>
+            <span
+              className={cn("flex items-center gap-1 text-xs font-semibold truncate", difference !== 0 ? "text-destructive cursor-pointer" : "text-foreground")}
+              onClick={() => {
+                if (difference !== 0) {
+                  navigator.clipboard.writeText(fmtRp(Math.abs(difference)));
+                  toast.success("Selisih disalin");
+                }
+              }}
+            >
+              {difference === 0 ? "Sesuai" : (
+                <>
+                  {`${difference < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(difference))}`}
+                  <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {onPrevious && (
+            <Button variant="outline" className="flex-1" onClick={onPrevious}>
+              Previous
+            </Button>
+          )}
+          <Button
+            className={onPrevious ? "flex-1" : "w-full"}
+            onClick={handleUpdate}
+            disabled={loading || !isChanged}
+          >
+            {loading ? "Menyimpan..." : saveLabel}
           </Button>
-        )}
-        <Button
-          className={onPrevious ? "flex-1" : "w-full"}
-          onClick={handleUpdate}
-          disabled={loading || !isChanged}
-        >
-          {loading ? "Menyimpan..." : saveLabel}
-        </Button>
+        </div>
       </div>
     </div>
   );
