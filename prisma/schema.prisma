@@ -395,18 +395,37 @@ model TutorialLesson {
 }
 
 model TutorialStep {
-  id        String         @id @default(uuid())
+  id        String                 @id @default(uuid())
   lessonId  String
   title     String
   caption   String
   image     String?
-  sortOrder Int            @default(0)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  lesson    TutorialLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  videoUrl  String?
+  videoType String?
+  sortOrder Int                    @default(0)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  lesson    TutorialLesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  documents TutorialStepDocument[]
 
   @@index([lessonId])
   @@map("tutorial_steps")
+}
+
+model TutorialStepDocument {
+  id        String       @id @default(uuid())
+  stepId    String
+  name      String
+  fileUrl   String
+  mimeType  String?
+  fileSize  Int?
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  step      TutorialStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@index([stepId])
+  @@map("tutorial_step_documents")
 }
 
 // ─── Vendors ─────────────────────────────────────────────────────────────────
