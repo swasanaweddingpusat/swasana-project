@@ -13,6 +13,7 @@ interface BookingsParams {
   recordStatus?: "saved" | "draft" | "all";
   dateFrom?: string;
   dateTo?: string;
+  year?: number;
   approvalStatus?: "pending" | "approved";
   salesId?: string;
 }
@@ -26,6 +27,7 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
     ...(params.recordStatus ? { recordStatus: params.recordStatus } : {}),
     ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
     ...(params.dateTo ? { dateTo: params.dateTo } : {}),
+    ...(params.year ? { year: String(params.year) } : {}),
     ...(params.approvalStatus ? { approvalStatus: params.approvalStatus } : {}),
     ...(params.salesId ? { salesId: params.salesId } : {}),
   });
@@ -35,7 +37,12 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
 }
 
 export function useBookings(params: BookingsParams, initialData?: BookingsResult) {
-  // "saved" is the implicit default — treat it like no filter so SSR initialData is reused.
+  // SSR fetches the current year (see page.tsx). initialData is only a valid seed
+  // when the effective filter still resolves to "current year" — undefined year
+  // (no date range) falls back to current year at the API layer too. Any explicit
+  // OTHER year must NOT reuse the current-year initialData, or the list would show
+  // the wrong year until staleTime elapses (refetchOnMount is off).
+  const currentYear = new Date().getFullYear();
   const isDefaultQuery =
     params.page === 1 &&
     !params.search &&
@@ -43,10 +50,11 @@ export function useBookings(params: BookingsParams, initialData?: BookingsResult
     (!params.recordStatus || params.recordStatus === "saved") &&
     !params.dateFrom &&
     !params.dateTo &&
+    (params.year === undefined || params.year === currentYear) &&
     !params.approvalStatus &&
     !params.salesId;
   return useQuery({
-    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.approvalStatus ?? "", params.salesId ?? ""],
+    queryKey: ["bookings", params.page, params.pageSize, params.search, params.venueId, params.recordStatus ?? "saved", params.dateFrom ?? "", params.dateTo ?? "", params.year ?? "", params.approvalStatus ?? "", params.salesId ?? ""],
     queryFn: () => fetchBookings(params),
     initialData: isDefaultQuery ? initialData : undefined,
     placeholderData: keepPreviousData,

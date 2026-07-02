@@ -1,4 +1,4 @@
-import { prisma } from "./_client";
+﻿import { prisma } from "./_client";
 
 // ── Roles ────────────────────────────────────────────────────────────
 const roleData = [
@@ -47,6 +47,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-maintenance-category": ["view", "create", "edit", "delete"],
   "settings-maintenance-priority": ["view", "create", "edit", "delete"],
   "settings-maintenance-status": ["view", "create", "edit", "delete"],
+  promo: ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -78,6 +79,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     quotations: ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    promo: ["view"],
   },
   // Manager: CRUD only on dashboard, calendar-event, groups, booking-weddings,
   // package, complimentary, vendors, and customers.
@@ -90,6 +92,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view", "create", "edit", "delete", "set-harga", "term-&-condition", "set-status"],
     vendor: ["view", "create", "edit", "delete"],
     complimentary: ["view", "create", "edit", "delete"],
+    promo: ["view"],
   },
   "direktur-operational": {
     booking: ["view", "create", "edit", "approve", "comment", "print"],
@@ -97,6 +100,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view", "create", "edit"],
     maintenance: ["view", "create", "edit"],
+    promo: ["view"],
   },
   operational: {
     booking: ["view", "create", "edit", "comment"],
@@ -104,6 +108,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     package: ["view"],
     vendor: ["view"],
     maintenance: ["view", "create", "edit"],
+    promo: ["view"],
   },
   finance: {
     // Finance has near-full access per PROD (118 perms). Excludes settings-role-permission
@@ -133,6 +138,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "settings-venues": ["view", "create", "edit", "delete"],
     "vendor-specialist": ["view", "create", "edit", "delete"],
     vendor: ["view", "create", "edit", "delete"],
+    promo: ["view"],
   },
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement", "print"],
@@ -146,6 +152,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // view+create only: sales can select & create complimentary on-the-fly from booking drawer,
     // but master data management (edit/delete) is reserved for direktur-sales and above.
     complimentary: ["view", "create"],
+    promo: ["view", "create", "edit", "delete"],
   },
   "vendor-specialist": {
     "vendor-specialist": ["view", "create", "edit", "delete"],
@@ -166,6 +173,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     // view+create only: same rationale as sales — operational access to pick/create
     // complimentary entries, master data management stays with direktur-sales and above.
     complimentary: ["view", "create"],
+    promo: ["view"],
   },
   // MICE manager: MICE features (leads, quotations, booking-mice) + groups,
   // customers, and event-types settings. No wedding booking, no finance/package/vendor.
@@ -177,6 +185,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     customers: ["view", "create", "edit", "delete"],
     "settings-event-types": ["view", "create", "edit", "delete"],
     "settings-quotation-templates": ["view", "create", "edit", "delete"],
+    promo: ["view"],
   },
 };
 

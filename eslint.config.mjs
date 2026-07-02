@@ -21,6 +21,8 @@ const eslintConfig = defineConfig([
     "public/**",
     // One-off utility/maintenance scripts (CommonJS, ad-hoc) — not app source.
     "scripts/**",
+    // Git worktrees and Claude Code internal files — not project source.
+    ".claude/**",
   ]),
 ]);
 

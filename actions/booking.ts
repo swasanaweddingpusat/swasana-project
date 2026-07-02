@@ -1,18 +1,18 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
-import { headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { notifySuperAdmins } from "@/lib/notifications";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
-import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema } from "@/lib/validations/booking";
+import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
-import { getNextSequence } from "@/lib/counter";
-import { createBookingRevision } from "@/lib/booking-revision";
+import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
+import { generateAccessCode } from "@/lib/access-code";
+import { createBookingRevision, refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
@@ -30,6 +30,17 @@ export async function createBooking(data: unknown) {
   const input = parsed.data;
 
   try {
+    // Validate venue + package EXIST before creating the customer / locking the lead.
+    // The main transaction has FK constraints on venueId/packageId; validating first
+    // prevents an orphaned customer + a lead marked "converted" with no booking when
+    // the create fails on a bad FK. (C-01)
+    const [venueOk, packageOk] = await Promise.all([
+      db.venue.findUnique({ where: { id: input.venueId }, select: { id: true } }),
+      db.package.findUnique({ where: { id: input.packageId }, select: { id: true } }),
+    ]);
+    if (!venueOk) return { success: false, error: "Venue tidak ditemukan." };
+    if (!packageOk) return { success: false, error: "Paket tidak ditemukan." };
+
     let customerId = input.customerId;
     let isNewCustomer = false;
     // leadId — set when booking is created from a Lead (not from existing Customer)
@@ -256,16 +267,15 @@ export async function createBooking(data: unknown) {
 
     const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 
-    // Generate invoice numbers atomically before transaction
+    // Generate invoice numbers atomically before transaction. Use the batched
+    // counter (1 round-trip, guaranteed-contiguous ascending block) instead of N
+    // concurrent getNextSequence calls whose completion order is non-deterministic
+    // and could produce out-of-order invoice numbers.
     let invoiceNumbers: string[] = [];
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       const monthRoman = ROMAN[now.getMonth()];
-      invoiceNumbers = await Promise.all(
-        input.termOfPayments.map(async () => {
-          const seq = await getNextSequence(`invoice-${year}`);
-          return `${seq}/INV/${venue.code}/${monthRoman}/${year}`;
-        })
-      );
+      const invoiceSeqs = await getNextSequenceBatch(`invoice-${year}`, input.termOfPayments.length);
+      invoiceNumbers = invoiceSeqs.map((seq) => `${seq}/INV/${venue.code}/${monthRoman}/${year}`);
     }
 
     if (input.withMaterai) {
@@ -371,6 +381,9 @@ export async function createBooking(data: unknown) {
           discountAmount: input.specialBonusAmount ?? 0,
           withMaterai: input.withMaterai ?? false,
           poNumber,
+          // Sortable PO parts for native DB ordering (scalability).
+          poYear: year,
+          poSeq,
         },
       }),
       db.snapCustomer.create({
@@ -555,7 +568,7 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i], paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund" } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i], paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund", paymentMethodId: input.paymentMethodId ?? null } })
         )
       );
     }
@@ -600,7 +613,7 @@ export async function createBooking(data: unknown) {
         data: {
           bookingId,
           token: crypto.randomUUID(),
-          accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+          accessCode: generateAccessCode(),
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       })
@@ -931,10 +944,15 @@ export async function transferBookingManager(
 
     const targetManager = await db.profile.findUnique({
       where: { id: targetManagerId },
-      select: { fullName: true, role: { select: { name: true } } },
+      select: { fullName: true, roleId: true },
     });
     if (!targetManager) return { success: false, error: "Manager tujuan tidak ditemukan." };
-    if (targetManager.role?.name !== "manager") return { success: false, error: "User yang dipilih bukan manager." };
+    // Manager eligibility via PERMISSION, not role-name string match (a role could be
+    // renamed to bypass a name check — see AGENTS.md §4.4). A valid booking manager is
+    // one whose role can approve bookings (booking:approve).
+    if (!(await hasPermission(targetManager.roleId, "booking", "approve"))) {
+      return { success: false, error: "User yang dipilih tidak berwenang sebagai manager approval." };
+    }
 
     await db.$transaction([db.booking.update({ where: { id: bookingId }, data: { managerId: targetManagerId } })]);
 
@@ -981,12 +999,16 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
   try {
     const booking = await db.booking.findUnique({
       where: { id },
-      select: { customerId: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
+      select: { customerId: true, snapshotFrozenAt: true, snapCustomer: { select: { name: true, mobileNumber: true } } },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
     const contactDisplay = serializeContactNumbersToDisplay(contactNumbers ?? "");
     const contactArray = parseContactNumbersToArray(contactNumbers ?? "");
+
+    // This path never triggers a revision/re-approval, so a frozen booking must keep
+    // its client-signed SnapCustomer intact. The Customer master still updates (CRM).
+    const skipSnapCustomerWrite = booking.snapshotFrozenAt != null;
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.booking.update({
@@ -996,19 +1018,23 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
           ...(salesId != null ? { salesId } : {}),
         },
       }),
-      db.snapCustomer.update({
-        where: { bookingId: id },
-        data: {
-          name: customerName,
-          mobileNumber: contactDisplay || "-",
-          emailCpp: contactEmailCpp || null,
-          emailCpw: contactEmailCpw || null,
-          cppNik: contactNikCpp || null,
-          cpwNik: contactNikCpw || null,
-          cppAddress: contactCppAddress || null,
-          cpwAddress: contactCpwAddress || null,
-        },
-      }),
+      ...(skipSnapCustomerWrite
+        ? []
+        : [
+            db.snapCustomer.update({
+              where: { bookingId: id },
+              data: {
+                name: customerName,
+                mobileNumber: contactDisplay || "-",
+                emailCpp: contactEmailCpp || null,
+                emailCpw: contactEmailCpw || null,
+                cppNik: contactNikCpp || null,
+                cpwNik: contactNikCpw || null,
+                cppAddress: contactCppAddress || null,
+                cpwAddress: contactCpwAddress || null,
+              },
+            }),
+          ]),
       db.customer.update({
         where: { id: booking.customerId },
         data: {
@@ -1072,6 +1098,7 @@ export async function editBooking(data: unknown) {
         eventDate: true, weddingSession: true, weddingType: true,
         paymentMethodId: true, sourceOfInformationId: true,
         discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
+        snapshotFrozenAt: true,
         snapCustomer: { select: { name: true, mobileNumber: true, emailCpp: true, emailCpw: true } },
         snapComplimentaries: {
           select: { name: true, price: true, isShowPrice: true, description: true, qty: true },
@@ -1126,12 +1153,21 @@ export async function editBooking(data: unknown) {
     const oldEventDate = `${ed.getUTCFullYear()}-${String(ed.getUTCMonth() + 1).padStart(2, "0")}-${String(ed.getUTCDate()).padStart(2, "0")}`;
     const eventDateChanged = newEventDate !== oldEventDate;
 
-    // Compare discount
+    // Compare discount — ONLY when the caller actually sent discount fields.
+    // Since the TOP-drawer refactor, discount is owned by updateTermOfPayments
+    // (actions/term-of-payment.ts); the edit-booking-drawer (venue/package step)
+    // and SalesSignatureDrawer omit these. If we treated an absent field as
+    // "reset to 0", saving those steps would silently wipe an existing discount
+    // AND spuriously trigger a re-approval revision. Distinguish undefined
+    // (not provided → leave untouched) from a real value.
+    const discountProvided =
+      rest.specialBonusName !== undefined || rest.specialBonusAmount !== undefined;
     const newDiscountName = rest.specialBonusName ?? null;
     const newDiscountAmount = rest.specialBonusAmount ?? 0;
     const discountChanged =
-      newDiscountName !== booking.discountName ||
-      newDiscountAmount !== (booking.discountAmount ?? 0);
+      discountProvided &&
+      (newDiscountName !== booking.discountName ||
+        newDiscountAmount !== (booking.discountAmount ?? 0));
 
     // Compare takeout toggles against current snapPackageCategoryPrices
     let takeoutChanged = false;
@@ -1255,38 +1291,11 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    // Compare complimentaries: field-based diff against current DB snapshot.
-    // Full-replace write semantics (delete+recreate) means no stable client-side id —
-    // compare by count + content instead. Normalization: trim strings, cast numerics,
-    // treat null/"" as equivalent for description.
-    let complimentaryChanged = false;
-    if (parsed.data.complimentaries !== undefined) {
-      const existing = booking.snapComplimentaries;
-      const incoming = parsed.data.complimentaries;
-      if (existing.length !== incoming.length) {
-        complimentaryChanged = true;
-      } else {
-        for (let ci = 0; ci < existing.length; ci++) {
-          const ex = existing[ci];
-          const inc = incoming[ci];
-          const exDesc = ex.description?.trim() || null;
-          const incDesc = inc.description?.trim() || null;
-          if (
-            ex.name.trim() !== inc.name.trim() ||
-            ex.price !== inc.price ||
-            ex.isShowPrice !== inc.isShowPrice ||
-            exDesc !== incDesc ||
-            ex.qty !== inc.qty
-          ) {
-            complimentaryChanged = true;
-            break;
-          }
-        }
-      }
-    }
-
     // unpaid→paid persists WITHOUT resetting approval; a paid→unpaid reversal IS
     // material (paidReversed) and re-triggers the approval revision flow below.
+    // NOTE: complimentaries are intentionally excluded from material-change detection.
+    // They are managed independently via saveSnapComplimentaries (EditComplimentaryDrawer)
+    // which does NOT reset approval or client agreement.
     const hasMaterialChange =
       venueChanged ||
       packageChanged ||
@@ -1295,12 +1304,21 @@ export async function editBooking(data: unknown) {
       discountChanged ||
       takeoutChanged ||
       topChanged ||
-      paidReversed ||
-      complimentaryChanged;
+      paidReversed;
     // Terms must be re-written whenever structure, status, or sort-order changed.
     // sortOrder-only change (drag reorder) is non-material but still needs a write
     // so the new display order is persisted correctly.
     const termsNeedWrite = topChanged || topStatusChanged || topSortOrderChanged;
+
+    // Snapshot freeze gate. Once the client signs (snapshotFrozenAt set), the frozen
+    // snapshot (SnapCustomer, pricing, internal items) must not be silently overwritten.
+    // A material change is the legitimate re-edit path: it spins a NEW revision the
+    // client re-signs, so the overwrite is allowed and the freeze is lifted below.
+    // A non-material edit on a frozen booking (e.g. tweaking client contact on the
+    // Client step) must leave the SIGNED SnapCustomer untouched — the Customer master
+    // still updates for CRM, but the PO snapshot the client signed stays intact.
+    const isFrozen = booking.snapshotFrozenAt != null;
+    const skipSnapCustomerWrite = isFrozen && !hasMaterialChange;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
     const [oldSnapVenue, oldSnapPackage, oldSnapVariant] = await Promise.all([
@@ -1324,26 +1342,39 @@ export async function editBooking(data: unknown) {
           signingLocation: rest.signingLocation ?? null,
           ...(rest.eventTime !== undefined && { eventTime: rest.eventTime || null }),
           ...(rest.notes !== undefined && { notes: rest.notes || null }),
-          discountName: rest.specialBonusName ?? null,
-          discountAmount: rest.specialBonusAmount ?? 0,
+          // Only overwrite discount when the caller actually sent it (TOP drawer
+          // path). Absent fields leave the existing discount untouched — see the
+          // discountProvided note above.
+          ...(discountProvided && {
+            discountName: newDiscountName,
+            discountAmount: newDiscountAmount,
+          }),
+          // A material change opens a new revision the client must re-sign, so lift the
+          // snapshot freeze here (covers legacy bookings without an approval record too).
+          ...(hasMaterialChange && { snapshotFrozenAt: null }),
         },
       }),
-      // Update customer snapshot
-      db.snapCustomer.update({
-        where: { bookingId: id },
-        data: {
-          name: customerName,
-          // snapCustomer.mobileNumber persists as display string: "name: number, ..."
-          mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
-          emailCpp: contactEmailCpp || null,
-          emailCpw: contactEmailCpw || null,
-          cppNik: contactNikCpp || null,
-          cpwNik: contactNikCpw || null,
-          ktpAddress: null,
-          cppAddress: contactCppAddress || null,
-          cpwAddress: contactCpwAddress || null,
-        },
-      }),
+      // Update customer snapshot — SKIPPED when the booking is frozen and this is a
+      // non-material edit, so the client-signed SnapCustomer on the PO stays intact.
+      ...(skipSnapCustomerWrite
+        ? []
+        : [
+            db.snapCustomer.update({
+              where: { bookingId: id },
+              data: {
+                name: customerName,
+                // snapCustomer.mobileNumber persists as display string: "name: number, ..."
+                mobileNumber: serializeContactNumbersToDisplay(contactNumbers ?? "") || "-",
+                emailCpp: contactEmailCpp || null,
+                emailCpw: contactEmailCpw || null,
+                cppNik: contactNikCpp || null,
+                cpwNik: contactNikCpw || null,
+                ktpAddress: null,
+                cppAddress: contactCppAddress || null,
+                cpwAddress: contactCpwAddress || null,
+              },
+            }),
+          ]),
       // Update actual customer — mobileNumber is a Json column (structured array)
       db.customer.update({
         where: { id: booking.customerId },
@@ -1599,28 +1630,8 @@ export async function editBooking(data: unknown) {
       );
     }
 
-    // Complimentaries — replace existing atomically within transaction
-    if (parsed.data.complimentaries !== undefined) {
-      ops.push(db.snapComplimentary.deleteMany({ where: { bookingId: id } }));
-      if (parsed.data.complimentaries.length > 0) {
-        ops.push(
-          ...parsed.data.complimentaries.map((c, i) =>
-            db.snapComplimentary.create({
-              data: {
-                bookingId: id,
-                complimentaryId: c.complimentaryId ?? null,
-                name: c.name,
-                price: c.price,
-                isShowPrice: c.isShowPrice,
-                description: c.description ?? null,
-                qty: c.qty,
-                sortOrder: c.sortOrder ?? i,
-              },
-            })
-          )
-        );
-      }
-    }
+    // NOTE: complimentaries are NOT managed here. They are edited independently via
+    // saveSnapComplimentaries (EditComplimentaryDrawer) which does not affect approval.
 
     // Storage keys of payment proofs to delete AFTER the transaction commits (paid→unpaid).
     // Collected here, deleted best-effort post-commit so a failed delete never rolls
@@ -1741,7 +1752,6 @@ export async function editBooking(data: unknown) {
       if (takeoutChanged) reasons.push("takeout");
       if (topChanged) reasons.push("terms of payment");
       if (paidReversed) reasons.push("payment reversed to unpaid");
-      if (complimentaryChanged) reasons.push("complimentary changed");
       const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
       const approvalRecord = await db.approvalRecord.findUnique({
@@ -1778,24 +1788,52 @@ export async function editBooking(data: unknown) {
             })
           );
 
-          // Update approval record to pending + booking to Pending + set currentRevisionId
-          // Old steps are kept untouched (snapshot, not reset)
+          // ONE atomic transaction for the whole re-approval reset: approval record
+          // → pending, booking → Pending + currentRevisionId, new steps, AND the
+          // client-agreement reset (new token, cleared signature). Previously the
+          // clientAgreement reset ran in a SEPARATE call — if it failed after the
+          // steps committed, the agreement kept a stale/signed token while approval
+          // was already pending (client could re-sign a superseded PO). (M-05)
+          // (snapshotFrozenAt was already cleared in the main ops transaction above.)
+          // Old steps are kept untouched (snapshot, not reset).
+          const newToken = crypto.randomUUID();
+          const newAccessCode = generateAccessCode();
           await db.$transaction([
             db.approvalRecord.update({ where: { id: approvalRecord.id }, data: { status: "pending" } }),
             db.booking.update({ where: { id }, data: { bookingStatus: "Pending", currentRevisionId: revisionId } }),
             ...newStepOps,
+            db.clientAgreement.updateMany({
+              where: { bookingId: id },
+              data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+            }),
           ]);
         }
-
-        // Reset client agreement — invalidate old link, generate new token
-        const newToken = crypto.randomUUID();
-        const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        await db.clientAgreement.updateMany({
-          where: { bookingId: id },
-          data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-        });
       }
     } // end if hasMaterialChange
+
+    // If signatureSales was provided without a material change (signature-only save
+    // from SalesSignatureContent in the continue flow), update the current sales step.
+    if (!hasMaterialChange && rest.signatureSales) {
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "booking", entityId: id } },
+        select: { id: true },
+      });
+      if (approvalRecord) {
+        await db.approvalRecordStep.updateMany({
+          where: {
+            recordId: approvalRecord.id,
+            approverType: "sales",
+            revisionId: booking.currentRevisionId ?? undefined,
+          },
+          data: {
+            signature: rest.signatureSales,
+            status: "approved",
+            decidedById: session!.user.profileId ?? undefined,
+            decidedAt: new Date(),
+          },
+        });
+      }
+    }
 
     await logAudit({
       userId: session!.user.id,
@@ -1859,45 +1897,78 @@ export async function editBooking(data: unknown) {
   }
 }
 
-// ─── Approve Booking ──────────────────────────────────────────────────────────
-
-export async function approveBooking(bookingId: string) {
+/** Updates ONLY signingLocation + sales ApprovalRecordStep signature.
+ *  Does NOT touch venue/package/TOP or trigger approval reset.
+ *  Used by SalesSignatureContent (standalone drawer & continue flow). */
+export async function updateBookingSignature(data: unknown): Promise<{ success: boolean; error?: string }> {
   const { session, error } = await requirePermission({ module: "booking", action: "edit" });
   if (error) return { success: false, error };
-  if (!mutationLimiter.check(`booking-approve:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+  if (!mutationLimiter.check(`booking-signature:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = updateBookingSignatureSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
+
+  const { id, signingLocation, signatureSales } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
-  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
     return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
   }
 
   try {
-    const [booking] = await db.$transaction([
-      db.booking.update({
-        where: { id: bookingId },
-        data: { managerId: session!.user.profileId },
-      }),
-    ]);
+    const booking = await db.booking.findUnique({
+      where: { id },
+      select: { currentRevisionId: true },
+    });
+    if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
-    revalidateTag("groups", "max");
-    revalidateTag("bookings", "max");
+    await db.booking.update({ where: { id }, data: { signingLocation } });
 
-    const h = await headers();
+    // Re-freeze the in-flight revision snapshot so signingLocation appears in the PDF.
+    // No-ops when the revision is frozen (client signed) — best-effort.
+    try {
+      await refreshCurrentRevisionSnapshot(id);
+    } catch (e) {
+      console.error("[updateBookingSignature] revision snapshot refresh failed:", e);
+    }
+
+    // Only update the approval step when the caller is the sales PIC and provides a signature.
+    if (signatureSales) {
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "booking", entityId: id } },
+        select: { id: true },
+      });
+      if (approvalRecord) {
+        await db.approvalRecordStep.updateMany({
+          where: {
+            recordId: approvalRecord.id,
+            approverType: "sales",
+            revisionId: booking.currentRevisionId ?? undefined,
+          },
+          data: {
+            signature: signatureSales,
+            status: "approved",
+            decidedById: session!.user.profileId ?? undefined,
+            decidedAt: new Date(),
+          },
+        });
+      }
+    }
+
     await logAudit({
-      userId: session!.user.profileId,
-      action: "booking.approved",
+      userId: session!.user.id,
+      action: "booking.signature_saved",
+      result: "success",
       entityType: "booking",
-      entityId: bookingId,
-      description: `Booking disetujui oleh manager`,
-      ipAddress: h.get("x-forwarded-for") ?? undefined,
-      userAgent: h.get("user-agent") ?? undefined,
+      entityId: id,
+      description: `Sales signature saved (location: ${signingLocation}${signatureSales ? ", with signature" : ", location only"})`,
     });
 
-    return { success: true, booking };
-  } catch (e) {
-    console.error("[approveBooking]", e);
-    return { success: false, error: "Terjadi kesalahan." };
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Gagal menyimpan tanda tangan." };
   }
 }
 

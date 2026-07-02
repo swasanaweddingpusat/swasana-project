@@ -3,6 +3,10 @@ generator client {
   // native       → local dev (Windows/macOS)
   // debian-...   → Docker runtime (node:20-bookworm-slim)
   binaryTargets = ["native", "debian-openssl-3.0.x"]
+  // relationJoins → opt into relationLoadStrategy: "join" (single LATERAL JOIN
+  // instead of one round-trip per relation). Huge win for deep-include reads over
+  // the Neon HTTP adapter. Applied selectively on heavy read queries.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -106,6 +110,21 @@ model Profile {
   emergencyContactRel   String?
   emergencyContactPhone String?
 
+  // HR Employment
+  npwp                  String?
+  bpjsKesehatan         String?
+  bpjsKetenagakerjaan   String?
+  religion              Religion?
+  bloodType             String?
+  joinDate              DateTime?
+  resignDate            DateTime?
+  employmentType        EmploymentType?
+  contractStartDate     DateTime?
+  contractEndDate       DateTime?
+  departmentId          String?
+  positionId            String?
+  ptkpStatus            PtkpStatus?
+
   // Access control
   roleId    String?
   managerId String?
@@ -152,10 +171,37 @@ model Profile {
   maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignee")
   maintenanceTicketsCreated  MaintenanceTicket[] @relation("MaintenanceCreator")
   bookingEditDrafts          BookingEditDraft[]
+  attendances                Attendance[]
+  department             Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position               Position?            @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  departmentsHeaded      Department[]         @relation("DepartmentHead")
+  employeeDocuments      EmployeeDocument[]
+  uploadedEmployeeDocs   EmployeeDocument[]   @relation("DocumentUploader")
+  employmentHistories    EmploymentHistory[]
+  createdHistoryEntries  EmploymentHistory[]  @relation("HistoryCreator")
+  workAssignments        EmployeeWorkAssignment[]
+  shiftOverrides         ShiftOverride[]
+  shiftOverridesCreated  ShiftOverride[]      @relation("ShiftOverrideCreator")
+  leaveBalances             LeaveBalance[]
+  leaveRequests             LeaveRequest[]
+  leaveManagerApprovals     LeaveRequest[]  @relation("LeaveManagerApprover")
+  leaveHrApprovals          LeaveRequest[]  @relation("LeaveHrApprover")
+  leaveRejections           LeaveRequest[]  @relation("LeaveRejector")
+  employeeSalaries          EmployeeSalary[]
+  payslips                  Payslip[]
+  payrollsGenerated         PayrollPeriod[] @relation("PayrollGenerator")
+  payrollsFinalized         PayrollPeriod[] @relation("PayrollFinalizer")
+  jobPostingsCreated        JobPosting[]    @relation("JobPostingCreator")
+  hiredFromCandidate        Candidate[]     @relation("HiredCandidate")
+  candidateNotesCreated     CandidateNote[] @relation("CandidateNoteCreator")
+  onboardingAssignments     OnboardingAssignment[]
+  onboardingTasksCompleted  OnboardingTask[] @relation("OnboardingTaskCompleter")
 
   @@index([roleId])
   @@index([managerId])
   @@index([dataScope])
+  @@index([departmentId])
+  @@index([positionId])
   @@map("profiles")
 }
 
@@ -291,6 +337,7 @@ model Venue {
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
   maintenanceTickets MaintenanceTicket[]
+  workLocations      WorkLocation[]
 
   @@index([brandId])
   @@map("venues")
@@ -365,6 +412,7 @@ model PaymentMethod {
   settlements        BookingPaymentSettlement[]
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
+  termOfPayments     TermOfPayment[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -542,6 +590,104 @@ enum DataScope {
   all
 }
 
+enum AttendanceStatus {
+  on_time
+  late
+  absent
+  on_leave
+}
+
+enum LeaveRequestStatus {
+  pending
+  manager_approved
+  approved
+  rejected
+  cancelled
+}
+
+enum SalaryComponentType {
+  earning
+  deduction
+}
+
+enum SalaryComponentCategory {
+  basic
+  allowance
+  deduction
+  benefit
+}
+
+enum Pph21Method {
+  ter
+  progressive
+}
+
+enum PtkpStatus {
+  TK0
+  TK1
+  TK2
+  TK3
+  K0
+  K1
+  K2
+  K3
+}
+
+enum PayrollPeriodStatus {
+  draft
+  processing
+  finalized
+  paid
+}
+
+enum PayslipStatus {
+  draft
+  finalized
+}
+
+enum JobPostingStatus {
+  draft
+  open
+  closed
+}
+
+enum CandidateStage {
+  applied
+  screening
+  interview
+  assessment
+  offering
+  hired
+  rejected
+}
+
+enum OnboardingAssignTo {
+  employee
+  hr
+  manager
+}
+
+enum OnboardingStatus {
+  in_progress
+  completed
+}
+
+enum Religion {
+  islam
+  kristen
+  katolik
+  hindu
+  buddha
+  konghucu
+}
+
+enum EmploymentType {
+  permanent
+  contract
+  probation
+  intern
+}
+
 model Booking {
   id                    String               @id @default(uuid())
   bookingStatus         BookingStatus        @default(Pending)
@@ -553,6 +699,8 @@ model Booking {
   eventTime             String?
   notes                 String?
   poNumber              String?
+  poYear                Int?
+  poSeq                 Int?
   eventDate             DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId           String?
   salesSignature        String?
@@ -562,6 +710,8 @@ model Booking {
   withMaterai           Boolean              @default(false)
   discountName          String?
   discountAmount        Int                  @default(0)
+  promoId               String?
+  promoSnapshot         Json?                // snapshot of DiscountProgram at booking creation
   salesId               String
   managerId             String?
   customerId            String
@@ -576,8 +726,14 @@ model Booking {
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles  Json?                // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries  Json?                // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftInternalItems    Json?                // { itemName: string, itemDescription: string }[] — editable package internal items during draft
+  draftVendorItems      Json?                // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
   currentRevisionId     String?
+  // Set when the client signs the agreement — freezes the snapshot layer (SnapCustomer,
+  // internal items, pricing). After this, only vendor items stay editable (ops swap);
+  // changing internal items / price / pax requires a new revision + re-approval.
+  snapshotFrozenAt      DateTime?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -590,6 +746,7 @@ model Booking {
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   lead                Lead?                @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  promo               DiscountProgram?     @relation(fields: [promoId], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -625,11 +782,13 @@ model Booking {
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
   @@index([leadId])
+  @@index([promoId])
   @@index([bookingStatus])
   @@index([recordStatus])
   @@index([category])
   @@index([eventDate])
   @@index([currentRevisionId])
+  @@index([recordStatus, poYear, poSeq])
   @@map("bookings")
 }
 
@@ -887,6 +1046,7 @@ model TermOfPayment {
   dueDate         DateTime
   paymentStatus   TermOfPaymentStatus @default(unpaid)
   paymentEvidence String?
+  paymentMethodId String?             // bank tujuan transfer per-term (nullable)
   invoiceNumber   String?
   notes           String?
   sortOrder       Int                 @default(0)
@@ -899,10 +1059,12 @@ model TermOfPayment {
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   partialPayments  PartialPayment[]
   acknowledgedBy   Profile?            @relation("TOPAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  paymentMethod    PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   @@unique([invoiceNumber])
   @@index([bookingId])
   @@index([acknowledgedById])
+  @@index([paymentMethodId])
   @@map("term_of_payments")
 }
 
@@ -1141,6 +1303,7 @@ model ApprovalRecord {
   @@unique([module, entityId])
   @@index([createdById])
   @@index([updatedById])
+  @@index([module, status])
   @@map("approval_records")
 }
 
@@ -1558,4 +1721,653 @@ model MaintenanceImage {
 
   @@index([ticketId])
   @@map("maintenance_images")
+}
+
+// ─── HR Attendance ────────────────────────────────────────────────────────────
+
+model Attendance {
+  id               String           @id @default(uuid())
+  profileId        String
+  date             DateTime
+
+  clockInAt        DateTime?
+  clockInPhotoUrl  String?
+  clockInLat       Float?
+  clockInLng       Float?
+
+  clockOutAt       DateTime?
+  clockOutPhotoUrl String?
+  clockOutLat      Float?
+  clockOutLng      Float?
+
+  status           AttendanceStatus @default(absent)
+  workLocationId   String?
+  workShiftId      String?
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  profile          Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation     WorkLocation?    @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  workShift        WorkShift?       @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, date])
+  @@index([profileId])
+  @@index([date])
+  @@index([workLocationId])
+  @@index([workShiftId])
+  @@map("attendances")
+}
+
+model AttendanceSettings {
+  id                   String   @id @default(uuid())
+  workStartTime        String
+  workEndTime          String
+  lateToleranceMinutes Int      @default(15)
+  officeLatitude       Float
+  officeLongitude      Float
+  officeRadiusMeters              Int      @default(100)
+  defaultLateToleranceMinutes     Int      @default(15)
+  requireClockOutLocation         Boolean  @default(false)
+
+  updatedAt            DateTime @updatedAt
+
+  @@map("attendance_settings")
+}
+
+// ─── Attendance Enhancement: Multi-Location & Shifts ─────────────────────────
+
+model WorkLocation {
+  id             String    @id @default(uuid())
+  name           String
+  address        String?
+  venueId        String?
+  latitude       Float
+  longitude      Float
+  radiusMeters   Int       @default(100)
+  isActive       Boolean   @default(true)
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  venue          Venue?    @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  assignments    EmployeeWorkAssignment[]
+  overrides      ShiftOverride[]
+  attendances    Attendance[]
+
+  @@index([venueId])
+  @@map("work_locations")
+}
+
+model WorkShift {
+  id                     String    @id @default(uuid())
+  name                   String
+  startTime              String
+  endTime                String
+  lateToleranceMinutes   Int       @default(15)
+  isOvernight            Boolean   @default(false)
+  isActive               Boolean   @default(true)
+  sortOrder              Int       @default(0)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  assignments            EmployeeWorkAssignment[]
+  overrides              ShiftOverride[]
+  attendances            Attendance[]
+
+  @@map("work_shifts")
+}
+
+model EmployeeWorkAssignment {
+  id              String       @id @default(uuid())
+  profileId       String
+  workLocationId  String
+  workShiftId     String
+  isDefault       Boolean      @default(false)
+  effectiveDate   DateTime
+  endDate         DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  profile         Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workLocation    WorkLocation @relation(fields: [workLocationId], references: [id], onDelete: Cascade)
+  workShift       WorkShift    @relation(fields: [workShiftId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, workLocationId, workShiftId])
+  @@index([profileId])
+  @@index([workLocationId])
+  @@index([workShiftId])
+  @@map("employee_work_assignments")
+}
+
+model ShiftOverride {
+  id              String        @id @default(uuid())
+  profileId       String
+  date            DateTime
+  workShiftId     String
+  workLocationId  String?
+  reason          String?
+  createdBy       String?
+  createdAt       DateTime      @default(now())
+
+  profile         Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  workShift       WorkShift     @relation(fields: [workShiftId], references: [id], onDelete: Cascade)
+  workLocation    WorkLocation? @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  creator         Profile?      @relation("ShiftOverrideCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, date])
+  @@index([profileId])
+  @@index([date])
+  @@map("shift_overrides")
+}
+
+// ─── HR Employee Database ────────────────────────────────────────────────────
+
+model Department {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  parentId    String?
+  headId      String?
+  sortOrder   Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Department[] @relation("DepartmentHierarchy")
+  head        Profile?     @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  profiles    Profile[]
+  positions   Position[]
+  jobPostings JobPosting[]
+
+  @@index([parentId])
+  @@index([headId])
+  @@map("departments")
+}
+
+model Position {
+  id           String      @id @default(uuid())
+  name         String      @unique
+  departmentId String?
+  level        Int         @default(0)
+  sortOrder    Int         @default(0)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  profiles     Profile[]
+  jobPostings  JobPosting[]
+
+  @@index([departmentId])
+  @@map("positions")
+}
+
+model EmployeeDocument {
+  id          String    @id @default(uuid())
+  profileId   String
+  type        String
+  name        String
+  fileUrl     String
+  fileSize    Int       @default(0)
+  expiresAt   DateTime?
+  uploadedBy  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  uploader    Profile?  @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([uploadedBy])
+  @@map("employee_documents")
+}
+
+model EmploymentHistory {
+  id            String   @id @default(uuid())
+  profileId     String
+  changeType    String
+  description   String
+  oldValue      String?
+  newValue      String?
+  effectiveDate DateTime
+  createdBy     String?
+  createdAt     DateTime @default(now())
+
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  creator       Profile? @relation("HistoryCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([effectiveDate])
+  @@index([createdBy])
+  @@map("employment_histories")
+}
+
+// ─── Leave Management ────────────────────────────────────────────────────────
+
+model LeaveType {
+  id                    String    @id @default(uuid())
+  name                  String    @unique
+  code                  String    @unique
+  description           String?
+  defaultQuota          Int       @default(0)
+  isDeductible          Boolean   @default(true)
+  requiresApproval      Boolean   @default(true)
+  maxConsecutiveDays    Int?
+  minDaysBeforeRequest  Int       @default(0)
+  isCarryOver           Boolean   @default(false)
+  carryOverMaxDays      Int?
+  carryOverExpiryMonths Int?
+  isActive              Boolean   @default(true)
+  isSystemType          Boolean   @default(false)
+  sortOrder             Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  balances              LeaveBalance[]
+  requests              LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id             String    @id @default(uuid())
+  profileId      String
+  leaveTypeId    String
+  year           Int
+  totalDays      Int       @default(0)
+  usedDays       Int       @default(0)
+  carryOverDays  Int       @default(0)
+  adjustmentDays Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  profile        Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  leaveType      LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, leaveTypeId, year])
+  @@index([profileId])
+  @@index([leaveTypeId])
+  @@index([year])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id                 String              @id @default(uuid())
+  profileId          String
+  leaveTypeId        String
+  startDate          DateTime
+  endDate            DateTime
+  totalDays          Int
+  reason             String?
+  status             LeaveRequestStatus  @default(pending)
+
+  managerApprovedBy  String?
+  managerApprovedAt  DateTime?
+  managerNote        String?
+
+  hrApprovedBy       String?
+  hrApprovedAt       DateTime?
+  hrNote             String?
+
+  rejectedBy         String?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  profile            Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  leaveType          LeaveType           @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  managerApprover    Profile?            @relation("LeaveManagerApprover", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
+  hrApprover         Profile?            @relation("LeaveHrApprover", fields: [hrApprovedBy], references: [id], onDelete: SetNull)
+  rejector           Profile?            @relation("LeaveRejector", fields: [rejectedBy], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([leaveTypeId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@map("leave_requests")
+}
+
+// ─── Payroll Engine ──────────────────────────────────────────────────────────
+
+model SalaryComponent {
+  id           String                  @id @default(uuid())
+  name         String                  @unique
+  code         String                  @unique
+  type         SalaryComponentType
+  category     SalaryComponentCategory
+  isFixed      Boolean                 @default(true)
+  isTaxable    Boolean                 @default(true)
+  isActive     Boolean                 @default(true)
+  isSystemType Boolean                 @default(false)
+  sortOrder    Int                     @default(0)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  employeeSalaries EmployeeSalary[]
+  payslipItems     PayslipItem[]
+
+  @@map("salary_components")
+}
+
+model EmployeeSalary {
+  id                String          @id @default(uuid())
+  profileId         String
+  salaryComponentId String
+  amount            Decimal         @db.Decimal(15, 2)
+  effectiveDate     DateTime
+  endDate           DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  profile           Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  salaryComponent   SalaryComponent @relation(fields: [salaryComponentId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, salaryComponentId, effectiveDate])
+  @@index([profileId])
+  @@index([salaryComponentId])
+  @@map("employee_salaries")
+}
+
+model PayrollSettings {
+  id                       String      @id @default(uuid())
+  pph21Method              Pph21Method @default(ter)
+
+  bpjsKesCompanyRate       Decimal     @default(4.0) @db.Decimal(5, 2)
+  bpjsKesEmployeeRate      Decimal     @default(1.0) @db.Decimal(5, 2)
+  bpjsKesMaxSalary         Decimal     @default(12000000) @db.Decimal(15, 2)
+
+  jhtCompanyRate            Decimal     @default(3.7) @db.Decimal(5, 2)
+  jhtEmployeeRate           Decimal     @default(2.0) @db.Decimal(5, 2)
+  jkkRate                   Decimal     @default(0.24) @db.Decimal(5, 2)
+  jkmRate                   Decimal     @default(0.3) @db.Decimal(5, 2)
+  jpCompanyRate             Decimal     @default(2.0) @db.Decimal(5, 2)
+  jpEmployeeRate            Decimal     @default(1.0) @db.Decimal(5, 2)
+  jpMaxSalary               Decimal     @default(10042300) @db.Decimal(15, 2)
+
+  absenceDeductionPerDay    Decimal     @default(0) @db.Decimal(15, 2)
+  lateDeductionPerIncident  Decimal     @default(0) @db.Decimal(15, 2)
+
+  updatedAt                 DateTime    @updatedAt
+
+  @@map("payroll_settings")
+}
+
+model PayrollPeriod {
+  id               String              @id @default(uuid())
+  month            Int
+  year             Int
+  status           PayrollPeriodStatus @default(draft)
+  totalEmployees   Int                 @default(0)
+  totalGrossAmount Decimal             @default(0) @db.Decimal(15, 2)
+  totalNetAmount   Decimal             @default(0) @db.Decimal(15, 2)
+  generatedBy      String?
+  generatedAt      DateTime?
+  finalizedBy      String?
+  finalizedAt      DateTime?
+  paidAt           DateTime?
+  notes            String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  generator        Profile?            @relation("PayrollGenerator", fields: [generatedBy], references: [id], onDelete: SetNull)
+  finalizer        Profile?            @relation("PayrollFinalizer", fields: [finalizedBy], references: [id], onDelete: SetNull)
+  payslips         Payslip[]
+
+  @@unique([month, year])
+  @@map("payroll_periods")
+}
+
+model Payslip {
+  id                String        @id @default(uuid())
+  payrollPeriodId   String
+  profileId         String
+
+  employeeName      String
+  employeeNumber    Int
+  departmentName    String?
+  positionName      String?
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  npwp              String?
+  ptkpStatus        PtkpStatus?
+
+  totalEarnings     Decimal       @default(0) @db.Decimal(15, 2)
+  totalDeductions   Decimal       @default(0) @db.Decimal(15, 2)
+  netSalary         Decimal       @default(0) @db.Decimal(15, 2)
+
+  pph21Method       Pph21Method?
+  pph21Amount       Decimal       @default(0) @db.Decimal(15, 2)
+
+  bpjsKesCompany    Decimal       @default(0) @db.Decimal(15, 2)
+  bpjsKesEmployee   Decimal       @default(0) @db.Decimal(15, 2)
+  jhtCompany        Decimal       @default(0) @db.Decimal(15, 2)
+  jhtEmployee       Decimal       @default(0) @db.Decimal(15, 2)
+  jkkAmount         Decimal       @default(0) @db.Decimal(15, 2)
+  jkmAmount         Decimal       @default(0) @db.Decimal(15, 2)
+  jpCompany         Decimal       @default(0) @db.Decimal(15, 2)
+  jpEmployee        Decimal       @default(0) @db.Decimal(15, 2)
+
+  totalWorkDays     Int           @default(0)
+  totalPresent      Int           @default(0)
+  totalAbsent       Int           @default(0)
+  totalLate         Int           @default(0)
+  totalLeave        Int           @default(0)
+  absenceDeduction  Decimal       @default(0) @db.Decimal(15, 2)
+  lateDeduction     Decimal       @default(0) @db.Decimal(15, 2)
+
+  status            PayslipStatus @default(draft)
+  pdfUrl            String?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  payrollPeriod     PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  profile           Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  items             PayslipItem[]
+
+  @@unique([payrollPeriodId, profileId])
+  @@index([payrollPeriodId])
+  @@index([profileId])
+  @@map("payslips")
+}
+
+model PayslipItem {
+  id                String              @id @default(uuid())
+  payslipId         String
+  salaryComponentId String?
+  name              String
+  type              SalaryComponentType
+  amount            Decimal             @db.Decimal(15, 2)
+  sortOrder         Int                 @default(0)
+
+  payslip           Payslip             @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  salaryComponent   SalaryComponent?    @relation(fields: [salaryComponentId], references: [id], onDelete: SetNull)
+
+  @@index([payslipId])
+  @@map("payslip_items")
+}
+
+// ─── Recruitment & Onboarding ────────────────────────────────────────────────
+
+model JobPosting {
+  id              String           @id @default(uuid())
+  title           String
+  departmentId    String?
+  positionId      String?
+  description     String?
+  requirements    String?
+  employmentType  EmploymentType?
+  location        String?
+  salaryRangeMin  Decimal?         @db.Decimal(15, 2)
+  salaryRangeMax  Decimal?         @db.Decimal(15, 2)
+  status          JobPostingStatus @default(draft)
+  openDate        DateTime?
+  closeDate       DateTime?
+  createdBy       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  department      Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position        Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  creator         Profile?         @relation("JobPostingCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  candidates      Candidate[]
+
+  @@index([departmentId])
+  @@index([status])
+  @@map("job_postings")
+}
+
+model Candidate {
+  id              String         @id @default(uuid())
+  jobPostingId    String
+  fullName        String
+  email           String
+  phoneNumber     String?
+  resumeUrl       String?
+  coverLetterUrl  String?
+  stage           CandidateStage @default(applied)
+  rating          Int?
+  notes           String?
+  rejectionReason String?
+  hiredAt         DateTime?
+  hiredProfileId  String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  jobPosting      JobPosting     @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  hiredProfile    Profile?       @relation("HiredCandidate", fields: [hiredProfileId], references: [id], onDelete: SetNull)
+  candidateNotes  CandidateNote[]
+
+  @@index([jobPostingId])
+  @@index([stage])
+  @@index([hiredProfileId])
+  @@map("candidates")
+}
+
+model CandidateNote {
+  id          String   @id @default(uuid())
+  candidateId String
+  content     String
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  creator     Profile?  @relation("CandidateNoteCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([candidateId])
+  @@map("candidate_notes")
+}
+
+model OnboardingTemplate {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tasks       OnboardingTemplateTask[]
+  assignments OnboardingAssignment[]
+
+  @@map("onboarding_templates")
+}
+
+model OnboardingTemplateTask {
+  id          String             @id @default(uuid())
+  templateId  String
+  title       String
+  description String?
+  dueInDays   Int                @default(1)
+  assignTo    OnboardingAssignTo @default(employee)
+  sortOrder   Int                @default(0)
+  createdAt   DateTime           @default(now())
+
+  template    OnboardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  tasks       OnboardingTask[]
+
+  @@index([templateId])
+  @@map("onboarding_template_tasks")
+}
+
+model OnboardingAssignment {
+  id          String           @id @default(uuid())
+  profileId   String
+  templateId  String
+  startDate   DateTime
+  status      OnboardingStatus @default(in_progress)
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  profile     Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  template    OnboardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  tasks       OnboardingTask[]
+
+  @@unique([profileId, templateId])
+  @@index([profileId])
+  @@index([status])
+  @@map("onboarding_assignments")
+}
+
+model OnboardingTask {
+  id              String                  @id @default(uuid())
+  assignmentId    String
+  templateTaskId  String?
+  title           String
+  description     String?
+  dueDate         DateTime?
+  assignTo        OnboardingAssignTo      @default(employee)
+  isCompleted     Boolean                 @default(false)
+  completedAt     DateTime?
+  completedBy     String?
+  sortOrder       Int                     @default(0)
+  createdAt       DateTime                @default(now())
+
+  assignment      OnboardingAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  templateTask    OnboardingTemplateTask? @relation(fields: [templateTaskId], references: [id], onDelete: SetNull)
+  completer       Profile?                @relation("OnboardingTaskCompleter", fields: [completedBy], references: [id], onDelete: SetNull)
+
+  @@index([assignmentId])
+  @@map("onboarding_tasks")
+}
+
+// ─── Discount / Promo ─────────────────────────────────────────────────────────
+
+enum DiscountType {
+  PERCENTAGE
+  NOMINAL
+}
+
+model DiscountProgram {
+  id                  String       @id @default(uuid())
+  name                String
+  isActive            Boolean      @default(true)
+  discountType        DiscountType
+  discountValue       Int
+  minTransaction      Int?
+  periodStart         DateTime
+  periodEnd           DateTime
+  eventEligibleStart  DateTime?
+  eventEligibleEnd    DateTime?
+  quota               Int?
+  usedCount           Int          @default(0)
+  description         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  bookings Booking[]
+
+  @@index([isActive])
+  @@index([periodStart, periodEnd])
+  @@map("discount_programs")
 }

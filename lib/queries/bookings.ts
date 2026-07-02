@@ -13,7 +13,23 @@ const bookingListInclude = {
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
   clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
-  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true, partialPayments: { orderBy: { paidAt: "asc" as const }, select: { id: true, amount: true, paidAt: true, evidence: true, notes: true } } } },
+  // List rows only need the TOP base fields (table computes paid/total + edit drawer
+  // hydrates from these). The nested partialPayments are NOT consumed from list items
+  // (the edit-finance drawer fetches them via useBookingFinanceDetail), so they're
+  // dropped here to keep the list payload small. snapPackageCategoryPrices likewise is
+  // only read from BookingDetail — kept on bookingDetailInclude below, not the list.
+  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true } },
+  editDraft: { select: { id: true, editorProfileId: true, formState: true, pendingUploads: true, updatedAt: true } },
+} as const;
+
+const bookingDetailInclude = {
+  ...bookingListInclude,
+  snapCustomer: true,
+  customer: { select: { bitrixId: true, cppNik: true, cpwNik: true, cppAddress: true, cpwAddress: true } },
+  snapVenue: true,
+  snapPackage: true,
+  // Re-added here (dropped from bookingListInclude for payload size): the detail
+  // view's SetHargaBookingDrawer / edit-booking-drawer read snapPackageCategoryPrices.
   snapPackageCategoryPrices: {
     select: {
       id: true,
@@ -26,15 +42,6 @@ const bookingListInclude = {
     },
     orderBy: { sortOrder: "asc" as const },
   },
-  editDraft: { select: { id: true, editorProfileId: true, formState: true, pendingUploads: true, updatedAt: true } },
-} as const;
-
-const bookingDetailInclude = {
-  ...bookingListInclude,
-  snapCustomer: true,
-  customer: { select: { bitrixId: true, cppNik: true, cpwNik: true, cppAddress: true, cpwAddress: true } },
-  snapVenue: true,
-  snapPackage: true,
   snapPackagePricing: {
     select: {
       id: true,
@@ -73,52 +80,66 @@ const bookingDetailInclude = {
   paymentMethod: true,
   sourceOfInformation: true,
   clientAgreement: true,
+  // editDraft (formState + pendingUploads — large JSON) is inherited via the spread
+  // above for the draft badge in the LIST. The detail view never reads it (the edit
+  // drawer hydrates editDraft from the list row, not from BookingDetail), so drop it
+  // here to keep the detail payload small.
+  editDraft: false,
 } as const;
 
 import type { DataScope } from "@/types/user";
 import type { Prisma, BookingStatus } from "@prisma/client";
 
+// Minimal select for the page-scoped approval fetch (Fix #1). ApprovalRecord is
+// polymorphic (linked to a booking via module + entityId, no FK) so Prisma cannot
+// `include` it on the booking query. We fetch only the ~10 records for the active
+// page and attach them per row. decidedBy / createdBy are intentionally omitted —
+// the bookings table never reads them.
+const bookingApprovalSelect = {
+  id: true,
+  entityId: true,
+  status: true,
+  steps: {
+    orderBy: { stepOrder: "asc" as const },
+    select: {
+      id: true,
+      stepOrder: true,
+      approverType: true,
+      approverRoleId: true,
+      approverUserId: true,
+      status: true,
+      signature: true,
+      decidedAt: true,
+      notes: true,
+      revisionId: true,
+      approverRole: { select: { id: true, name: true } },
+      approverUser: { select: { id: true, fullName: true } },
+    },
+  },
+} as const;
+
+export type BookingApproval = Awaited<
+  ReturnType<typeof db.approvalRecord.findMany<{ select: typeof bookingApprovalSelect }>>
+>[number];
+
+type BookingListRow = Awaited<
+  ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude }>>
+>[number];
+
 export interface PaginatedBookings {
-  data: Awaited<ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude }>>>;
+  data: (BookingListRow & { bookingApprovals: BookingApproval | null })[];
   total: number;
 }
 
-/** Parse a PO number into a sortable key. Format: "001/BRAND/VENUE/TYPE/dd-mm-yyyy".
- *  The sequence counter resets every year, so the true chronological order is
- *  (year DESC, sequence DESC). Returns null for drafts (no PO yet) so they can be
- *  pushed to the end. */
-function parsePoSortKey(poNumber: string | null): { year: number; seq: number } | null {
-  if (!poNumber) return null;
-  const parts = poNumber.split("/");
-  if (parts.length < 5) return null;
-  const seq = parseInt(parts[0], 10);
-  const year = parseInt(parts[4].split("-")[2], 10);
-  if (Number.isNaN(seq) || Number.isNaN(year)) return null;
-  return { year, seq };
-}
-
-/** Sort by true PO order: newest PO first (year DESC, then sequence DESC).
- *  Drafts (no PO) sink to the bottom, ordered among themselves by createdAt DESC. */
-function comparePoDesc(
-  a: { poNumber: string | null; createdAt: Date },
-  b: { poNumber: string | null; createdAt: Date },
-): number {
-  const ka = parsePoSortKey(a.poNumber);
-  const kb = parsePoSortKey(b.poNumber);
-  if (ka && kb) {
-    if (ka.year !== kb.year) return kb.year - ka.year;
-    if (ka.seq !== kb.seq) return kb.seq - ka.seq;
-    return b.createdAt.getTime() - a.createdAt.getTime();
-  }
-  if (ka && !kb) return -1; // a has a PO, b is a draft → a first
-  if (!ka && kb) return 1;
-  return b.createdAt.getTime() - a.createdAt.getTime(); // both drafts
-}
+// NOTE: PO sort is now done natively by the DB via the poYear/poSeq columns
+// (see getBookings orderBy). The former in-app parsePoSortKey/comparePoDesc helpers
+// were removed — they only existed because the sort key lived inside the poNumber
+// string, which is no longer the case.
 
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; salesId?: string; approvalStatus?: "pending" | "approved" },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: "pending" | "approved" },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
@@ -129,7 +150,7 @@ export async function getBookings(
     rs === "draft" ? { recordStatus: "draft" } :
     rs === "all" ? {} :
     { recordStatus: "saved" };
-  const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo);
+  const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo, options?.year);
   const salesIdFilter: Prisma.BookingWhereInput = options?.salesId ? { salesId: options.salesId } : {};
   let approvalStatusFilter: Prisma.BookingWhereInput = {};
   if (options?.approvalStatus) {
@@ -148,26 +169,44 @@ export async function getBookings(
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 10));
 
-  // Sort by true PO order (year DESC, sequence DESC; drafts last). The sequence is a
-  // substring of poNumber that resets yearly, which Prisma's orderBy cannot express.
-  // So we fetch only the lightweight ordering keys for ALL matching rows, sort + paginate
-  // in-app, then hydrate the page with the full include. Reuses the exact same `where`
-  // (scope/search/filters) — no SQL duplication.
-  const keys = await db.booking.findMany({
-    where,
-    select: { id: true, poNumber: true, createdAt: true },
-  });
-  const total = keys.length;
-  keys.sort(comparePoDesc);
-  const pageIds = keys.slice((page - 1) * pageSize, page * pageSize).map((k) => k.id);
+  // Native PO order (year DESC, sequence DESC; drafts/null last), paginated by the DB.
+  // poYear/poSeq are stored columns backed by @@index([recordStatus, poYear, poSeq]),
+  // so the database does the sort + LIMIT/OFFSET — no more fetching up to 5000 keys and
+  // sorting them in-app. This keeps the list query O(page) regardless of table size.
+  // `createdAt` is the final tiebreaker (matches the old comparePoDesc behaviour).
+  const orderBy: Prisma.BookingOrderByWithRelationInput[] = [
+    { poYear: { sort: "desc", nulls: "last" } },
+    { poSeq: { sort: "desc", nulls: "last" } },
+    { createdAt: "desc" },
+  ];
+
+  const total = await db.booking.count({ where });
 
   const rows = await db.booking.findMany({
-    where: { id: { in: pageIds } },
+    where,
+    orderBy,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    // Single LATERAL JOIN for the page's ~11 included relations instead of a
+    // round-trip per relation (Neon HTTP). One query for the whole page.
+    relationLoadStrategy: "join",
     include: bookingListInclude,
   });
-  // findMany ignores the order of `in`, so re-order to match the paginated key order.
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const data = pageIds.map((id) => byId.get(id)!).filter(Boolean);
+
+  const pageIds = rows.map((r) => r.id);
+
+  // Page-scoped approval fetch: only the active page's bookings, replacing the old
+  // client-side /api/approval-records call that pulled ALL booking records.
+  const approvals = pageIds.length > 0
+    ? await db.approvalRecord.findMany({
+        where: { module: "booking", entityId: { in: pageIds } },
+        select: bookingApprovalSelect,
+      })
+    : [] as BookingApproval[];
+  const approvalByEntityId = new Map(approvals.map((a) => [a.entityId, a]));
+
+  // rows already come back in the correct order from the DB — just attach approvals.
+  const data = rows.map((r) => ({ ...r, bookingApprovals: approvalByEntityId.get(r.id) ?? null }));
 
   return { data, total };
 }
@@ -189,14 +228,28 @@ function buildSearchFilter(search?: string): Prisma.BookingWhereInput {
   };
 }
 
-function buildDateFilter(dateFrom?: string, dateTo?: string): Prisma.BookingWhereInput {
-  if (!dateFrom && !dateTo) return {};
-  // dateFrom/dateTo are full ISO instants (local day start/end) computed client-side.
-  const gte = dateFrom ? new Date(dateFrom) : undefined;
-  const lte = dateTo ? new Date(dateTo) : undefined;
-  if (gte && lte) return { eventDate: { gte, lte } };
-  if (gte) return { eventDate: { gte } };
-  return { eventDate: { lte: lte! } };
+function buildDateFilter(dateFrom?: string, dateTo?: string, year?: number): Prisma.BookingWhereInput {
+  // Explicit date range wins — most specific filter
+  if (dateFrom || dateTo) {
+    const gte = dateFrom ? new Date(dateFrom) : undefined;
+    const lte = dateTo ? new Date(dateTo) : undefined;
+    if (gte && lte) return { eventDate: { gte, lte } };
+    if (gte) return { eventDate: { gte } };
+    return { eventDate: { lte: lte! } };
+  }
+
+  // Year filter — convenience shortcut for full calendar year
+  if (year) {
+    return {
+      eventDate: {
+        gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        lte: new Date(`${year}-12-31T23:59:59.999Z`),
+      },
+    };
+  }
+
+  // No filter
+  return {};
 }
 
 async function buildScopeFilter(profileId?: string, dataScope?: DataScope) {
@@ -236,6 +289,10 @@ export async function getBookingById(id: string) {
   const [booking, approvalRecord] = await Promise.all([
     db.booking.findUnique({
       where: { id },
+      // Single LATERAL JOIN instead of one round-trip per relation. This detail
+      // include pulls ~20 relations — over the Neon HTTP adapter the default
+      // "query" strategy meant ~20 sequential network hops (the 4-5s we saw).
+      relationLoadStrategy: "join",
       include: bookingDetailInclude,
     }),
     db.approvalRecord.findFirst({

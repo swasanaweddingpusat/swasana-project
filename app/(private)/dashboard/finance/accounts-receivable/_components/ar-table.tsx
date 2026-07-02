@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   AltArrowLeft,
@@ -10,11 +9,10 @@ import {
   Eye,
   Card,
   Bell,
-  CheckCircle,
-  Refresh,
   DownloadMinimalistic,
   FileSend,
   Wallet,
+  Copy,
 } from "@solar-icons/react";
 import {
   Table,
@@ -26,7 +24,6 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { acknowledgePayment } from "@/actions/payment-ack";
 import {
   fmtRp,
   fmtDate,
@@ -41,16 +38,20 @@ import type { ARBooking, ARTermin } from "@/types/finance";
 interface ARTableProps {
   bookings: ARBooking[];
   loading: boolean;
-  expandedRow: string | null;
+  expandedRows: Set<string>;
   onToggleRow: (id: string) => void;
   onOpenDetail: (booking: ARBooking) => void;
   onEditKeuangan?: (booking: ARBooking) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
-  canAck?: boolean; // finance-ar:edit permission
   canEditKeuangan?: boolean; // booking:edit OR finance-ar:edit
 }
+
+/** Shared header cell styling — small uppercase labels, the data-table convention. */
+const TH = "h-10 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
+/** Right-aligned variant for numeric columns. */
+const THR = cn(TH, "text-right");
 
 /* ─── Pagination ───────────────────────────────────────────────────────────── */
 
@@ -74,35 +75,23 @@ function genPages(current: number, total: number): (number | "...")[] {
 export function ARTable({
   bookings,
   loading,
-  expandedRow,
+  expandedRows,
   onToggleRow,
   onOpenDetail,
   onEditKeuangan,
   currentPage,
   totalPages,
   onPageChange,
-  canAck = false,
   canEditKeuangan = false,
 }: ARTableProps) {
   if (loading) {
     return (
-      <div className="rounded-lg border overflow-x-auto">
-        <Table>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="bg-secondary hover:bg-secondary">
-              {[
-                "Customer Event",
-                "Nama Event",
-                "Total Price",
-                "Outstanding",
-                "Jatuh Tempo",
-                "Status Booking",
-                "Status Termin",
-                "Actions",
-              ].map((h) => (
-                <TableHead key={h} className="h-11 text-xs">
-                  {h}
-                </TableHead>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              {["Customer Event", "Nama Event", "Total Price", "Outstanding", "Jatuh Tempo", "Status Booking", "Status Termin", "Aksi"].map((h) => (
+                <TableHead key={h} className={TH}>{h}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -110,7 +99,7 @@ export function ARTable({
             {Array.from({ length: 6 }).map((_, i) => (
               <TableRow key={i} className="h-18">
                 {Array.from({ length: 8 }).map((_, j) => (
-                  <TableCell key={j}>
+                  <TableCell key={j} className="px-4">
                     <Skeleton className="h-4 w-full" />
                   </TableCell>
                 ))}
@@ -123,46 +112,35 @@ export function ARTable({
   }
 
   return (
-    <div className="space-y-0">
-      <div className="rounded-lg border overflow-x-auto">
-        <Table>
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        <Table className="table-fixed">
+          <colgroup>
+            <col style={{ width: "17%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "11%" }} />
+          </colgroup>
           <TableHeader>
-            <TableRow className="bg-secondary hover:bg-secondary">
-              <TableHead className="h-11 min-w-44 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  Customer Event <AltArrowDown weight="BoldDuotone" className="size-3" />
-                </span>
-              </TableHead>
-              <TableHead className="h-11 w-37.75 min-w-37.75 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Nama Event
-              </TableHead>
-              <TableHead className="h-11 w-37.5 min-w-37.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Total Price
-              </TableHead>
-              <TableHead className="h-11 w-37.5 min-w-37.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Outstanding
-              </TableHead>
-              <TableHead className="h-11 w-28.5 min-w-28.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Jatuh Tempo
-              </TableHead>
-              <TableHead className="h-11 w-35 min-w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Status Booking
-              </TableHead>
-              <TableHead className="h-11 w-35 min-w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Status Termin
-              </TableHead>
-              <TableHead className="h-11 min-w-28.25 flex-1 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                Actions
-              </TableHead>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className={TH}>Customer Event</TableHead>
+              <TableHead className={TH}>Nama Event</TableHead>
+              <TableHead className={THR}>Total Price</TableHead>
+              <TableHead className={THR}>Outstanding</TableHead>
+              <TableHead className={TH}>Jatuh Tempo</TableHead>
+              <TableHead className={TH}>Status Booking</TableHead>
+              <TableHead className={TH}>Status Termin</TableHead>
+              <TableHead className={cn(TH, "text-right")}>Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {bookings.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={8}
-                  className="h-24 text-center text-sm text-muted-foreground"
-                >
+                <TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">
                   Tidak ada data piutang.
                 </TableCell>
               </TableRow>
@@ -171,11 +149,10 @@ export function ARTable({
                 <BookingRow
                   key={booking.id}
                   booking={booking}
-                  isExpanded={expandedRow === booking.id}
+                  isExpanded={expandedRows.has(booking.id)}
                   onToggle={() => onToggleRow(booking.id)}
                   onDetail={() => onOpenDetail(booking)}
                   onEditKeuangan={onEditKeuangan ? () => onEditKeuangan(booking) : undefined}
-                  canAck={canAck}
                   canEditKeuangan={canEditKeuangan}
                 />
               ))
@@ -185,16 +162,16 @@ export function ARTable({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 border-t px-6 pb-4 pt-3">
+        <div className="flex items-center justify-center gap-3">
           <div className="flex flex-1 items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage <= 1}
-              className="gap-1"
+              className="gap-1 rounded-full"
             >
-              <AltArrowLeft weight="BoldDuotone" className="size-5" />
+              <AltArrowLeft weight="BoldDuotone" className="size-4" />
               Previous
             </Button>
           </div>
@@ -202,10 +179,7 @@ export function ARTable({
           <div className="flex items-center gap-0.5">
             {genPages(currentPage, totalPages).map((p, i) =>
               p === "..." ? (
-                <span
-                  key={`e${i}`}
-                  className="flex size-10 items-center justify-center text-sm font-medium text-muted-foreground"
-                >
+                <span key={`e${i}`} className="flex size-9 items-center justify-center text-sm font-medium text-muted-foreground">
                   ...
                 </span>
               ) : (
@@ -213,9 +187,9 @@ export function ARTable({
                   key={p}
                   onClick={() => onPageChange(p as number)}
                   className={cn(
-                    "flex size-10 cursor-pointer items-center justify-center rounded-lg text-sm font-medium",
+                    "flex size-9 cursor-pointer items-center justify-center rounded-full text-sm font-medium transition-colors",
                     currentPage === p
-                      ? "bg-secondary text-foreground"
+                      ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-secondary"
                   )}
                 >
@@ -231,10 +205,10 @@ export function ARTable({
               size="sm"
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage >= totalPages}
-              className="gap-1"
+              className="gap-1 rounded-full"
             >
               Next
-              <AltArrowRight weight="BoldDuotone" className="size-5" />
+              <AltArrowRight weight="BoldDuotone" className="size-4" />
             </Button>
           </div>
         </div>
@@ -251,7 +225,6 @@ function BookingRow({
   onToggle,
   onDetail,
   onEditKeuangan,
-  canAck,
   canEditKeuangan,
 }: {
   booking: ARBooking;
@@ -259,85 +232,82 @@ function BookingRow({
   onToggle: () => void;
   onDetail: () => void;
   onEditKeuangan?: () => void;
-  canAck: boolean;
   canEditKeuangan: boolean;
 }) {
   const bookingStatusBadge = getBookingStatusBadge(booking.bookingStatus);
   const terminBadge = getTerminBadge(booking.statusTermin);
+  const isLunas = booking.outstanding <= 0;
 
   return (
     <>
       <TableRow
-        className="h-18 cursor-pointer bg-background hover:bg-secondary/50"
+        className={cn(
+          "h-18 cursor-pointer bg-card align-middle transition-colors hover:bg-secondary/40",
+          isExpanded && "bg-secondary/30 hover:bg-secondary/30"
+        )}
         onClick={onToggle}
       >
-        <TableCell className="px-6 py-4">
-          <div className="flex items-start gap-2">
+        <TableCell className="px-4 py-3 align-middle">
+          <div className="flex items-center gap-2">
             <AltArrowDown
               weight="BoldDuotone"
               className={cn(
-                "size-4 shrink-0 mt-0.5 text-muted-foreground transition-transform duration-200",
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
                 isExpanded && "rotate-180"
               )}
             />
-            <div>
-              <div className="text-sm font-medium text-foreground">
-                {booking.customerEvent}
-              </div>
-              <div className="text-xs text-muted-foreground">{booking.noPo}</div>
-              <div className="text-xs text-muted-foreground">
-                {fmtDate(booking.customerDate)}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-foreground">{booking.customerEvent}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {booking.noPo} · {fmtDate(booking.customerDate)}
               </div>
             </div>
           </div>
         </TableCell>
-        <TableCell className="px-6 py-4 text-sm text-foreground">
+        <TableCell className="truncate px-4 py-3 align-middle text-sm text-foreground">
           {booking.namaEvent}
         </TableCell>
-        <TableCell className="px-6 py-4 text-sm text-foreground">
+        <TableCell className="px-4 py-3 text-right align-middle text-sm tabular-nums text-foreground">
           {fmtRp(booking.totalPrice)}
         </TableCell>
-        <TableCell className="px-6 py-4 text-sm font-semibold text-foreground">
+        <TableCell
+          className={cn(
+            "px-4 py-3 text-right align-middle text-sm tabular-nums",
+            isLunas ? "text-muted-foreground" : "font-semibold text-foreground"
+          )}
+        >
           {fmtRp(booking.outstanding)}
         </TableCell>
-        <TableCell className="px-6 py-4 text-sm text-foreground">
+        <TableCell className="px-4 py-3 align-middle text-sm text-foreground">
           {fmtDate(booking.jatuhTempo)}
         </TableCell>
-        <TableCell className="px-6 py-4">
+        <TableCell className="px-4 py-3 align-middle">
           <StatusBadge config={bookingStatusBadge} />
         </TableCell>
-        <TableCell className="px-6 py-4">
+        <TableCell className="px-4 py-3 align-middle">
           <StatusBadge config={terminBadge} />
         </TableCell>
-        <TableCell className="p-4">
+        <TableCell className="px-4 py-3 align-middle">
           <div
-            className="flex items-center gap-0.5"
+            className="flex items-center justify-end gap-0.5"
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
           >
             <button
-              className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+              className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={onDetail}
               title="Detail"
             >
               <Eye weight="BoldDuotone" className="size-4" />
             </button>
-            <button
-              disabled
-              className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-              title="Segera hadir"
-            >
+            <button disabled className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40" title="Segera hadir">
               <Card weight="BoldDuotone" className="size-4" />
             </button>
-            <button
-              disabled
-              className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-              title="Segera hadir"
-            >
+            <button disabled className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40" title="Segera hadir">
               <Bell weight="BoldDuotone" className="size-4" />
             </button>
             {canEditKeuangan && onEditKeuangan && (
               <button
-                className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+                className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 onClick={onEditKeuangan}
                 title="Edit Keuangan"
               >
@@ -351,48 +321,42 @@ function BookingRow({
       {isExpanded && booking.termins.length > 0 && (
         <TableRow className="bg-secondary/30 hover:bg-secondary/30">
           <TableCell colSpan={8} className="p-0">
-            <div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-secondary hover:bg-secondary">
-                    <TableHead className="h-11 w-32.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Termin
-                    </TableHead>
-                    <TableHead className="h-11 w-29.75 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Due Date
-                    </TableHead>
-                    <TableHead className="h-11 w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Amount
-                    </TableHead>
-                    <TableHead className="h-11 w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Status Termin
-                    </TableHead>
-                    <TableHead className="h-11 w-35 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      No Invoice
-                    </TableHead>
-                    <TableHead className="h-11 w-32.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Status Invoice
-                    </TableHead>
-                    <TableHead className="h-11 w-28.5 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Aging (days)
-                    </TableHead>
-                    <TableHead className="h-11 w-36 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Piutang Ack
-                    </TableHead>
-                    <TableHead className="h-11 w-30 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Note
-                    </TableHead>
-                    <TableHead className="h-11 min-w-21.75 flex-1 px-6 py-3 text-xs font-semibold text-muted-foreground">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {booking.termins.map((termin) => (
-                    <TerminRow key={termin.id} termin={termin} canAck={canAck} />
-                  ))}
-                </TableBody>
-              </Table>
+            {/* Inset panel: own card so it reads clearly as the row's child
+                detail. Single, even padding — no extra left indent. */}
+            <div className="p-3">
+              <div className="overflow-hidden rounded-xl border border-border bg-card">
+                <Table className="table-fixed">
+                  <colgroup>
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "7%" }} />
+                  </colgroup>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className={TH}>Termin</TableHead>
+                      <TableHead className={TH}>Due Date</TableHead>
+                      <TableHead className={THR}>Amount</TableHead>
+                      <TableHead className={TH}>Status Termin</TableHead>
+                      <TableHead className={TH}>Status Invoice</TableHead>
+                      <TableHead className={THR}>Aging</TableHead>
+                      <TableHead className={TH}>Piutang Ack</TableHead>
+                      <TableHead className={TH}>Note</TableHead>
+                      <TableHead className={cn(TH, "text-right")}>Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {booking.termins.map((termin) => (
+                      <TerminRow key={termin.id} termin={termin} />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </TableCell>
         </TableRow>
@@ -403,190 +367,102 @@ function BookingRow({
 
 /* ─── Termin Row (child) ───────────────────────────────────────────────────── */
 
-function TerminRow({ termin, canAck }: { termin: ARTermin; canAck: boolean }) {
+function TerminRow({ termin }: { termin: ARTermin }) {
   const terminBadge = getTerminBadge(termin.status);
   const invoiceBadge = getInvoiceBadge(termin.statusInvoice);
   const ackBadge = getAckBadge(termin.ackStatus);
 
   return (
-    <TableRow className="h-18 bg-background hover:bg-secondary/30">
-      <TableCell className="px-6 py-4 text-sm text-foreground">
-        {termin.name}
+    <TableRow className="bg-card align-middle transition-colors hover:bg-secondary/40">
+      <TableCell className="px-4 py-3 align-middle">
+        <div className="truncate text-sm font-medium text-foreground">{termin.name}</div>
+        <CopyableInvoice value={termin.noInvoice} />
       </TableCell>
-      <TableCell className="px-6 py-4 text-sm text-foreground">
+      <TableCell className="px-4 py-3 align-middle text-sm text-foreground">
         {fmtDate(termin.dueDate)}
       </TableCell>
-      <TableCell className="px-6 py-4 text-sm font-semibold text-foreground">
+      <TableCell className="px-4 py-3 text-right align-middle text-sm font-semibold tabular-nums text-foreground">
         {fmtRp(termin.amount)}
       </TableCell>
-      <TableCell className="px-6 py-4">
+      <TableCell className="px-4 py-3 align-middle">
         <StatusBadge config={terminBadge} />
       </TableCell>
-      <TableCell className="px-6 py-4 text-sm text-foreground">
-        {termin.noInvoice || "-"}
-      </TableCell>
-      <TableCell className="px-6 py-4">
+      <TableCell className="px-4 py-3 align-middle">
         <StatusBadge config={invoiceBadge} />
       </TableCell>
-      <TableCell className="px-6 py-4 text-sm text-foreground">
+      <TableCell className="px-4 py-3 text-right align-middle text-sm tabular-nums text-foreground">
         {termin.agingDays != null ? `+${termin.agingDays}` : "-"}
       </TableCell>
-      <TableCell className="px-6 py-4">
+      <TableCell className="px-4 py-3 align-middle">
         <div className="space-y-0.5">
           <StatusBadge config={ackBadge} />
           {termin.acknowledgedAt && termin.acknowledgedByName && (
-            <p className="text-xs text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground">
               {termin.acknowledgedByName} · {fmtDate(termin.acknowledgedAt)}
             </p>
           )}
         </div>
       </TableCell>
-      <TableCell className="px-6 py-4 text-sm text-foreground max-w-30 truncate">
+      <TableCell className="truncate px-4 py-3 align-middle text-sm text-foreground">
         {termin.catatan || "-"}
       </TableCell>
-      <TableCell className="p-4">
-        <TerminActions termin={termin} canAck={canAck} />
+      <TableCell className="px-4 py-3 align-middle">
+        <TerminActions termin={termin} />
       </TableCell>
     </TableRow>
   );
 }
 
-/* ─── Ack Button ────────────────────────────────────────────────────────────── */
+/* ─── Copyable invoice number ──────────────────────────────────────────────── */
 
-function AckButton({ topId }: { topId: string }) {
-  const [isPending, startTransition] = useTransition();
-  const [done, setDone] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const qc = useQueryClient();
-
-  function handleAck() {
-    setErr(null);
-    startTransition(async () => {
-      const result = await acknowledgePayment(topId);
-      if (result.success) {
-        setDone(true);
-        // Invalidate supaya TanStack Query refetch data AR terbaru.
-        // revalidateTag("ar-bookings","max") di server action sudah invalidate
-        // Next.js cache; ini invalidate TanStack Query client cache juga.
-        void qc.invalidateQueries({ queryKey: ["ar-bookings"] });
-      } else {
-        setErr(result.error);
-      }
-    });
+function CopyableInvoice({ value }: { value: string }) {
+  if (!value) {
+    return <span className="block truncate text-xs text-muted-foreground">Belum ada invoice</span>;
   }
 
-  if (done) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
-        <CheckCircle weight="BoldDuotone" className="size-3.5" />
-        Acked
-      </span>
-    );
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    void navigator.clipboard.writeText(value);
+    toast.success("No invoice disalin", { duration: 1500 });
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
-      <button
-        onClick={handleAck}
-        disabled={isPending}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors",
-          isPending
-            ? "cursor-not-allowed text-muted-foreground"
-            : "cursor-pointer hover:bg-primary hover:text-primary-foreground hover:border-primary text-foreground"
-        )}
-        title="Acknowledge payment"
-      >
-        {isPending ? (
-          <Refresh weight="BoldDuotone" className="size-3.5 animate-spin" />
-        ) : (
-          <CheckCircle weight="BoldDuotone" className="size-3.5" />
-        )}
-        Ack
-      </button>
-      {err && <p className="text-xs text-destructive">{err}</p>}
-    </div>
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={`Salin ${value}`}
+      className="group/inv inline-flex max-w-full items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <span className="truncate">{value}</span>
+      <Copy
+        weight="BoldDuotone"
+        className="size-3 shrink-0 opacity-0 transition-opacity group-hover/inv:opacity-100"
+      />
+    </button>
   );
 }
 
-/* ─── Termin Actions (context-aware) ───────────────────────────────────────── */
+/* ─── Termin Actions ───────────────────────────────────────────────────────── */
 
-function TerminActions({ termin, canAck }: { termin: ARTermin; canAck: boolean }) {
-  // Show Ack button when TOP is paid but not yet acknowledged (Finance can ack)
-  const showAck = canAck && termin.status === "paid" && termin.ackStatus !== "acknowledged";
-
-  if (termin.status === "paid") {
-    return (
-      <div className="flex items-center gap-0.5">
-        <button
-          disabled
-          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-          title="Segera hadir"
-        >
-          <Eye weight="BoldDuotone" className="size-4" />
-        </button>
-        <button
-          disabled
-          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-          title="Segera hadir"
-        >
-          <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
-        </button>
-        {showAck && <AckButton topId={termin.id} />}
-      </div>
-    );
-  }
-
-  if (termin.status === "overdue") {
-    return (
-      <div className="flex items-center gap-0.5">
-        <button
-          disabled
-          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-          title="Segera hadir"
-        >
-          <Card weight="BoldDuotone" className="size-4" />
-        </button>
-        <button
-          disabled
-          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-          title="Segera hadir"
-        >
-          <Bell weight="BoldDuotone" className="size-4" />
-        </button>
-      </div>
-    );
-  }
-
-  if (termin.statusInvoice === "unissued") {
-    return (
-      <div className="flex items-center gap-0.5">
-        <button
-          disabled
-          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-          title="Segera hadir"
-        >
-          <FileSend weight="BoldDuotone" className="size-4" />
-        </button>
-        <button
-          disabled
-          className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-          title="Segera hadir"
-        >
-          <Bell weight="BoldDuotone" className="size-4" />
-        </button>
-      </div>
-    );
-  }
-
+function TerminActions({ termin }: { termin: ARTermin }) {
+  // Termin actions: download invoice + download kwitansi only.
+  // Kwitansi (receipt) only makes sense once the termin is paid.
+  const canKwitansi = termin.status === "paid";
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center justify-end gap-0.5">
       <button
         disabled
-        className="cursor-not-allowed rounded-md p-1.5 text-muted-foreground/40"
-        title="Segera hadir"
+        className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
+        title="Download invoice — segera hadir"
       >
-        <Card weight="BoldDuotone" className="size-4" />
+        <FileSend weight="BoldDuotone" className="size-4" />
+      </button>
+      <button
+        disabled
+        className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
+        title={canKwitansi ? "Download kwitansi — segera hadir" : "Kwitansi tersedia setelah lunas"}
+      >
+        <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
       </button>
     </div>
   );

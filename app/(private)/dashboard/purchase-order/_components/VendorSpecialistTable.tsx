@@ -243,7 +243,7 @@ export function VendorSpecialistTable({
                           {booking.snapPackagePricing && (
                             <>
                               <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackagePricing.packageName}</span>
-                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
+                              <span className={cn("text-xs", "text-muted-foreground", "block")}>{booking.snapPackagePricing.pax ? `${booking.snapPackagePricing.pax} PAX · ` : ""}{fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
                             </>
                           )}
                         </div>

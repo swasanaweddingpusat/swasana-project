@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer } from "@/components/shared/drawer";
@@ -20,6 +23,8 @@ import {
   CloseCircle,
   CheckCircle,
   AlignVerticalSpacing,
+  Copy,
+  TagPrice,
 } from "@solar-icons/react";
 import {
   DndContext,
@@ -75,7 +80,7 @@ function SortableTermItem({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("space-y-2", isDragging && "opacity-50 relative z-10")}
+      className={cn(isDragging && "opacity-50 relative z-10")}
     >
       {children({ attributes, listeners })}
     </div>
@@ -90,6 +95,12 @@ interface TopContentProps {
   packagePrice: number;
   discountName: string | null;
   discountAmount: number;
+  saveLabel?: string;
+  onPrevious?: () => void;
+  /** When provided, called after a successful save instead of leaving the drawer
+   *  open — used by the edit-booking continue flow to advance to the next step.
+   *  Omitted in standalone usage (Finance AR / row menu), where the drawer stays open. */
+  onSaved?: () => void;
 }
 
 function TopContent({
@@ -98,6 +109,9 @@ function TopContent({
   packagePrice,
   discountName: initialDiscountName,
   discountAmount: initialDiscountAmount,
+  saveLabel = "Update",
+  onPrevious,
+  onSaved,
 }: TopContentProps): React.ReactElement {
   const qc = useQueryClient();
   const [terms, setTerms] = useState<FinanceTerm[]>([]);
@@ -106,6 +120,34 @@ function TopContent({
   const [partialPayments, setPartialPayments] = useState<Record<string, PartialPayment[]>>({});
   const [expandedTerms, setExpandedTerms] = useState<Set<string>>(new Set());
   const [_uploading, setUploading] = useState<string | null>(null);
+  // Payment method (bank tujuan) per term — UI-only for now, keyed by term id.
+  const [termPaymentMethods, setTermPaymentMethods] = useState<Record<string, string>>({});
+  // Accordion: which term cards are collapsed (paid/locked terms start collapsed).
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
+  // Which locked (paid/acknowledged) terms the user explicitly unlocked to edit.
+  const [unlockedTerms, setUnlockedTerms] = useState<Set<string>>(new Set());
+  function toggleCollapse(id: string): void {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+  function toggleUnlock(id: string): void {
+    setUnlockedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   const [discountName, setDiscountName] = useState(initialDiscountName ?? "Discount");
   const [discountAmount, setDiscountAmount] = useState(initialDiscountAmount);
@@ -143,7 +185,30 @@ function TopContent({
         }
         return map;
       });
+      // Seed per-term payment method from saved data (includes backfilled bank for old terms).
+      setTermPaymentMethods(
+        Object.fromEntries(
+          initialTerms
+            .filter((t) => t.paymentMethodId)
+            .map((t) => [t.id, t.paymentMethodId as string]),
+        ),
+      );
       setExpandedTerms(new Set());
+      // Collapse paid / acknowledged / refund terms by default — they're settled,
+      // so the card starts compact; active (unpaid) terms stay expanded.
+      setCollapsedTerms(
+        new Set(
+          initialTerms
+            .filter(
+              (t) =>
+                t.paymentStatus === "paid" ||
+                t.paymentStatus === "refund" ||
+                t.ackStatus === "acknowledged",
+            )
+            .map((t) => t.id),
+        ),
+      );
+      setUnlockedTerms(new Set());
       setDiscountName(initialDiscountName ?? "Discount");
       setDiscountAmount(initialDiscountAmount);
       setDiscountEditing(false);
@@ -164,6 +229,35 @@ function TopContent({
     [initialTerms],
   );
 
+  // Promo state (multi-select). One payment nominal (uang masuk / cashflow) drives
+  // every promo's potongan; each potongan can be overridden manually per promo.
+  const [selectedPromoIds, setSelectedPromoIds] = useState<string[]>([]);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [promoOverrides, setPromoOverrides] = useState<Record<string, number>>({});
+  const selectedPromos = DUMMY_PROMOS.filter((p) => selectedPromoIds.includes(p.id));
+  function togglePromo(id: string): void {
+    setSelectedPromoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+    // Drop any manual override when a promo is unselected so it recomputes fresh next time.
+    setPromoOverrides((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+  function computePotongan(p: (typeof DUMMY_PROMOS)[number], payment: number): number {
+    return p.discountType === "PERCENTAGE"
+      ? Math.round((payment || 0) * p.discountValue / 100)
+      : p.discountValue; // nominal flat, tidak tergantung pembayaran
+  }
+  function potonganOf(p: (typeof DUMMY_PROMOS)[number]): number {
+    return promoOverrides[p.id] ?? computePotongan(p, paymentAmount);
+  }
+  const totalPromo = selectedPromos.reduce((s, p) => s + potonganOf(p), 0);
+
   const priceAfterDiscount = Math.max(0, packagePrice - discountAmount);
   // Refund terms are a separate reconciliation, not a billable term — exclude
   // them from the total so the difference reflects the actual billing pool.
@@ -171,6 +265,15 @@ function TopContent({
     .filter((t) => t.paymentStatus !== "refund")
     .reduce((s, t) => s + (t.amount || 0), 0);
   const difference = totalTerms - priceAfterDiscount;
+
+  const isMandatoryValid = useMemo(() => {
+    const firstTerm = terms[0];
+    if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) return false;
+    for (const t of terms) {
+      if (t.paymentStatus === "paid" && !t.paymentEvidence && !pendingFiles[t.id]) return false;
+    }
+    return true;
+  }, [terms, pendingFiles]);
 
   const isChanged = useMemo(() => {
     if (terms.length !== initialTerms.length) return true;
@@ -231,20 +334,29 @@ function TopContent({
   };
 
   const handleUpdate = async () => {
+    // Continue flow with no changes — skip API call and advance immediately.
+    if (!isChanged && onSaved) {
+      onSaved();
+      return;
+    }
+
     for (const t of terms) {
       if (t.paymentStatus === "paid" && !t.paymentEvidence && !pendingFiles[t.id]) {
         toast.error(`${t.name}: Upload bukti bayar dulu sebelum set Paid`);
         return;
       }
     }
-    const dpTerm = terms.find((t) => t.name.trim().toUpperCase() === "DP");
-    if (dpTerm && (!dpTerm.amount || dpTerm.amount <= 0)) {
-      toast.error("Nominal DP wajib diisi dan harus lebih dari 0.");
+    const firstTerm = terms[0];
+    if (firstTerm && (!firstTerm.amount || firstTerm.amount <= 0)) {
+      toast.error(`Nominal ${firstTerm.name || "term pertama"} wajib diisi dan harus lebih dari 0.`);
       return;
     }
 
     setLoading(true);
 
+    // Upload evidence for EXISTING terms (they already have a stable DB id).
+    // New terms (id "new-…") are handled AFTER the save below, once the server has
+    // assigned them real ids — otherwise their evidence would be silently dropped.
     for (const [termId, file] of Object.entries(pendingFiles)) {
       if (termId.startsWith("new-")) continue;
       setUploading(termId);
@@ -286,25 +398,76 @@ function TopContent({
         dueDate: t.dueDate,
         paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
         notes: t.notes,
+        paymentMethodId: termPaymentMethods[t.id] ?? null,
         sortOrder,
       })),
       newTerms.map(({ term: t, sortOrder }) => ({
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate,
+        paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
+        paymentMethodId: termPaymentMethods[t.id] ?? null,
         sortOrder,
       })),
       { discountName, discountAmount },
     );
 
-    setLoading(false);
     if (!result.success) {
+      setLoading(false);
       toast.error(result.error);
       return;
     }
+
+    // Upload evidence for NEWLY-created terms. The server assigned each a stable id;
+    // previously this was skipped entirely, so a new paid term's proof was lost
+    // without any error. (C-03)
+    //
+    // Robust matching: the brand-new DB rows are exactly those whose id was NOT
+    // present before the save (excludes existing + refund terms, so a refund term's
+    // sortOrder can't be mistaken for a new term's). We then align new DB rows to our
+    // new client terms by ascending sortOrder — unique among the new set.
+    const newTermsWithFile = newTerms.filter(({ term: t }) => pendingFiles[t.id]);
+    if (newTermsWithFile.length > 0) {
+      try {
+        const knownIds = new Set(terms.filter((t) => !t.id.startsWith("new-")).map((t) => t.id));
+        const res = await fetch(`/api/bookings/${bookingId}/terms`);
+        if (!res.ok) throw new Error("fetch terms failed");
+        const dbTerms = (await res.json()) as Array<{ id: string; sortOrder: number }>;
+        const freshDbId = new Map(
+          dbTerms.filter((r) => !knownIds.has(r.id)).map((r) => [r.sortOrder, r.id]),
+        );
+
+        for (const { term: t, sortOrder } of newTermsWithFile) {
+          const dbId = freshDbId.get(sortOrder);
+          const file = pendingFiles[t.id];
+          if (!dbId || !file) continue;
+          setUploading(t.id);
+          const fd = new FormData();
+          fd.set("bookingId", bookingId);
+          fd.set("termId", dbId);
+          fd.set("file", file);
+          const up = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
+          if (!up.ok) throw new Error(`upload failed for ${t.name}`);
+          setUploading(null);
+        }
+      } catch {
+        setUploading(null);
+        setLoading(false);
+        // The terms themselves are saved; only the new-term evidence upload failed.
+        toast.error("Term tersimpan, tapi bukti bayar term baru gagal di-upload. Buka lagi & upload ulang.");
+        qc.invalidateQueries({ queryKey: ["bookings"] });
+        qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+        return;
+      }
+    }
+
+    setLoading(false);
     toast.success("TOP berhasil diupdate");
     qc.invalidateQueries({ queryKey: ["bookings"] });
-    // Drawer stays open — user closes manually
+    qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+    // Continue flow: advance to the next step. Standalone usage omits onSaved, so
+    // the drawer stays open and the user closes it manually.
+    onSaved?.();
   };
 
   return (
@@ -351,6 +514,149 @@ function TopContent({
           )}
         </div>
 
+        {/* Promo Program — hidden until wired to real DB (discount_programs table) */}
+        {false && <div className="mb-4">
+          <label className="text-sm font-medium text-foreground mb-2 block">Program Discount</label>
+          <Popover open={promoOpen} onOpenChange={setPromoOpen}>
+            <PopoverTrigger
+              className={cn(
+                "w-full flex items-center justify-between rounded-xl border bg-background px-3 h-10 text-sm shadow-sm transition-colors hover:bg-accent",
+                selectedPromoIds.length === 0 && "text-muted-foreground",
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {selectedPromoIds.length === 0 ? (
+                  <span>Pilih program...</span>
+                ) : (
+                  <span className="text-foreground">{selectedPromoIds.length} program dipilih</span>
+                )}
+              </div>
+              <AltArrowDown weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground ml-2" />
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-72" align="start">
+              <Command>
+                <CommandInput placeholder="Cari program..." />
+                <CommandList>
+                  <CommandEmpty>Program tidak ditemukan.</CommandEmpty>
+                  <CommandGroup>
+                    {DUMMY_PROMOS.map((p) => {
+                      const isSelected = selectedPromoIds.includes(p.id);
+                      return (
+                        <CommandItem
+                          key={p.id}
+                          value={p.name}
+                          onSelect={() => togglePromo(p.id)}
+                        >
+                          <div className="flex items-start gap-2 w-full py-0.5">
+                            <TagPrice weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{p.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+                                  {p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp ${(p.discountValue / 1_000_000).toFixed(1)}jt`}
+                                </Badge>
+                                {p.minTransaction > 0 && (
+                                  <span className="text-xs text-muted-foreground">min. Rp{(p.minTransaction / 1_000_000).toFixed(0)}jt</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                s/d {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                              </p>
+                            </div>
+                            {isSelected && <CheckCircle weight="BoldDuotone" className="ml-auto h-4 w-4 text-primary shrink-0 mt-0.5" />}
+                          </div>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          {/* Nominal Pembayaran — one input for all promos (uang masuk / cashflow) */}
+          {selectedPromos.length > 0 && (
+            <div className="mt-3">
+              <label className="text-sm font-medium text-foreground mb-1 block">Nominal Pembayaran</label>
+              <Input
+                value={paymentAmount ? fmtRp(paymentAmount) : ""}
+                onChange={(e) =>
+                  setPaymentAmount(parseInt(e.target.value.replace(/\D/g, ""), 10) || 0)
+                }
+                placeholder="IDR. 0"
+                inputMode="numeric"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Uang masuk dari client (cashflow)</p>
+            </div>
+          )}
+
+          {/* Promo Cards (one per selected program) */}
+          {selectedPromos.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {selectedPromos.map((p) => (
+                <div key={p.id} className="rounded-xl border bg-card p-3 shadow-sm">
+                  <div className="flex items-start gap-2">
+                    <TagPrice weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-gold)] shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-foreground">{p.name}</p>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="default">
+                            {p.discountType === "PERCENTAGE"
+                              ? `${p.discountValue}%`
+                              : `Rp ${(p.discountValue / 1_000_000).toFixed(1)} jt`}
+                          </Badge>
+                          <button
+                            type="button"
+                            onClick={() => togglePromo(p.id)}
+                            className="rounded-full p-0.5 hover:bg-muted transition-colors"
+                          >
+                            <CloseCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        {p.minTransaction > 0 && (
+                          <p>Min. transaksi: Rp {(p.minTransaction / 1_000_000).toFixed(0)} jt</p>
+                        )}
+                        <p>
+                          Berlaku:{" "}
+                          {p.periodStart.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} -{" "}
+                          {p.periodEnd.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+
+                      {/* Potongan — auto dari pembayaran, bisa override manual */}
+                      <div className="mt-2 pt-2 border-t">
+                        <label className="text-xs font-medium text-foreground mb-1 block">Potongan</label>
+                        <Input
+                          value={potonganOf(p) ? fmtRp(potonganOf(p)) : ""}
+                          onChange={(e) =>
+                            setPromoOverrides((prev) => ({
+                              ...prev,
+                              [p.id]: parseInt(e.target.value.replace(/\D/g, ""), 10) || 0,
+                            }))
+                          }
+                          placeholder="IDR. 0"
+                          inputMode="numeric"
+                          className="w-full h-8 text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {p.discountType === "PERCENTAGE"
+                            ? `${p.discountValue}% × Rp${fmtRp(paymentAmount)} = Rp${fmtRp(computePotongan(p, paymentAmount))}`
+                            : "Nominal tetap"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>}
+
         {/* Terms */}
         <div>
           <span className="text-sm font-medium text-foreground mb-2 block">Term of Payments</span>
@@ -358,89 +664,122 @@ function TopContent({
             <SortableContext items={terms.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-4">
             {terms.map((term, idx) => {
-              const locked = lockedIds.includes(term.id);
+              const isUnlockable = lockedIds.includes(term.id);
+              const locked = isUnlockable && !unlockedTerms.has(term.id);
               const isAcknowledged = term.ackStatus === "acknowledged";
               const isRefund = term.paymentStatus === "refund";
               const isNew = term.id.startsWith("new-");
-              const isDP = term.name.trim().toUpperCase() === "DP";
+              const isDP = idx === 0;
               const isDPInvalid = isDP && (!term.amount || term.amount <= 0);
+              const collapsed = collapsedTerms.has(term.id);
+              const statusLabel =
+                term.paymentStatus.charAt(0).toUpperCase() + term.paymentStatus.slice(1);
               return (
                 <SortableTermItem key={term.id} id={term.id}>
                   {({ attributes, listeners }) => (
-                <>
-                  {/* Term name — inline editable */}
-                  <div className="flex items-center gap-2">
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  {/* Accordion header — click toggles collapse */}
+                  <div
+                    className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-accent/40 transition-colors"
+                    onClick={() => toggleCollapse(term.id)}
+                  >
                     <button
                       type="button"
                       {...attributes}
                       {...listeners}
+                      onClick={(e) => e.stopPropagation()}
                       className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
                       tabIndex={-1}
                       aria-label="Drag to reorder"
                     >
                       <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
                     </button>
-                    <div className="flex items-center gap-0.5 flex-1 min-w-0">
-                      <Input
-                        value={term.name}
-                        onChange={(e) => handleFieldChange(term.id, "name", e.target.value)}
-                        placeholder="Term name"
-                        disabled={locked}
-                        className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
-                      />
+                    <AltArrowDown
+                      weight="BoldDuotone"
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                        !collapsed && "rotate-180",
+                      )}
+                    />
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {term.name || "Term"}
+                      </span>
                       {isDP && (
                         <span className="text-destructive text-xs font-medium shrink-0">*</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* Refund badge */}
-                      {isRefund && (
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {/* Status badge */}
+                      {isRefund ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-[var(--brand-gold)]/10 px-2 py-0.5 text-xs font-medium text-[var(--brand-gold)]">
                           Refund
                         </span>
-                      )}
-                      {/* Acknowledged badge */}
-                      {isAcknowledged && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          <CheckCircle weight="BoldDuotone" className="h-3 w-3" />
-                          Acknowledged
+                      ) : (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium",
+                            term.paymentStatus === "paid"
+                              ? "bg-muted text-foreground"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {isAcknowledged && <CheckCircle weight="BoldDuotone" className="h-3 w-3" />}
+                          {isAcknowledged ? "Acknowledged" : statusLabel}
                         </span>
                       )}
-                      {!isNew && !isRefund && (
-                        <Select
-                          value={term.paymentStatus}
-                          onValueChange={(v) => handleFieldChange(term.id, "paymentStatus", v)}
-                          disabled={locked}
+                      {/* Edit-paid pencil toggle — only for locked terms */}
+                      {isUnlockable && !isRefund && (
+                        <button
+                          type="button"
+                          onClick={() => toggleUnlock(term.id)}
+                          className={cn(
+                            "shrink-0 rounded-lg p-1.5 transition-colors",
+                            !locked
+                              ? "text-[var(--brand-gold)] bg-[var(--brand-gold)]/10"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                          aria-label={!locked ? "Kunci term" : "Edit term"}
                         >
-                          <SelectTrigger className="w-24 h-7">
-                            <span
-                              className={cn(
-                                "text-xs font-semibold",
-                                term.paymentStatus === "paid"
-                                  ? "text-foreground"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {term.paymentStatus.charAt(0).toUpperCase() +
-                                term.paymentStatus.slice(1)}
-                            </span>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PAYMENT_STATUS.map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {s.charAt(0).toUpperCase() + s.slice(1)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
+                        </button>
                       )}
+                      {/* Duplicate */}
+                      {!isRefund && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const maxSort = terms.reduce((max, t) => Math.max(max, t.sortOrder), -1);
+                            setTerms((prev) => {
+                              const idx = prev.findIndex((t) => t.id === term.id);
+                              const copy = {
+                                ...term,
+                                id: `new-${Date.now()}`,
+                                sortOrder: maxSort + 1,
+                                paymentStatus: "unpaid" as const,
+                                ackStatus: null,
+                                paymentEvidence: null,
+                                notes: null,
+                              };
+                              const next = [...prev];
+                              next.splice(idx + 1, 0, copy);
+                              return next;
+                            });
+                          }}
+                          className="text-muted-foreground hover:text-foreground shrink-0 flex items-center justify-center h-8 w-8"
+                          aria-label="Duplikat term"
+                        >
+                          <Copy weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      )}
+                      {/* Delete */}
                       {terms.length > 1 && !locked && (
                         <button
                           type="button"
                           onClick={() =>
                             setTerms((prev) => prev.filter((t) => t.id !== term.id))
                           }
-                          className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center min-h-9 min-w-9"
+                          className="text-muted-foreground hover:text-destructive shrink-0 flex items-center justify-center h-8 w-8"
                         >
                           <TrashBinTrash
                             weight="BoldDuotone"
@@ -450,6 +789,47 @@ function TopContent({
                       )}
                     </div>
                   </div>
+
+                  {/* Accordion body */}
+                  {!collapsed && (
+                  <div className="px-3 pb-3 space-y-2 border-t pt-3">
+                  {/* Term name — inline editable (+ status select for existing terms) */}
+                  {!isRefund && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={term.name}
+                        onChange={(e) => handleFieldChange(term.id, "name", e.target.value)}
+                        placeholder="Term name"
+                        disabled={locked}
+                        className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
+                      />
+                      <Select
+                        value={term.paymentStatus}
+                        onValueChange={(v) => handleFieldChange(term.id, "paymentStatus", v)}
+                        disabled={locked}
+                      >
+                        <SelectTrigger className="w-24 h-7 shrink-0">
+                          <span
+                            className={cn(
+                              "text-xs font-semibold",
+                              term.paymentStatus === "paid"
+                                ? "text-foreground"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {statusLabel}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_STATUS.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {/* Amount + Date row */}
                   <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 sm:items-center">
@@ -509,6 +889,23 @@ function TopContent({
                         </PopoverContent>
                       </Popover>
                     </div>
+                  </div>
+
+                  {/* Payment method (bank tujuan) per term */}
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Metode Pembayaran
+                    </label>
+                    <BankAccountSelect
+                      value={termPaymentMethods[term.id] ?? ""}
+                      onChange={(v) =>
+                        setTermPaymentMethods((prev) => ({ ...prev, [term.id]: v }))
+                      }
+                      placeholder="Pilih metode pembayaran"
+                      disabled={locked}
+                      crossVenue
+                      disableAdd
+                    />
                   </div>
 
                   {/* Upload evidence */}
@@ -954,9 +1351,9 @@ function TopContent({
                   {isDPInvalid && (
                     <p className="text-xs text-destructive">Nominal DP wajib diisi</p>
                   )}
-                  {/* Divider */}
-                  {idx < terms.length - 1 && <div className="border-b border-border pt-1" />}
-                </>
+                  </div>
+                  )}
+                </div>
                   )}
                 </SortableTermItem>
               );
@@ -970,10 +1367,11 @@ function TopContent({
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
+              className={cn("flex-1", "border-dashed", "bg-muted/20")}
               onClick={handleAddTerm}
               disabled={loading}
             >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2 text-muted-foreground" />
               Tambah Payment
             </Button>
           </div>
@@ -993,6 +1391,14 @@ function TopContent({
               - Rp{fmtRp(discountAmount)}
             </span>
           </div>
+          {false && totalPromo > 0 && (
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-[var(--brand-gold)]">Potongan Promo:</span>
+              <span className="text-sm font-medium text-[var(--brand-gold)]">
+                - Rp{fmtRp(totalPromo)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between items-center mb-2 border-t pt-2">
             <span className="text-sm font-medium text-foreground">Harga Setelah Discount:</span>
             <span className="text-sm font-medium text-foreground">
@@ -1008,7 +1414,7 @@ function TopContent({
             <span
               className={cn(
                 "text-sm font-medium",
-                difference !== 0 ? "text-destructive" : "text-foreground",
+                difference < 0 ? "text-destructive" : difference > 0 ? "text-green-600" : "text-foreground",
               )}
             >
               Rp{fmtRp(Math.abs(difference))}
@@ -1020,17 +1426,77 @@ function TopContent({
 
       {/* Footer */}
       <div className="sticky bottom-0 bg-background pt-4">
-        <Button
-          className="w-full"
-          onClick={handleUpdate}
-          disabled={loading || !isChanged}
-        >
-          {loading ? "Updating..." : "Update"}
-        </Button>
+        {/* Mini price summary — Harga Paket | Input User | Selisih */}
+        <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+            <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(priceAfterDiscount)}</span>
+          </div>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[10px] text-muted-foreground">Input User</span>
+            <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(totalTerms)}</span>
+          </div>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[10px] text-muted-foreground">Selisih</span>
+            <span
+              className={cn("flex items-center gap-1 text-xs font-semibold truncate", difference < 0 ? "text-destructive cursor-pointer" : difference > 0 ? "text-green-600 cursor-pointer" : "text-foreground")}
+              onClick={() => {
+                if (difference !== 0) {
+                  navigator.clipboard.writeText(fmtRp(Math.abs(difference)));
+                  toast.success("Selisih disalin");
+                }
+              }}
+            >
+              {difference === 0 ? "Sesuai" : (
+                <>
+                  {`${difference < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(difference))}`}
+                  <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {onPrevious && (
+            <Button variant="outline" className="flex-1" onClick={onPrevious}>
+              Previous
+            </Button>
+          )}
+          <Button
+            className={onPrevious ? "flex-1" : "w-full"}
+            onClick={handleUpdate}
+            disabled={loading || (!isChanged && !onSaved) || !isMandatoryValid}
+          >
+            {loading ? "Menyimpan..." : saveLabel}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
+
+/* ─── Dummy Promo Data ──────────────────────────────────────────────────────── */
+
+const DUMMY_PROMOS = [
+  {
+    id: "promo-1",
+    name: "June Surprise",
+    discountType: "PERCENTAGE" as const,
+    discountValue: 10,
+    minTransaction: 30_000_000,
+    periodStart: new Date("2026-06-01"),
+    periodEnd: new Date("2026-06-30"),
+  },
+  {
+    id: "promo-2",
+    name: "Early Bird Q3",
+    discountType: "NOMINAL" as const,
+    discountValue: 5_000_000,
+    minTransaction: 50_000_000,
+    periodStart: new Date("2026-07-01"),
+    periodEnd: new Date("2026-09-30"),
+  },
+];
 
 /* ─── EditTopDrawer (props-langsung) ──────────────────────────────────────── */
 
@@ -1075,39 +1541,87 @@ export function EditTopDrawer({
 export interface EditTopDrawerByIdProps {
   isOpen: boolean;
   onClose: () => void;
+  onPrevious?: () => void;
   bookingId: string;
   customerName: string;
+  saveLabel?: string;
+  step?: number;
+  totalSteps?: number;
 }
 
 export function EditTopDrawerById({
   isOpen,
   onClose,
+  onPrevious,
   bookingId,
   customerName,
+  saveLabel,
+  step,
+  totalSteps,
 }: EditTopDrawerByIdProps): React.ReactElement {
-  const { data, isLoading, error } = useBookingFinanceDetail(isOpen ? bookingId : null);
+  return (
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Term of Payment — ${customerName}`}
+      headerActions={step && totalSteps ? (
+        <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
+      ) : undefined}
+    >
+      <EditTopContentById active={isOpen} bookingId={bookingId} onPrevious={onPrevious} saveLabel={saveLabel} />
+    </Drawer>
+  );
+}
+
+/* ─── EditTopContentById (no Drawer shell) ────────────────────────────────────
+ * Fetches finance detail and renders the TOP body WITHOUT a Sheet of its own, so
+ * it can be embedded inside another drawer's single Sheet (the edit-booking
+ * continue flow). `active` gates the fetch (was `isOpen`).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+export function EditTopContentById({
+  active,
+  bookingId,
+  onPrevious,
+  onSaved,
+  saveLabel,
+}: {
+  active: boolean;
+  bookingId: string;
+  onPrevious?: () => void;
+  /** Continue flow only: advance to the next step after a successful save.
+   *  Standalone usage (Finance AR / row menu) omits it and the drawer stays open. */
+  onSaved?: () => void;
+  saveLabel?: string;
+}): React.ReactElement {
+  const { data, isLoading, error } = useBookingFinanceDetail(active ? bookingId : null);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+        Memuat data...
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-32 text-sm text-destructive">
+        Gagal memuat data. Coba tutup dan buka kembali.
+      </div>
+    );
+  }
+  if (!data) return <></>;
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} title={`Term of Payment — ${customerName}`}>
-      {isLoading && (
-        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-          Memuat data...
-        </div>
-      )}
-      {error && !isLoading && (
-        <div className="flex items-center justify-center h-32 text-sm text-destructive">
-          Gagal memuat data. Coba tutup dan buka kembali.
-        </div>
-      )}
-      {data && !isLoading && (
-        <TopContent
-          bookingId={data.id}
-          initialTerms={data.terms}
-          packagePrice={data.packagePrice}
-          discountName={data.discountName}
-          discountAmount={data.discountAmount}
-        />
-      )}
-    </Drawer>
+    <TopContent
+      bookingId={data.id}
+      initialTerms={data.terms}
+      packagePrice={data.packagePrice}
+      discountName={data.discountName}
+      discountAmount={data.discountAmount}
+      saveLabel={saveLabel}
+      onPrevious={onPrevious}
+      onSaved={onSaved}
+    />
   );
 }

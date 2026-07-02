@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useBookingDetail } from "@/hooks/use-booking-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,8 +109,8 @@ interface Props {
 }
 
 export function BookingDetailModal({ open, onClose, bookingId }: Props) {
-  const [booking, setBooking] = useState<BookingDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { data, isLoading: loading, refetch } = useBookingDetail(bookingId, open);
+  const booking = data ?? null;
   const [activeTab, setActiveTab] = useState<"booking" | "vendor" | "payment" | "documents" | "agreement">("booking");
   const [deleteDocTarget, setDeleteDocTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -117,21 +118,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
-  const fetchBooking = (id: string) => {
-    setLoading(true);
-    fetch(`/api/bookings/${id}`)
-      .then((r) => r.json())
-      .then((data: BookingDetail) => setBooking(data))
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
-  };
-
   useEffect(() => {
     if (!open || !bookingId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveTab("booking");
     setSelectedDocIds(new Set());
-    fetchBooking(bookingId);
   }, [open, bookingId]);
 
   if (!open) return null;
@@ -169,7 +160,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
               </h2>
               {bookingId && (
                 <button
-                  onClick={() => fetchBooking(bookingId)}
+                  onClick={() => { void refetch(); }}
                   className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Refresh"
                 >
@@ -291,7 +282,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         {fmtPrice(booking.snapPackagePricing?.price)}
                       </MobileField>
                       <MobileField label="Package">
-                        {booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)
+                        {booking.snapPackagePricing?.packageName ?? "-"}{booking.snapPackagePricing?.pax ? ` (${booking.snapPackagePricing.pax} PAX)` : ""}
                       </MobileField>
                       <MobileField label="Payment Method">
                         {booking.paymentMethod ? (
@@ -408,7 +399,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <p className={lbl + " mt-4"}>Package Price</p>
                       <p className={val}>{fmtPrice(booking.snapPackagePricing?.price)}</p>
                       <p className={lbl + " mt-4"}>Package</p>
-                      <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)</p>
+                      <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"}{booking.snapPackagePricing?.pax ? ` (${booking.snapPackagePricing.pax} PAX)` : ""}</p>
                       <p className={lbl + " mt-4"}>Manager</p>
                       <p className={val}>{booking.manager?.fullName ?? "-"}</p>
                     </div>
@@ -522,39 +513,39 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       </div>
 
                       {/* Desktop: original table */}
-                      <div className="hidden sm:block rounded-md border overflow-x-auto">
-                        <Table>
+                      <div className="hidden sm:block rounded-md border overflow-hidden [&_[data-slot=table-container]]:overflow-hidden">
+                        <Table className="table-fixed w-full">
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableHead className="px-4 w-40">Kategori</TableHead>
-                              <TableHead className="px-4">Nama Vendor</TableHead>
-                              <TableHead className="px-4 w-37.5">Nominal</TableHead>
-                              <TableHead className="px-4">Keterangan</TableHead>
-                              <TableHead className="px-4 w-37.5">Status Order</TableHead>
+                              <TableHead className="px-4 w-[18%]">Kategori</TableHead>
+                              <TableHead className="px-4 w-[20%]">Nama Vendor</TableHead>
+                              <TableHead className="px-4 w-[15%]">Nominal</TableHead>
+                              <TableHead className="px-4 w-[32%]">Keterangan</TableHead>
+                              <TableHead className="px-4 w-[15%]">Status Order</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {booking.snapVendorItems.filter((v) => !v.isAddons).map((v) => (
                               <TableRow key={v.id}>
-                                <TableCell className="px-4 font-medium text-sm text-foreground">{v.vendorCategoryName}</TableCell>
-                                <TableCell className="px-4 text-sm">{v.vendorName}</TableCell>
-                                <TableCell className="px-4 text-sm">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
-                                <TableCell className="px-4 text-sm"><RichText html={v.description} /></TableCell>
-                                <TableCell className="px-4 text-sm text-muted-foreground">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
+                                <TableCell className="px-4 font-medium text-sm text-foreground whitespace-normal break-words">{v.vendorCategoryName}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words">{v.vendorName}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal">{Number(v.itemPrice) > 0 ? fmtPrice(v.itemPrice) : "-"}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words"><RichText html={v.description} /></TableCell>
+                                <TableCell className="px-4 text-sm text-muted-foreground whitespace-normal break-words">{(v as typeof v & { orderStatus?: { name: string } | null }).orderStatus?.name ?? "-"}</TableCell>
                               </TableRow>
                             ))}
                             {booking.snapBonuses.length > 0 && (
                               <TableRow className="bg-muted/50">
-                                <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Complimentary / Bonus</TableCell>
+                                <TableCell colSpan={5} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-normal">Complimentary / Bonus</TableCell>
                               </TableRow>
                             )}
                             {booking.snapBonuses.map((b) => (
                               <TableRow key={b.id}>
-                                <TableCell className="px-4 font-medium text-sm text-foreground">Complimentary</TableCell>
-                                <TableCell className="px-4 text-sm">{b.vendorName}</TableCell>
-                                <TableCell className="px-4 text-sm">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
-                                <TableCell className="px-4 text-sm"><RichText html={b.description} /></TableCell>
-                                <TableCell className="px-4 text-sm text-muted-foreground">{b.orderStatus?.name ?? "-"}</TableCell>
+                                <TableCell className="px-4 font-medium text-sm text-foreground whitespace-normal break-words">Complimentary</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words">{b.vendorName}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal">{Number((b as typeof b & { nominal?: number | null }).nominal ?? 0) > 0 ? `Rp ${new Intl.NumberFormat("id-ID").format(Number((b as typeof b & { nominal?: number | null }).nominal))}` : "-"}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words"><RichText html={b.description} /></TableCell>
+                                <TableCell className="px-4 text-sm text-muted-foreground whitespace-normal break-words">{b.orderStatus?.name ?? "-"}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -577,19 +568,19 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         ))}
                       </div>
                       {/* Desktop: table */}
-                      <div className="hidden sm:block rounded-md border overflow-x-auto">
-                        <Table>
+                      <div className="hidden sm:block rounded-md border overflow-hidden [&_[data-slot=table-container]]:overflow-hidden">
+                        <Table className="table-fixed w-full">
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableHead className="px-4 w-1/3">Nama Item</TableHead>
+                              <TableHead className="px-4 w-[35%]">Nama Item</TableHead>
                               <TableHead className="px-4">Keterangan</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {booking.snapPackageInternalItems.map((item) => (
                               <TableRow key={item.id}>
-                                <TableCell className="px-4 font-medium text-sm text-foreground align-top">{item.itemName}</TableCell>
-                                <TableCell className="px-4 text-sm">{item.itemDescription ? <RichText html={item.itemDescription} /> : <span className="text-muted-foreground">—</span>}</TableCell>
+                                <TableCell className="px-4 font-medium text-sm text-foreground align-top whitespace-normal break-words">{item.itemName}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words">{item.itemDescription ? <RichText html={item.itemDescription} /> : <span className="text-muted-foreground">—</span>}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -612,19 +603,19 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         ))}
                       </div>
                       {/* Desktop: table */}
-                      <div className="hidden sm:block rounded-md border overflow-x-auto">
-                        <Table>
+                      <div className="hidden sm:block rounded-md border overflow-hidden [&_[data-slot=table-container]]:overflow-hidden">
+                        <Table className="table-fixed w-full">
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableHead className="px-4 w-1/3">Kategori</TableHead>
+                              <TableHead className="px-4 w-[35%]">Kategori</TableHead>
                               <TableHead className="px-4">Item</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {booking.snapPackageVendorItems.map((item) => (
                               <TableRow key={item.id}>
-                                <TableCell className="px-4 font-medium text-sm text-foreground align-top">{item.categoryName}</TableCell>
-                                <TableCell className="px-4 text-sm"><RichText html={item.itemText} /></TableCell>
+                                <TableCell className="px-4 font-medium text-sm text-foreground align-top whitespace-normal break-words">{item.categoryName}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words"><RichText html={item.itemText} /></TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -654,8 +645,8 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         ))}
                       </div>
                       {/* Desktop */}
-                      <div className="hidden sm:block rounded-md border overflow-x-auto">
-                        <Table>
+                      <div className="hidden sm:block rounded-md border overflow-hidden [&_[data-slot=table-container]]:overflow-hidden">
+                        <Table className="table-fixed w-full">
                           <TableHeader>
                             <TableRow className="bg-muted/50">
                               <TableHead className="px-4">Nama</TableHead>
@@ -667,10 +658,10 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                           <TableBody>
                             {(booking as typeof booking & { snapComplimentaries: { id: string; name: string; price: number; isShowPrice: boolean; qty: number; description?: string | null }[] }).snapComplimentaries.map((c) => (
                               <TableRow key={c.id}>
-                                <TableCell className="px-4 font-medium text-sm text-foreground">{c.name}</TableCell>
-                                <TableCell className="px-4 text-sm">{c.qty}</TableCell>
-                                <TableCell className="px-4 text-sm">{c.isShowPrice ? fmtPrice(c.price) : <span className="text-muted-foreground">(Tersembunyi)</span>}</TableCell>
-                                <TableCell className="px-4 text-sm"><RichText html={c.description} /></TableCell>
+                                <TableCell className="px-4 font-medium text-sm text-foreground whitespace-normal break-words">{c.name}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal">{c.qty}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal">{c.isShowPrice ? fmtPrice(c.price) : <span className="text-muted-foreground">(Tersembunyi)</span>}</TableCell>
+                                <TableCell className="px-4 text-sm whitespace-normal break-words"><RichText html={c.description} /></TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -923,6 +914,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
         description={`Yakin mau hapus "${deleteDocTarget?.name}"? File akan dihapus permanen.`}
         confirmLabel={deleting ? "Menghapus..." : "Hapus"}
         destructive
+        zIndex={70}
         onConfirm={async () => {
           if (!deleteDocTarget) return;
           setDeleting(true);
@@ -931,7 +923,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           if (!result.success) { toast.error(result.error); return; }
           toast.success("Dokumen berhasil dihapus");
           setDeleteDocTarget(null);
-          if (bookingId) fetchBooking(bookingId);
+          void refetch();
         }}
       />
       <ConfirmDialog
@@ -941,6 +933,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
         description={`Yakin mau hapus ${selectedDocIds.size} file? Semua file akan dihapus permanen.`}
         confirmLabel={bulkDeleting ? "Menghapus..." : `Hapus ${selectedDocIds.size} file`}
         destructive
+        zIndex={70}
         onConfirm={async () => {
           setBulkDeleting(true);
           const result = await deleteBookingDocuments([...selectedDocIds]);
@@ -949,7 +942,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
           toast.success(`${result.count} file berhasil dihapus`);
           setShowBulkConfirm(false);
           setSelectedDocIds(new Set());
-          if (bookingId) fetchBooking(bookingId);
+          void refetch();
         }}
       />
     </div>
