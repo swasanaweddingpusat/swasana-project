@@ -1,15 +1,14 @@
+"use client";
+
 import { GraphUp, CalendarMark, ClockCircle, CloseCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-
-interface SalesStats {
-  totalBookings: number;
-  totalRevenue: number;
-  pendingBookings: number;
-  lostBookings: number;
-}
+import { useDashboardStats } from "@/hooks/use-dashboard-stats";
+import type { DashboardStats } from "@/lib/queries/dashboard";
 
 interface SalesStatCardsProps {
-  stats: SalesStats;
+  initialStats: DashboardStats;
+  year: number;
+  month: number; // 1-indexed
 }
 
 function formatCurrency(amount: number): string {
@@ -20,32 +19,35 @@ function formatCurrency(amount: number): string {
 
 const cards = [
   {
-    key: "totalBookings" as keyof SalesStats,
+    key: "totalBookings" as keyof DashboardStats,
     label: "Total Booking",
     icon: CalendarMark,
     format: (v: number) => v.toString(),
   },
   {
-    key: "totalRevenue" as keyof SalesStats,
+    key: "totalRevenue" as keyof DashboardStats,
     label: "Revenue Confirmed",
     icon: GraphUp,
     format: formatCurrency,
   },
   {
-    key: "pendingBookings" as keyof SalesStats,
+    key: "pendingBookings" as keyof DashboardStats,
     label: "Pending Approval",
     icon: ClockCircle,
     format: (v: number) => v.toString(),
   },
   {
-    key: "lostBookings" as keyof SalesStats,
+    key: "lostBookings" as keyof DashboardStats,
     label: "Lost / Canceled",
     icon: CloseCircle,
     format: (v: number) => v.toString(),
   },
 ];
 
-export function SalesStatCards({ stats }: SalesStatCardsProps) {
+export function SalesStatCards({ initialStats, year, month }: SalesStatCardsProps) {
+  const { data } = useDashboardStats(year, month, initialStats);
+  const stats = data ?? initialStats;
+
   return (
     <div className={cn("flex", "flex-wrap", "gap-4")}>
       {cards.map(({ key, label, icon: Icon, format }) => (
