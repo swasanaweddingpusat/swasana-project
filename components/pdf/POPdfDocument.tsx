@@ -560,7 +560,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               // Render satu sisi panel sebagai daftar baris label | value.
               const renderSide = (rows: { label: string; value: string }[]) => (
                 <>
-                  {rows.map((it, i) => (
+                  {rows.filter((it) => it.value && it.value !== "-").map((it, i) => (
                     <View key={i} style={s.infoPairRow}>
                       <Text style={s.infoPairLabel}>{it.label}</Text>
                       <Text style={s.infoPairValue}>: {it.value}</Text>

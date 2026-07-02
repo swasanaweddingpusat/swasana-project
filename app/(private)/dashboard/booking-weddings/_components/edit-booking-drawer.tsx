@@ -551,7 +551,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                 <div>
                   <label className={LBL}>Pilih Paket <span className="text-destructive">*</span></label>
                   <SearchableSelect
-                    options={packages.map((p) => ({ id: p.id, name: `${p.packageName} · ${p.pax} PAX` }))}
+                    options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` · ${p.pax} PAX` : ""}` }))}
                     value={packageId}
                     onChange={(id) => setPackageId(id)}
                     placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"}

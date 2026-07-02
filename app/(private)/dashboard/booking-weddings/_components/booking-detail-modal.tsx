@@ -282,7 +282,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                         {fmtPrice(booking.snapPackagePricing?.price)}
                       </MobileField>
                       <MobileField label="Package">
-                        {booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)
+                        {booking.snapPackagePricing?.packageName ?? "-"}{booking.snapPackagePricing?.pax ? ` (${booking.snapPackagePricing.pax} PAX)` : ""}
                       </MobileField>
                       <MobileField label="Payment Method">
                         {booking.paymentMethod ? (
@@ -399,7 +399,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <p className={lbl + " mt-4"}>Package Price</p>
                       <p className={val}>{fmtPrice(booking.snapPackagePricing?.price)}</p>
                       <p className={lbl + " mt-4"}>Package</p>
-                      <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"} ({booking.snapPackagePricing?.pax ?? 0} PAX)</p>
+                      <p className={val}>{booking.snapPackagePricing?.packageName ?? "-"}{booking.snapPackagePricing?.pax ? ` (${booking.snapPackagePricing.pax} PAX)` : ""}</p>
                       <p className={lbl + " mt-4"}>Manager</p>
                       <p className={val}>{booking.manager?.fullName ?? "-"}</p>
                     </div>
