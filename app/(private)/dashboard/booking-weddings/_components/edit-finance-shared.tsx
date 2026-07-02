@@ -18,10 +18,7 @@ function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () 
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof src === "string" || !src.type.startsWith("image/")) {
-      setObjectUrl(null);
-      return;
-    }
+    if (typeof src === "string" || !src.type.startsWith("image/")) return;
     const url = URL.createObjectURL(src);
     setObjectUrl(url);
     return () => { URL.revokeObjectURL(url); };
