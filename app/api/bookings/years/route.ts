@@ -23,15 +23,19 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Fetch distinct years from poYear column
-    const result = await db.$queryRaw<Array<{ poYear: number }>>`
-      SELECT DISTINCT "poYear"
+    // Distinct years by EVENT date — must match buildDateFilter (which filters the
+    // list by eventDate range), NOT poYear (the year the PO was created). A booking
+    // finalized in Dec 2025 for a Jan 2026 wedding belongs to the "2026" filter.
+    // eventDate is a naive UTC timestamp, so EXTRACT(YEAR ...) lines up with the
+    // UTC boundaries buildDateFilter uses.
+    const result = await db.$queryRaw<Array<{ year: number }>>`
+      SELECT DISTINCT EXTRACT(YEAR FROM "eventDate")::int AS year
       FROM bookings
-      WHERE "poYear" IS NOT NULL
-      ORDER BY "poYear" DESC
+      WHERE "eventDate" IS NOT NULL
+      ORDER BY year DESC
     `;
 
-    const years = result.map((row) => row.poYear);
+    const years = result.map((row) => row.year);
 
     return new Response(JSON.stringify({ years }), {
       headers: { "content-type": "application/json" },
