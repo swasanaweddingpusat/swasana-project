@@ -10,22 +10,21 @@ export function toFullUrl(raw: string): string {
 }
 
 export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const key = typeof src === "string" ? src : `${src.name}-${src.size}-${src.lastModified}`;
+  return <EvidencePreviewInner key={key} src={src} onOpen={onOpen} />;
+}
+
+function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () => void }) {
+  const [objectUrl] = useState<string | null>(() => {
+    if (typeof src === "string" || !src.type.startsWith("image/")) return null;
+    return URL.createObjectURL(src);
+  });
 
   useEffect(() => {
-    if (typeof src === "string") {
-      setUrl(toFullUrl(src));
-      return;
-    }
-    if (!src.type.startsWith("image/")) {
-      setUrl(null);
-      return;
-    }
-    const objectUrl = URL.createObjectURL(src);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [src]);
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [objectUrl]);
 
+  const url = typeof src === "string" ? toFullUrl(src) : objectUrl;
   if (!url) return null;
   const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");
   if (!isImage) return null;

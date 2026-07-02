@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle, HandMoney, Wallet } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
@@ -37,26 +37,18 @@ function InfoRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 export function ApPayDrawer({ isOpen, onClose, payable }: ApPayDrawerProps) {
-  const [amount, setAmount] = useState("");
+  if (!payable) {
+    return <Drawer isOpen={isOpen} onClose={onClose} title="Bayar Payable" maxWidth="sm:max-w-lg"><div /></Drawer>;
+  }
+  return <ApPayDrawerInner key={payable.id} isOpen={isOpen} onClose={onClose} payable={payable} />;
+}
+
+function ApPayDrawerInner({ isOpen, onClose, payable }: Omit<ApPayDrawerProps, "payable"> & { payable: APPayable }) {
+  const [amount, setAmount] = useState(String(payable.outstanding));
   const [method, setMethod] = useState(METHODS[0]);
   const [notes, setNotes] = useState("");
   const [ack, setAck] = useState(false);
   const [ackBy, setAckBy] = useState("");
-
-  // Reset the form whenever a different payable is opened.
-  useEffect(() => {
-    if (payable) {
-      setAmount(String(payable.outstanding));
-      setMethod(METHODS[0]);
-      setNotes("");
-      setAck(false);
-      setAckBy("");
-    }
-  }, [payable]);
-
-  if (!payable) {
-    return <Drawer isOpen={isOpen} onClose={onClose} title="Bayar Payable" maxWidth="sm:max-w-lg"><div /></Drawer>;
-  }
 
   const locked = !payable.eventDone && payable.category === "tunjangan-wp";
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
