@@ -93,7 +93,7 @@ export default async function DashboardPage({
       </div>
 
       {/* Stat Cards */}
-      <SalesStatCards stats={stats} />
+      <SalesStatCards initialStats={stats} year={year} month={month + 1} />
 
       {/* Calendar Event */}
       <CalendarWidget events={calendarEvents} year={year} month={month + 1} />
