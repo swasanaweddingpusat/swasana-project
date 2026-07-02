@@ -12,7 +12,10 @@ export async function getTutorialCategories() {
       lessons: {
         orderBy: { sortOrder: "asc" },
         include: {
-          steps: { orderBy: { sortOrder: "asc" } },
+          steps: {
+              orderBy: { sortOrder: "asc" },
+              include: { documents: { orderBy: { sortOrder: "asc" } } },
+            },
         },
       },
     },

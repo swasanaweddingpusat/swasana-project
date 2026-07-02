@@ -272,7 +272,7 @@ export function TutorialManager({ initialCategories }: Props) {
           toast.error(result.error ?? "Gagal membuat step.");
           return;
         }
-        const newStep = result.step as TutorialStep;
+        const newStep: TutorialStep = { ...(result.step as Omit<TutorialStep, "documents">), documents: [] };
         setCategories((prev) =>
           prev.map((c) =>
             c.id !== selectedCategory?.id
