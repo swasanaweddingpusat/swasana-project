@@ -648,14 +648,13 @@ function TopContent({
             <SortableContext items={terms.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-4">
             {terms.map((term, idx) => {
-              const locked = lockedIds.includes(term.id);
+              const isUnlockable = lockedIds.includes(term.id);
+              const locked = isUnlockable && !unlockedTerms.has(term.id);
               const isAcknowledged = term.ackStatus === "acknowledged";
               const isRefund = term.paymentStatus === "refund";
               const isNew = term.id.startsWith("new-");
               const isDP = idx === 0;
               const isDPInvalid = isDP && (!term.amount || term.amount <= 0);
-              const isLockable = lockedIds.includes(term.id);
-              const isUnlocked = unlockedTerms.has(term.id);
               const collapsed = collapsedTerms.has(term.id);
               const statusLabel =
                 term.paymentStatus.charAt(0).toUpperCase() + term.paymentStatus.slice(1);
@@ -714,17 +713,17 @@ function TopContent({
                         </span>
                       )}
                       {/* Edit-paid pencil toggle — only for locked terms */}
-                      {isLockable && !isRefund && (
+                      {isUnlockable && !isRefund && (
                         <button
                           type="button"
                           onClick={() => toggleUnlock(term.id)}
                           className={cn(
                             "shrink-0 rounded-lg p-1.5 transition-colors",
-                            isUnlocked
+                            !locked
                               ? "text-[var(--brand-gold)] bg-[var(--brand-gold)]/10"
                               : "text-muted-foreground hover:bg-muted hover:text-foreground",
                           )}
-                          aria-label={isUnlocked ? "Kunci term" : "Edit term"}
+                          aria-label={!locked ? "Kunci term" : "Edit term"}
                         >
                           <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
                         </button>

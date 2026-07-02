@@ -1939,7 +1939,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName} — ${p.pax} pax — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
                       <FormMessage />
                     </FormItem>
@@ -2702,7 +2702,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     </div>
                     <div className={cn('flex', 'justify-between', 'items-center')}>
                       <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Selisih:</span>
-                      <span className={cn("text-sm font-medium", getDifference() !== 0 ? "text-destructive" : "text-foreground")}>
+                      <span className={cn("text-sm font-medium", getDifference() < 0 ? "text-destructive" : getDifference() > 0 ? "text-green-600" : "text-foreground")}>
                         Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}
                       </span>
                     </div>
@@ -2801,7 +2801,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground">Selisih</span>
                 <span
-                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getDifference() !== 0 ? "text-destructive cursor-pointer" : "text-foreground")}
+                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getDifference() < 0 ? "text-destructive cursor-pointer" : getDifference() > 0 ? "text-green-600 cursor-pointer" : "text-foreground")}
                   onClick={() => {
                     if (getDifference() !== 0) {
                       navigator.clipboard.writeText(fmtRp(Math.abs(getDifference())));

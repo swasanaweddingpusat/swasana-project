@@ -299,7 +299,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
   // Only append the pricing tier name when it differs from the package name,
   // otherwise it duplicates (e.g. "PRIORITY - PRIORITY").
   const tierSuffix = pricingPackageName && pricingPackageName !== packageName ? ` - ${pricingPackageName}` : "";
-  rows.push({ no: "1", desc: `${venueName} ${packageName}${tierSuffix} for ${pax} people include: `, total: price });
+  rows.push({ no: "1", desc: `${venueName} ${packageName}${tierSuffix}${pax ? ` for ${pax} people include:` : ""}`, total: price });
   notes.forEach((note) => rows.push({ no: "", desc: note, total: "" }));
 
   const benefitItems = internalItems.filter((i) => i.itemName.toLowerCase().includes("benefit"));
