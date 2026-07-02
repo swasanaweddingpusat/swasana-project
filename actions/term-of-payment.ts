@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
+import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -26,6 +27,7 @@ interface NewTerm {
   name: string;
   amount: number;
   dueDate: string;
+  paymentStatus?: "unpaid" | "paid" | "partial";
   /** Bank tujuan transfer per-term (nullable). */
   paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
@@ -101,6 +103,7 @@ export async function updateTermOfPayments(
               dueDate: new Date(t.dueDate),
               paymentMethodId: t.paymentMethodId ?? null,
               sortOrder: t.sortOrder ?? nextSort++,
+              paymentStatus: t.paymentStatus ?? "unpaid",
             },
           })
         );
@@ -118,6 +121,15 @@ export async function updateTermOfPayments(
     }
 
     await db.$transaction(ops);
+
+    // Re-freeze the in-flight revision snapshot so the PO PDF (which renders TOP from
+    // the revision, not the live term_of_payments) reflects the edited schedule/discount.
+    // No-ops when the revision is frozen (client signed) — best-effort, never blocks the save.
+    try {
+      await refreshCurrentRevisionSnapshot(bookingId);
+    } catch (e) {
+      console.error("[updateTermOfPayments] revision snapshot refresh failed:", e);
+    }
 
     await logAudit({
       userId: session!.user.id,

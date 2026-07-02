@@ -108,13 +108,13 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
 
   // ── Data queries ──
   const { data: detail } = useQuery({
-    queryKey: ["bookings", booking?.id],
+    queryKey: ["booking-detail", booking?.id],
     queryFn: async () => {
       const res = await fetch(`/api/bookings/${booking!.id}`);
       return res.ok ? res.json() : null;
     },
     enabled: !!booking?.id && open,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
 
   const { data: venues = [] } = useQuery<VenueOption[]>({
@@ -187,9 +187,27 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setOriginalNoteDateEvent(booking.notes ?? "");
   }, [open, booking]);
 
-  // ── Init detail fields (email, NIK, address, bitrix) ──
+  // ── Init detail fields (email, NIK, address, bitrix, name, contact) ──
+  // Also seeds name & contactNumbers from snapCustomer so that after a
+  // handleSaveClientInfo save + invalidate, the form reflects the saved data
+  // without requiring the drawer to be closed and reopened.
   useEffect(() => {
     if (!detail) return;
+    // Name & contact numbers — authoritative from snapCustomer in detail response
+    const detailName = detail.snapCustomer?.name ?? detail.customer?.name ?? "";
+    if (detailName) setCustomerName(detailName);
+    const rawContact = detail.snapCustomer?.mobileNumber ?? detail.customer?.mobileNumber ?? "";
+    if (typeof rawContact === "string" && rawContact.trim()) {
+      const parsed: MobileNumberEntry[] = rawContact.split(",").map((segment: string) => {
+        const trimmed = segment.trim();
+        const bracketMatch = trimmed.match(/^(.+?)\s*\((.+)\)$/);
+        if (bracketMatch) return { name: bracketMatch[1].trim(), number: bracketMatch[2].trim() };
+        return { name: "", number: trimmed };
+      });
+      setContactNumbers(parsed);
+    } else if (Array.isArray(rawContact)) {
+      setContactNumbers(rawContact as MobileNumberEntry[]);
+    }
     setContactEmailCpp(detail.snapCustomer?.emailCpp ?? detail.customer?.emailCpp ?? "");
     setContactEmailCpw(detail.snapCustomer?.emailCpw ?? detail.customer?.emailCpw ?? "");
     setContactNikCpp(detail.snapCustomer?.cppNik ?? detail.customer?.cppNik ?? "");
@@ -402,7 +420,21 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
             </div>
           </div>
 
-          <div className={cn("flex-1", "overflow-y-auto", "px-2")}>
+          <div
+            className={cn("flex-1", "overflow-y-auto", "px-2")}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.shiftKey) return;
+              const target = e.target as HTMLElement;
+              if (target.tagName === "TEXTAREA") return;
+              if (target.closest("[role='listbox']") || target.closest("[role='option']")) return;
+              e.preventDefault();
+              if (currentStep === 1 && isStep1Complete && !isSavingClientInfo) {
+                void handleSaveClientInfo();
+              } else if (currentStep === 2 && isStep2Complete && !isSubmitting) {
+                void handleSubmit();
+              }
+            }}
+          >
             {/* ─── Step 1: Informasi Client ─── */}
             {currentStep === 1 && (
               <div className="space-y-3">
@@ -494,12 +526,14 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   />
                 </div>
 
-                <div>
-                  <label className={LBL}>
-                    Bitrix ID {isBitrixSource && <span className="text-destructive">*</span>}
-                  </label>
-                  <Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" />
-                </div>
+                {isBitrixSource && (
+                  <div>
+                    <label className={LBL}>
+                      Bitrix ID <span className="text-destructive">*</span>
+                    </label>
+                    <Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" />
+                  </div>
+                )}
 
                 <div>
                   <label className={LBL}>Email CPP</label>

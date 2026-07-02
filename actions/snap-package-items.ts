@@ -8,6 +8,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { isBookingSnapshotFrozen, frozenSnapshotError } from "@/lib/booking-freeze";
+import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import {
   saveSnapInternalItemsSchema,
   saveSnapVendorItemsSchema,
@@ -54,6 +55,14 @@ export async function saveSnapInternalItems(
     ];
 
     await db.$transaction(ops);
+
+    // Re-freeze the in-flight revision snapshot so the PO PDF reflects the edited
+    // internal items. No-ops when frozen (client signed) — best-effort.
+    try {
+      await refreshCurrentRevisionSnapshot(bookingId);
+    } catch (e) {
+      console.error("[saveSnapInternalItems] revision snapshot refresh failed:", e);
+    }
 
     await logAudit({
       userId: session!.user.id,
@@ -106,6 +115,14 @@ export async function saveSnapVendorItems(
   const frozen = before.snapshotFrozenAt != null;
 
   try {
+    // Preserve existing isTakeout flags — the vendor items editor only edits itemText,
+    // not takeout state; we must not reset flags that saveSnapTakeout already set.
+    const existingVendorItems = await db.snapPackageVendorItem.findMany({
+      where: { bookingId },
+      select: { categoryName: true, isTakeout: true },
+    });
+    const takeoutByCategoryName = new Map(existingVendorItems.map((r) => [r.categoryName, r.isTakeout]));
+
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.snapPackageVendorItem.deleteMany({ where: { bookingId } }),
       ...items.map((item, idx) =>
@@ -116,7 +133,8 @@ export async function saveSnapVendorItems(
             categoryName: item.categoryName,
             itemText: item.itemText,
             sortOrder: item.sortOrder ?? idx,
-            isTakeout: item.isTakeout ?? false,
+            // Prefer caller-supplied value; fall back to existing DB flag to avoid reset
+            isTakeout: item.isTakeout ?? takeoutByCategoryName.get(item.categoryName) ?? false,
           },
         }),
       ),
@@ -146,6 +164,15 @@ export async function saveSnapVendorItems(
         success: false,
         error: "Booking baru saja diubah (revisi baru dibuat). Buka ulang & simpan item vendor sekali lagi.",
       };
+    }
+
+    // Re-freeze the in-flight revision snapshot so the PO PDF reflects the edited
+    // vendor items. No-ops when frozen (post-signature swap) — the signed PO stays
+    // as the client agreed; only live tables carry the ops swap. Best-effort.
+    try {
+      await refreshCurrentRevisionSnapshot(bookingId);
+    } catch (e) {
+      console.error("[saveSnapVendorItems] revision snapshot refresh failed:", e);
     }
 
     await logAudit({
@@ -212,6 +239,14 @@ export async function saveSnapComplimentaries(
 
     await db.$transaction(ops);
 
+    // Re-freeze the in-flight revision snapshot so the PO PDF reflects the edited
+    // complimentaries. No-ops when frozen (client signed) — best-effort.
+    try {
+      await refreshCurrentRevisionSnapshot(bookingId);
+    } catch (e) {
+      console.error("[saveSnapComplimentaries] revision snapshot refresh failed:", e);
+    }
+
     await logAudit({
       userId: session!.user.id,
       action: "booking.snap_complimentaries_updated",
@@ -249,12 +284,13 @@ export async function saveSnapTakeout(
   try {
     // dataScope and the category-price rows are independent reads — fetch them in
     // parallel (each DB call is a network round-trip, and the access check below
-    // only needs the resolved scope, not the rows).
+    // only needs the resolved scope, not the rows). We need categoryId + isShow here
+    // to resolve which category IDs are taken out (vendor items match by ID, not name).
     const [scope, existingRows] = await Promise.all([
       getProfileDataScope(session!.user.profileId),
       db.snapPackageCategoryPrice.findMany({
         where: { bookingId },
-        select: { id: true, categoryName: true },
+        select: { id: true, categoryName: true, categoryId: true, isShow: true },
       }),
     ]);
 
@@ -262,12 +298,36 @@ export async function saveSnapTakeout(
       return { success: false, error: "Booking tidak ditemukan atau akses ditolak." };
     }
 
-    // Takeout toggles change the PO price — locked after client signature.
-    if (await isBookingSnapshotFrozen(bookingId)) return frozenSnapshotError();
+    // Takeout toggles are ops decisions (which vendor provides what) — allowed even
+    // after client signature. Only internal items and pricing revisions require re-approval.
+
+    // Also fetch vendor item rows so we can sync isTakeout on them. Vendor items carry
+    // a categoryId (nullable) — we match primarily on THAT, not categoryName, because
+    // the vendor item's category label can differ from the price category label
+    // (canonical editBooking logic matches by categoryId and calls categoryName "fragile").
+    // We keep a categoryName fallback for legacy rows whose categoryId is null.
+    const vendorItemRows = await db.snapPackageVendorItem.findMany({
+      where: { bookingId },
+      select: { id: true, categoryId: true, categoryName: true },
+    });
 
     const rowById = new Map(existingRows.map((r) => [r.categoryName, r.id]));
 
-    // Build update ops for each item that has a matching row
+    // Build a lookup: categoryName → isTakeout from incoming items. Keys are
+    // lowercased — real data has case drift between the price category label
+    // ("CATERING") and the vendor item label ("Catering").
+    const takeoutByCategory = new Map(items.map((item) => [item.categoryName.toLowerCase(), item.isTakeout]));
+
+    // Resolve which category IDs are taken out — join incoming toggles (keyed by name)
+    // to the snapshot category rows (which hold the categoryId) so vendor items can be
+    // matched by ID. Only visible (isShow) categories can be taken out.
+    const takeoutCategoryIds = new Set(
+      existingRows
+        .filter((r) => r.isShow && (takeoutByCategory.get(r.categoryName.toLowerCase()) ?? false) && r.categoryId)
+        .map((r) => r.categoryId as string),
+    );
+
+    // Build update ops for each category-price row that has a matching row
     const ops: Prisma.PrismaPromise<unknown>[] = items
       .filter((item) => rowById.has(item.categoryName))
       .map((item) =>
@@ -282,7 +342,31 @@ export async function saveSnapTakeout(
 
     if (ops.length === 0) return { success: false, error: "Tidak ada kategori yang cocok." };
 
+    // Sync isTakeout on vendor item snapshot rows (for PDF strikethrough rendering).
+    // Primary match by categoryId; fall back to categoryName when the vendor item has
+    // no categoryId (legacy data) so takeout still strikes it through in the PO.
+    for (const vi of vendorItemRows) {
+      const isTakeout = vi.categoryId
+        ? takeoutCategoryIds.has(vi.categoryId)
+        : (takeoutByCategory.get(vi.categoryName.toLowerCase()) ?? false);
+      ops.push(
+        db.snapPackageVendorItem.update({
+          where: { id: vi.id },
+          data: { isTakeout },
+        }),
+      );
+    }
+
     await db.$transaction(ops);
+
+    // Re-freeze the in-flight revision snapshot so the PO PDF (which renders from
+    // the revision, not the live tables) reflects the new takeout state. No-ops when
+    // the revision is already frozen (client signed) — best-effort, never blocks the save.
+    try {
+      await refreshCurrentRevisionSnapshot(bookingId);
+    } catch (e) {
+      console.error("[saveSnapTakeout] revision snapshot refresh failed:", e);
+    }
 
     await logAudit({
       userId: session!.user.id,

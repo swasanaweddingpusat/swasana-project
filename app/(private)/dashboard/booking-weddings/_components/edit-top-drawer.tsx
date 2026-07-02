@@ -390,6 +390,7 @@ function TopContent({
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate,
+        paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial",
         paymentMethodId: termPaymentMethods[t.id] ?? null,
         sortOrder,
       })),
@@ -759,33 +760,31 @@ function TopContent({
                         disabled={locked}
                         className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto w-full"
                       />
-                      {!isNew && (
-                        <Select
-                          value={term.paymentStatus}
-                          onValueChange={(v) => handleFieldChange(term.id, "paymentStatus", v)}
-                          disabled={locked}
-                        >
-                          <SelectTrigger className="w-24 h-7 shrink-0">
-                            <span
-                              className={cn(
-                                "text-xs font-semibold",
-                                term.paymentStatus === "paid"
-                                  ? "text-foreground"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {statusLabel}
-                            </span>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PAYMENT_STATUS.map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {s.charAt(0).toUpperCase() + s.slice(1)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Select
+                        value={term.paymentStatus}
+                        onValueChange={(v) => handleFieldChange(term.id, "paymentStatus", v)}
+                        disabled={locked}
+                      >
+                        <SelectTrigger className="w-24 h-7 shrink-0">
+                          <span
+                            className={cn(
+                              "text-xs font-semibold",
+                              term.paymentStatus === "paid"
+                                ? "text-foreground"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {statusLabel}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_STATUS.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 

@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useMySignature } from "@/hooks/use-my-signature";
-import { editBooking } from "@/actions/booking";
+import { updateBookingSignature } from "@/actions/booking";
 
 interface Props {
   isOpen: boolean;
@@ -66,7 +66,7 @@ export function SalesSignatureContent({
     if (!canSave) return;
     setSaving(true);
     try {
-      const r = await editBooking({ id: bookingId, signingLocation, signatureSales: finalSig });
+      const r = await updateBookingSignature({ id: bookingId, signingLocation, signatureSales: finalSig });
       if (!r.success) { toast.error(r.error); return; }
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
@@ -116,8 +116,8 @@ export function SalesSignatureContent({
               <SignatureCanvas
                 ref={sigRef}
                 penColor="black"
-                canvasProps={{ width: 460, height: 160, className: "w-full" }}
-                onEnd={() => setDrawnSig(sigRef.current?.toDataURL() ?? "")}
+                canvasProps={{ className: "w-full", style: { width: "100%", height: 200, touchAction: "none" } }}
+                onEnd={() => setDrawnSig(sigRef.current?.toDataURL("image/png") ?? "")}
               />
             </div>
             <div className="flex items-center justify-between">

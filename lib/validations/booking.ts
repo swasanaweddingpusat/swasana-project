@@ -151,7 +151,16 @@ export const updateBookingClientInfoSchema = z.object({
   sourceOfInformationId: z.string().optional().nullable(),
 });
 
+/** Signature-only update: updates signingLocation + ApprovalRecordStep signature
+ *  WITHOUT touching venue/package/TOP or triggering approval reset. */
+export const updateBookingSignatureSchema = z.object({
+  id: z.string().min(1),
+  signingLocation: z.string().min(1, "Lokasi tanda tangan wajib diisi").max(200),
+  signatureSales: z.string().min(1, "Tanda tangan wajib diisi"),
+});
+
 export type BookingInput = z.infer<typeof bookingSchema>;
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 export type EditBookingInput = z.infer<typeof editBookingSchema>;
 export type UpdateBookingClientInfoInput = z.infer<typeof updateBookingClientInfoSchema>;
+export type UpdateBookingSignatureInput = z.infer<typeof updateBookingSignatureSchema>;

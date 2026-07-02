@@ -8,7 +8,7 @@ import { requirePermission, hasPermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
-import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema } from "@/lib/validations/booking";
+import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
@@ -568,7 +568,7 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i], paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund" } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i], paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund", paymentMethodId: input.paymentMethodId ?? null } })
         )
       );
     }
@@ -1811,6 +1811,30 @@ export async function editBooking(data: unknown) {
       }
     } // end if hasMaterialChange
 
+    // If signatureSales was provided without a material change (signature-only save
+    // from SalesSignatureContent in the continue flow), update the current sales step.
+    if (!hasMaterialChange && rest.signatureSales) {
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "booking", entityId: id } },
+        select: { id: true },
+      });
+      if (approvalRecord) {
+        await db.approvalRecordStep.updateMany({
+          where: {
+            recordId: approvalRecord.id,
+            approverType: "sales",
+            revisionId: booking.currentRevisionId ?? undefined,
+          },
+          data: {
+            signature: rest.signatureSales,
+            status: "approved",
+            decidedById: session!.user.profileId ?? undefined,
+            decidedAt: new Date(),
+          },
+        });
+      }
+    }
+
     await logAudit({
       userId: session!.user.id,
       action: "updated",
@@ -1870,6 +1894,70 @@ export async function editBooking(data: unknown) {
     return { success: true };
   } catch {
     return { success: false, error: "Gagal mengupdate booking." };
+  }
+}
+
+/** Updates ONLY signingLocation + sales ApprovalRecordStep signature.
+ *  Does NOT touch venue/package/TOP or trigger approval reset.
+ *  Used by SalesSignatureContent (standalone drawer & continue flow). */
+export async function updateBookingSignature(data: unknown): Promise<{ success: boolean; error?: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`booking-signature:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsed = updateBookingSignatureSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
+
+  const { id, signingLocation, signatureSales } = parsed.data;
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const scope = await getProfileDataScope(session!.user.profileId);
+  if (!(await canAccessBooking(session!.user.profileId, scope, id))) {
+    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+  }
+
+  try {
+    const booking = await db.booking.findUnique({
+      where: { id },
+      select: { currentRevisionId: true },
+    });
+    if (!booking) return { success: false, error: "Booking tidak ditemukan." };
+
+    await db.booking.update({ where: { id }, data: { signingLocation } });
+
+    const approvalRecord = await db.approvalRecord.findUnique({
+      where: { module_entityId: { module: "booking", entityId: id } },
+      select: { id: true },
+    });
+    if (approvalRecord) {
+      await db.approvalRecordStep.updateMany({
+        where: {
+          recordId: approvalRecord.id,
+          approverType: "sales",
+          revisionId: booking.currentRevisionId ?? undefined,
+        },
+        data: {
+          signature: signatureSales,
+          status: "approved",
+          decidedById: session!.user.profileId ?? undefined,
+          decidedAt: new Date(),
+        },
+      });
+    }
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "booking.signature_saved",
+      result: "success",
+      entityType: "booking",
+      entityId: id,
+      description: `Sales signature saved (location: ${signingLocation})`,
+    });
+
+    revalidateTag("bookings", "max");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Gagal menyimpan tanda tangan." };
   }
 }
 
