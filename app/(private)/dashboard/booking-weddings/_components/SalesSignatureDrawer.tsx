@@ -85,10 +85,6 @@ export function SalesSignatureContent({
     }
   }
 
-  function handleSkip() {
-    onDone();
-  }
-
   return (
     <div className="flex flex-col gap-4 px-1 pb-4">
         {/* Lokasi tanda tangan — wajib diisi oleh siapapun */}
@@ -157,9 +153,6 @@ export function SalesSignatureContent({
               Previous
             </Button>
           )}
-          <Button type="button" variant="outline" onClick={handleSkip} className="flex-1 rounded-xl">
-            Lewati
-          </Button>
           <Button type="button" onClick={handleSave} disabled={saving || !canSave} className="flex-1 rounded-xl">
             {saving ? "Menyimpan..." : "Selesai"}
           </Button>
