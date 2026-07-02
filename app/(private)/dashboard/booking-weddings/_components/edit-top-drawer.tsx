@@ -266,6 +266,11 @@ function TopContent({
     .reduce((s, t) => s + (t.amount || 0), 0);
   const difference = totalTerms - priceAfterDiscount;
 
+  const isMandatoryValid = useMemo(() => {
+    const firstTerm = terms[0];
+    return !!firstTerm && !!firstTerm.amount && firstTerm.amount > 0;
+  }, [terms]);
+
   const isChanged = useMemo(() => {
     if (terms.length !== initialTerms.length) return true;
     if (discountName !== (initialDiscountName ?? "Discount")) return true;
@@ -325,6 +330,12 @@ function TopContent({
   };
 
   const handleUpdate = async () => {
+    // Continue flow with no changes — skip API call and advance immediately.
+    if (!isChanged && onSaved) {
+      onSaved();
+      return;
+    }
+
     for (const t of terms) {
       if (t.paymentStatus === "paid" && !t.paymentEvidence && !pendingFiles[t.id]) {
         toast.error(`${t.name}: Upload bukti bayar dulu sebelum set Paid`);
@@ -1422,7 +1433,7 @@ function TopContent({
           <Button
             className={onPrevious ? "flex-1" : "w-full"}
             onClick={handleUpdate}
-            disabled={loading || !isChanged}
+            disabled={loading || (!isChanged && !onSaved) || !isMandatoryValid}
           >
             {loading ? "Menyimpan..." : saveLabel}
           </Button>
