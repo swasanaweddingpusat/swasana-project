@@ -367,6 +367,48 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+model TutorialCategory {
+  id        String           @id @default(uuid())
+  name      String
+  sortOrder Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  lessons   TutorialLesson[]
+
+  @@map("tutorial_categories")
+}
+
+model TutorialLesson {
+  id         String         @id @default(uuid())
+  categoryId String
+  title      String
+  duration   String
+  completed  Boolean        @default(false)
+  sortOrder  Int            @default(0)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  category   TutorialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  steps      TutorialStep[]
+
+  @@index([categoryId])
+  @@map("tutorial_lessons")
+}
+
+model TutorialStep {
+  id        String         @id @default(uuid())
+  lessonId  String
+  title     String
+  caption   String
+  image     String?
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  lesson    TutorialLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+  @@map("tutorial_steps")
+}
+
 // ─── Vendors ─────────────────────────────────────────────────────────────────
 
 model VendorCategory {

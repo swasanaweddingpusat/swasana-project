@@ -13,9 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { TUTORIAL_CATEGORIES, type TutorialLesson, type TutorialCategory } from "./tutorial-data";
+import type { TutorialLesson, TutorialCategory } from "./tutorial-types";
 
 interface TutorialDetailProps {
+  categories: TutorialCategory[];
   selectedLessonId: string | null;
   onNavigate: (lessonId: string) => void;
   onBack?: () => void;
@@ -29,11 +30,11 @@ interface ResolvedLesson {
   nextLessonId: string | null;
 }
 
-function resolveLesson(lessonId: string | null): ResolvedLesson | null {
+function resolveLesson(lessonId: string | null, categories: TutorialCategory[]): ResolvedLesson | null {
   if (!lessonId) return null;
 
   const allLessons: Array<{ lesson: TutorialLesson; category: TutorialCategory }> = [];
-  for (const cat of TUTORIAL_CATEGORIES) {
+  for (const cat of categories) {
     for (const les of cat.lessons) {
       allLessons.push({ lesson: les, category: cat });
     }
@@ -51,12 +52,16 @@ function resolveLesson(lessonId: string | null): ResolvedLesson | null {
 }
 
 export function TutorialDetail({
+  categories,
   selectedLessonId,
   onNavigate,
   onBack,
   showBackButton = false,
 }: TutorialDetailProps) {
-  const resolved = useMemo(() => resolveLesson(selectedLessonId), [selectedLessonId]);
+  const resolved = useMemo(
+    () => resolveLesson(selectedLessonId, categories),
+    [selectedLessonId, categories]
+  );
 
   if (!resolved) {
     return <EmptyState />;
@@ -115,7 +120,7 @@ export function TutorialDetail({
                 stepNumber={index + 1}
                 title={step.title}
                 caption={step.caption}
-                image={step.image}
+                image={step.image ?? undefined}
               />
             ))}
           </ol>

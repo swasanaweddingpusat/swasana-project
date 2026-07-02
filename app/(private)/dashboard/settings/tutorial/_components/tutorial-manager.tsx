@@ -1,0 +1,729 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { AddCircle, TrashBinTrash, PenNewSquare, Book } from "@solar-icons/react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import {
+  createTutorialCategory,
+  updateTutorialCategory,
+  deleteTutorialCategory,
+  createTutorialLesson,
+  updateTutorialLesson,
+  deleteTutorialLesson,
+  createTutorialStep,
+  updateTutorialStep,
+  deleteTutorialStep,
+} from "@/actions/tutorial";
+import type { TutorialCategory, TutorialLesson, TutorialStep } from "@/app/(private)/dashboard/tutorial/_components/tutorial-types";
+
+interface Props {
+  initialCategories: TutorialCategory[];
+}
+
+export function TutorialManager({ initialCategories }: Props) {
+  const [categories, setCategories] = useState<TutorialCategory[]>(initialCategories);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(categories[0]?.id ?? null);
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(categories[0]?.lessons?.[0]?.id ?? null);
+
+  const selectedCategory = useMemo(
+    () => categories.find((c) => c.id === selectedCategoryId) ?? categories[0] ?? null,
+    [categories, selectedCategoryId]
+  );
+
+  const selectedLesson = useMemo(
+    () => selectedCategory?.lessons.find((l) => l.id === selectedLessonId) ?? selectedCategory?.lessons?.[0] ?? null,
+    [selectedCategory, selectedLessonId]
+  );
+
+  useEffect(() => {
+    if (!selectedCategory && categories.length > 0) {
+      setSelectedCategoryId(categories[0].id);
+    }
+  }, [categories, selectedCategory]);
+
+  useEffect(() => {
+    if (selectedCategory && selectedLessonId && !selectedCategory.lessons.some((l) => l.id === selectedLessonId)) {
+      setSelectedLessonId(selectedCategory.lessons[0]?.id ?? null);
+    }
+  }, [selectedCategory, selectedLessonId]);
+
+  useEffect(() => {
+    if (!selectedLessonId && selectedCategory?.lessons.length) {
+      setSelectedLessonId(selectedCategory.lessons[0].id);
+    }
+  }, [selectedCategory, selectedLessonId]);
+
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [editingCategory, setEditingCategory] = useState<TutorialCategory | null>(null);
+
+  const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
+  const [lessonTitle, setLessonTitle] = useState("");
+  const [lessonDuration, setLessonDuration] = useState("");
+  const [lessonCompleted, setLessonCompleted] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<TutorialLesson | null>(null);
+
+  const [stepDialogOpen, setStepDialogOpen] = useState(false);
+  const [stepTitle, setStepTitle] = useState("");
+  const [stepCaption, setStepCaption] = useState("");
+  const [stepImage, setStepImage] = useState("");
+  const [editingStep, setEditingStep] = useState<TutorialStep | null>(null);
+
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<TutorialCategory | null>(null);
+  const [deleteLessonTarget, setDeleteLessonTarget] = useState<TutorialLesson | null>(null);
+  const [deleteStepTarget, setDeleteStepTarget] = useState<TutorialStep | null>(null);
+
+  const [isPending, setIsPending] = useState(false);
+
+  const openNewCategoryDialog = () => {
+    setEditingCategory(null);
+    setCategoryName("");
+    setCategoryDialogOpen(true);
+  };
+
+  const openEditCategoryDialog = (category: TutorialCategory) => {
+    setEditingCategory(category);
+    setCategoryName(category.name);
+    setCategoryDialogOpen(true);
+  };
+
+  const openNewLessonDialog = () => {
+    if (!selectedCategory) return;
+    setEditingLesson(null);
+    setLessonTitle("");
+    setLessonDuration("");
+    setLessonCompleted(false);
+    setLessonDialogOpen(true);
+  };
+
+  const openEditLessonDialog = (lesson: TutorialLesson) => {
+    setEditingLesson(lesson);
+    setLessonTitle(lesson.title);
+    setLessonDuration(lesson.duration ?? "");
+    setLessonCompleted(lesson.completed ?? false);
+    setLessonDialogOpen(true);
+  };
+
+  const openNewStepDialog = () => {
+    if (!selectedLesson) return;
+    setEditingStep(null);
+    setStepTitle("");
+    setStepCaption("");
+    setStepImage("");
+    setStepDialogOpen(true);
+  };
+
+  const openEditStepDialog = (step: TutorialStep) => {
+    setEditingStep(step);
+    setStepTitle(step.title);
+    setStepCaption(step.caption);
+    setStepImage(step.image ?? "");
+    setStepDialogOpen(true);
+  };
+
+  async function handleSaveCategory() {
+    if (isPending) return;
+    const name = categoryName.trim();
+    if (!name) {
+      toast.error("Nama kategori tidak boleh kosong.");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      if (editingCategory) {
+        const result = await updateTutorialCategory(editingCategory.id, name);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal memperbarui kategori.");
+          return;
+        }
+        setCategories((prev) => prev.map((c) => (c.id === editingCategory.id ? { ...c, name } : c)));
+        toast.success("Kategori berhasil diperbarui.");
+      } else {
+        const result = await createTutorialCategory(name);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal membuat kategori.");
+          return;
+        }
+        const { id, name: catName } = result.category as { id: string; name: string };
+        setCategories((prev) => [...prev, { id, name: catName, lessons: [] }]);
+        toast.success("Kategori berhasil ditambahkan.");
+      }
+      setCategoryDialogOpen(false);
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleSaveLesson() {
+    if (isPending) return;
+    if (!selectedCategory) {
+      toast.error("Pilih kategori terlebih dahulu.");
+      return;
+    }
+
+    const title = lessonTitle.trim();
+    const duration = lessonDuration.trim();
+    if (!title) {
+      toast.error("Judul lesson tidak boleh kosong.");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      if (editingLesson) {
+        const result = await updateTutorialLesson(editingLesson.id, title, duration, lessonCompleted);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal memperbarui lesson.");
+          return;
+        }
+        setCategories((prev) =>
+          prev.map((c) =>
+            c.id !== selectedCategory.id
+              ? c
+              : {
+                  ...c,
+                  lessons: c.lessons.map((l) =>
+                    l.id === editingLesson.id ? { ...l, title, duration, completed: lessonCompleted } : l
+                  ),
+                }
+          )
+        );
+        toast.success("Lesson berhasil diperbarui.");
+      } else {
+        const result = await createTutorialLesson(selectedCategory.id, title, duration, lessonCompleted);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal membuat lesson.");
+          return;
+        }
+        const raw = result.lesson as { id: string; title: string; duration: string; completed: boolean; sortOrder: number };
+        const newLesson: TutorialLesson = { id: raw.id, title: raw.title, duration: raw.duration, completed: raw.completed, sortOrder: raw.sortOrder, steps: [] };
+        setCategories((prev) =>
+          prev.map((c) =>
+            c.id === selectedCategory.id ? { ...c, lessons: [...c.lessons, newLesson] } : c
+          )
+        );
+        toast.success("Lesson berhasil ditambahkan.");
+        setSelectedLessonId(newLesson.id);
+      }
+      setLessonDialogOpen(false);
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleSaveStep() {
+    if (isPending) return;
+    if (!selectedLesson) {
+      toast.error("Pilih lesson terlebih dahulu.");
+      return;
+    }
+
+    const title = stepTitle.trim();
+    const caption = stepCaption.trim();
+    const image = stepImage.trim() || undefined;
+    if (!title || !caption) {
+      toast.error("Judul dan keterangan step wajib diisi.");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      if (editingStep) {
+        const result = await updateTutorialStep(editingStep.id, title, caption, image);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal memperbarui step.");
+          return;
+        }
+        setCategories((prev) =>
+          prev.map((c) =>
+            c.id !== selectedCategory?.id
+              ? c
+              : {
+                  ...c,
+                  lessons: c.lessons.map((l) =>
+                    l.id !== selectedLesson.id
+                      ? l
+                      : {
+                          ...l,
+                          steps: l.steps.map((s) =>
+                            s.id === editingStep.id
+                              ? { ...s, title, caption, image: image ?? null }
+                              : s
+                          ),
+                        }
+                  ),
+                }
+          )
+        );
+        toast.success("Step berhasil diperbarui.");
+      } else {
+        const result = await createTutorialStep(selectedLesson.id, title, caption, image);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal membuat step.");
+          return;
+        }
+        const newStep = result.step as TutorialStep;
+        setCategories((prev) =>
+          prev.map((c) =>
+            c.id !== selectedCategory?.id
+              ? c
+              : {
+                  ...c,
+                  lessons: c.lessons.map((l) =>
+                    l.id === selectedLesson.id ? { ...l, steps: [...l.steps, newStep] } : l
+                  ),
+                }
+          )
+        );
+        toast.success("Step berhasil ditambahkan.");
+      }
+      setStepDialogOpen(false);
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleDeleteCategory() {
+    if (!deleteCategoryTarget || isPending) return;
+    setIsPending(true);
+    try {
+      const result = await deleteTutorialCategory(deleteCategoryTarget.id);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menghapus kategori.");
+        return;
+      }
+      setCategories((prev) => prev.filter((c) => c.id !== deleteCategoryTarget.id));
+      setDeleteCategoryTarget(null);
+      toast.success("Kategori berhasil dihapus.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleDeleteLesson() {
+    if (!deleteLessonTarget || !selectedCategory || isPending) return;
+    setIsPending(true);
+    try {
+      const result = await deleteTutorialLesson(deleteLessonTarget.id);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menghapus lesson.");
+        return;
+      }
+      const remainingLessons = selectedCategory.lessons.filter((l) => l.id !== deleteLessonTarget.id);
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id !== selectedCategory.id ? c : { ...c, lessons: remainingLessons }
+        )
+      );
+      if (selectedLessonId === deleteLessonTarget.id) {
+        setSelectedLessonId(remainingLessons[0]?.id ?? null);
+      }
+      setDeleteLessonTarget(null);
+      toast.success("Lesson berhasil dihapus.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleDeleteStep() {
+    if (!deleteStepTarget || !selectedCategory || !selectedLesson || isPending) return;
+    setIsPending(true);
+    try {
+      const result = await deleteTutorialStep(deleteStepTarget.id);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menghapus step.");
+        return;
+      }
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id !== selectedCategory.id
+            ? c
+            : {
+                ...c,
+                lessons: c.lessons.map((l) =>
+                  l.id !== selectedLesson.id
+                    ? l
+                    : { ...l, steps: l.steps.filter((s) => s.id !== deleteStepTarget.id) }
+                ),
+              }
+        )
+      );
+      setDeleteStepTarget(null);
+      toast.success("Step berhasil dihapus.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <div className="px-2 sm:px-6 pb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Tutorial CMS</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Kelola konten tutorial aplikasi secara terstruktur.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={openNewCategoryDialog} className="cursor-pointer">
+            <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" /> Tambah Kategori
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[300px_1fr]">
+        <Card className="h-fit">
+          <CardHeader className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Kategori</CardTitle>
+              <CardDescription>Tata urutan kategori tutorial.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 p-0">
+            {categories.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">Belum ada kategori. Tambahkan kategori untuk memulai.</div>
+            ) : (
+              <div className="space-y-2 p-4">
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategoryId(category.id);
+                      setSelectedLessonId(category.lessons[0]?.id ?? null);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition",
+                      selectedCategoryId === category.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-background hover:border-primary/50"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                        <Book weight="BoldDuotone" className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="font-medium text-foreground">{category.name}</p>
+                        <p className="text-xs text-muted-foreground">{category.lessons.length} lesson</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openEditCategoryDialog(category); }}
+                        className="p-1 rounded-md text-muted-foreground hover:bg-muted"
+                      >
+                        <PenNewSquare weight="BoldDuotone" className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setDeleteCategoryTarget(category); }}
+                        className="p-1 rounded-md text-destructive hover:bg-destructive/10"
+                      >
+                        <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Lesson</CardTitle>
+                <CardDescription>
+                  {selectedCategory ? `Kelola lesson untuk kategori ${selectedCategory.name}.` : "Pilih kategori terlebih dahulu."}
+                </CardDescription>
+              </div>
+              <Button onClick={openNewLessonDialog} disabled={!selectedCategory} className="cursor-pointer">
+                <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" /> Tambah Lesson
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2 p-4">
+              {!selectedCategory ? (
+                <p className="text-sm text-muted-foreground">Pilih kategori untuk melihat lesson.</p>
+              ) : selectedCategory.lessons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Belum ada lesson di kategori ini.</p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedCategory.lessons.map((lesson) => (
+                    <button
+                      key={lesson.id}
+                      type="button"
+                      onClick={() => setSelectedLessonId(lesson.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition",
+                        selectedLessonId === lesson.id
+                          ? "border-primary bg-primary/10"
+                          : "border-border bg-background hover:border-primary/50"
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{lesson.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{lesson.duration || "Durasi belum diatur"}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openEditLessonDialog(lesson); }}
+                          className="p-1 rounded-md text-muted-foreground hover:bg-muted"
+                        >
+                          <PenNewSquare weight="BoldDuotone" className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeleteLessonTarget(lesson); }}
+                          className="p-1 rounded-md text-destructive hover:bg-destructive/10"
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Step</CardTitle>
+                <CardDescription>
+                  {selectedLesson ? `Step untuk lesson ${selectedLesson.title}.` : "Pilih lesson untuk melihat step."}
+                </CardDescription>
+              </div>
+              <Button onClick={openNewStepDialog} disabled={!selectedLesson} className="cursor-pointer">
+                <AddCircle weight="BoldDuotone" className="h-4 w-4 mr-2" /> Tambah Step
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2 p-4">
+              {!selectedLesson ? (
+                <p className="text-sm text-muted-foreground">Pilih lesson untuk melihat step.</p>
+              ) : selectedLesson.steps.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Belum ada step dalam lesson ini.</p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedLesson.steps.map((step, index) => (
+                    <div key={step.id} className="rounded-2xl border border-border bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground">{index + 1}. {step.title}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">{step.caption}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditStepDialog(step)}
+                            className="p-1 rounded-md text-muted-foreground hover:bg-muted"
+                          >
+                            <PenNewSquare weight="BoldDuotone" className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteStepTarget(step)}
+                            className="p-1 rounded-md text-destructive hover:bg-destructive/10"
+                          >
+                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {step.image ? <p className="mt-2 text-xs text-muted-foreground">Gambar: {step.image}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>{editingCategory ? "Edit Kategori" : "Tambah Kategori"}</DialogTitle>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="category-name">Nama Kategori</Label>
+              <Input
+                id="category-name"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                placeholder="Contoh: Booking & Order"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setCategoryDialogOpen(false)} className="flex-1 cursor-pointer">
+                Batal
+              </Button>
+              <Button onClick={handleSaveCategory} disabled={isPending} className="flex-1 cursor-pointer">
+                {isPending ? "Menyimpan..." : "Simpan"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={lessonDialogOpen} onOpenChange={setLessonDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>{editingLesson ? "Edit Lesson" : "Tambah Lesson"}</DialogTitle>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="lesson-title">Judul Lesson</Label>
+              <Input
+                id="lesson-title"
+                value={lessonTitle}
+                onChange={(e) => setLessonTitle(e.target.value)}
+                placeholder="Contoh: Cara Membuat Booking Baru"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lesson-duration">Durasi</Label>
+              <Input
+                id="lesson-duration"
+                value={lessonDuration}
+                onChange={(e) => setLessonDuration(e.target.value)}
+                placeholder="Contoh: 5 menit"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="lesson-completed"
+                checked={lessonCompleted}
+                onCheckedChange={(value) => setLessonCompleted(value === true)}
+              />
+              <Label htmlFor="lesson-completed">Tandai sudah selesai</Label>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setLessonDialogOpen(false)} className="flex-1 cursor-pointer">
+                Batal
+              </Button>
+              <Button onClick={handleSaveLesson} disabled={isPending} className="flex-1 cursor-pointer">
+                {isPending ? "Menyimpan..." : "Simpan"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>{editingStep ? "Edit Step" : "Tambah Step"}</DialogTitle>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="step-title">Judul Step</Label>
+              <Input
+                id="step-title"
+                value={stepTitle}
+                onChange={(e) => setStepTitle(e.target.value)}
+                placeholder="Contoh: Buka Halaman Booking"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="step-caption">Keterangan</Label>
+              <Textarea
+                id="step-caption"
+                value={stepCaption}
+                onChange={(e) => setStepCaption(e.target.value)}
+                placeholder="Jelaskan langkah secara ringkas..."
+                rows={4}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="step-image">Path Gambar (opsional)</Label>
+              <Input
+                id="step-image"
+                value={stepImage}
+                onChange={(e) => setStepImage(e.target.value)}
+                placeholder="Contoh: /tutorial/booking/01-dashboard.png"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setStepDialogOpen(false)} className="flex-1 cursor-pointer">
+                Batal
+              </Button>
+              <Button onClick={handleSaveStep} disabled={isPending} className="flex-1 cursor-pointer">
+                {isPending ? "Menyimpan..." : "Simpan"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteCategoryTarget} onOpenChange={(open) => { if (!open) setDeleteCategoryTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Kategori</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus kategori <strong>{deleteCategoryTarget?.name}</strong> beserta semua lesson dan step yang terkait.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCategory}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteLessonTarget} onOpenChange={(open) => { if (!open) setDeleteLessonTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Lesson</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus lesson <strong>{deleteLessonTarget?.title}</strong> beserta semua step yang terkait.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteLesson}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteStepTarget} onOpenChange={(open) => { if (!open) setDeleteStepTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Step</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus step <strong>{deleteStepTarget?.title}</strong> dari lesson ini.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteStep}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

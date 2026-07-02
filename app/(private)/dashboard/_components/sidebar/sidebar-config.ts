@@ -70,6 +70,7 @@ export const SETTINGS_MODULES = [
   "settings-maintenance-category",
   "settings-maintenance-priority",
   "settings-maintenance-status",
+  "settings-tutorial",
   "customers",
 ] as const;
 

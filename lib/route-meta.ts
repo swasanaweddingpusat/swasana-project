@@ -224,6 +224,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Panduan penggunaan aplikasi",
   },
 
+
   // ─── HR & Payroll ──────────────────────────────────────────────────────────
   "/dashboard/hr": {
     title: "HR & Payroll",
@@ -268,6 +269,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Rekrutmen & Onboarding",
     subtitle: "Kelola lowongan, kandidat, dan onboarding",
     parent: "/dashboard/hr",
+  },
+  "/dashboard/settings/tutorial": {
+    title: "Tutorial CMS",
+    subtitle: "Kelola konten tutorial aplikasi",
+    parent: "/dashboard/settings",
   },
 };
 
