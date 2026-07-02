@@ -16,6 +16,14 @@ const optionalImageSchema = z
   .optional()
   .transform((value) => (value?.trim() ? value.trim() : undefined));
 
+const optionalVideoUrlSchema = z
+  .string()
+  .max(1000)
+  .optional()
+  .transform((value) => (value?.trim() ? value.trim() : undefined));
+
+const videoTypeSchema = z.enum(["youtube", "mp4", "minio"]).optional();
+
 export async function createTutorialCategory(name: string) {
   const { session, error } = await requirePermission({ module: "settings-tutorial", action: "create" });
   if (error) return { success: false, error };
@@ -152,7 +160,14 @@ export async function deleteTutorialLesson(id: string) {
   }
 }
 
-export async function createTutorialStep(lessonId: string, title: string, caption: string, image?: string) {
+export async function createTutorialStep(
+  lessonId: string,
+  title: string,
+  caption: string,
+  image?: string,
+  videoUrl?: string,
+  videoType?: string,
+) {
   const { session, error } = await requirePermission({ module: "settings-tutorial", action: "create" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`tutorial-step-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
@@ -166,6 +181,12 @@ export async function createTutorialStep(lessonId: string, title: string, captio
   const parsedImage = optionalImageSchema.safeParse(image?.trim());
   if (!parsedImage.success) return { success: false, error: parsedImage.error.issues[0].message };
 
+  const parsedVideoUrl = optionalVideoUrlSchema.safeParse(videoUrl?.trim());
+  if (!parsedVideoUrl.success) return { success: false, error: parsedVideoUrl.error.issues[0].message };
+
+  const parsedVideoType = videoTypeSchema.safeParse(videoType || undefined);
+  if (!parsedVideoType.success) return { success: false, error: parsedVideoType.error.issues[0].message };
+
   try {
     const count = await db.tutorialStep.count({ where: { lessonId } });
     const step = await db.tutorialStep.create({
@@ -174,6 +195,8 @@ export async function createTutorialStep(lessonId: string, title: string, captio
         title: parsedTitle.data,
         caption: parsedCaption.data,
         image: parsedImage.data,
+        videoUrl: parsedVideoUrl.data,
+        videoType: parsedVideoType.data,
         sortOrder: count,
       },
     });
@@ -185,7 +208,14 @@ export async function createTutorialStep(lessonId: string, title: string, captio
   }
 }
 
-export async function updateTutorialStep(id: string, title: string, caption: string, image?: string) {
+export async function updateTutorialStep(
+  id: string,
+  title: string,
+  caption: string,
+  image?: string,
+  videoUrl?: string,
+  videoType?: string,
+) {
   const { session, error } = await requirePermission({ module: "settings-tutorial", action: "edit" });
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`tutorial-step-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
@@ -199,6 +229,12 @@ export async function updateTutorialStep(id: string, title: string, caption: str
   const parsedImage = optionalImageSchema.safeParse(image?.trim());
   if (!parsedImage.success) return { success: false, error: parsedImage.error.issues[0].message };
 
+  const parsedVideoUrl = optionalVideoUrlSchema.safeParse(videoUrl?.trim());
+  if (!parsedVideoUrl.success) return { success: false, error: parsedVideoUrl.error.issues[0].message };
+
+  const parsedVideoType = videoTypeSchema.safeParse(videoType || undefined);
+  if (!parsedVideoType.success) return { success: false, error: parsedVideoType.error.issues[0].message };
+
   try {
     const step = await db.tutorialStep.update({
       where: { id },
@@ -206,6 +242,8 @@ export async function updateTutorialStep(id: string, title: string, caption: str
         title: parsedTitle.data,
         caption: parsedCaption.data,
         image: parsedImage.data,
+        videoUrl: parsedVideoUrl.data,
+        videoType: parsedVideoType.data,
       },
     });
     revalidateTag("tutorials", "max");
@@ -228,5 +266,57 @@ export async function deleteTutorialStep(id: string) {
   } catch (e) {
     console.error("[deleteTutorialStep]", e);
     return { success: false, error: "Gagal menghapus step." };
+  }
+}
+
+export async function createTutorialStepDocument(
+  stepId: string,
+  name: string,
+  fileUrl: string,
+  mimeType?: string,
+  fileSize?: number,
+) {
+  const { session, error } = await requirePermission({ module: "settings-tutorial", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`tutorial-doc-create:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsedName = z.string().min(1).max(255).safeParse(name.trim());
+  if (!parsedName.success) return { success: false, error: "Nama dokumen tidak valid." };
+
+  const parsedUrl = z.string().url().max(1000).safeParse(fileUrl.trim());
+  if (!parsedUrl.success) return { success: false, error: "URL dokumen tidak valid." };
+
+  try {
+    const count = await db.tutorialStepDocument.count({ where: { stepId } });
+    const document = await db.tutorialStepDocument.create({
+      data: {
+        stepId,
+        name: parsedName.data,
+        fileUrl: parsedUrl.data,
+        mimeType: mimeType ?? null,
+        fileSize: fileSize ?? null,
+        sortOrder: count,
+      },
+    });
+    revalidateTag("tutorials", "max");
+    return { success: true, document };
+  } catch (e) {
+    console.error("[createTutorialStepDocument]", e);
+    return { success: false, error: "Gagal menyimpan dokumen." };
+  }
+}
+
+export async function deleteTutorialStepDocument(id: string) {
+  const { session, error } = await requirePermission({ module: "settings-tutorial", action: "delete" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`tutorial-doc-delete:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    await db.tutorialStepDocument.delete({ where: { id } });
+    revalidateTag("tutorials", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[deleteTutorialStepDocument]", e);
+    return { success: false, error: "Gagal menghapus dokumen." };
   }
 }
