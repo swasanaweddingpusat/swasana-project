@@ -258,7 +258,7 @@ function TopContent({
   }
   const totalPromo = selectedPromos.reduce((s, p) => s + potonganOf(p), 0);
 
-  const priceAfterDiscount = Math.max(0, packagePrice - discountAmount - totalPromo);
+  const priceAfterDiscount = Math.max(0, packagePrice - discountAmount);
   // Refund terms are a separate reconciliation, not a billable term — exclude
   // them from the total so the difference reflects the actual billing pool.
   const totalTerms = terms
@@ -498,8 +498,8 @@ function TopContent({
           )}
         </div>
 
-        {/* Promo Program */}
-        <div className="mb-4">
+        {/* Promo Program — hidden until wired to real DB (discount_programs table) */}
+        {false && <div className="mb-4">
           <label className="text-sm font-medium text-foreground mb-2 block">Program Discount</label>
           <Popover open={promoOpen} onOpenChange={setPromoOpen}>
             <PopoverTrigger
@@ -639,7 +639,7 @@ function TopContent({
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Terms */}
         <div>
@@ -1350,7 +1350,7 @@ function TopContent({
               - Rp{fmtRp(discountAmount)}
             </span>
           </div>
-          {totalPromo > 0 && (
+          {false && totalPromo > 0 && (
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium text-[var(--brand-gold)]">Potongan Promo:</span>
               <span className="text-sm font-medium text-[var(--brand-gold)]">
