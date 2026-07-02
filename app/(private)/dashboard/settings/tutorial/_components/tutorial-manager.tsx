@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   createTutorialCategory,
@@ -22,8 +23,10 @@ import {
   createTutorialStep,
   updateTutorialStep,
   deleteTutorialStep,
+  createTutorialStepDocument,
+  deleteTutorialStepDocument,
 } from "@/actions/tutorial";
-import type { TutorialCategory, TutorialLesson, TutorialStep } from "@/app/(private)/dashboard/tutorial/_components/tutorial-types";
+import type { TutorialCategory, TutorialLesson, TutorialStep, TutorialStepDocument } from "@/app/(private)/dashboard/tutorial/_components/tutorial-types";
 
 interface Props {
   initialCategories: TutorialCategory[];
@@ -78,6 +81,13 @@ export function TutorialManager({ initialCategories }: Props) {
   const [stepImage, setStepImage] = useState("");
   const [editingStep, setEditingStep] = useState<TutorialStep | null>(null);
 
+  const [stepVideoUrl, setStepVideoUrl] = useState("");
+  const [stepVideoType, setStepVideoType] = useState<"youtube" | "mp4" | "minio" | "">("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+
+  const [uploadingDocStepId, setUploadingDocStepId] = useState<string | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<TutorialCategory | null>(null);
   const [deleteLessonTarget, setDeleteLessonTarget] = useState<TutorialLesson | null>(null);
   const [deleteStepTarget, setDeleteStepTarget] = useState<TutorialStep | null>(null);
@@ -119,6 +129,8 @@ export function TutorialManager({ initialCategories }: Props) {
     setStepTitle("");
     setStepCaption("");
     setStepImage("");
+    setStepVideoUrl("");
+    setStepVideoType("");
     setStepDialogOpen(true);
   };
 
@@ -127,6 +139,8 @@ export function TutorialManager({ initialCategories }: Props) {
     setStepTitle(step.title);
     setStepCaption(step.caption);
     setStepImage(step.image ?? "");
+    setStepVideoUrl(step.videoUrl ?? "");
+    setStepVideoType((step.videoType as "youtube" | "mp4" | "minio" | "") ?? "");
     setStepDialogOpen(true);
   };
 
@@ -231,6 +245,8 @@ export function TutorialManager({ initialCategories }: Props) {
     const title = stepTitle.trim();
     const caption = stepCaption.trim();
     const image = stepImage.trim() || undefined;
+    const videoUrl = stepVideoUrl.trim() || undefined;
+    const videoType = stepVideoType || undefined;
     if (!title || !caption) {
       toast.error("Judul dan keterangan step wajib diisi.");
       return;
@@ -239,7 +255,7 @@ export function TutorialManager({ initialCategories }: Props) {
     setIsPending(true);
     try {
       if (editingStep) {
-        const result = await updateTutorialStep(editingStep.id, title, caption, image);
+        const result = await updateTutorialStep(editingStep.id, title, caption, image, videoUrl, videoType);
         if (!result.success) {
           toast.error(result.error ?? "Gagal memperbarui step.");
           return;
@@ -257,7 +273,7 @@ export function TutorialManager({ initialCategories }: Props) {
                           ...l,
                           steps: l.steps.map((s) =>
                             s.id === editingStep.id
-                              ? { ...s, title, caption, image: image ?? null }
+                              ? { ...s, title, caption, image: image ?? null, videoUrl: videoUrl ?? null, videoType: videoType ?? null }
                               : s
                           ),
                         }
@@ -267,12 +283,13 @@ export function TutorialManager({ initialCategories }: Props) {
         );
         toast.success("Step berhasil diperbarui.");
       } else {
-        const result = await createTutorialStep(selectedLesson.id, title, caption, image);
+        const result = await createTutorialStep(selectedLesson.id, title, caption, image, videoUrl, videoType);
         if (!result.success) {
           toast.error(result.error ?? "Gagal membuat step.");
           return;
         }
-        const newStep: TutorialStep = { ...(result.step as Omit<TutorialStep, "documents">), documents: [] };
+        const raw = result.step as { id: string; title: string; caption: string; image?: string | null; videoUrl?: string | null; videoType?: string | null; sortOrder: number };
+        const newStep: TutorialStep = { ...raw, documents: [] };
         setCategories((prev) =>
           prev.map((c) =>
             c.id !== selectedCategory?.id
@@ -362,6 +379,74 @@ export function TutorialManager({ initialCategories }: Props) {
       toast.success("Step berhasil dihapus.");
     } finally {
       setIsPending(false);
+    }
+  }
+
+  async function handleAddDocument(stepId: string) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setUploadingDocStepId(stepId);
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("type", "document");
+        const res = await fetch("/api/upload/tutorial-media", { method: "POST", body: fd });
+        const data = await res.json() as { url?: string; name?: string; mimeType?: string; fileSize?: number; error?: string };
+        if (!res.ok || data.error) {
+          toast.error(data.error ?? "Gagal upload dokumen.");
+          return;
+        }
+        const result = await createTutorialStepDocument(stepId, data.name ?? file.name, data.url!, data.mimeType, data.fileSize);
+        if (!result.success) {
+          toast.error(result.error ?? "Gagal menyimpan dokumen.");
+          return;
+        }
+        const newDoc = result.document as TutorialStepDocument;
+        setCategories((prev) =>
+          prev.map((c) => ({
+            ...c,
+            lessons: c.lessons.map((l) => ({
+              ...l,
+              steps: l.steps.map((s) =>
+                s.id === stepId ? { ...s, documents: [...s.documents, newDoc] } : s
+              ),
+            })),
+          }))
+        );
+        toast.success("Dokumen berhasil ditambahkan.");
+      } finally {
+        setUploadingDocStepId(null);
+      }
+    };
+    input.click();
+  }
+
+  async function handleDeleteDocument(stepId: string, docId: string) {
+    setDeletingDocId(docId);
+    try {
+      const result = await deleteTutorialStepDocument(docId);
+      if (!result.success) {
+        toast.error(result.error ?? "Gagal menghapus dokumen.");
+        return;
+      }
+      setCategories((prev) =>
+        prev.map((c) => ({
+          ...c,
+          lessons: c.lessons.map((l) => ({
+            ...l,
+            steps: l.steps.map((s) =>
+              s.id === stepId ? { ...s, documents: s.documents.filter((d) => d.id !== docId) } : s
+            ),
+          })),
+        }))
+      );
+      toast.success("Dokumen berhasil dihapus.");
+    } finally {
+      setDeletingDocId(null);
     }
   }
 
@@ -542,6 +627,36 @@ export function TutorialManager({ initialCategories }: Props) {
                         </div>
                       </div>
                       {step.image ? <p className="mt-2 text-xs text-muted-foreground">Gambar: {step.image}</p> : null}
+                      {step.videoType ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Video ({step.videoType}): {step.videoUrl}
+                        </p>
+                      ) : null}
+                      {/* Documents */}
+                      <div className="mt-3 border-t pt-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Dokumen terlampir</p>
+                        {step.documents.map((doc) => (
+                          <div key={doc.id} className="flex items-center gap-2 mb-1">
+                            <span className="text-xs text-foreground truncate flex-1">{doc.name}</span>
+                            <button
+                              type="button"
+                              disabled={deletingDocId === doc.id}
+                              onClick={() => handleDeleteDocument(step.id, doc.id)}
+                              className="p-0.5 rounded text-destructive hover:bg-destructive/10"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={uploadingDocStepId === step.id}
+                          onClick={() => handleAddDocument(step.id)}
+                          className="mt-1 text-xs text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {uploadingDocStepId === step.id ? "Mengunggah..." : "+ Tambah Dokumen"}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -649,6 +764,89 @@ export function TutorialManager({ initialCategories }: Props) {
                 onChange={(e) => setStepImage(e.target.value)}
                 placeholder="Contoh: /tutorial/booking/01-dashboard.png"
               />
+            </div>
+            {/* Video section */}
+            <div className="space-y-2">
+              <Label>Video (opsional)</Label>
+              <Select
+                value={stepVideoType}
+                onValueChange={(v) => {
+                  setStepVideoType(v as typeof stepVideoType);
+                  setStepVideoUrl("");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tidak ada video" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Tidak ada video</SelectItem>
+                  <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="mp4">URL Video (MP4)</SelectItem>
+                  <SelectItem value="minio">Upload ke MinIO</SelectItem>
+                </SelectContent>
+              </Select>
+              {(stepVideoType === "youtube" || stepVideoType === "mp4") && (
+                <Input
+                  value={stepVideoUrl}
+                  onChange={(e) => setStepVideoUrl(e.target.value)}
+                  placeholder={
+                    stepVideoType === "youtube"
+                      ? "https://youtube.com/watch?v=..."
+                      : "https://cdn.example.com/video.mp4"
+                  }
+                />
+              )}
+              {stepVideoType === "minio" && (
+                <div className="flex items-center gap-2">
+                  {stepVideoUrl ? (
+                    <>
+                      <span className="flex-1 truncate text-sm text-muted-foreground">{stepVideoUrl}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStepVideoUrl("")}
+                      >
+                        Hapus
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploadingVideo}
+                      onClick={() => {
+                        const input = document.createElement("input");
+                        input.type = "file";
+                        input.accept = "video/mp4,video/webm,video/ogg,video/quicktime";
+                        input.onchange = async () => {
+                          const file = input.files?.[0];
+                          if (!file) return;
+                          setIsUploadingVideo(true);
+                          try {
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            fd.append("type", "video");
+                            const res = await fetch("/api/upload/tutorial-media", { method: "POST", body: fd });
+                            const data = await res.json() as { url?: string; error?: string };
+                            if (!res.ok || data.error) {
+                              toast.error(data.error ?? "Gagal upload video.");
+                              return;
+                            }
+                            setStepVideoUrl(data.url!);
+                          } finally {
+                            setIsUploadingVideo(false);
+                          }
+                        };
+                        input.click();
+                      }}
+                    >
+                      {isUploadingVideo ? "Mengunggah..." : "Pilih File Video"}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setStepDialogOpen(false)} className="flex-1 cursor-pointer">
