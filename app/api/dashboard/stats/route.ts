@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
@@ -10,20 +11,26 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  if (!apiLimiter.check(`dashboard-stats:${session.user.id}:${ip}`)) {
+  if (!apiLimiter.check(`dashboard-stats:${session.user.id}`)) {
     return rateLimitResponse();
   }
 
-  const { searchParams } = new URL(req.url);
+  const querySchema = z.object({
+    year:  z.coerce.number().int().min(2000).max(2100).optional(),
+    month: z.coerce.number().int().min(1).max(12).optional(),
+  });
+
+  const qParsed = querySchema.safeParse(
+    Object.fromEntries(new URL(req.url).searchParams),
+  );
+  if (!qParsed.success) {
+    return Response.json({ error: "Invalid query parameters" }, { status: 400 });
+  }
+
   const now = new Date();
-  const year = searchParams.has("year")
-    ? parseInt(searchParams.get("year")!, 10)
-    : now.getFullYear();
-  const monthParam = searchParams.has("month")
-    ? parseInt(searchParams.get("month")!, 10)
-    : now.getMonth() + 1;
-  const month = monthParam - 1; // convert 1-indexed URL param to 0-indexed Date arg
+  const year = qParsed.data.year ?? now.getFullYear();
+  const monthParam = qParsed.data.month ?? now.getMonth() + 1;
+  const month = monthParam - 1;
   const startDate = new Date(year, month, 1);
   const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
 

@@ -21,6 +21,7 @@ export function useDashboardStats(
     queryKey: ["dashboard-stats", year, month],
     queryFn: () => fetchDashboardStats(year, month),
     initialData,
+    staleTime: 10_000,
     refetchInterval: 10_000,
     refetchOnWindowFocus: false,
   });
