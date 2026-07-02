@@ -104,15 +104,8 @@ export const editBookingSchema = z.object({
     qty: z.coerce.number().int().min(1).default(1),
     nominal: z.coerce.number().min(0).default(0),
   })).optional().default([]),
-  complimentaries: z.array(z.object({
-    complimentaryId: z.string().optional().nullable(),
-    name: z.string().min(1),
-    price: z.coerce.number().int().min(0).default(0),
-    isShowPrice: z.boolean().default(false),
-    description: z.string().optional().nullable(),
-    qty: z.coerce.number().int().min(1).default(1),
-    sortOrder: z.coerce.number().int().default(0),
-  })).optional().default([]),
+  // complimentaries intentionally omitted — managed via EditComplimentaryDrawer +
+  // saveSnapComplimentaries which does NOT reset approval or client agreement.
   categoryToggles: z.array(z.object({
     categoryName: z.string().min(1),
     basePrice: z.coerce.number().int().min(0),
@@ -141,11 +134,6 @@ export const editBookingSchema = z.object({
   refreshPackagePrice: z.boolean().optional().default(false),
 });
 
-export const approveBookingSchema = z.object({
-  id: z.string().min(1),
-  signatureManager: z.string().min(1, "Tanda tangan manager wajib diisi"),
-});
-
 /** Client-info-only update: updates snapCustomer + customer master WITHOUT touching
  *  venue/package/TOP or triggering approval reset. Used by Step 1 "Save & Publish". */
 export const updateBookingClientInfoSchema = z.object({
@@ -167,4 +155,3 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 export type EditBookingInput = z.infer<typeof editBookingSchema>;
 export type UpdateBookingClientInfoInput = z.infer<typeof updateBookingClientInfoSchema>;
-export type ApproveBookingInput = z.infer<typeof approveBookingSchema>;

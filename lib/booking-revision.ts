@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
 const snapshotInclude = {
   snapCustomer: true,
@@ -24,16 +25,40 @@ export async function createBookingRevision(
 ): Promise<string> {
   const booking = await db.booking.findUniqueOrThrow({
     where: { id: bookingId },
+    // Single LATERAL JOIN — snapshotInclude pulls ~13 relations; the default
+    // per-relation round-tripping over Neon HTTP made this a major finalize cost.
+    relationLoadStrategy: "join",
     include: snapshotInclude,
   });
 
-  const lastRevision = await db.bookingRevision.findFirst({
-    where: { bookingId },
-    orderBy: { revisionNumber: "desc" },
-    select: { revisionNumber: true },
-  });
+  // Guard: a revision snapshot MUST have the core snap rows. If they're missing
+  // (upstream bug — snap tables not written before revision creation), fail loudly
+  // here instead of persisting a partial-null snapshotData that crashes render-po later.
+  if (!booking.snapCustomer || !booking.snapVenue || !booking.snapPackagePricing) {
+    throw new Error(
+      `[createBookingRevision] booking ${bookingId} missing snapshot rows (customer/venue/pricing) — cannot build revision`,
+    );
+  }
 
-  const revisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
+  // Atomic per-booking revision number. Previously this read MAX(revisionNumber)+1
+  // then created — two concurrent edits could compute the same number and collide
+  // on @@unique([bookingId, revisionNumber]) (unique violation). We use a per-booking
+  // counter row, atomically incremented. The counter self-seeds from the existing
+  // MAX(revisionNumber) so bookings created before this change don't restart at 1
+  // and collide with their existing revisions. (B-2)
+  const counterKey = `revision-${bookingId}`;
+  const [seeded] = await db.$queryRaw<[{ value: number }]>(
+    Prisma.sql`
+      INSERT INTO counters (id, value)
+      VALUES (
+        ${counterKey},
+        (SELECT COALESCE(MAX("revisionNumber"), 0) + 1 FROM booking_revisions WHERE "bookingId" = ${bookingId})
+      )
+      ON CONFLICT (id) DO UPDATE SET value = counters.value + 1
+      RETURNING value
+    `,
+  );
+  const revisionNumber = seeded.value;
 
   const snapshotData = {
     poNumber: booking.poNumber,

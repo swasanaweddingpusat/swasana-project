@@ -6,7 +6,8 @@ import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 interface TermUpdate {
   id: string;
@@ -15,6 +16,8 @@ interface TermUpdate {
   dueDate: string;
   paymentStatus: "unpaid" | "paid" | "partial";
   notes?: string | null;
+  /** Bank tujuan transfer per-term (nullable). Empty string / null clears it. */
+  paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
   sortOrder?: number;
 }
@@ -23,6 +26,8 @@ interface NewTerm {
   name: string;
   amount: number;
   dueDate: string;
+  /** Bank tujuan transfer per-term (nullable). */
+  paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
   sortOrder?: number;
 }
@@ -75,6 +80,7 @@ export async function updateTermOfPayments(
           dueDate: new Date(t.dueDate),
           paymentStatus: t.paymentStatus,
           notes: t.notes ?? null,
+          ...(t.paymentMethodId !== undefined && { paymentMethodId: t.paymentMethodId || null }),
           ...(t.sortOrder !== undefined && { sortOrder: t.sortOrder }),
         },
       });
@@ -93,6 +99,7 @@ export async function updateTermOfPayments(
               name: t.name,
               amount: t.amount,
               dueDate: new Date(t.dueDate),
+              paymentMethodId: t.paymentMethodId ?? null,
               sortOrder: t.sortOrder ?? nextSort++,
             },
           })
@@ -139,18 +146,21 @@ export async function addTermOfPayment(bookingId: string, data: { name: string; 
   }
 
   try {
-    const maxSort = await db.termOfPayment.findFirst({ where: { bookingId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
-    await db.$transaction([
-      db.termOfPayment.create({
-        data: {
-          bookingId,
-          name: data.name,
-          amount: data.amount,
-          dueDate: new Date(data.dueDate),
-          sortOrder: (maxSort?.sortOrder ?? -1) + 1,
-        },
-      }),
-    ]);
+    // Atomic sortOrder: compute MAX(sortOrder)+1 via a scalar subquery inside the
+    // INSERT so two concurrent adds can't read the same max and collide. The VALUES
+    // form always inserts exactly one row (the subquery yields 0 when no terms exist).
+    // id/createdAt/updatedAt are Prisma-level defaults, so we set them explicitly here.
+    const id = randomUUID();
+    await db.$executeRaw(
+      Prisma.sql`
+        INSERT INTO term_of_payments ("id", "bookingId", "name", "amount", "dueDate", "sortOrder", "paymentStatus", "ackStatus", "createdAt", "updatedAt")
+        VALUES (
+          ${id}, ${bookingId}, ${data.name}, ${data.amount}, ${new Date(data.dueDate)},
+          (SELECT COALESCE(MAX("sortOrder"), -1) + 1 FROM term_of_payments WHERE "bookingId" = ${bookingId}),
+          'unpaid'::"TermOfPaymentStatus", 'pending', NOW(), NOW()
+        )
+      `,
+    );
 
     await logAudit({
       userId: session!.user.id,

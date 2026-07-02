@@ -243,7 +243,7 @@ export function CateringPOPdf({ booking, vendorName, poData, logoBase64, signatu
           <View style={s.infoLeft}>
             <InfoRow label="Customer" value={booking.customerName} />
             <InfoRow label="Venue" value={booking.venueName} />
-            <InfoRow label="Package" value={`${booking.packageName} (${booking.pax} PAX)`} />
+            <InfoRow label="Package" value={`${booking.packageName}${booking.pax ? ` (${booking.pax} PAX)` : ""}`} />
           </View>
           <View style={s.infoRight}>
             <InfoRow label="No. PO" value={booking.poNumber ?? "-"} />

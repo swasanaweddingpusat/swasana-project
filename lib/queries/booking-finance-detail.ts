@@ -16,6 +16,7 @@ export interface BookingFinanceDetail {
     paymentStatus: "unpaid" | "paid" | "partial" | "refund";
     ackStatus: string | null;
     paymentEvidence: string | null;
+    paymentMethodId: string | null;
     notes: string | null;
     partialPayments: {
       id: string;
@@ -41,6 +42,10 @@ export async function getBookingFinanceDetail(
 ): Promise<BookingFinanceDetail | null> {
   const booking = await db.booking.findUnique({
     where: { id: bookingId },
+    // Single LATERAL JOIN — pulls snapCustomer, snapPackagePricing, termOfPayments
+    // (+ nested partialPayments) and snapPackageCategoryPrices in one query instead
+    // of a round-trip per relation. Hit every time the TOP drawer opens.
+    relationLoadStrategy: "join",
     select: {
       id: true,
       discountName: true,
@@ -58,6 +63,7 @@ export async function getBookingFinanceDetail(
           paymentStatus: true,
           ackStatus: true,
           paymentEvidence: true,
+          paymentMethodId: true,
           notes: true,
           partialPayments: {
             orderBy: { paidAt: "asc" },
@@ -104,6 +110,7 @@ export async function getBookingFinanceDetail(
       paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
       ackStatus: t.ackStatus ?? null,
       paymentEvidence: t.paymentEvidence ?? null,
+      paymentMethodId: t.paymentMethodId ?? null,
       notes: t.notes ?? null,
       partialPayments: t.partialPayments.map((p) => ({
         id: p.id,

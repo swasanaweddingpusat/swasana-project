@@ -14,16 +14,14 @@ async function getScopedSalesIds(
   if (dataScope === "all") return null;
   if (dataScope === "own") return [profileId];
 
-  const myGroups = await db.userGroupMember.findMany({
-    where: { userId: profileId },
-    select: { groupId: true },
-  });
-  if (myGroups.length === 0) return [profileId];
-
+  // Single round-trip: pull every member of any group the user belongs to,
+  // via the relation filter — equivalent to the old two-query (my-groups →
+  // members) flow, but without the sequential dependency.
   const members = await db.userGroupMember.findMany({
-    where: { groupId: { in: myGroups.map((g) => g.groupId) } },
+    where: { group: { members: { some: { userId: profileId } } } },
     select: { userId: true },
   });
+  if (members.length === 0) return [profileId];
   return [...new Set(members.map((m) => m.userId))];
 }
 

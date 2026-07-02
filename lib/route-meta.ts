@@ -148,6 +148,10 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Daftar rekening pembayaran venue",
     parent: "/dashboard/finance/accounts-payable",
   },
+  "/dashboard/discount-promo": {
+    title: "Discount / Promo",
+    subtitle: "Program promo & discount aktif",
+  },
 
   // ─── Notifications ─────────────────────────────────────────────────────────
   "/dashboard/notifications": {

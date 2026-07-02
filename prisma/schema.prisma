@@ -3,6 +3,10 @@ generator client {
   // native       → local dev (Windows/macOS)
   // debian-...   → Docker runtime (node:20-bookworm-slim)
   binaryTargets = ["native", "debian-openssl-3.0.x"]
+  // relationJoins → opt into relationLoadStrategy: "join" (single LATERAL JOIN
+  // instead of one round-trip per relation). Huge win for deep-include reads over
+  // the Neon HTTP adapter. Applied selectively on heavy read queries.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -408,6 +412,7 @@ model PaymentMethod {
   settlements        BookingPaymentSettlement[]
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
+  termOfPayments     TermOfPayment[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -694,6 +699,8 @@ model Booking {
   eventTime             String?
   notes                 String?
   poNumber              String?
+  poYear                Int?
+  poSeq                 Int?
   eventDate             DateTime? // required for saved bookings; null only during MICE draft steps
   quotationId           String?
   salesSignature        String?
@@ -703,6 +710,8 @@ model Booking {
   withMaterai           Boolean              @default(false)
   discountName          String?
   discountAmount        Int                  @default(0)
+  promoId               String?
+  promoSnapshot         Json?                // snapshot of DiscountProgram at booking creation
   salesId               String
   managerId             String?
   customerId            String
@@ -717,8 +726,14 @@ model Booking {
   // Draft-only fields: persisted during multi-step form, cleared on finalize (kept as null for saved bookings)
   draftCategoryToggles  Json?                // { categoryName: string, isTakeout: boolean, takeoutNominal: number }[]
   draftComplimentaries  Json?                // { complimentaryId: string | null, name: string, price: number, isShowPrice: boolean, description: string | null, qty: number }[]
+  draftInternalItems    Json?                // { itemName: string, itemDescription: string }[] — editable package internal items during draft
+  draftVendorItems      Json?                // { categoryId: string | null, categoryName: string, itemText: string }[] — editable package vendor items during draft
   // Tracks the active revision for approval step filtering (snapshot approach)
   currentRevisionId     String?
+  // Set when the client signs the agreement — freezes the snapshot layer (SnapCustomer,
+  // internal items, pricing). After this, only vendor items stay editable (ops swap);
+  // changing internal items / price / pax requires a new revision + re-approval.
+  snapshotFrozenAt      DateTime?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -731,6 +746,7 @@ model Booking {
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   lead                Lead?                @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
+  promo               DiscountProgram?     @relation(fields: [promoId], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -766,11 +782,13 @@ model Booking {
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
   @@index([leadId])
+  @@index([promoId])
   @@index([bookingStatus])
   @@index([recordStatus])
   @@index([category])
   @@index([eventDate])
   @@index([currentRevisionId])
+  @@index([recordStatus, poYear, poSeq])
   @@map("bookings")
 }
 
@@ -1028,6 +1046,7 @@ model TermOfPayment {
   dueDate         DateTime
   paymentStatus   TermOfPaymentStatus @default(unpaid)
   paymentEvidence String?
+  paymentMethodId String?             // bank tujuan transfer per-term (nullable)
   invoiceNumber   String?
   notes           String?
   sortOrder       Int                 @default(0)
@@ -1040,10 +1059,12 @@ model TermOfPayment {
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   partialPayments  PartialPayment[]
   acknowledgedBy   Profile?            @relation("TOPAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  paymentMethod    PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   @@unique([invoiceNumber])
   @@index([bookingId])
   @@index([acknowledgedById])
+  @@index([paymentMethodId])
   @@map("term_of_payments")
 }
 
@@ -1282,6 +1303,7 @@ model ApprovalRecord {
   @@unique([module, entityId])
   @@index([createdById])
   @@index([updatedById])
+  @@index([module, status])
   @@map("approval_records")
 }
 
@@ -2317,4 +2339,35 @@ model OnboardingTask {
 
   @@index([assignmentId])
   @@map("onboarding_tasks")
+}
+
+// ─── Discount / Promo ─────────────────────────────────────────────────────────
+
+enum DiscountType {
+  PERCENTAGE
+  NOMINAL
+}
+
+model DiscountProgram {
+  id                  String       @id @default(uuid())
+  name                String
+  isActive            Boolean      @default(true)
+  discountType        DiscountType
+  discountValue       Int
+  minTransaction      Int?
+  periodStart         DateTime
+  periodEnd           DateTime
+  eventEligibleStart  DateTime?
+  eventEligibleEnd    DateTime?
+  quota               Int?
+  usedCount           Int          @default(0)
+  description         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  bookings Booking[]
+
+  @@index([isActive])
+  @@index([periodStart, periodEnd])
+  @@map("discount_programs")
 }

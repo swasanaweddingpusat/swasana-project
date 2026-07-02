@@ -1,4 +1,4 @@
-import type { ForwardRefExoticComponent, RefAttributes } from "react";
+﻿import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import {
   type IconProps,
   Widget,
@@ -28,6 +28,7 @@ import {
   DocumentAdd,
   Sledgehammer,
   Gift,
+  TagPrice,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -113,6 +114,12 @@ export const navItems: NavItem[] = [
     href: "/dashboard/booking-mice",
     icon: TicketSale,
     permission: { module: "booking-mice", action: "view" },
+  },
+  {
+    name: "Discount / Promo",
+    href: "/dashboard/discount-promo",
+    icon: TagPrice,
+    permission: { module: "promo", action: "view" },
   },
   {
     name: "Purchase Order",

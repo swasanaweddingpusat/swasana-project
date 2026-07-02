@@ -10,24 +10,21 @@ export function toFullUrl(raw: string): string {
 }
 
 export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: () => void }) {
-  const [prev, setPrev] = useState(src);
-  const [url, setUrl] = useState<string | null>(() => {
-    if (typeof src === "string") return toFullUrl(src);
-    return src.type.startsWith("image/") ? URL.createObjectURL(src) : null;
+  const key = typeof src === "string" ? src : `${src.name}-${src.size}-${src.lastModified}`;
+  return <EvidencePreviewInner key={key} src={src} onOpen={onOpen} />;
+}
+
+function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () => void }) {
+  const [objectUrl] = useState<string | null>(() => {
+    if (typeof src === "string" || !src.type.startsWith("image/")) return null;
+    return URL.createObjectURL(src);
   });
 
-  if (prev !== src) {
-    if (url && typeof prev !== "string") URL.revokeObjectURL(url);
-    if (typeof src === "string") {
-      setUrl(toFullUrl(src));
-    } else {
-      setUrl(src.type.startsWith("image/") ? URL.createObjectURL(src) : null);
-    }
-    setPrev(src);
-  }
+  useEffect(() => {
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [objectUrl]);
 
-  useEffect(() => () => { if (url && typeof prev !== "string") URL.revokeObjectURL(url); }, [url, prev]);
-
+  const url = typeof src === "string" ? toFullUrl(src) : objectUrl;
   if (!url) return null;
   const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");
   if (!isImage) return null;
@@ -69,6 +66,7 @@ export interface FinanceTerm {
   paymentStatus: "unpaid" | "paid" | "partial" | "refund";
   ackStatus: string | null;
   paymentEvidence: string | null;
+  paymentMethodId?: string | null;
   notes: string | null;
   partialPayments?: {
     id: string;

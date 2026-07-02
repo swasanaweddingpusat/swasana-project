@@ -9,6 +9,9 @@ import {
   CardSend,
   Buildings2,
   Buildings,
+  Wallet,
+  CalendarMark,
+  MoneyBag,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -47,6 +50,9 @@ export const FINANCE_NAV: FinanceNavItem[] = [
     href: "/dashboard/finance/accounts-payable",
     icon: CardSend,
     children: [
+      { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
+      { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },
+      { name: "Expense", href: "/dashboard/finance/accounts-payable/expense", icon: MoneyBag },
       { name: "Rekening Vendor", href: "/dashboard/finance/accounts-payable/rekening-vendor", icon: Buildings2 },
       { name: "Rekening Venue", href: "/dashboard/finance/accounts-payable/rekening-venue", icon: Buildings },
     ],

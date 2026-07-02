@@ -25,12 +25,14 @@ export async function createNotification(input: CreateNotificationInput): Promis
 
 /**
  * Create notifications for multiple users at once.
+ * Batched into a single array-form transaction — over Neon HTTP that's one
+ * round-trip instead of one per notification. (createMany is not supported on the
+ * Neon HTTP adapter, so we use the array-form $transaction.)
  */
 export async function createNotifications(inputs: CreateNotificationInput[]): Promise<void> {
+  if (inputs.length === 0) return;
   try {
-    for (const input of inputs) {
-      await db.notification.create({ data: input });
-    }
+    await db.$transaction(inputs.map((input) => db.notification.create({ data: input })));
   } catch {
     // Silent fail
   }
@@ -45,9 +47,11 @@ export async function notifyRole(roleId: string, notification: Omit<CreateNotifi
       where: { roleId, status: "active" },
       select: { id: true },
     });
-    for (const p of profiles) {
-      await db.notification.create({ data: { ...notification, userId: p.id } });
-    }
+    if (profiles.length === 0) return;
+    // One array-form transaction (1 round-trip) instead of one create per profile.
+    await db.$transaction(
+      profiles.map((p) => db.notification.create({ data: { ...notification, userId: p.id } })),
+    );
   } catch {
     // Silent fail
   }
@@ -58,15 +62,17 @@ export async function notifyRole(roleId: string, notification: Omit<CreateNotifi
  */
 export async function notifySuperAdmins(notification: Omit<CreateNotificationInput, "userId">, excludeUserId?: string): Promise<void> {
   try {
-    const adminRole = await db.role.findFirst({ where: { isSystemRole: true } });
+    const adminRole = await db.role.findFirst({ where: { isSystemRole: true }, select: { id: true } });
     if (!adminRole) return;
     const profiles = await db.profile.findMany({
       where: { roleId: adminRole.id, status: "active", ...(excludeUserId ? { id: { not: excludeUserId } } : {}) },
       select: { id: true },
     });
-    for (const p of profiles) {
-      await db.notification.create({ data: { ...notification, userId: p.id } });
-    }
+    if (profiles.length === 0) return;
+    // One array-form transaction (1 round-trip) instead of one create per admin.
+    await db.$transaction(
+      profiles.map((p) => db.notification.create({ data: { ...notification, userId: p.id } })),
+    );
   } catch {
     // Silent fail
   }

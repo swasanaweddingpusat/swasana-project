@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice, Gift, Tag, HandMoney } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -38,8 +38,12 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { BookingTCDrawer } from "./booking-tc-drawer";
 import { EditPackageDrawer, type EditPackageTarget } from "./EditPackageDrawer";
 import { SetHargaBookingDrawer } from "./SetHargaBookingDrawer";
+import { EditComplimentaryDrawer, type EditComplimentaryTarget } from "./EditComplimentaryDrawer";
+import { EditTakeoutDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/EditTakeoutDrawer";
+import { EditTopDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-top-drawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { fetchBookingComments } from "@/services/booking-comment-service";
+import { fetchBookingDetail } from "@/services/booking-detail-service";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
@@ -127,6 +131,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [yearFilter, setYearFilter] = useState<number>(new Date().getFullYear());
   const [approvalFilter, setApprovalFilter] = useState<"pending" | "approved" | "">("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
@@ -140,13 +145,24 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     staleTime: 10 * 60 * 1000,
   });
 
+  const { data: yearsData } = useQuery<{ years: number[] }>({
+    queryKey: ["booking-years"],
+    queryFn: async () => {
+      const res = await fetch("/api/bookings/years");
+      if (!res.ok) return { years: [] };
+      return res.json();
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+  const availableYears = yearsData?.years ?? [];
+
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setCurrentPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
@@ -168,6 +184,16 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [detailTarget, setDetailTarget] = useState<string | null>(null);
+  // Warm the detail modal's cache on hover/focus so opening a row is instant
+  // (shares the ["booking-detail", id] key + staleTime with useBookingDetail).
+  const prefetchDetail = (id: string) => {
+    qc.prefetchQuery({ queryKey: ["booking-detail", id], queryFn: () => fetchBookingDetail(id), staleTime: 30_000 });
+  };
+  // Mark a booking's cached detail stale after a mutation so the next open/refresh
+  // refetches fresh data instead of serving a pre-mutation snapshot.
+  const invalidateDetail = (id: string) => {
+    qc.invalidateQueries({ queryKey: ["booking-detail", id] });
+  };
   const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
@@ -176,17 +202,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string; initialTC: string | null } | null>(null);
   const [editPackageTarget, setEditPackageTarget] = useState<EditPackageTarget | null>(null);
   const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
-  const { data: bookingApprovals = [] } = useQuery<{ id: string; entityId: string; status: string; steps: { id: string; stepOrder: number; approverType: string; approverRoleId: string | null; approverUserId: string | null; status: string; signature: string | null; decidedAt: string | null; notes: string | null; revisionId: string | null; approverRole: { id: string; name: string } | null; approverUser: { id: string; fullName: string | null } | null; decidedBy: { id: string; fullName: string | null } | null }[] }[]>({
-    queryKey: ["booking-approvals"],
-    queryFn: async () => {
-      const res = await fetch("/api/approval-records?module=booking");
-      if (!res.ok) return [];
-      const json = await res.json();
-      return json.data ?? json;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  const approvalMap = new Map((Array.isArray(bookingApprovals) ? bookingApprovals : []).map((r) => [r.entityId, r]));
+  const [editComplimentaryTarget, setEditComplimentaryTarget] = useState<EditComplimentaryTarget | null>(null);
+  const [editTakeoutTarget, setEditTakeoutTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [editTopTarget, setEditTopTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
+  // Approval records now ride along on each booking row (Fix #1: getBookings attaches
+  // booking.bookingApprovals for the active page only), so no separate fetch of ALL
+  // approval records is needed here. Build the entityId → record map from the list.
+  const approvalMap = new Map(
+    bookings
+      .map((b: BookingListItem) => b.bookingApprovals)
+      .filter((r): r is NonNullable<BookingListItem["bookingApprovals"]> => r !== null)
+      .map((r) => [r.entityId, r]),
+  );
 
   const APPROVAL_STATUS_OPTIONS: { id: "" | "pending" | "approved"; name: string }[] = [
     { id: "", name: "Semua" },
@@ -250,9 +277,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       : allSteps;
     const nonClientSteps = currentRoundSteps.filter((s) => s.approverType !== "client");
     const hasPending = approvalMap.has(booking.id) && !nonClientSteps.every((s) => s.status === "approved");
-    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
-    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
-    const internalApproved = isManagerApproved && isFinanceApproved;
+    // Internal approval = EVERY non-client step (Sales + Manager + Finance) approved.
+    // Previously this only checked manager + finance, so the Client Agreement button
+    // showed while the Sales step was still pending. Deriving it from ALL non-client
+    // steps also stays correct if the flow gains/loses a step.
+    const internalApproved = nonClientSteps.length > 0 && nonClientSteps.every((s) => s.status === "approved");
     return { hasPending, internalApproved };
   }
 
@@ -323,7 +352,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   function renderMoreItems(booking: BookingListItem): React.ReactNode {
     return (
       <>
-        <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)}>
+        <DropdownMenuItem className="cursor-pointer" onClick={() => setDetailTarget(booking.id)} onMouseEnter={() => prefetchDetail(booking.id)} onFocus={() => prefetchDetail(booking.id)}>
           <Eye weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Lihat Detail
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -335,6 +364,21 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {can("booking", "edit-package") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && booking.bookingStatus !== "Canceled" && (
           <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditPackageTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
             <Widget weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Package
+          </DropdownMenuItem>
+        )}
+        {can("booking", "edit-package") && (
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditComplimentaryTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
+            <Gift weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Complimentary
+          </DropdownMenuItem>
+        )}
+        {can("booking", "edit") && (
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTakeoutTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
+            <Tag weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Takeout
+          </DropdownMenuItem>
+        )}
+        {can("booking", "edit") && (
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTopTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
+            <HandMoney weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit TOP
           </DropdownMenuItem>
         )}
         {can("booking", "edit-set-harga") && (
@@ -413,21 +457,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       );
     }
 
-    // Client Agreement is gated on internal approval: it appears only after BOTH
-    // the manager and finance approval steps (current revision) are approved.
-    // Filter steps by currentRevisionId (snapshot approach).
-    // Backward compat: if booking has no currentRevisionId OR all steps have null revisionId,
-    // fall back to showing all steps (legacy data before this feature).
-    const allAgreementSteps = approvalMap.get(booking.id)?.steps ?? [];
-    // booking.currentRevisionId is a scalar field returned by Prisma `include` — no cast needed.
-    const currentRevisionId = booking.currentRevisionId;
-    const hasRevisionedSteps = allAgreementSteps.some((s) => s.revisionId !== null);
-    const currentRoundSteps = (currentRevisionId && hasRevisionedSteps)
-      ? allAgreementSteps.filter((s) => s.revisionId === currentRevisionId)
-      : allAgreementSteps;
-    const isManagerApproved = currentRoundSteps.some((s) => s.approverRole?.name === "manager" && s.status === "approved");
-    const isFinanceApproved = currentRoundSteps.some((s) => s.approverRole?.name === "finance" && s.status === "approved");
-    const internalApproved = isManagerApproved && isFinanceApproved;
+    // Client Agreement is gated on internal approval: it appears only after ALL
+    // non-client steps (Sales + Manager + Finance) of the current revision are
+    // approved. Reuse the single source of truth so the two call sites can't drift.
+    const { internalApproved } = getBookingApprovalState(booking);
     return (
       <>
         {/* Agreement modal trigger — hidden on mobile. Shown only once manager +
@@ -541,8 +574,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const hasSalesFilter = salesFilter !== "";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
+  const hasYearFilter = yearFilter !== new Date().getFullYear();
   const hasApprovalFilter = approvalFilter !== "";
-  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
+  const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
 
   const RECORD_STATUS_OPTIONS: { id: "saved" | "draft" | "all"; name: string }[] = [
@@ -558,7 +592,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setApprovalFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(new Date().getFullYear()); setApprovalFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -671,6 +705,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         )}
       </div>
       <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Tahun</label>
+        <SearchableSelect
+          options={availableYears.length > 0 ? availableYears.map((y) => ({ id: String(y), name: String(y) })) : [{ id: String(new Date().getFullYear()), name: String(new Date().getFullYear()) }]}
+          value={String(yearFilter)}
+          onChange={(val) => { setYearFilter(Number(val)); setCurrentPage(1); }}
+          placeholder="Pilih tahun"
+          searchPlaceholder="Cari tahun..."
+          emptyText="Tahun tidak ditemukan"
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Status Approval</label>
         <SearchableSelect
           options={APPROVAL_STATUS_OPTIONS}
@@ -730,7 +776,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => { refetch(); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+                onClick={() => { refetch(); }}
                 disabled={isFetching}
                 aria-label="Muat ulang data booking"
                 className="shrink-0"
@@ -918,6 +964,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                     <TableRow
                       key={booking.id}
                       className={cn('hover:bg-muted/40', 'cursor-pointer')}
+                      onMouseEnter={() => { if (booking.recordStatus !== "draft") prefetchDetail(booking.id); }}
                       onClick={() => {
                         if (booking.recordStatus === "draft") {
                           openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } });
@@ -1027,7 +1074,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <div className="leading-tight">
                           <span className={cn('truncate', 'block')}>{booking.snapPackage?.packageName ?? "—"}</span>
                           {booking.snapPackagePricing && (
-                            <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
+                            <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax ? `${booking.snapPackagePricing.pax} PAX · ` : ""}{fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
                           )}
                         </div>
                       </TableCell>
@@ -1090,6 +1137,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                   <div
                     key={booking.id}
                     className={cn('rounded-lg', 'border', 'bg-card', 'p-3', 'space-y-2', 'cursor-pointer')}
+                    onMouseEnter={() => { if (booking.recordStatus !== "draft") prefetchDetail(booking.id); }}
                     onClick={() => {
                       if (booking.recordStatus === "draft") {
                         openBookingDrawer({ resumeMode: true, initialDraftId: booking.id, onSuccess: () => { void refetch(); } });
@@ -1236,6 +1284,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               type="button"
                               className={cn('flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
                               onClick={() => setDetailTarget(booking.id)}
+                              onMouseEnter={() => prefetchDetail(booking.id)}
+                              onFocus={() => prefetchDetail(booking.id)}
                               aria-label={`Lihat detail booking ${booking.snapCustomer?.name ?? ""}`}
                             >
                               <Eye weight="BoldDuotone" aria-hidden="true" className={cn('h-5', 'w-5', 'text-primary')} />
@@ -1413,20 +1463,20 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <RejectBookingModal
         open={!!rejectTarget}
         booking={rejectTarget}
-        onClose={() => setRejectTarget(null)}
+        onClose={() => { if (rejectTarget) invalidateDetail(rejectTarget.id); setRejectTarget(null); }}
       />
 
       <MarkLostDialog
         open={!!lostTarget}
         booking={lostTarget}
-        onClose={() => setLostTarget(null)}
+        onClose={() => { if (lostTarget) invalidateDetail(lostTarget.id); setLostTarget(null); }}
       />
 
       {/* Restore Booking Modal */}
       <RestoreBookingDialog
         open={!!restoreTarget}
         booking={restoreTarget}
-        onClose={() => setRestoreTarget(null)}
+        onClose={() => { if (restoreTarget) invalidateDetail(restoreTarget.id); setRestoreTarget(null); }}
       />
 
       {/* Transfer Booking Modal */}
@@ -1434,14 +1484,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         open={!!transferTarget}
         booking={transferTarget}
         salesProfiles={salesProfiles}
-        onClose={() => setTransferTarget(null)}
+        onClose={() => { if (transferTarget) invalidateDetail(transferTarget.id); setTransferTarget(null); }}
       />
 
       {/* Transfer Manager Modal */}
       <TransferManagerModal
         open={!!managerTarget}
         booking={managerTarget}
-        onClose={() => setManagerTarget(null)}
+        onClose={() => { if (managerTarget) invalidateDetail(managerTarget.id); setManagerTarget(null); }}
       />
       {/* Activity Log Modal */}
       <ActivityLogModal
@@ -1462,7 +1512,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <AgreementModal
           bookingId={agreementModal.bookingId}
           customerName={agreementModal.customerName}
-          onClose={() => setAgreementModal(null)}
+          onClose={() => { invalidateDetail(agreementModal.bookingId); setAgreementModal(null); }}
         />
       )}
 
@@ -1503,9 +1553,34 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
 
       {/* Edit Package Drawer — key forces remount on booking change, resetting all local state cleanly */}
       <EditPackageDrawer
-        key={editPackageTarget?.bookingId ?? "none"}
+        key={`pkg-${editPackageTarget?.bookingId ?? "none"}`}
         target={editPackageTarget}
-        onClose={() => setEditPackageTarget(null)}
+        onClose={() => { if (editPackageTarget) invalidateDetail(editPackageTarget.bookingId); setEditPackageTarget(null); }}
+      />
+
+      {/* Edit Complimentary Drawer — key forces remount per booking so lazy-initializer picks up correct data */}
+      <EditComplimentaryDrawer
+        key={`comp-${editComplimentaryTarget?.bookingId ?? "none"}`}
+        target={editComplimentaryTarget}
+        onClose={() => { if (editComplimentaryTarget) invalidateDetail(editComplimentaryTarget.bookingId); setEditComplimentaryTarget(null); }}
+      />
+
+      {/* Edit Takeout Drawer */}
+      <EditTakeoutDrawer
+        key={`takeout-${editTakeoutTarget?.bookingId ?? "none"}`}
+        isOpen={!!editTakeoutTarget}
+        onClose={() => setEditTakeoutTarget(null)}
+        bookingId={editTakeoutTarget?.bookingId ?? ""}
+        customerName={editTakeoutTarget?.customerName ?? ""}
+      />
+
+      {/* Edit TOP Drawer */}
+      <EditTopDrawerById
+        key={`top-${editTopTarget?.bookingId ?? "none"}`}
+        isOpen={!!editTopTarget}
+        onClose={() => setEditTopTarget(null)}
+        bookingId={editTopTarget?.bookingId ?? ""}
+        customerName={editTopTarget?.customerName ?? ""}
       />
 
       {/* Set Harga Booking Drawer */}
@@ -1513,7 +1588,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <SetHargaBookingDrawer
           key={setHargaTarget.bookingId}
           isOpen={!!setHargaTarget}
-          onClose={() => setSetHargaTarget(null)}
+          onClose={() => { invalidateDetail(setHargaTarget.bookingId); setSetHargaTarget(null); }}
           bookingId={setHargaTarget.bookingId}
           customerName={setHargaTarget.customerName}
           packageName={setHargaTarget.packageName}
@@ -1533,7 +1608,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       {approvalDialogTarget && user && (
         <ApprovalDialog
           open={!!approvalDialogTarget}
-          onClose={() => { setApprovalDialogTarget(null); qc.invalidateQueries({ queryKey: ["bookings"] }); qc.invalidateQueries({ queryKey: ["booking-approvals"] }); }}
+          onClose={() => { invalidateDetail(approvalDialogTarget.id); setApprovalDialogTarget(null); qc.invalidateQueries({ queryKey: ["bookings"] }); }}
           packageId={approvalDialogTarget.id}
           packageName={approvalDialogTarget.snapCustomer?.name ?? "Booking"}
           userProfileId={user.profileId}
@@ -1549,7 +1624,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           onClose={() => {
             setApproveModal(null);
             qc.invalidateQueries({ queryKey: ["bookings"] });
-            qc.invalidateQueries({ queryKey: ["booking-approvals"] });
+            // approveModal carries no bookingId — broadly invalidate detail caches.
+            qc.invalidateQueries({ queryKey: ["booking-detail"] });
           }}
           stepId={approveModal.stepId}
           stepLabel={approveModal.stepLabel}
