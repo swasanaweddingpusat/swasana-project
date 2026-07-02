@@ -15,21 +15,23 @@ export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: (
 }
 
 function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () => void }) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  // Create objectUrl eagerly in the initializer — the parent remounts this component
+  // via a unique `key` on every src change, so the initializer always runs fresh and
+  // we never need setState inside an effect (which ESLint forbids).
+  const [objectUrl] = useState<string | null>(() => {
+    if (typeof src === "string" || !src.type.startsWith("image/")) return null;
+    return URL.createObjectURL(src);
+  });
 
   useEffect(() => {
-    if (typeof src === "string" || !src.type.startsWith("image/")) return;
-    const url = URL.createObjectURL(src);
-    setObjectUrl(url);
-    return () => { URL.revokeObjectURL(url); };
-  }, [src]);
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [objectUrl]);
 
   const isImage = typeof src === "string"
     ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src)
     : src.type.startsWith("image/");
   if (!isImage) return null;
 
-  // Local File: use objectUrl (created above). Fallback to S3 URL for saved evidence.
   const url = typeof src === "string" ? toFullUrl(src) : objectUrl;
   if (!url) return null;
 
