@@ -9,11 +9,12 @@ import {
   AltArrowRight,
   ClockCircle,
   ListCheck,
+  File as FileIcon,
 } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { TutorialLesson, TutorialCategory } from "./tutorial-types";
+import type { TutorialLesson, TutorialCategory, TutorialStepDocument } from "./tutorial-types";
 
 interface TutorialDetailProps {
   categories: TutorialCategory[];
@@ -121,6 +122,9 @@ export function TutorialDetail({
                 title={step.title}
                 caption={step.caption}
                 image={step.image ?? undefined}
+                videoUrl={step.videoUrl ?? undefined}
+                videoType={step.videoType ?? undefined}
+                documents={step.documents}
               />
             ))}
           </ol>
@@ -170,9 +174,12 @@ interface StepCardProps {
   title: string;
   caption: string;
   image?: string;
+  videoUrl?: string;
+  videoType?: string;
+  documents: TutorialStepDocument[];
 }
 
-function StepCard({ stepNumber, title, caption, image }: StepCardProps) {
+function StepCard({ stepNumber, title, caption, image, videoUrl, videoType, documents }: StepCardProps) {
   return (
     <li className="rounded-2xl border bg-card p-5 shadow-sm">
       {/* Step number + title */}
@@ -205,9 +212,74 @@ function StepCard({ stepNumber, title, caption, image }: StepCardProps) {
         </div>
       )}
 
+      {/* Video */}
+      {videoUrl && videoType ? (
+        <VideoEmbed videoUrl={videoUrl} videoType={videoType} />
+      ) : null}
+
       {/* Caption */}
       <p className="text-sm text-muted-foreground leading-relaxed">{caption}</p>
+
+      {/* Documents */}
+      <DocumentList documents={documents} />
     </li>
+  );
+}
+
+function extractYouTubeId(url: string): string | null {
+  const match = url.match(
+    /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/ \s]{11})/,
+  );
+  return match?.[1] ?? null;
+}
+
+function VideoEmbed({ videoUrl, videoType }: { videoUrl: string; videoType: string }) {
+  if (videoType === "youtube") {
+    const videoId = extractYouTubeId(videoUrl);
+    if (!videoId) return null;
+    return (
+      <div className="mb-4 aspect-video w-full overflow-hidden rounded-xl border">
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}`}
+          className="h-full w-full"
+          allowFullScreen
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          title="Tutorial video"
+        />
+      </div>
+    );
+  }
+  return (
+    <video
+      src={videoUrl}
+      controls
+      className="mb-4 w-full rounded-xl border bg-black"
+    />
+  );
+}
+
+function DocumentList({ documents }: { documents: TutorialStepDocument[] }) {
+  if (!documents.length) return null;
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Unduhan</p>
+      {documents.map((doc) => (
+        <a
+          key={doc.id}
+          href={doc.fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download={doc.name}
+          className={cn(
+            "flex items-center gap-2 rounded-xl border p-3 text-sm text-foreground",
+            "hover:bg-muted transition-colors"
+          )}
+        >
+          <FileIcon weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{doc.name}</span>
+        </a>
+      ))}
+    </div>
   );
 }
 
