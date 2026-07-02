@@ -12,7 +12,7 @@ import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingCli
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
-import { createBookingRevision } from "@/lib/booking-revision";
+import { createBookingRevision, refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
@@ -1924,6 +1924,14 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
     await db.booking.update({ where: { id }, data: { signingLocation } });
+
+    // Re-freeze the in-flight revision snapshot so signingLocation appears in the PDF.
+    // No-ops when the revision is frozen (client signed) — best-effort.
+    try {
+      await refreshCurrentRevisionSnapshot(id);
+    } catch (e) {
+      console.error("[updateBookingSignature] revision snapshot refresh failed:", e);
+    }
 
     // Only update the approval step when the caller is the sales PIC and provides a signature.
     if (signatureSales) {

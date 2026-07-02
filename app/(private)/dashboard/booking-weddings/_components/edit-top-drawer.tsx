@@ -744,6 +744,34 @@ function TopContent({
                           <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
                         </button>
                       )}
+                      {/* Duplicate */}
+                      {!isRefund && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const maxSort = terms.reduce((max, t) => Math.max(max, t.sortOrder), -1);
+                            setTerms((prev) => {
+                              const idx = prev.findIndex((t) => t.id === term.id);
+                              const copy = {
+                                ...term,
+                                id: `new-${Date.now()}`,
+                                sortOrder: maxSort + 1,
+                                paymentStatus: "unpaid" as const,
+                                ackStatus: null,
+                                paymentEvidence: null,
+                                notes: null,
+                              };
+                              const next = [...prev];
+                              next.splice(idx + 1, 0, copy);
+                              return next;
+                            });
+                          }}
+                          className="text-muted-foreground hover:text-foreground shrink-0 flex items-center justify-center h-8 w-8"
+                          aria-label="Duplikat term"
+                        >
+                          <Copy weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      )}
                       {/* Delete */}
                       {terms.length > 1 && !locked && (
                         <button
