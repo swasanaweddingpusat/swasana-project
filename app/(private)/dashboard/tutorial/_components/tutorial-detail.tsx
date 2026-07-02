@@ -29,6 +29,8 @@ interface ResolvedLesson {
   category: TutorialCategory;
   prevLessonId: string | null;
   nextLessonId: string | null;
+  lessonIndex: number;
+  totalLessons: number;
 }
 
 function resolveLesson(lessonId: string | null, categories: TutorialCategory[]): ResolvedLesson | null {
@@ -49,6 +51,8 @@ function resolveLesson(lessonId: string | null, categories: TutorialCategory[]):
     category: allLessons[idx].category,
     prevLessonId: idx > 0 ? allLessons[idx - 1].lesson.id : null,
     nextLessonId: idx < allLessons.length - 1 ? allLessons[idx + 1].lesson.id : null,
+    lessonIndex: idx,
+    totalLessons: allLessons.length,
   };
 }
 
@@ -68,7 +72,7 @@ export function TutorialDetail({
     return <EmptyState />;
   }
 
-  const { lesson, category, prevLessonId, nextLessonId } = resolved;
+  const { lesson, category, prevLessonId, nextLessonId, lessonIndex, totalLessons } = resolved;
 
   return (
     <div className="flex h-full flex-col">
@@ -148,7 +152,7 @@ export function TutorialDetail({
           </Button>
 
           <span className="text-xs text-muted-foreground">
-            Langkah {lesson.steps.length} dari {lesson.steps.length}
+            Pelajaran {lessonIndex + 1} dari {totalLessons}
           </span>
 
           <Button
