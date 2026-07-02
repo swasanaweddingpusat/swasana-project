@@ -65,6 +65,40 @@ async function getBookingStats(
   };
 }
 
+export async function getBookingStatsRaw(
+  salesIds: string[] | null,
+  startDate: Date,
+  endDate: Date,
+): Promise<DashboardStats> {
+  const bookings = await db.booking.findMany({
+    where: {
+      recordStatus: "saved",
+      eventDate: { gte: startDate, lte: endDate },
+      ...(salesIds ? { salesId: { in: salesIds } } : {}),
+    },
+    select: {
+      bookingStatus: true,
+      snapPackagePricing: { select: { price: true } },
+    },
+    take: 10000,
+  });
+
+  return {
+    totalBookings: bookings.length,
+    totalRevenue: bookings
+      .filter((b) => b.bookingStatus === BookingStatus.Confirmed)
+      .reduce((sum, b) => sum + (b.snapPackagePricing?.price ?? 0), 0),
+    pendingBookings: bookings.filter(
+      (b) => b.bookingStatus === BookingStatus.Pending,
+    ).length,
+    lostBookings: bookings.filter(
+      (b) =>
+        b.bookingStatus === BookingStatus.Lost ||
+        b.bookingStatus === BookingStatus.Canceled,
+    ).length,
+  };
+}
+
 // ─── Main dashboard data composer ────────────────────────────────────────────
 
 export async function getDashboardData(
