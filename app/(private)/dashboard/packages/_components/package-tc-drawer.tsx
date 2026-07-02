@@ -7,8 +7,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import { TextBold, TextItalic, TextUnderline as UnderlineIcon, List, AddCircle } from "@solar-icons/react";
-const ListOrdered = List;
+import { TextBold, TextItalic, TextUnderline as UnderlineIcon, List, ListArrowDown, AltArrowRight, AltArrowLeft, AddCircle } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Drawer } from "@/components/shared/drawer";
@@ -179,7 +178,14 @@ export function PackageTCDrawer({ open, onClose, pkg }: Props) {
                   <List weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numbered List">
-                  <ListOrdered weight="BoldDuotone" className="h-4 w-4" />
+                  <ListArrowDown weight="BoldDuotone" className="h-4 w-4" />
+                </ToolbarButton>
+                <div className="w-px h-5 bg-border mx-1" />
+                <ToolbarButton active={false} onClick={() => editor.chain().focus().sinkListItem("listItem").run()} title="Indent (Sub-list)">
+                  <AltArrowRight weight="BoldDuotone" className="h-4 w-4" />
+                </ToolbarButton>
+                <ToolbarButton active={false} onClick={() => editor.chain().focus().liftListItem("listItem").run()} title="Outdent">
+                  <AltArrowLeft weight="BoldDuotone" className="h-4 w-4" />
                 </ToolbarButton>
               </div>
             )}

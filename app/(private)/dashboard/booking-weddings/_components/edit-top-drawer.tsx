@@ -1372,7 +1372,7 @@ function TopContent({
             <span
               className={cn(
                 "text-sm font-medium",
-                difference !== 0 ? "text-destructive" : "text-foreground",
+                difference < 0 ? "text-destructive" : difference > 0 ? "text-green-600" : "text-foreground",
               )}
             >
               Rp{fmtRp(Math.abs(difference))}
@@ -1397,7 +1397,7 @@ function TopContent({
           <div className="flex flex-col gap-0.5 min-w-0">
             <span className="text-[10px] text-muted-foreground">Selisih</span>
             <span
-              className={cn("flex items-center gap-1 text-xs font-semibold truncate", difference !== 0 ? "text-destructive cursor-pointer" : "text-foreground")}
+              className={cn("flex items-center gap-1 text-xs font-semibold truncate", difference < 0 ? "text-destructive cursor-pointer" : difference > 0 ? "text-green-600 cursor-pointer" : "text-foreground")}
               onClick={() => {
                 if (difference !== 0) {
                   navigator.clipboard.writeText(fmtRp(Math.abs(difference)));

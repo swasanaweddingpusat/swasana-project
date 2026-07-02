@@ -85,6 +85,10 @@ function stripHtml(text: string): string {
 
 function parseInlineHtml(text: string): React.ReactNode {
   if (!text) return null;
+  if (/<br\s*\/?>/i.test(text)) {
+    const segs = text.split(/<br\s*\/?>/i);
+    return <>{segs.map((seg, i) => <React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(seg)}</React.Fragment>)}</>;
+  }
   const cleaned = text.replace(/<\/?p>/g, "");
   if (!/<(strong|em|u|b|i)/.test(cleaned)) return stripHtml(cleaned);
   const parts: React.ReactNode[] = [];
@@ -160,7 +164,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       }
 
       const bullet = type === "ol" ? `${idx + startNum}. ` : "• ";
-      const indent = depth * 16;
+      const indent = depth * 10;
 
       if (mainText) {
         nodes.push(
@@ -237,7 +241,24 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
   }
 
   const blocks = html.replace(/^<p>|<\/p>$/g, "").split(/<\/p>\s*<p>|<br\s*\/?>/).filter(Boolean);
-  return (<Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }}>{blocks.map((block, i) => { const c = block.replace(/<\/?p>/g, "").trim(); if (!c) return null; return (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>); })}</Text>);
+  const cleanBlocks = blocks.map(b => b.replace(/<\/?p>/g, "").trim()).filter(Boolean);
+  const numRe = /^(\d+)[.)]\s+([\s\S]*)/;
+  const bulRe = /^[-•*]\s+([\s\S]*)/;
+  const isList = cleanBlocks.length > 0 && cleanBlocks.every(b => numRe.test(b) || bulRe.test(b));
+  if (isList) {
+    return <>{cleanBlocks.map((b, i) => {
+      const nm = numRe.exec(b);
+      const bullet = nm ? `${nm[1]}.` : "•";
+      const text = nm ? nm[2] : (bulRe.exec(b)?.[1] ?? b);
+      return (
+        <View key={i} wrap={false} style={{ flexDirection: "row", marginBottom: 2, alignItems: "flex-start" }}>
+          <Text style={{ fontSize, lineHeight: 1.3, width: 18, textAlign: "right", marginRight: 4 }}>{bullet}</Text>
+          <Text style={{ fontSize, flex: 1, lineHeight: 1.3, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(text)}</Text>
+        </View>
+      );
+    })}</>;
+  }
+  return (<Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }}>{cleanBlocks.map((c, i) => (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>))}</Text>);
 }
 
 function renderHtmlToPdf(html: string) {
@@ -424,12 +445,12 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
       return `<li>${t.name} sebesar ${fmtRpTerbilang(t.amount)}${due}</li>`;
     }).join("");
 
-    // Editor format: <ul><li><p>{term_of_payment}</p></li></ul>
-    // Strip the <li><p>…</p></li> wrapper and inject raw payment items directly into the <ul>.
-    // Resilient to optional whitespace/newlines between tags and around the placeholder.
-    html = html.replace(/<li>\s*<p>\s*\{term_of_payment\}\s*<\/p>\s*<\/li>/g, topHtml);
-    // Seeder format: <ul>{term_of_payment}</ul> — placeholder sits bare inside <ul>
-    html = html.replace(/\{term_of_payment\}/g, topHtml);
+    // Editor format: <ol><li><p>{term_of_payment}</p></li></ol>
+    // Replace the wrapping <li><p>…</p></li> with an <ol> sub-list so the payment terms
+    // render as an indented numbered list under the parent list item.
+    html = html.replace(/<li>\s*<p>\s*\{term_of_payment\}\s*<\/p>\s*<\/li>/g, `<li><ul>${topHtml}</ul></li>`);
+    // Seeder / bare format: placeholder sits directly inside a list or paragraph
+    html = html.replace(/\{term_of_payment\}/g, `<ul>${topHtml}</ul>`);
   }
 
   for (const [key, value] of Object.entries(vars)) {
