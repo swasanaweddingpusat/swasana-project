@@ -268,8 +268,12 @@ function TopContent({
 
   const isMandatoryValid = useMemo(() => {
     const firstTerm = terms[0];
-    return !!firstTerm && !!firstTerm.amount && firstTerm.amount > 0;
-  }, [terms]);
+    if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) return false;
+    for (const t of terms) {
+      if (t.paymentStatus === "paid" && !t.paymentEvidence && !pendingFiles[t.id]) return false;
+    }
+    return true;
+  }, [terms, pendingFiles]);
 
   const isChanged = useMemo(() => {
     if (terms.length !== initialTerms.length) return true;

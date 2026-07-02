@@ -15,19 +15,27 @@ export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: (
 }
 
 function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () => void }) {
-  const [objectUrl] = useState<string | null>(() => {
-    if (typeof src === "string" || !src.type.startsWith("image/")) return null;
-    return URL.createObjectURL(src);
-  });
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [objectUrl]);
+    if (typeof src === "string" || !src.type.startsWith("image/")) {
+      setObjectUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(src);
+    setObjectUrl(url);
+    return () => { URL.revokeObjectURL(url); };
+  }, [src]);
 
+  const isImage = typeof src === "string"
+    ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src)
+    : src.type.startsWith("image/");
+  if (!isImage) return null;
+
+  // Local File: use objectUrl (created above). Fallback to S3 URL for saved evidence.
   const url = typeof src === "string" ? toFullUrl(src) : objectUrl;
   if (!url) return null;
-  const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");
-  if (!isImage) return null;
+
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
