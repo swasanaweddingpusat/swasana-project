@@ -335,7 +335,7 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
         if (item.itemText.includes("<")) {
           rows.push({ no: "", desc: item.itemText, total: "", isTakeout: catTakeout });
         } else {
-          item.itemText.split("\n").filter(Boolean).forEach((line) => rows.push({ no: "", desc: `   ${line}`, total: "", isTakeout: catTakeout }));
+          item.itemText.split("\n").filter(Boolean).forEach((line) => rows.push({ no: "", desc: `   ${stripHtml(line)}`, total: "", isTakeout: catTakeout }));
         }
       }
       rows.push({ no: "", desc: "", total: "", isSpacer: true });
@@ -488,7 +488,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
           {/* Title */}
           <View style={{ alignItems: "center", marginBottom: 16 }}>
             <Text style={s.title}>PURCHASE ORDER PACKAGE</Text>
-            <Text style={s.title}>{varSnap?.packageName ? `${varSnap.packageName.toUpperCase()} ` : ""}{varSnap?.pax ?? "800"} PAX - {(brandName || "BRAND NAME").toUpperCase()}</Text>
+            <Text style={s.title}>{varSnap?.packageName ? `${varSnap.packageName.toUpperCase()}` : ""}{varSnap?.pax ? ` ${varSnap.pax} PAX` : ""} - {(brandName || "BRAND NAME").toUpperCase()}</Text>
             <Text style={s.subtitle}>{venueName || "VENUE NAME"}</Text>
             <Text style={s.headerAddress}>{booking.snapVenue?.address ?? "-"}</Text>
           </View>
