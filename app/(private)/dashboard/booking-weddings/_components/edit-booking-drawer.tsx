@@ -761,6 +761,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           bookingId={booking.id}
           onDone={handleCloseAll}
           onPrevious={() => setContinueFlowStep("top")}
+          isSalesPIC={isSalesPIC}
         />
       )}
     </Drawer>

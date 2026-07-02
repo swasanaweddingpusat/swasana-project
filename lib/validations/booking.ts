@@ -156,7 +156,9 @@ export const updateBookingClientInfoSchema = z.object({
 export const updateBookingSignatureSchema = z.object({
   id: z.string().min(1),
   signingLocation: z.string().min(1, "Lokasi tanda tangan wajib diisi").max(200),
-  signatureSales: z.string().min(1, "Tanda tangan wajib diisi"),
+  /** Optional — only provided when the caller IS the sales PIC. Non-sales callers
+   *  omit this to save signingLocation only, without touching the approval step. */
+  signatureSales: z.string().min(1).optional(),
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;

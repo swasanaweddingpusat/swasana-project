@@ -1925,24 +1925,27 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
 
     await db.booking.update({ where: { id }, data: { signingLocation } });
 
-    const approvalRecord = await db.approvalRecord.findUnique({
-      where: { module_entityId: { module: "booking", entityId: id } },
-      select: { id: true },
-    });
-    if (approvalRecord) {
-      await db.approvalRecordStep.updateMany({
-        where: {
-          recordId: approvalRecord.id,
-          approverType: "sales",
-          revisionId: booking.currentRevisionId ?? undefined,
-        },
-        data: {
-          signature: signatureSales,
-          status: "approved",
-          decidedById: session!.user.profileId ?? undefined,
-          decidedAt: new Date(),
-        },
+    // Only update the approval step when the caller is the sales PIC and provides a signature.
+    if (signatureSales) {
+      const approvalRecord = await db.approvalRecord.findUnique({
+        where: { module_entityId: { module: "booking", entityId: id } },
+        select: { id: true },
       });
+      if (approvalRecord) {
+        await db.approvalRecordStep.updateMany({
+          where: {
+            recordId: approvalRecord.id,
+            approverType: "sales",
+            revisionId: booking.currentRevisionId ?? undefined,
+          },
+          data: {
+            signature: signatureSales,
+            status: "approved",
+            decidedById: session!.user.profileId ?? undefined,
+            decidedAt: new Date(),
+          },
+        });
+      }
     }
 
     await logAudit({
@@ -1951,7 +1954,7 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
       result: "success",
       entityType: "booking",
       entityId: id,
-      description: `Sales signature saved (location: ${signingLocation})`,
+      description: `Sales signature saved (location: ${signingLocation}${signatureSales ? ", with signature" : ", location only"})`,
     });
 
     revalidateTag("bookings", "max");
