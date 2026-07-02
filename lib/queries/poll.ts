@@ -34,21 +34,21 @@ export async function getPollData(
     ? { recordStatus: "saved" as const, salesId: { in: salesIds } }
     : { recordStatus: "saved" as const };
 
-  const [latestBooking, latestComment, notifCount] = await Promise.all([
-    db.booking.findFirst({
-      where: bookingWhere,
-      orderBy: { updatedAt: "desc" },
-      select: { updatedAt: true },
-    }),
-    db.bookingComment.findFirst({
-      where: { booking: bookingWhere },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-    db.notification.count({
-      where: { userId: profileId, isRead: false },
-    }),
-  ]);
+  // Run sequentially — Neon HTTP has a limited connection pool; parallel queries
+  // during a heavy concurrent write (e.g. editBooking) trigger P1017 ConnectionClosed.
+  const latestBooking = await db.booking.findFirst({
+    where: bookingWhere,
+    orderBy: { updatedAt: "desc" },
+    select: { updatedAt: true },
+  });
+  const latestComment = await db.bookingComment.findFirst({
+    where: { booking: bookingWhere },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  const notifCount = await db.notification.count({
+    where: { userId: profileId, isRead: false },
+  });
 
   return {
     bookingsUpdatedAt: latestBooking?.updatedAt?.toISOString() ?? null,

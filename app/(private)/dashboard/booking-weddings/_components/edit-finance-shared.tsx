@@ -15,6 +15,9 @@ export function EvidencePreview({ src, onOpen }: { src: File | string; onOpen: (
 }
 
 function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () => void }) {
+  // Create objectUrl eagerly in the initializer — the parent remounts this component
+  // via a unique `key` on every src change, so the initializer always runs fresh and
+  // we never need setState inside an effect (which ESLint forbids).
   const [objectUrl] = useState<string | null>(() => {
     if (typeof src === "string" || !src.type.startsWith("image/")) return null;
     return URL.createObjectURL(src);
@@ -24,10 +27,14 @@ function EvidencePreviewInner({ src, onOpen }: { src: File | string; onOpen: () 
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [objectUrl]);
 
+  const isImage = typeof src === "string"
+    ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src)
+    : src.type.startsWith("image/");
+  if (!isImage) return null;
+
   const url = typeof src === "string" ? toFullUrl(src) : objectUrl;
   if (!url) return null;
-  const isImage = typeof src === "string" ? /\.(webp|jpe?g|png|gif)(\?|$)/i.test(src) : src.type.startsWith("image/");
-  if (!isImage) return null;
+
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }

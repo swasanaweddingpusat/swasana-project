@@ -20,6 +20,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   onConfirm: () => void;
   destructive?: boolean;
+  /** Override z-index for dialogs that need to appear above other fixed overlays */
+  zIndex?: number;
 }
 
 export function ConfirmDialog({
@@ -31,10 +33,13 @@ export function ConfirmDialog({
   cancelLabel = "Batal",
   onConfirm,
   destructive = false,
+  zIndex,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent
+        style={zIndex !== undefined ? { zIndex } : undefined}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

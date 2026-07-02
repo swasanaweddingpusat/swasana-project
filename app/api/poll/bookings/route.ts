@@ -17,6 +17,16 @@ export async function GET(req: Request): Promise<Response> {
   // dataScope already lives on the JWT/session (lib/auth.ts) — no extra DB round-trip.
   const dataScope: DataScope = session.user.dataScope ?? "own";
 
-  const data = await getPollData(session.user.profileId, dataScope);
-  return Response.json(data);
+  try {
+    const data = await getPollData(session.user.profileId, dataScope);
+    return Response.json(data);
+  } catch (e) {
+    // P1017 = Neon connection closed (pool exhausted under heavy load) — transient,
+    // client should retry. Return 503 so the poller backs off rather than logging 500.
+    const code = (e as { code?: string })?.code;
+    if (code === "P1017") {
+      return Response.json({ error: "Service temporarily unavailable" }, { status: 503 });
+    }
+    throw e;
+  }
 }
