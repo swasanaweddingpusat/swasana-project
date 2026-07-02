@@ -1074,7 +1074,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                         <div className="leading-tight">
                           <span className={cn('truncate', 'block')}>{booking.snapPackage?.packageName ?? "—"}</span>
                           {booking.snapPackagePricing && (
-                            <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax} PAX · {fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
+                            <span className={cn('text-xs', 'text-muted-foreground', 'block')}>{booking.snapPackagePricing.pax ? `${booking.snapPackagePricing.pax} PAX · ` : ""}{fmtRp(Math.max(0, Number(booking.snapPackagePricing.price) - (booking.discountAmount ?? 0)))}</span>
                           )}
                         </div>
                       </TableCell>
