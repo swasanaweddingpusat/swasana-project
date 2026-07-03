@@ -5,6 +5,7 @@ import { uploadToStorage, generateStorageKey } from "@/lib/storage";
 import { compressToWebp } from "@/lib/image";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+const AUDIO_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg"] as const;
 const MAX_SIZE = 10 * 1024 * 1024;
 
 export async function POST(req: Request): Promise<Response> {
@@ -33,6 +34,12 @@ export async function POST(req: Request): Promise<Response> {
       contentType = "image/webp";
       fileName = fileName.replace(/\.[^.]+$/, ".webp");
       key = generateStorageKey("booking-comments", "webp");
+    } else if ((AUDIO_TYPES as readonly string[]).includes(file.type)) {
+      // Audio: store as-is, no compression
+      const extFromName = file.name.split(".").pop();
+      const extFromType = file.type.split("/")[1]?.split(";")[0]; // e.g. "webm", "ogg", "mp4", "mpeg"
+      const ext = extFromName ?? extFromType ?? "audio";
+      key = generateStorageKey("booking-comments", ext);
     } else {
       const ext = file.name.split(".").pop() ?? "bin";
       key = generateStorageKey("booking-comments", ext);

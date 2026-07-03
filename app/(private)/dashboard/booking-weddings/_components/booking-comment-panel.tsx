@@ -3,18 +3,25 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Plain, CloseCircle, Paperclip, Gallery, FileText, Reply, Pen, TrashBinTrash, CheckCircle, Refresh, ChatRound, AddCircle } from "@solar-icons/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plain, CloseCircle, Paperclip, Gallery, FileText, Reply, Pen, TrashBinTrash, CheckCircle, Refresh, ChatRound, AddCircle, Microphone, SmileCircle } from "@solar-icons/react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { VoiceRecorder } from "@/components/shared/voice-recorder";
+import { VoiceNotePlayer } from "@/components/shared/voice-note-player";
+import { MessageReactions, AddReactionButton } from "@/components/shared/message-reactions";
+import { EmojiPicker } from "@/components/shared/emoji-picker";
+import { FormatToolbar } from "@/components/shared/format-toolbar";
+import { applyFormat, renderWhatsappContent, type FormatType } from "@/lib/whatsapp-format";
 import { useBookingComments } from "@/hooks/use-booking-comments";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useMentionableUsers } from "@/hooks/use-mentionable-users";
-import { createBookingComment, editBookingComment, deleteBookingComment, markCommentsRead } from "@/actions/booking-comment";
-import type { BookingCommentItem } from "@/lib/queries/booking-comments";
+import { createBookingComment, editBookingComment, deleteBookingComment, markCommentsRead, toggleCommentReaction } from "@/actions/booking-comment";
+import type { BookingCommentItem, AggregatedReaction } from "@/lib/queries/booking-comments";
 import type { MentionableUser } from "@/lib/queries/users";
 import { cn } from "@/lib/utils";
 
@@ -34,17 +41,6 @@ function dateBadgeLabel(date: Date) {
 function getInitials(name: string | null | undefined) {
   if (!name) return "?";
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-}
-
-function renderContent(content: string, isSelf: boolean) {
-  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
-  return parts.map((part, i) =>
-    part.startsWith("@") ? (
-      <span key={i} className={`font-semibold rounded px-0.5 ${isSelf ? "text-primary-foreground/80 underline" : "text-primary"}`}>
-        {part}
-      </span>
-    ) : part
-  );
 }
 
 async function compressImage(file: File): Promise<{ blob: Blob; url: string }> {
@@ -171,6 +167,18 @@ function MentionDropdown({ users, query, activeIndex, onSelect }: MentionDropdow
 interface PendingAttachment { type: "image" | "document"; url: string; name: string; size: number; blob: Blob }
 interface SelectedMention { profileId: string; name: string }
 
+/** Attachment shape inside bubble — extends upload result with audio metadata + optimistic flag */
+interface CommentAttachmentLocal {
+  path: string;
+  name: string;
+  size: number;
+  type: string;
+  url?: string;
+  _uploading?: boolean;
+  duration?: number;
+  peaks?: number[];
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -184,7 +192,7 @@ interface Props {
 export function BookingCommentPanel({ open, onClose, bookingId, customerName, highlightCommentId }: Props) {
   const { user } = useCurrentUser();
   const qc = useQueryClient();
-  const { data: comments = [], isLoading } = useBookingComments(open ? bookingId : null);
+  const { data: comments = [], isLoading } = useBookingComments(open ? bookingId : null, highlightCommentId);
   const { users: mentionableUsers } = useMentionableUsers();
 
   const [input, setInput] = useState("");
@@ -197,6 +205,10 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [reactionMenuId, setReactionMenuId] = useState<string | null>(null);
+  const [showFormatToolbar, setShowFormatToolbar] = useState(false);
 
   // Mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -252,7 +264,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
 
   const resetPanel = () => {
     setInput(""); setReplyTo(null); setEditingId(null); setPendingAttachments([]);
-    setMentionQuery(null); setSelectedMentions([]);
+    setMentionQuery(null); setSelectedMentions([]); setRecording(false); setEmojiPickerOpen(false);
   };
 
   // ─── Mention helpers ─────────────────────────────────────────────────────────
@@ -296,6 +308,30 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
+  /** Reply with auto-focus on textarea */
+  const handleReply = useCallback((comment: BookingCommentItem) => {
+    setReplyTo(comment);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
+  /** Insert emoji at current caret position in textarea */
+  const insertEmoji = (emoji: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart ?? input.length;
+    const end = textarea.selectionEnd ?? input.length;
+    const newText = input.slice(0, start) + emoji + input.slice(end);
+    setInput(newText);
+    setEmojiPickerOpen(false);
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + emoji.length;
+      textarea.setSelectionRange(newPos, newPos);
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }, 0);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
@@ -306,6 +342,20 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
     const query = getMentionQuery(val, caret);
     setMentionQuery(query);
     setMentionActiveIdx(0);
+  };
+
+  const handleFormat = (type: FormatType) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const { text, selStart, selEnd } = applyFormat(input, ta.selectionStart, ta.selectionEnd, type);
+    setInput(text);
+    // restore selection & recalc height after React updates the value
+    setTimeout(() => {
+      ta.focus();
+      ta.setSelectionRange(selStart, selEnd);
+      ta.style.height = "auto";
+      ta.style.height = `${ta.scrollHeight}px`;
+    }, 0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -334,10 +384,34 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
       }
     }
 
+    // Formatting shortcuts (Ctrl/Cmd-based). Side-effect → pakai if, bukan ternary.
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === "b" || e.key === "B") {
+        e.preventDefault();
+        handleFormat("bold");
+        return;
+      }
+      if (e.key === "i" || e.key === "I") {
+        e.preventDefault();
+        handleFormat("italic");
+        return;
+      }
+      if (e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        handleFormat("mono");
+        return;
+      }
+      if (e.shiftKey && (e.key === "X" || e.key === "x")) {
+        e.preventDefault();
+        handleFormat("strike");
+        return;
+      }
+    }
+
     // Default: Enter without shift = send
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   };
 
@@ -365,12 +439,13 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
       createdAt: new Date(),
       author: { id: user?.profileId ?? "", fullName: user?.name ?? "Kamu", avatarUrl: null },
       replyTo: replyTo ? { id: replyTo.id, content: replyTo.content, author: { fullName: replyTo.author.fullName } } : null,
+      reactions: [],
     };
 
     qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], (prev) => [...(prev ?? []), optimisticComment]);
     setOptimisticIds((prev) => new Set(prev).add(tempId));
     setInput(""); setPendingAttachments([]); setReplyTo(null);
-    setSelectedMentions([]); setMentionQuery(null);
+    setSelectedMentions([]); setMentionQuery(null); setShowFormatToolbar(false);
     setSending(true);
 
     // Upload attachments if any
@@ -402,6 +477,127 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
     qc.invalidateQueries({ queryKey: ["unread-comments"] });
     if (textareaRef.current) textareaRef.current.style.height = "40px";
     textareaRef.current?.focus();
+  };
+
+  /** Send a recorded voice note: upload blob, then createBookingComment with audio attachment */
+  const handleSendVoice = async ({ blob, duration, peaks }: { blob: Blob; duration: number; peaks: number[] }) => {
+    if (!bookingId) return;
+    setRecording(false);
+
+    const capturedReplyTo = replyTo;
+    setReplyTo(null);
+
+    const mimeType = blob.type || "audio/webm";
+    const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+    const fileName = `voice-note.${ext}`;
+
+    // Optimistic — skeleton shown during _uploading
+    const tempId = `optimistic-${Date.now()}`;
+    const optimisticVn: BookingCommentItem = {
+      id: tempId,
+      content: "",
+      mentions: [],
+      edited: false,
+      attachments: [{ path: "", name: fileName, size: blob.size, type: mimeType, _uploading: true, duration, peaks }],
+      createdAt: new Date(),
+      author: { id: user?.profileId ?? "", fullName: user?.name ?? "Kamu", avatarUrl: null },
+      replyTo: capturedReplyTo
+        ? { id: capturedReplyTo.id, content: capturedReplyTo.content, author: { fullName: capturedReplyTo.author.fullName } }
+        : null,
+      reactions: [],
+    };
+
+    qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], (prev) => [...(prev ?? []), optimisticVn]);
+    setOptimisticIds((prev) => new Set(prev).add(tempId));
+    setSending(true);
+
+    // Upload audio
+    const fd = new FormData();
+    fd.append("files", blob, fileName);
+    let uploadedAttachment: { path: string; name: string; size: number; type: string } | null = null;
+    const res = await fetch("/api/bookings/comments/upload", { method: "POST", body: fd });
+    if (res.ok) {
+      const data = await res.json() as { attachments: { path: string; name: string; size: number; type: string }[] };
+      uploadedAttachment = data.attachments[0] ?? null;
+    }
+
+    const attachments = uploadedAttachment
+      ? [{ ...uploadedAttachment, duration, peaks }]
+      : [];
+
+    const result = await createBookingComment({
+      bookingId,
+      content: "",
+      mentions: [],
+      replyToId: capturedReplyTo?.id,
+      // duration & peaks stored in JSONB — TypeScript allows structural subtype assignment
+      attachments: attachments as { path: string; name: string; size: number; type: string }[],
+    });
+
+    setSending(false);
+    setOptimisticIds((prev) => { const next = new Set(prev); next.delete(tempId); return next; });
+
+    if (!result.success) {
+      qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], (prev) => (prev ?? []).filter((c) => c.id !== tempId));
+      toast.error(result.error);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["booking-comments", bookingId] });
+    qc.invalidateQueries({ queryKey: ["unread-comments"] });
+  };
+
+  /** Toggle emoji reaction with optimistic cache update */
+  const handleToggleReaction = async (commentId: string, emoji: string) => {
+    if (!bookingId) return;
+
+    const prevData = qc.getQueryData<BookingCommentItem[]>(["booking-comments", bookingId]) ?? [];
+
+    const nextData = prevData.map((c): BookingCommentItem => {
+      if (c.id !== commentId) return c;
+      const currentReactions = c.reactions ?? [];
+      const existing = currentReactions.find((r) => r.emoji === emoji);
+      let newReactions: AggregatedReaction[];
+
+      if (existing) {
+        if (existing.reactedByMe) {
+          // Remove my reaction
+          const newCount = existing.count - 1;
+          if (newCount <= 0) {
+            newReactions = currentReactions.filter((r) => r.emoji !== emoji);
+          } else {
+            newReactions = currentReactions.map((r) =>
+              r.emoji === emoji
+                ? { ...r, count: newCount, reactedByMe: false, names: r.names.filter((n) => n !== (user?.name ?? "Kamu")) }
+                : r
+            );
+          }
+        } else {
+          // Increment existing emoji
+          newReactions = currentReactions.map((r) =>
+            r.emoji === emoji
+              ? { ...r, count: r.count + 1, reactedByMe: true, names: [...r.names, user?.name ?? "Kamu"] }
+              : r
+          );
+        }
+      } else {
+        // New emoji
+        newReactions = [...currentReactions, { emoji, count: 1, reactedByMe: true, names: [user?.name ?? "Kamu"] }];
+      }
+
+      return { ...c, reactions: newReactions };
+    });
+
+    qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], nextData);
+
+    const result = await toggleCommentReaction(commentId, emoji);
+    if (!result.success) {
+      // Rollback
+      qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], prevData);
+      toast.error(result.error);
+      return;
+    }
+    // Sync with server for accurate names
+    qc.invalidateQueries({ queryKey: ["booking-comments", bookingId] });
   };
 
   const handleEditSave = async (id: string) => {
@@ -444,6 +640,9 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
     if (!last || !isSameDay(last.date, date)) grouped.push({ date, items: [c] });
     else last.items.push(c);
   }
+
+  // Derived: show mic button when input is empty and no attachments and not recording
+  const showMicButton = !input.trim() && !pendingAttachments.length && !recording;
 
   return (
     <>
@@ -529,20 +728,23 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                 <textarea
                                   value={editInput}
                                   onChange={(e) => setEditInput(e.target.value)}
-                                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditSave(comment.id); } if (e.key === "Escape") setEditingId(null); }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEditSave(comment.id); }
+                                    if (e.key === "Escape") setEditingId(null);
+                                  }}
                                   className={cn('flex-1', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring')}
                                   rows={2}
                                   autoFocus
                                 />
-                                <button onClick={() => handleEditSave(comment.id)} className={cn('p-0.5', 'text-primary', 'hover:text-primary/80')}><CheckCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
+                                <button onClick={() => void handleEditSave(comment.id)} className={cn('p-0.5', 'text-primary', 'hover:text-primary/80')}><CheckCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
                                 <button onClick={() => setEditingId(null)} className={cn('p-0.5', 'text-muted-foreground', 'hover:text-foreground')}><CloseCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
                               </div>
                             ) : (
                               <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed ${isSelf ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-secondary text-secondary-foreground rounded-tl-sm"}`}>
                                 {/* Attachments */}
-                                {Array.isArray(comment.attachments) && (comment.attachments as { path: string; name: string; size: number; type: string; url?: string; _uploading?: boolean }[]).length > 0 && (
+                                {Array.isArray(comment.attachments) && (comment.attachments as unknown as CommentAttachmentLocal[]).length > 0 && (
                                   <div className={cn('flex', 'flex-wrap', 'gap-1.5', 'mb-1')}>
-                                    {(comment.attachments as { path: string; name: string; size: number; type: string; url?: string; _uploading?: boolean }[]).map((att, i) => {
+                                    {(comment.attachments as unknown as CommentAttachmentLocal[]).map((att, i) => {
                                       if (att._uploading) {
                                         const isImg = att.type.startsWith("image/");
                                         return isImg ? (
@@ -552,7 +754,19 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                         );
                                       }
                                       const url = att.url ?? "";
+                                      const isAudio = att.type.startsWith("audio/");
                                       const isImg = att.type.startsWith("image/");
+                                      if (isAudio) {
+                                        return (
+                                          <VoiceNotePlayer
+                                            key={i}
+                                            url={url}
+                                            duration={att.duration ?? 0}
+                                            peaks={att.peaks ?? []}
+                                            isSelf={isSelf}
+                                          />
+                                        );
+                                      }
                                       return isImg ? (
                                         // eslint-disable-next-line @next/next/no-img-element
                                         <img key={i} src={url} alt={att.name} className={cn('rounded-lg', 'max-w-45', 'cursor-pointer', 'hover:opacity-90', 'transition-opacity')} onClick={() => setPreviewImage(url)} />
@@ -573,9 +787,21 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                     })}
                                   </div>
                                 )}
-                                {comment.content && renderContent(comment.content, isSelf)}
+                                {comment.content && renderWhatsappContent(comment.content, isSelf, (name, key) => (
+                                  <span key={key} className={`font-semibold rounded px-0.5 ${isSelf ? "text-primary-foreground/80 underline" : "text-primary"}`}>
+                                    {name}
+                                  </span>
+                                ))}
                               </div>
                             )}
+
+                            {/* Reactions */}
+                            <MessageReactions
+                              reactions={comment.reactions ?? []}
+                              onToggle={(emoji) => { void handleToggleReaction(comment.id, emoji); }}
+                              isSelf={isSelf}
+                              align={isSelf ? "end" : "start"}
+                            />
 
                             {/* Meta + hover actions */}
                             <div className={`flex items-center gap-1.5 px-1 ${isSelf ? "flex-row-reverse" : "flex-row"}`}>
@@ -590,8 +816,19 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                   </span>
                                 </span>
                               )}
-                              <div className={`hidden group-hover:flex items-center gap-0.5 ${isSelf ? "flex-row-reverse" : "flex-row"}`}>
-                                <button onClick={() => setReplyTo(comment)} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
+                              <div className={cn(
+                                'items-center', 'gap-0.5',
+                                isSelf ? 'flex-row-reverse' : 'flex-row',
+                                reactionMenuId === comment.id ? 'flex' : 'hidden group-hover:flex',
+                              )}>
+                                {/* Add reaction */}
+                                <AddReactionButton
+                                  onToggle={(emoji) => { void handleToggleReaction(comment.id, emoji); }}
+                                  side="top"
+                                  align={isSelf ? "end" : "start"}
+                                  onOpenChange={(open) => setReactionMenuId(open ? comment.id : null)}
+                                />
+                                <button onClick={() => handleReply(comment)} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
                                   <Reply weight="BoldDuotone" className={cn('h-3', 'w-3')} />
                                 </button>
                                 {isSelf && editingId !== comment.id && (
@@ -650,48 +887,101 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
           )}
 
           {/* Input area */}
-          <div className={cn('shrink-0', 'border-t', 'px-3', 'py-3', 'flex', 'gap-2', 'items-end')}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className={cn('h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
-                  <AddCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start">
-                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <Gallery weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'text-muted-foreground')} /> Foto / Gambar
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
-                  <Paperclip weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'text-muted-foreground')} /> Dokumen
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Textarea wrapper — relative for mention dropdown */}
-            <div className="relative flex-1">
-              {mentionQuery !== null && filteredMentionUsers.length > 0 && (
-                <MentionDropdown
-                  users={mentionableUsers}
-                  query={mentionQuery}
-                  activeIndex={mentionActiveIdx}
-                  onSelect={insertMention}
-                />
-              )}
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Ketik komentar... (@ untuk mention)"
-                rows={1}
-                className={cn('w-full', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2.5', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
-                style={{ minHeight: "40px", maxHeight: "160px", overflowY: "auto" }}
+          <div className={cn('shrink-0', 'border-t', 'px-3', 'py-3')}>
+            {recording ? (
+              /* Voice recorder replaces entire input row */
+              <VoiceRecorder
+                onSend={(data) => { void handleSendVoice(data); }}
+                onCancel={() => setRecording(false)}
               />
-            </div>
+            ) : (
+              <div className={cn('flex', 'gap-2', 'items-center')}>
+                {/* Attachment picker */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className={cn('h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
+                      <AddCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="start">
+                    <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                      <Gallery weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'text-muted-foreground')} /> Foto / Gambar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
+                      <Paperclip weight="BoldDuotone" className={cn('h-4', 'w-4', 'mr-2', 'text-muted-foreground')} /> Dokumen
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-            <Button size="icon" onClick={handleSend} disabled={sending || (!input.trim() && !pendingAttachments.length)} className={cn('shrink-0', 'rounded-xl', 'h-10', 'w-10')}>
-              {sending ? <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin')} /> : <Plain weight="BoldDuotone" className={cn('h-5', 'w-5')} />}
-            </Button>
+                {/* Emoji insert picker */}
+                <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                  <PopoverTrigger
+                    className={cn('h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}
+                    aria-label="Sisipkan emoji"
+                  >
+                    <SmileCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="start" className="p-0 w-auto">
+                    <EmojiPicker onSelect={insertEmoji} />
+                  </PopoverContent>
+                </Popover>
+
+                {/* Textarea wrapper — relative for mention dropdown */}
+                <div className="relative flex-1">
+                  {showFormatToolbar && (
+                    <div className="absolute bottom-full left-0 z-20 mb-1">
+                      <FormatToolbar onFormat={handleFormat} />
+                    </div>
+                  )}
+                  {mentionQuery !== null && filteredMentionUsers.length > 0 && (
+                    <MentionDropdown
+                      users={mentionableUsers}
+                      query={mentionQuery}
+                      activeIndex={mentionActiveIdx}
+                      onSelect={insertMention}
+                    />
+                  )}
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    onSelect={(e) => {
+                      const ta = e.currentTarget;
+                      setShowFormatToolbar(ta.selectionEnd > ta.selectionStart);
+                    }}
+                    onKeyUp={(e) => {
+                      const ta = e.currentTarget;
+                      setShowFormatToolbar(ta.selectionEnd > ta.selectionStart);
+                    }}
+                    onMouseUp={(e) => {
+                      const ta = e.currentTarget;
+                      setShowFormatToolbar(ta.selectionEnd > ta.selectionStart);
+                    }}
+                    placeholder="Ketik komentar... (@ mention, *tebal* _miring_)"
+                    rows={1}
+                    className={cn('w-full', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2.5', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
+                    style={{ minHeight: "40px", maxHeight: "160px", overflowY: "auto" }}
+                  />
+                </div>
+
+                {/* Mic / Send toggle */}
+                {showMicButton ? (
+                  <button
+                    type="button"
+                    onClick={() => setRecording(true)}
+                    className={cn('shrink-0', 'rounded-xl', 'h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'bg-primary', 'text-primary-foreground', 'hover:bg-primary/90', 'transition-colors')}
+                    aria-label="Rekam voice note"
+                  >
+                    <Microphone weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+                  </button>
+                ) : (
+                  <Button size="icon" onClick={() => void handleSend()} disabled={sending || (!input.trim() && !pendingAttachments.length)} className={cn('shrink-0', 'rounded-xl', 'h-10', 'w-10')}>
+                    {sending ? <Refresh weight="BoldDuotone" className={cn('h-5', 'w-5', 'animate-spin')} /> : <Plain weight="BoldDuotone" className={cn('h-5', 'w-5')} />}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
@@ -706,7 +996,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
         description="Yakin mau hapus komentar ini?"
         confirmLabel="Hapus"
         destructive
-        onConfirm={() => handleDelete(deleteTarget!)}
+        onConfirm={() => void handleDelete(deleteTarget!)}
       />
 
       {/* Image preview modal */}

@@ -10,6 +10,7 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { createNotifications } from "@/lib/notifications";
 
 const contentSchema = z.string().max(2000);
+const emojiSchema = z.string().min(1).max(16);
 
 export interface CommentAttachment {
   path: string;
@@ -140,6 +141,58 @@ export async function deleteBookingComment(id: string) {
   } catch (e) {
     console.error("[deleteBookingComment]", e);
     return { success: false as const, error: "Terjadi kesalahan." };
+  }
+}
+
+export async function toggleCommentReaction(
+  commentId: string,
+  emoji: string
+): Promise<{ success: true; added: boolean } | { success: false; error: string }> {
+  const { session, error } = await requirePermission({ module: "booking", action: "comment" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`comment-react:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  const parsedEmoji = emojiSchema.safeParse(emoji);
+  if (!parsedEmoji.success) return { success: false, error: "Emoji tidak valid." };
+
+  if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
+  const profileId = session!.user.profileId;
+
+  try {
+    const comment = await db.bookingComment.findUnique({
+      where: { id: commentId },
+      select: { bookingId: true },
+    });
+    if (!comment) return { success: false, error: "Komentar tidak ditemukan." };
+
+    const scope = await getProfileDataScope(profileId);
+    if (!(await canAccessBooking(profileId, scope, comment.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
+
+    const existing = await db.bookingCommentReaction.findUnique({
+      where: { commentId_profileId_emoji: { commentId, profileId, emoji: parsedEmoji.data } },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await db.$transaction([
+        db.bookingCommentReaction.delete({ where: { id: existing.id } }),
+      ]);
+      revalidateTag(`booking-comments-${comment.bookingId}`, "max");
+      return { success: true, added: false };
+    } else {
+      await db.$transaction([
+        db.bookingCommentReaction.create({
+          data: { commentId, profileId, emoji: parsedEmoji.data },
+        }),
+      ]);
+      revalidateTag(`booking-comments-${comment.bookingId}`, "max");
+      return { success: true, added: true };
+    }
+  } catch (e) {
+    console.error("[toggleCommentReaction]", e);
+    return { success: false, error: "Terjadi kesalahan." };
   }
 }
 
