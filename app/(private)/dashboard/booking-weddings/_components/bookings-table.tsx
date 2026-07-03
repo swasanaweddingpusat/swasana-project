@@ -131,7 +131,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
-  const [yearFilter, setYearFilter] = useState<number>(new Date().getFullYear());
+  const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [approvalFilter, setApprovalFilter] = useState<"pending" | "approved" | "">("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
@@ -162,12 +162,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
   // keeps the old rows mounted, so isPlaceholderData is the signal for that transition).
-  const isTableLoading = isLoading || isPlaceholderData;
+  const isTableLoading = isLoading || isPlaceholderData || isFetching;
   const bookings = result.data;
   const totalBookings = result.total;
   const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
@@ -574,7 +574,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const hasSalesFilter = salesFilter !== "";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
-  const hasYearFilter = yearFilter !== new Date().getFullYear();
+  const hasYearFilter = yearFilter !== null;
   const hasApprovalFilter = approvalFilter !== "";
   const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
@@ -592,7 +592,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(new Date().getFullYear()); setApprovalFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(null); setApprovalFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -707,10 +707,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Tahun</label>
         <SearchableSelect
-          options={availableYears.length > 0 ? availableYears.map((y) => ({ id: String(y), name: String(y) })) : [{ id: String(new Date().getFullYear()), name: String(new Date().getFullYear()) }]}
-          value={String(yearFilter)}
-          onChange={(val) => { setYearFilter(Number(val)); setCurrentPage(1); }}
-          placeholder="Pilih tahun"
+          options={availableYears.map((y) => ({ id: String(y), name: String(y) }))}
+          value={yearFilter !== null ? String(yearFilter) : ""}
+          onChange={(val) => { setYearFilter(val ? Number(val) : null); setCurrentPage(1); }}
+          placeholder="Semua tahun"
           searchPlaceholder="Cari tahun..."
           emptyText="Tahun tidak ditemukan"
           className="h-9"
