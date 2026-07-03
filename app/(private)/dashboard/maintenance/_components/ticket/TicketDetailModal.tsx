@@ -67,20 +67,41 @@ export function TicketDetailModal({
   const [activeTab, setActiveTab] = useState<Tab>("detail");
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [prevTicketId, setPrevTicketId] = useState<string | null>(null);
+  const [lastFetchKey, setLastFetchKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) setActiveTab("detail");
-  }, [open, ticket?.id]);
+  if (open && ticket && ticket.id !== prevTicketId) {
+    setPrevTicketId(ticket.id);
+    setActiveTab("detail");
+    setActivities([]);
+    setLastFetchKey(null);
+  }
+  if (!open && prevTicketId !== null) {
+    setPrevTicketId(null);
+  }
+
+  const fetchKey = activeTab === "aktivitas" && ticket ? ticket.id : null;
+  if (fetchKey && fetchKey !== lastFetchKey) {
+    setLastFetchKey(fetchKey);
+    setActivitiesLoading(true);
+  }
 
   useEffect(() => {
     if (activeTab !== "aktivitas" || !ticket) return;
-    setActivitiesLoading(true);
+    let cancelled = false;
     fetch(`/api/maintenance/${ticket.id}/activity`)
       .then((r) => r.json())
-      .then((data: ActivityLog[]) => setActivities(data))
-      .catch(() => setActivities([]))
-      .finally(() => setActivitiesLoading(false));
-  }, [activeTab, ticket?.id]);
+      .then((data: ActivityLog[]) => {
+        if (!cancelled) setActivities(data);
+      })
+      .catch(() => {
+        if (!cancelled) setActivities([]);
+      })
+      .finally(() => {
+        if (!cancelled) setActivitiesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [activeTab, ticket]);
 
   if (!open || !ticket) return null;
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { requirePagePermission } from "@/lib/require-page-permission";
 import { db } from "@/lib/db";
 import { ProcurementClient } from "./_components/ProcurementClient";
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PengadaanBarangPage() {
+  await connection();
   await requirePagePermission("procurement");
 
   const venues = await db.venue.findMany({
