@@ -167,7 +167,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
   // keeps the old rows mounted, so isPlaceholderData is the signal for that transition).
-  const isTableLoading = isLoading || isPlaceholderData;
+  const isTableLoading = isLoading || isPlaceholderData || isFetching;
   const bookings = result.data;
   const totalBookings = result.total;
   const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
