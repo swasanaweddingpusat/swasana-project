@@ -120,7 +120,7 @@ interface ApprovalStep {
   approverRoleId: string | null;
   approverUserId: string | null;
   status: string;
-  signature: string | null;
+  // signature not included — list payload omits it; ApprovalDialog fetches its own record.
   decidedAt: string | null;
   notes: string | null;
   revisionId: string | null;

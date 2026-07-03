@@ -13,13 +13,16 @@ const bookingListInclude = {
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
   clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
-  // List rows only need the TOP base fields (table computes paid/total + edit drawer
-  // hydrates from these). The nested partialPayments are NOT consumed from list items
-  // (the edit-finance drawer fetches them via useBookingFinanceDetail), so they're
-  // dropped here to keep the list payload small. snapPackageCategoryPrices likewise is
-  // only read from BookingDetail — kept on bookingDetailInclude below, not the list.
+  // List rows only need the TOP base fields (table computes paid/total). The nested
+  // partialPayments are NOT consumed from list items (the edit-finance drawer fetches
+  // them via useBookingFinanceDetail), so they're dropped here to keep the list payload
+  // small. snapPackageCategoryPrices likewise is only read from BookingDetail — kept on
+  // bookingDetailInclude below, not the list.
   termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true } },
-  editDraft: { select: { id: true, editorProfileId: true, formState: true, pendingUploads: true, updatedAt: true } },
+  // Only id/editorProfileId/updatedAt needed for the "Sedang diedit" badge (truthiness
+  // check). formState and pendingUploads are large JSON blobs not read by any list
+  // consumer — the edit drawer hydrates via useDraftBookingDetail (detail endpoint).
+  editDraft: { select: { id: true, editorProfileId: true, updatedAt: true } },
 } as const;
 
 const bookingDetailInclude = {
@@ -80,10 +83,8 @@ const bookingDetailInclude = {
   paymentMethod: true,
   sourceOfInformation: true,
   clientAgreement: true,
-  // editDraft (formState + pendingUploads — large JSON) is inherited via the spread
-  // above for the draft badge in the LIST. The detail view never reads it (the edit
-  // drawer hydrates editDraft from the list row, not from BookingDetail), so drop it
-  // here to keep the detail payload small.
+  // editDraft is excluded from detail payload — the detail view does not read it
+  // (the edit drawer hydrates via useDraftBookingDetail, not from BookingDetail).
   editDraft: false,
 } as const;
 
@@ -108,7 +109,8 @@ const bookingApprovalSelect = {
       approverRoleId: true,
       approverUserId: true,
       status: true,
-      signature: true,
+      // signature omitted — list UI never reads it; ApprovalDialog and the client
+      // agreement flow fetch their own records via /api/approval-records.
       decidedAt: true,
       notes: true,
       revisionId: true,
@@ -122,8 +124,19 @@ export type BookingApproval = Awaited<
   ReturnType<typeof db.approvalRecord.findMany<{ select: typeof bookingApprovalSelect }>>
 >[number];
 
+// Heavy scalar fields not consumed by any list UI — omitted to reduce payload size.
+// salesSignature: large base64/text blob for the sales rep's ink signature.
+// draft* fields: JSON arrays only read by the edit drawer (via detail endpoint).
+const bookingListOmit = {
+  salesSignature: true,
+  draftCategoryToggles: true,
+  draftComplimentaries: true,
+  draftInternalItems: true,
+  draftVendorItems: true,
+} as const;
+
 type BookingListRow = Awaited<
-  ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude }>>
+  ReturnType<typeof db.booking.findMany<{ include: typeof bookingListInclude; omit: typeof bookingListOmit }>>
 >[number];
 
 export interface PaginatedBookings {
@@ -180,18 +193,24 @@ export async function getBookings(
     { createdAt: "desc" },
   ];
 
-  const total = await db.booking.count({ where });
-
-  const rows = await db.booking.findMany({
-    where,
-    orderBy,
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    // Single LATERAL JOIN for the page's ~11 included relations instead of a
-    // round-trip per relation (Neon HTTP). One query for the whole page.
-    relationLoadStrategy: "join",
-    include: bookingListInclude,
-  });
+  // Run count and page fetch in parallel — independent queries, no reason to
+  // serialize them. Same pattern as getMiceBookings below.
+  const [total, rows] = await Promise.all([
+    db.booking.count({ where }),
+    db.booking.findMany({
+      where,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      // Single LATERAL JOIN for the page's ~11 included relations instead of a
+      // round-trip per relation (Neon HTTP). One query for the whole page.
+      relationLoadStrategy: "join",
+      include: bookingListInclude,
+      // Drop heavy scalar fields not consumed by any list UI consumer. The edit
+      // drawer and detail view hydrate these via the detail endpoint.
+      omit: bookingListOmit,
+    }),
+  ]);
 
   const pageIds = rows.map((r) => r.id);
 
