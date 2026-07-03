@@ -1,31 +1,33 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Magnifer, AltArrowDown, AltArrowRight, CheckCircle } from "@solar-icons/react";
+import { Magnifer, AltArrowDown, AltArrowRight, CheckCircle, Book } from "@solar-icons/react";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { TUTORIAL_CATEGORIES, type TutorialLesson } from "./tutorial-data";
+import type { TutorialCategory, TutorialLesson } from "./tutorial-types";
 
 interface TutorialMasterProps {
+  categories: TutorialCategory[];
   selectedLessonId: string | null;
   onSelectLesson: (lessonId: string) => void;
 }
 
-export function TutorialMaster({ selectedLessonId, onSelectLesson }: TutorialMasterProps) {
+export function TutorialMaster({ categories, selectedLessonId, onSelectLesson }: TutorialMasterProps) {
   const [search, setSearch] = useState("");
   const [openCategories, setOpenCategories] = useState<Set<string>>(
-    () => new Set(TUTORIAL_CATEGORIES.map((c) => c.id))
+    () => new Set(categories.map((c) => c.id))
   );
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return TUTORIAL_CATEGORIES;
-    return TUTORIAL_CATEGORIES.map((cat) => ({
+    if (!q) return categories;
+    return categories
+      .map((cat) => ({
       ...cat,
       lessons: cat.lessons.filter((l) => l.title.toLowerCase().includes(q)),
     })).filter((cat) => cat.lessons.length > 0);
-  }, [search]);
+  }, [categories, search]);
 
   function toggleCategory(id: string) {
     setOpenCategories((prev) => {
@@ -66,7 +68,6 @@ export function TutorialMaster({ selectedLessonId, onSelectLesson }: TutorialMas
         )}
 
         {filtered.map((category) => {
-          const CategoryIcon = category.icon;
           const isOpen = openCategories.has(category.id);
 
           return (
@@ -77,7 +78,7 @@ export function TutorialMaster({ selectedLessonId, onSelectLesson }: TutorialMas
             >
               <CollapsibleTrigger className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-accent/50 transition-colors rounded-lg mx-1 group/cat">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <CategoryIcon weight="BoldDuotone" className="h-4 w-4 text-primary" />
+                  <Book weight="BoldDuotone" className="h-4 w-4 text-primary" />
                 </span>
                 <span className="flex-1 text-sm font-semibold text-foreground truncate">
                   {category.name}
