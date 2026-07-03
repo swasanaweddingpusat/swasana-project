@@ -28,10 +28,10 @@ export async function GET(request: Request) {
   const dateFrom = rawDateFrom && !Number.isNaN(Date.parse(rawDateFrom)) ? rawDateFrom : undefined;
   const dateTo = rawDateTo && !Number.isNaN(Date.parse(rawDateTo)) ? rawDateTo : undefined;
 
-  // Year filter — default to current year if no date filters provided (scalability: avoid fetching all bookings)
+  // Year filter — no default; when omitted the list shows all years.
   const rawYear = searchParams.get("year");
   const parsedYear = rawYear ? Number(rawYear) : undefined;
-  const year = parsedYear && !Number.isNaN(parsedYear) ? parsedYear : (!dateFrom && !dateTo ? new Date().getFullYear() : undefined);
+  const year = parsedYear && !Number.isNaN(parsedYear) ? parsedYear : undefined;
 
   const profileId = session.user.profileId ?? undefined;
   // dataScope is already carried on the JWT/session (refreshed from DB every 10
