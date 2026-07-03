@@ -199,7 +199,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string; initialTC: string | null } | null>(null);
+  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [editPackageTarget, setEditPackageTarget] = useState<EditPackageTarget | null>(null);
   const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
   const [editComplimentaryTarget, setEditComplimentaryTarget] = useState<EditComplimentaryTarget | null>(null);
@@ -387,7 +387,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </DropdownMenuItem>
         )}
         {can("booking", "term-&-condition") && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer", initialTC: booking.snapPackagePricing?.termAndCondition ?? null }); }}>
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
             <DocumentText weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term & Condition
           </DropdownMenuItem>
         )}
@@ -1547,7 +1547,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           onClose={() => setTcTarget(null)}
           bookingId={tcTarget.bookingId}
           customerName={tcTarget.customerName}
-          initialTC={tcTarget.initialTC}
         />
       )}
 
