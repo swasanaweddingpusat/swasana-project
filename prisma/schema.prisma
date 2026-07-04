@@ -157,6 +157,7 @@ model Profile {
   notifications           Notification[]
   bookingComments         BookingComment[]
   bookingCommentReads     BookingCommentRead[]
+  commentReactions        BookingCommentReaction[]
   approvalRecordsCreated  ApprovalRecord[]           @relation("ApprovalRecordCreator")
   approvalRecordsUpdated  ApprovalRecord[]           @relation("ApprovalRecordUpdater")
   approvalStepApprovals   ApprovalRecordStep[]       @relation("ApprovalRecordStepApprover")
@@ -1176,15 +1177,31 @@ model BookingComment {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  booking Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  author  Profile          @relation(fields: [authorId], references: [id], onDelete: Restrict)
-  replyTo BookingComment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies BookingComment[] @relation("CommentReplies")
+  booking   Booking                  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author    Profile                  @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  replyTo   BookingComment?          @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   BookingComment[]         @relation("CommentReplies")
+  reactions BookingCommentReaction[]
 
   @@index([bookingId, createdAt])
   @@index([authorId])
   @@index([replyToId])
   @@map("booking_comments")
+}
+
+model BookingCommentReaction {
+  id        String   @id @default(uuid())
+  commentId String
+  profileId String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  comment BookingComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  profile Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, profileId, emoji])
+  @@index([commentId])
+  @@map("booking_comment_reactions")
 }
 
 model BookingCommentRead {
