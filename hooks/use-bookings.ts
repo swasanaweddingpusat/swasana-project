@@ -37,12 +37,11 @@ async function fetchBookings(params: BookingsParams): Promise<BookingsResult> {
 }
 
 export function useBookings(params: BookingsParams, initialData?: BookingsResult) {
-  // SSR fetches the current year (see page.tsx). initialData is only a valid seed
-  // when the effective filter still resolves to "current year" — undefined year
-  // (no date range) falls back to current year at the API layer too. Any explicit
-  // OTHER year must NOT reuse the current-year initialData, or the list would show
-  // the wrong year until staleTime elapses (refetchOnMount is off).
-  const currentYear = new Date().getFullYear();
+  // SSR fetches with NO year filter (see page.tsx) — initialData is "all years,
+  // page 1, default filters". It is only a valid seed when the client query also
+  // has no year filter; any explicit year must trigger a real fetch, otherwise the
+  // list would show all years while the dropdown says a specific year until
+  // staleTime elapses (refetchOnMount is off).
   const isDefaultQuery =
     params.page === 1 &&
     !params.search &&
@@ -50,7 +49,7 @@ export function useBookings(params: BookingsParams, initialData?: BookingsResult
     (!params.recordStatus || params.recordStatus === "saved") &&
     !params.dateFrom &&
     !params.dateTo &&
-    (params.year === undefined || params.year === currentYear) &&
+    params.year === undefined &&
     !params.approvalStatus &&
     !params.salesId;
   return useQuery({

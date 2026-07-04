@@ -9,13 +9,15 @@ import {
   AltArrowRight,
   ClockCircle,
   ListCheck,
+  File as FileIcon,
 } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { TUTORIAL_CATEGORIES, type TutorialLesson, type TutorialCategory } from "./tutorial-data";
+import type { TutorialLesson, TutorialCategory, TutorialStepDocument } from "./tutorial-types";
 
 interface TutorialDetailProps {
+  categories: TutorialCategory[];
   selectedLessonId: string | null;
   onNavigate: (lessonId: string) => void;
   onBack?: () => void;
@@ -27,13 +29,15 @@ interface ResolvedLesson {
   category: TutorialCategory;
   prevLessonId: string | null;
   nextLessonId: string | null;
+  lessonIndex: number;
+  totalLessons: number;
 }
 
-function resolveLesson(lessonId: string | null): ResolvedLesson | null {
+function resolveLesson(lessonId: string | null, categories: TutorialCategory[]): ResolvedLesson | null {
   if (!lessonId) return null;
 
   const allLessons: Array<{ lesson: TutorialLesson; category: TutorialCategory }> = [];
-  for (const cat of TUTORIAL_CATEGORIES) {
+  for (const cat of categories) {
     for (const les of cat.lessons) {
       allLessons.push({ lesson: les, category: cat });
     }
@@ -47,22 +51,28 @@ function resolveLesson(lessonId: string | null): ResolvedLesson | null {
     category: allLessons[idx].category,
     prevLessonId: idx > 0 ? allLessons[idx - 1].lesson.id : null,
     nextLessonId: idx < allLessons.length - 1 ? allLessons[idx + 1].lesson.id : null,
+    lessonIndex: idx,
+    totalLessons: allLessons.length,
   };
 }
 
 export function TutorialDetail({
+  categories,
   selectedLessonId,
   onNavigate,
   onBack,
   showBackButton = false,
 }: TutorialDetailProps) {
-  const resolved = useMemo(() => resolveLesson(selectedLessonId), [selectedLessonId]);
+  const resolved = useMemo(
+    () => resolveLesson(selectedLessonId, categories),
+    [selectedLessonId, categories]
+  );
 
   if (!resolved) {
     return <EmptyState />;
   }
 
-  const { lesson, category, prevLessonId, nextLessonId } = resolved;
+  const { lesson, category, prevLessonId, nextLessonId, lessonIndex, totalLessons } = resolved;
 
   return (
     <div className="flex h-full flex-col">
@@ -115,7 +125,10 @@ export function TutorialDetail({
                 stepNumber={index + 1}
                 title={step.title}
                 caption={step.caption}
-                image={step.image}
+                image={step.image ?? undefined}
+                videoUrl={step.videoUrl ?? undefined}
+                videoType={step.videoType ?? undefined}
+                documents={step.documents}
               />
             ))}
           </ol>
@@ -139,7 +152,7 @@ export function TutorialDetail({
           </Button>
 
           <span className="text-xs text-muted-foreground">
-            Langkah {lesson.steps.length} dari {lesson.steps.length}
+            Pelajaran {lessonIndex + 1} dari {totalLessons}
           </span>
 
           <Button
@@ -165,9 +178,12 @@ interface StepCardProps {
   title: string;
   caption: string;
   image?: string;
+  videoUrl?: string;
+  videoType?: string;
+  documents: TutorialStepDocument[];
 }
 
-function StepCard({ stepNumber, title, caption, image }: StepCardProps) {
+function StepCard({ stepNumber, title, caption, image, videoUrl, videoType, documents }: StepCardProps) {
   return (
     <li className="rounded-2xl border bg-card p-5 shadow-sm">
       {/* Step number + title */}
@@ -200,9 +216,74 @@ function StepCard({ stepNumber, title, caption, image }: StepCardProps) {
         </div>
       )}
 
+      {/* Video */}
+      {videoUrl && videoType ? (
+        <VideoEmbed videoUrl={videoUrl} videoType={videoType} />
+      ) : null}
+
       {/* Caption */}
       <p className="text-sm text-muted-foreground leading-relaxed">{caption}</p>
+
+      {/* Documents */}
+      <DocumentList documents={documents} />
     </li>
+  );
+}
+
+function extractYouTubeId(url: string): string | null {
+  const match = url.match(
+    /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/ \s]{11})/,
+  );
+  return match?.[1] ?? null;
+}
+
+function VideoEmbed({ videoUrl, videoType }: { videoUrl: string; videoType: string }) {
+  if (videoType === "youtube") {
+    const videoId = extractYouTubeId(videoUrl);
+    if (!videoId) return null;
+    return (
+      <div className="mb-4 aspect-video w-full overflow-hidden rounded-xl border">
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}`}
+          className="h-full w-full"
+          allowFullScreen
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          title="Tutorial video"
+        />
+      </div>
+    );
+  }
+  return (
+    <video
+      src={videoUrl}
+      controls
+      className="mb-4 w-full rounded-xl border bg-black"
+    />
+  );
+}
+
+function DocumentList({ documents }: { documents: TutorialStepDocument[] }) {
+  if (!documents.length) return null;
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Unduhan</p>
+      {documents.map((doc) => (
+        <a
+          key={doc.id}
+          href={doc.fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download={doc.name}
+          className={cn(
+            "flex items-center gap-2 rounded-xl border p-3 text-sm text-foreground",
+            "hover:bg-muted transition-colors"
+          )}
+        >
+          <FileIcon weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{doc.name}</span>
+        </a>
+      ))}
+    </div>
   );
 }
 

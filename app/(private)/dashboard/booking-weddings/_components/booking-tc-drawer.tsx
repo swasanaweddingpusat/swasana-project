@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -72,12 +72,22 @@ interface Props {
   onClose: () => void;
   bookingId: string;
   customerName: string;
-  initialTC: string | null;
 }
 
-export function BookingTCDrawer({ open, onClose, bookingId, customerName, initialTC }: Props) {
+export function BookingTCDrawer({ open, onClose, bookingId, customerName }: Props) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
+
+  const { data: tcData } = useQuery<{ termAndCondition: string | null }>({
+    queryKey: ["booking-tc", bookingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/term-condition`);
+      if (!res.ok) throw new Error("Gagal memuat Term & Condition");
+      return res.json() as Promise<{ termAndCondition: string | null }>;
+    },
+    enabled: open && !!bookingId,
+    staleTime: 0,
+  });
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -92,7 +102,7 @@ export function BookingTCDrawer({ open, onClose, bookingId, customerName, initia
       Underline,
       Placeholder.configure({ placeholder: "Tulis Term & Condition di sini..." }),
     ],
-    content: initialTC ?? "",
+    content: "",
     editorProps: {
       attributes: {
         class: "prose prose-sm max-w-none focus:outline-none min-h-full px-4 py-3 text-sm [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5",
@@ -100,11 +110,11 @@ export function BookingTCDrawer({ open, onClose, bookingId, customerName, initia
     },
   });
 
-  // Sync editor content when drawer opens or target booking changes
+  // Sync editor content when fetch resolves or drawer opens/changes booking
   useEffect(() => {
     if (!open || !editor) return;
-    editor.commands.setContent(initialTC ?? "");
-  }, [open, initialTC, editor]);
+    editor.commands.setContent(tcData?.termAndCondition ?? "");
+  }, [open, tcData, editor]);
 
   const insertVariable = useCallback(
     (key: string) => {
@@ -123,7 +133,10 @@ export function BookingTCDrawer({ open, onClose, bookingId, customerName, initia
     setSaving(false);
     if (res.success) {
       toast.success("Term & Condition berhasil disimpan.");
-      await qc.invalidateQueries({ queryKey: ["bookings"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["bookings"] }),
+        qc.invalidateQueries({ queryKey: ["booking-tc", bookingId] }),
+      ]);
     } else {
       toast.error(res.error);
     }

@@ -27,15 +27,11 @@ export interface DashboardData {
 
 // ─── Stat cards query ────────────────────────────────────────────────────────
 
-async function getBookingStats(
+async function _queryBookingStats(
   salesIds: string[] | null,
   startDate: Date,
   endDate: Date,
 ): Promise<DashboardStats> {
-  "use cache";
-  cacheTag("bookings");
-  cacheLife("minutes");
-
   const bookings = await db.booking.findMany({
     where: {
       recordStatus: "saved",
@@ -63,6 +59,26 @@ async function getBookingStats(
         b.bookingStatus === BookingStatus.Canceled,
     ).length,
   };
+}
+
+async function getBookingStats(
+  salesIds: string[] | null,
+  startDate: Date,
+  endDate: Date,
+): Promise<DashboardStats> {
+  "use cache";
+  cacheTag("bookings");
+  cacheLife("minutes");
+
+  return _queryBookingStats(salesIds, startDate, endDate);
+}
+
+export async function getBookingStatsRaw(
+  salesIds: string[] | null,
+  startDate: Date,
+  endDate: Date,
+): Promise<DashboardStats> {
+  return _queryBookingStats(salesIds, startDate, endDate);
 }
 
 // ─── Main dashboard data composer ────────────────────────────────────────────

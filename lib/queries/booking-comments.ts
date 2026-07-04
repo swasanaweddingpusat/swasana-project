@@ -2,46 +2,96 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { resolveAvatarUrl } from "@/lib/storage";
 
-export async function getBookingComments(bookingId: string, page = 1, limit = 10) {
+export interface AggregatedReaction {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+  names: string[];
+}
+
+const COMMENT_SELECT = {
+  id: true,
+  content: true,
+  mentions: true,
+  edited: true,
+  attachments: true,
+  createdAt: true,
+  author: { select: { id: true, fullName: true, avatarUrl: true } },
+  replyTo: {
+    select: {
+      id: true,
+      content: true,
+      attachments: true,
+      author: { select: { fullName: true } },
+    },
+  },
+  reactions: {
+    select: {
+      emoji: true,
+      profileId: true,
+      profile: { select: { fullName: true } },
+    },
+  },
+} as const;
+
+export async function getBookingComments(
+  bookingId: string,
+  profileId: string | undefined,
+  options?: { highlightCommentId?: string; limit?: number },
+) {
+  const limit = options?.limit ?? 50;
   const where = { bookingId };
-  const skip = (page - 1) * limit;
 
-  const [data, total] = await Promise.all([
-    db.bookingComment.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        content: true,
-        mentions: true,
-        edited: true,
-        attachments: true,
-        createdAt: true,
-        author: { select: { id: true, fullName: true, avatarUrl: true } },
-        replyTo: {
-          select: {
-            id: true,
-            content: true,
-            author: { select: { fullName: true } },
-          },
-        },
-      },
-    }),
-    db.bookingComment.count({ where }),
-  ]);
+  // Take the latest `limit` comments. If highlightCommentId is given, ensure it
+  // is always in the result — fetch it separately if it falls outside the window.
+  const latest = await db.bookingComment.findMany({
+    where,
+    orderBy: { createdAt: "asc" },
+    take: limit,
+    select: COMMENT_SELECT,
+  });
 
-  const resolved = data.map((c) => ({
-    ...c,
-    author: { ...c.author, avatarUrl: resolveAvatarUrl(c.author.avatarUrl) },
-  }));
+  let data = latest;
+  if (options?.highlightCommentId && !latest.some((c) => c.id === options.highlightCommentId)) {
+    const highlighted = await db.bookingComment.findUnique({
+      where: { id: options.highlightCommentId },
+      select: COMMENT_SELECT,
+    });
+    if (highlighted) {
+      data = [highlighted, ...latest].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+    }
+  }
 
-  return { data: resolved, total, page, limit };
+  const resolved = data.map((c) => {
+    // Aggregate raw reactions into per-emoji summaries
+    const reactionMap = new Map<string, { names: string[]; reactedByMe: boolean }>();
+    for (const r of c.reactions) {
+      const entry = reactionMap.get(r.emoji) ?? { names: [], reactedByMe: false };
+      entry.names.push(r.profile.fullName ?? "");
+      if (r.profileId === profileId) entry.reactedByMe = true;
+      reactionMap.set(r.emoji, entry);
+    }
+    const reactions: AggregatedReaction[] = Array.from(reactionMap.entries()).map(
+      ([emoji, { names, reactedByMe }]) => ({ emoji, count: names.length, reactedByMe, names })
+    );
+
+    return {
+      ...c,
+      reactions,
+      author: { ...c.author, avatarUrl: resolveAvatarUrl(c.author.avatarUrl) },
+    };
+  });
+
+  return resolved;
 }
 
 export type BookingCommentsResult = Awaited<ReturnType<typeof getBookingComments>>;
-export type BookingCommentItem = BookingCommentsResult["data"][number];
+type RawBookingCommentItem = BookingCommentsResult[number];
+export type BookingCommentItem = Omit<RawBookingCommentItem, "reactions"> & {
+  reactions?: AggregatedReaction[];
+};
 
 /**
  * Returns count of unread mention notifications per bookingId for a given profile.

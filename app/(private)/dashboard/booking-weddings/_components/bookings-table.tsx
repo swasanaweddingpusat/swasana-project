@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
@@ -131,7 +131,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
-  const [yearFilter, setYearFilter] = useState<number>(new Date().getFullYear());
+  const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [approvalFilter, setApprovalFilter] = useState<"pending" | "approved" | "">("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
@@ -162,12 +162,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   }, [search]);
 
   const { data: result = initialData, refetch, isFetching, isLoading, isPlaceholderData } = useBookings(
-    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
+    { page: currentPage, pageSize: ROWS_PER_PAGE, search: debouncedSearch, venueId: venueFilter || undefined, recordStatus: recordStatusFilter, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, year: (!dateFrom && !dateTo && yearFilter) ? yearFilter : undefined, approvalStatus: approvalFilter || undefined, salesId: salesFilter || undefined },
     initialData,
   );
   // Show shimmer on initial load AND while transitioning pages/filters (keepPreviousData
   // keeps the old rows mounted, so isPlaceholderData is the signal for that transition).
-  const isTableLoading = isLoading || isPlaceholderData;
+  const isTableLoading = isLoading || isPlaceholderData || isFetching;
   const bookings = result.data;
   const totalBookings = result.total;
   const totalPages = Math.ceil(totalBookings / ROWS_PER_PAGE);
@@ -194,12 +194,14 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const invalidateDetail = (id: string) => {
     qc.invalidateQueries({ queryKey: ["booking-detail", id] });
   };
-  const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
+  const [commentTarget, setCommentTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  // Guards deep-link effect from re-running after URL params are cleaned up
+  const deepLinkFiredRef = useRef(false);
   const [poPreviewTarget, setPoPreviewTarget] = useState<BookingPOPreviewTarget | null>(null);
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string; initialTC: string | null } | null>(null);
+  const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [editPackageTarget, setEditPackageTarget] = useState<EditPackageTarget | null>(null);
   const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
   const [editComplimentaryTarget, setEditComplimentaryTarget] = useState<EditComplimentaryTarget | null>(null);
@@ -245,14 +247,17 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const mentionCounts = countData?.mentionCounts ?? {};
 
   // Handle deep-link dari notification mention: ?bookingId=X&openComments=true&highlightComment=Y
+  // Drawer dibuka SEGERA dari URL params — tidak nunggu list query selesai.
   useEffect(() => {
+    if (deepLinkFiredRef.current) return;
     const bookingId = searchParams.get("bookingId");
     const openComments = searchParams.get("openComments");
+    if (!bookingId || openComments !== "true") return;
+    deepLinkFiredRef.current = true;
     const highlightComment = searchParams.get("highlightComment");
-    if (!bookingId || openComments !== "true" || !bookings.length) return;
-    const target = bookings.find((b: BookingListItem) => b.id === bookingId);
-    if (!target) return;
-    setCommentTarget(target);
+    // customerName dari list kalau sudah ada, kosong jika list belum load
+    const match = bookings.find((b: BookingListItem) => b.id === bookingId);
+    setCommentTarget({ bookingId, customerName: match?.snapCustomer?.name ?? "" });
     if (highlightComment) setHighlightCommentId(highlightComment);
     const url = new URL(window.location.href);
     url.searchParams.delete("bookingId");
@@ -261,7 +266,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
     const cleanSearch = url.search === "?" ? "" : url.search;
     routerNav.replace(url.pathname + cleanSearch, { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, bookings.length]);
+  }, [searchParams]);
 
   // ---------------------------------------------------------------------------
   // Shared helpers — used by both desktop renderBookingActions AND mobile bar
@@ -387,7 +392,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           </DropdownMenuItem>
         )}
         {can("booking", "term-&-condition") && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer", initialTC: booking.snapPackagePricing?.termAndCondition ?? null }); }}>
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setTcTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
             <DocumentText weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Term & Condition
           </DropdownMenuItem>
         )}
@@ -496,7 +501,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {/* Comment button — placed last, right before the More actions menu */}
         <PermissionGate module="booking" action="comment">
           <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget(booking)} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
+            <TooltipTrigger render={<Button variant="ghost" size="icon" className={cn('cursor-pointer', 'relative')} onClick={() => setCommentTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "" })} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
               <MessageSquare weight="BoldDuotone" className={cn('h-4', 'w-4')} />
               {/* Badge merah — unread biasa */}
               {(unreadCounts[booking.id] ?? 0) > 0 && (
@@ -574,7 +579,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const hasSalesFilter = salesFilter !== "";
   const hasRecordStatusFilter = recordStatusFilter !== "saved";
   const hasDateFilter = dateFrom !== "" || dateTo !== "";
-  const hasYearFilter = yearFilter !== new Date().getFullYear();
+  const hasYearFilter = yearFilter !== null;
   const hasApprovalFilter = approvalFilter !== "";
   const activeFilterCount = (hasVenueFilter ? 1 : 0) + (hasSalesFilter ? 1 : 0) + (hasRecordStatusFilter ? 1 : 0) + (hasDateFilter ? 1 : 0) + (hasYearFilter ? 1 : 0) + (hasApprovalFilter ? 1 : 0);
   const hasActiveFilter = activeFilterCount > 0;
@@ -592,7 +597,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(new Date().getFullYear()); setApprovalFilter(""); setCurrentPage(1); }}
+            onClick={() => { setVenueFilter(""); setSalesFilter(""); setRecordStatusFilter("saved"); setDateFrom(""); setDateTo(""); setYearFilter(null); setApprovalFilter(""); setCurrentPage(1); }}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset
@@ -707,10 +712,10 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Tahun</label>
         <SearchableSelect
-          options={availableYears.length > 0 ? availableYears.map((y) => ({ id: String(y), name: String(y) })) : [{ id: String(new Date().getFullYear()), name: String(new Date().getFullYear()) }]}
-          value={String(yearFilter)}
-          onChange={(val) => { setYearFilter(Number(val)); setCurrentPage(1); }}
-          placeholder="Pilih tahun"
+          options={availableYears.map((y) => ({ id: String(y), name: String(y) }))}
+          value={yearFilter !== null ? String(yearFilter) : ""}
+          onChange={(val) => { setYearFilter(val ? Number(val) : null); setCurrentPage(1); }}
+          placeholder="Semua tahun"
           searchPlaceholder="Cari tahun..."
           emptyText="Tahun tidak ditemukan"
           className="h-9"
@@ -1339,7 +1344,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <button
                                 type="button"
                                 className={cn('relative', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-0.5', 'w-14', 'rounded-xl', 'py-1.5', 'px-1', 'cursor-pointer', 'transition-colors', 'hover:bg-accent')}
-                                onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }}
+                                onClick={(e) => { e.stopPropagation(); setCommentTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "" }); }}
                                 onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }}
                                 onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }}
                                 aria-label="Komentar"
@@ -1524,8 +1529,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           qc.invalidateQueries({ queryKey: ["unread-comments"] });
           qc.invalidateQueries({ queryKey: ["notifications"] });
         }}
-        bookingId={commentTarget?.id ?? null}
-        customerName={commentTarget?.snapCustomer?.name ?? ""}
+        bookingId={commentTarget?.bookingId ?? null}
+        customerName={commentTarget?.customerName ?? ""}
         highlightCommentId={highlightCommentId ?? undefined}
       />
 
@@ -1547,7 +1552,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           onClose={() => setTcTarget(null)}
           bookingId={tcTarget.bookingId}
           customerName={tcTarget.customerName}
-          initialTC={tcTarget.initialTC}
         />
       )}
 

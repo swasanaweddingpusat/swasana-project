@@ -305,7 +305,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Tutorial",
     subtitle: "Panduan penggunaan aplikasi",
   },
-
+  "/dashboard/settings/tutorial": {
+    title: "Tutorial CMS",
+    subtitle: "Kelola konten tutorial aplikasi",
+    parent: "/dashboard/settings",
+  },
 };
 
 export interface Breadcrumb {
