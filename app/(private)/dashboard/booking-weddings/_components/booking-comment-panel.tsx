@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plain, CloseCircle, Paperclip, Gallery, FileText, Reply, Pen, TrashBinTrash, CheckCircle, Refresh, ChatRound, AddCircle, Microphone, SmileCircle } from "@solar-icons/react";
+import { Plain, CloseCircle, Paperclip, Gallery, FileText, Reply, Pen, TrashBinTrash, CheckCircle, Refresh, ChatRound, AddCircle, Microphone, SmileCircle, MenuDots } from "@solar-icons/react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { id as localeId } from "date-fns/locale";
@@ -13,9 +13,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { VoiceRecorder } from "@/components/shared/voice-recorder";
 import { VoiceNotePlayer } from "@/components/shared/voice-note-player";
-import { MessageReactions, AddReactionButton } from "@/components/shared/message-reactions";
+import { MessageReactions, QuickReactionBar } from "@/components/shared/message-reactions";
 import { EmojiPicker } from "@/components/shared/emoji-picker";
 import { FormatToolbar } from "@/components/shared/format-toolbar";
+import { RichTextInput, type RichTextInputHandle } from "@/components/shared/rich-text-input";
+import { LinkPreviewCard, BubbleLinkPreview } from "@/components/shared/link-preview-card";
 import { applyFormat, renderWhatsappContent, type FormatType } from "@/lib/whatsapp-format";
 import { useBookingComments } from "@/hooks/use-booking-comments";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -208,7 +210,33 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
   const [recording, setRecording] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [reactionMenuId, setReactionMenuId] = useState<string | null>(null);
+  const [quickReactId, setQuickReactId] = useState<string | null>(null);
   const [showFormatToolbar, setShowFormatToolbar] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [debouncedPreviewUrl, setDebouncedPreviewUrl] = useState<string | null>(null);
+  const [dismissedPreviewUrl, setDismissedPreviewUrl] = useState<string | null>(null);
+
+  // Debounce preview URL so link metadata only fetches after typing settles
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPreviewUrl(previewUrl), 600);
+    return () => clearTimeout(t);
+  }, [previewUrl]);
+
+  // Show format toolbar whenever there's a non-collapsed selection inside the editor
+  useEffect(() => {
+    const onSelChange = () => {
+      const el = textareaRef.current?.getElement();
+      const sel = window.getSelection();
+      if (!el || !sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        setShowFormatToolbar(false);
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      setShowFormatToolbar(el.contains(range.commonAncestorContainer) && sel.toString().length > 0);
+    };
+    document.addEventListener("selectionchange", onSelChange);
+    return () => document.removeEventListener("selectionchange", onSelChange);
+  }, []);
 
   // Mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -216,7 +244,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<RichTextInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -263,7 +291,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
   }, [open, comments.length, bookingId, qc]);
 
   const resetPanel = () => {
-    setInput(""); setReplyTo(null); setEditingId(null); setPendingAttachments([]);
+    setInput(""); textareaRef.current?.setValue(""); setReplyTo(null); setEditingId(null); setPendingAttachments([]);
     setMentionQuery(null); setSelectedMentions([]); setRecording(false); setEmojiPickerOpen(false);
   };
 
@@ -276,35 +304,19 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
     : [];
 
   const insertMention = useCallback((user: MentionableUser) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const caretPos = textarea.selectionStart ?? input.length;
-    const textBefore = input.slice(0, caretPos);
-    const textAfter = input.slice(caretPos);
-    const atIdx = textBefore.lastIndexOf("@");
-    if (atIdx === -1) return;
-
-    const newText = textBefore.slice(0, atIdx) + `@${user.fullName} ` + textAfter;
-    setInput(newText);
+    const editor = textareaRef.current;
+    if (!editor) return;
+    const name = user.fullName ?? "";
+    // Replace the "@query" token before the caret with "@name "
+    editor.replaceMention(name, (mentionQuery ?? "").length);
     setSelectedMentions((prev) => {
       const exists = prev.some((m) => m.profileId === user.id);
       if (exists) return prev;
-      return [...prev, { profileId: user.id, name: user.fullName ?? "" }];
+      return [...prev, { profileId: user.id, name }];
     });
     setMentionQuery(null);
     setMentionActiveIdx(0);
-
-    // Restore focus and move caret after the inserted mention
-    setTimeout(() => {
-      if (!textarea) return;
-      textarea.focus();
-      const newCaretPos = atIdx + `@${user.fullName} `.length;
-      textarea.setSelectionRange(newCaretPos, newCaretPos);
-      // Trigger height recalc
-      textarea.style.height = "auto";
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }, 0);
-  }, [input]);
+  }, [mentionQuery]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -314,51 +326,49 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
-  /** Insert emoji at current caret position in textarea */
+  /** Insert emoji at current caret position in the editor */
   const insertEmoji = (emoji: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart ?? input.length;
-    const end = textarea.selectionEnd ?? input.length;
-    const newText = input.slice(0, start) + emoji + input.slice(end);
-    setInput(newText);
+    textareaRef.current?.insertText(emoji);
     setEmojiPickerOpen(false);
-    setTimeout(() => {
-      textarea.focus();
-      const newPos = start + emoji.length;
-      textarea.setSelectionRange(newPos, newPos);
-      textarea.style.height = "auto";
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }, 0);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
+  const handleInputChange = (val: string) => {
     setInput(val);
-    e.target.style.height = "auto";
-    e.target.style.height = `${e.target.scrollHeight}px`;
+    // URL preview detection
+    const urlMatch = val.match(/https?:\/\/[^\s]+/);
+    setPreviewUrl(urlMatch ? urlMatch[0] : null);
+  };
 
-    const caret = e.target.selectionStart ?? val.length;
-    const query = getMentionQuery(val, caret);
+  /** Called by RichTextInput with the visible text before the caret — mention detection */
+  const handleCaret = (textBeforeCaret: string) => {
+    const query = getMentionQuery(textBeforeCaret, textBeforeCaret.length);
     setMentionQuery(query);
     setMentionActiveIdx(0);
   };
 
   const handleFormat = (type: FormatType) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const { text, selStart, selEnd } = applyFormat(input, ta.selectionStart, ta.selectionEnd, type);
-    setInput(text);
-    // restore selection & recalc height after React updates the value
-    setTimeout(() => {
-      ta.focus();
-      ta.setSelectionRange(selStart, selEnd);
-      ta.style.height = "auto";
-      ta.style.height = `${ta.scrollHeight}px`;
-    }, 0);
+    const editor = textareaRef.current;
+    if (!editor) return;
+    // Inline formats use live DOM toggling; line-prefix formats rewrite the value.
+    if (type === "bold" || type === "italic" || type === "strike" || type === "mono") {
+      editor.applyInline(type);
+    } else {
+      const { text } = applyFormat(input, input.length, input.length, type);
+      editor.setValue(text);
+    }
+    setShowFormatToolbar(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Formatting shortcuts (Ctrl/Cmd) — checked FIRST so nothing else swallows them.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const key = e.key.toLowerCase();
+      if (key === "b") { e.preventDefault(); handleFormat("bold"); return; }
+      if (key === "i") { e.preventDefault(); handleFormat("italic"); return; }
+      if (key === "e") { e.preventDefault(); handleFormat("mono"); return; }
+      if (e.shiftKey && key === "x") { e.preventDefault(); handleFormat("strike"); return; }
+    }
+
     // When mention dropdown is open, intercept navigation keys
     if (mentionQuery !== null && filteredMentionUsers.length > 0) {
       if (e.key === "ArrowDown") {
@@ -380,30 +390,6 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
       if (e.key === "Escape") {
         e.preventDefault();
         setMentionQuery(null);
-        return;
-      }
-    }
-
-    // Formatting shortcuts (Ctrl/Cmd-based). Side-effect → pakai if, bukan ternary.
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === "b" || e.key === "B") {
-        e.preventDefault();
-        handleFormat("bold");
-        return;
-      }
-      if (e.key === "i" || e.key === "I") {
-        e.preventDefault();
-        handleFormat("italic");
-        return;
-      }
-      if (e.key === "e" || e.key === "E") {
-        e.preventDefault();
-        handleFormat("mono");
-        return;
-      }
-      if (e.shiftKey && (e.key === "X" || e.key === "x")) {
-        e.preventDefault();
-        handleFormat("strike");
         return;
       }
     }
@@ -444,8 +430,9 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
 
     qc.setQueryData<BookingCommentItem[]>(["booking-comments", bookingId], (prev) => [...(prev ?? []), optimisticComment]);
     setOptimisticIds((prev) => new Set(prev).add(tempId));
-    setInput(""); setPendingAttachments([]); setReplyTo(null);
+    setInput(""); textareaRef.current?.setValue(""); setPendingAttachments([]); setReplyTo(null);
     setSelectedMentions([]); setMentionQuery(null); setShowFormatToolbar(false);
+    setPreviewUrl(null); setDebouncedPreviewUrl(null); setDismissedPreviewUrl(null);
     setSending(true);
 
     // Upload attachments if any
@@ -475,7 +462,6 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
     }
     qc.invalidateQueries({ queryKey: ["booking-comments", bookingId] });
     qc.invalidateQueries({ queryKey: ["unread-comments"] });
-    if (textareaRef.current) textareaRef.current.style.height = "40px";
     textareaRef.current?.focus();
   };
 
@@ -722,88 +708,150 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                               </div>
                             )}
 
-                            {/* Bubble */}
-                            {editingId === comment.id ? (
-                              <div className={cn('flex', 'gap-1', 'items-end', 'w-full')}>
-                                <textarea
-                                  value={editInput}
-                                  onChange={(e) => setEditInput(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEditSave(comment.id); }
-                                    if (e.key === "Escape") setEditingId(null);
-                                  }}
-                                  className={cn('flex-1', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring')}
-                                  rows={2}
-                                  autoFocus
-                                />
-                                <button onClick={() => void handleEditSave(comment.id)} className={cn('p-0.5', 'text-primary', 'hover:text-primary/80')}><CheckCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
-                                <button onClick={() => setEditingId(null)} className={cn('p-0.5', 'text-muted-foreground', 'hover:text-foreground')}><CloseCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
-                              </div>
-                            ) : (
-                              <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed ${isSelf ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-secondary text-secondary-foreground rounded-tl-sm"}`}>
-                                {/* Attachments */}
-                                {Array.isArray(comment.attachments) && (comment.attachments as unknown as CommentAttachmentLocal[]).length > 0 && (
-                                  <div className={cn('flex', 'flex-wrap', 'gap-1.5', 'mb-1')}>
-                                    {(comment.attachments as unknown as CommentAttachmentLocal[]).map((att, i) => {
-                                      if (att._uploading) {
-                                        const isImg = att.type.startsWith("image/");
-                                        return isImg ? (
-                                          <div key={i} className={cn('rounded-lg', 'bg-muted', 'animate-pulse')} style={{ width: 120, height: 90 }} />
-                                        ) : (
-                                          <div key={i} className={cn('flex', 'items-center', 'gap-2', 'bg-muted', 'animate-pulse', 'rounded-lg', 'px-2', 'py-1.5', 'w-36', 'h-9')} />
-                                        );
-                                      }
-                                      const url = att.url ?? "";
-                                      const isAudio = att.type.startsWith("audio/");
-                                      const isImg = att.type.startsWith("image/");
-                                      if (isAudio) {
-                                        return (
-                                          <VoiceNotePlayer
-                                            key={i}
-                                            url={url}
-                                            duration={att.duration ?? 0}
-                                            peaks={att.peaks ?? []}
-                                            isSelf={isSelf}
-                                          />
-                                        );
-                                      }
-                                      return isImg ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img key={i} src={url} alt={att.name} className={cn('rounded-lg', 'max-w-45', 'cursor-pointer', 'hover:opacity-90', 'transition-opacity')} onClick={() => setPreviewImage(url)} />
-                                      ) : (
-                                        <div key={i} className={cn('flex', 'items-center', 'gap-2', 'bg-black/10', 'rounded-lg', 'px-2', 'py-1.5', 'cursor-pointer')} onClick={() => window.open(url, "_blank")}>
-                                          <div className={cn('shrink-0', 'flex', 'flex-col', 'items-center', 'justify-center', 'w-8', 'h-8', 'rounded', 'bg-black/10')}>
-                                            <FileText weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
-                                            <span className={cn('text-[8px]', 'font-bold', 'uppercase', 'leading-none', 'mt-0.5')}>
-                                              {att.name.split(".").pop() ?? att.type.split("/")[1]}
-                                            </span>
-                                          </div>
-                                          <div className="min-w-0">
-                                            <p className={cn('text-xs', 'font-medium', 'truncate', 'max-w-35')}>{att.name}</p>
-                                            <p className={cn('text-[10px]', 'opacity-70')}>{fmtSize(att.size)}</p>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
+                            {/* Bubble row: dots button di samping bubble */}
+                            <div className={cn('flex items-end gap-1', isSelf ? 'flex-row-reverse' : 'flex-row')}>
+                              {/* Bubble + reactions nempel */}
+                              <div className="relative group/bubble">
+                                {/* Quick reaction bar — muncul on hover bubble.
+                                    pb-1 (bukan mb-1) bikin area hover nyambung ke bubble, gak ada dead-zone yang bikin bar hilang pas cursor mau klik. */}
+                                {editingId !== comment.id && (
+                                  <div className={cn(
+                                    'absolute bottom-full pb-1 z-20 transition-opacity',
+                                    isSelf ? 'right-0' : 'left-0',
+                                    quickReactId === comment.id ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover/bubble:opacity-100 group-hover/bubble:pointer-events-auto',
+                                  )}>
+                                    <QuickReactionBar
+                                      onToggle={(emoji) => { void handleToggleReaction(comment.id, emoji); }}
+                                      isSelf={isSelf}
+                                      onPickerOpenChange={(open) => setQuickReactId(open ? comment.id : null)}
+                                    />
                                   </div>
                                 )}
-                                {comment.content && renderWhatsappContent(comment.content, isSelf, (name, key) => (
-                                  <span key={key} className={`font-semibold rounded px-0.5 ${isSelf ? "text-primary-foreground/80 underline" : "text-primary"}`}>
-                                    {name}
-                                  </span>
-                                ))}
+                                {/* Bubble */}
+                                {editingId === comment.id ? (
+                                  <div className={cn('flex', 'gap-1', 'items-end', 'w-full')}>
+                                    <textarea
+                                      value={editInput}
+                                      onChange={(e) => setEditInput(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEditSave(comment.id); }
+                                        if (e.key === "Escape") setEditingId(null);
+                                      }}
+                                      className={cn('flex-1', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring')}
+                                      rows={2}
+                                      autoFocus
+                                    />
+                                    <button onClick={() => void handleEditSave(comment.id)} className={cn('p-0.5', 'text-primary', 'hover:text-primary/80')}><CheckCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
+                                    <button onClick={() => setEditingId(null)} className={cn('p-0.5', 'text-muted-foreground', 'hover:text-foreground')}><CloseCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} /></button>
+                                  </div>
+                                ) : (
+                                  <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed ${isSelf ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-secondary text-secondary-foreground rounded-tl-sm"}`}>
+                                    {/* Attachments */}
+                                    {Array.isArray(comment.attachments) && (comment.attachments as unknown as CommentAttachmentLocal[]).length > 0 && (
+                                      <div className={cn('flex', 'flex-wrap', 'gap-1.5', 'mb-1')}>
+                                        {(comment.attachments as unknown as CommentAttachmentLocal[]).map((att, i) => {
+                                          if (att._uploading) {
+                                            const isImg = att.type.startsWith("image/");
+                                            return isImg ? (
+                                              <div key={i} className={cn('rounded-lg', 'bg-muted', 'animate-pulse')} style={{ width: 120, height: 90 }} />
+                                            ) : (
+                                              <div key={i} className={cn('flex', 'items-center', 'gap-2', 'bg-muted', 'animate-pulse', 'rounded-lg', 'px-2', 'py-1.5', 'w-36', 'h-9')} />
+                                            );
+                                          }
+                                          const url = att.url ?? "";
+                                          const isAudio = att.type.startsWith("audio/");
+                                          const isImg = att.type.startsWith("image/");
+                                          if (isAudio) {
+                                            return (
+                                              <VoiceNotePlayer
+                                                key={i}
+                                                url={url}
+                                                duration={att.duration ?? 0}
+                                                peaks={att.peaks ?? []}
+                                                isSelf={isSelf}
+                                              />
+                                            );
+                                          }
+                                          return isImg ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img key={i} src={url} alt={att.name} className={cn('rounded-lg', 'max-w-45', 'cursor-pointer', 'hover:opacity-90', 'transition-opacity')} onClick={() => setPreviewImage(url)} />
+                                          ) : (
+                                            <div key={i} className={cn('flex', 'items-center', 'gap-2', 'bg-black/10', 'rounded-lg', 'px-2', 'py-1.5', 'cursor-pointer')} onClick={() => window.open(url, "_blank")}>
+                                              <div className={cn('shrink-0', 'flex', 'flex-col', 'items-center', 'justify-center', 'w-8', 'h-8', 'rounded', 'bg-black/10')}>
+                                                <FileText weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />
+                                                <span className={cn('text-[8px]', 'font-bold', 'uppercase', 'leading-none', 'mt-0.5')}>
+                                                  {att.name.split(".").pop() ?? att.type.split("/")[1]}
+                                                </span>
+                                              </div>
+                                              <div className="min-w-0">
+                                                <p className={cn('text-xs', 'font-medium', 'truncate', 'max-w-35')}>{att.name}</p>
+                                                <p className={cn('text-[10px]', 'opacity-70')}>{fmtSize(att.size)}</p>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    {/* Link preview inside bubble (WhatsApp style) */}
+                                    {(() => {
+                                      const m = comment.content?.match(/https?:\/\/[^\s]+/);
+                                      return m ? <BubbleLinkPreview url={m[0]} isSelf={isSelf} /> : null;
+                                    })()}
+                                    {comment.content && renderWhatsappContent(comment.content, isSelf, (name, key) => (
+                                      <span key={key} className={`font-semibold rounded px-0.5 ${isSelf ? "text-primary-foreground/80 underline" : "text-primary"}`}>
+                                        {name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Reactions nempel di bawah bubble — overlap kayak WhatsApp */}
+                                {(comment.reactions ?? []).length > 0 && (
+                                  <div className={cn('absolute -bottom-4', isSelf ? 'right-0' : 'left-0')}>
+                                    <MessageReactions
+                                      reactions={comment.reactions ?? []}
+                                      onToggle={(emoji) => { void handleToggleReaction(comment.id, emoji); }}
+                                      isSelf={isSelf}
+                                      align={isSelf ? "end" : "start"}
+                                    />
+                                  </div>
+                                )}
                               </div>
-                            )}
 
-                            {/* Reactions */}
-                            <MessageReactions
-                              reactions={comment.reactions ?? []}
-                              onToggle={(emoji) => { void handleToggleReaction(comment.id, emoji); }}
-                              isSelf={isSelf}
-                              align={isSelf ? "end" : "start"}
-                            />
+                              {/* Dots button — di samping bubble, muncul on hover */}
+                              <div className={cn('flex items-center mb-1 transition-opacity', reactionMenuId === comment.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
+                                <DropdownMenu onOpenChange={(open) => setReactionMenuId(open ? comment.id : null)}>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className={cn('p-1', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
+                                      <MenuDots weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'rotate-90')} />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent side="top" align={isSelf ? "end" : "start"} className="min-w-36">
+                                    <DropdownMenuItem onClick={() => handleReply(comment)} className="gap-2 cursor-pointer">
+                                      <Reply weight="BoldDuotone" className="h-4 w-4" />
+                                      Balas
+                                    </DropdownMenuItem>
+                                    {isSelf && editingId !== comment.id && (
+                                      <>
+                                        <DropdownMenuItem onClick={() => { setEditingId(comment.id); setEditInput(comment.content); }} className="gap-2 cursor-pointer">
+                                          <Pen weight="BoldDuotone" className="h-4 w-4" />
+                                          Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setDeleteTarget(comment.id)} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
+                                          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                                          Hapus
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
 
-                            {/* Meta + hover actions */}
+                            {/* Spacer bawah buat reactions yang overlap */}
+                            {(comment.reactions ?? []).length > 0 && <div className="h-3" />}
+
+                            {/* Meta: waktu + status */}
                             <div className={`flex items-center gap-1.5 px-1 ${isSelf ? "flex-row-reverse" : "flex-row"}`}>
                               <span className={cn('text-[10px]', 'text-muted-foreground')}>{format(new Date(comment.createdAt), "HH:mm")}</span>
                               {comment.edited && <span className={cn('text-[10px]', 'text-muted-foreground', 'italic')}>diedit</span>}
@@ -816,32 +864,6 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                   </span>
                                 </span>
                               )}
-                              <div className={cn(
-                                'items-center', 'gap-0.5',
-                                isSelf ? 'flex-row-reverse' : 'flex-row',
-                                reactionMenuId === comment.id ? 'flex' : 'hidden group-hover:flex',
-                              )}>
-                                {/* Add reaction */}
-                                <AddReactionButton
-                                  onToggle={(emoji) => { void handleToggleReaction(comment.id, emoji); }}
-                                  side="top"
-                                  align={isSelf ? "end" : "start"}
-                                  onOpenChange={(open) => setReactionMenuId(open ? comment.id : null)}
-                                />
-                                <button onClick={() => handleReply(comment)} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
-                                  <Reply weight="BoldDuotone" className={cn('h-3', 'w-3')} />
-                                </button>
-                                {isSelf && editingId !== comment.id && (
-                                  <>
-                                    <button onClick={() => { setEditingId(comment.id); setEditInput(comment.content); }} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground')}>
-                                      <Pen weight="BoldDuotone" className={cn('h-3', 'w-3')} />
-                                    </button>
-                                    <button onClick={() => setDeleteTarget(comment.id)} className={cn('p-0.5', 'rounded', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-destructive')}>
-                                      <TrashBinTrash weight="BoldDuotone" className={cn('h-3', 'w-3')} />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -928,6 +950,14 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
 
                 {/* Textarea wrapper — relative for mention dropdown */}
                 <div className="relative flex-1">
+                  {(() => {
+                    const activePreviewUrl = debouncedPreviewUrl && debouncedPreviewUrl !== dismissedPreviewUrl ? debouncedPreviewUrl : null;
+                    return activePreviewUrl ? (
+                      <div className="absolute bottom-full left-0 right-0 z-30 mb-1">
+                        <LinkPreviewCard url={activePreviewUrl} onDismiss={() => setDismissedPreviewUrl(activePreviewUrl)} />
+                      </div>
+                    ) : null;
+                  })()}
                   {showFormatToolbar && (
                     <div className="absolute bottom-full left-0 z-20 mb-1">
                       <FormatToolbar onFormat={handleFormat} />
@@ -941,26 +971,14 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                       onSelect={insertMention}
                     />
                   )}
-                  <textarea
+                  <RichTextInput
                     ref={textareaRef}
                     value={input}
                     onChange={handleInputChange}
+                    onCaret={handleCaret}
                     onKeyDown={handleKeyDown}
-                    onSelect={(e) => {
-                      const ta = e.currentTarget;
-                      setShowFormatToolbar(ta.selectionEnd > ta.selectionStart);
-                    }}
-                    onKeyUp={(e) => {
-                      const ta = e.currentTarget;
-                      setShowFormatToolbar(ta.selectionEnd > ta.selectionStart);
-                    }}
-                    onMouseUp={(e) => {
-                      const ta = e.currentTarget;
-                      setShowFormatToolbar(ta.selectionEnd > ta.selectionStart);
-                    }}
-                    placeholder="Ketik komentar... (@ mention, *tebal* _miring_)"
-                    rows={1}
-                    className={cn('w-full', 'resize-none', 'rounded-xl', 'border', 'border-border', 'bg-background', 'px-3', 'py-2.5', 'text-sm', 'focus:outline-none', 'focus:ring-1', 'focus:ring-ring', 'overflow-hidden')}
+                    placeholder="Kirim pesan..."
+                    className={cn('w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm leading-normal focus:outline-none focus:ring-1 focus:ring-ring')}
                     style={{ minHeight: "40px", maxHeight: "160px", overflowY: "auto" }}
                   />
                 </div>

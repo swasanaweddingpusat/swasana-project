@@ -60,6 +60,15 @@ function applyInlineFormat(
     return { text: newText, selStart: selStart + mLen, selEnd: selStart + mLen };
   }
 
+  // Trim whitespace inside the selection so markers hug the text (no "*bro *")
+  const rawSel = text.slice(selStart, selEnd);
+  const leadWs = rawSel.length - rawSel.trimStart().length;
+  const trailWs = rawSel.length - rawSel.trimEnd().length;
+  if ((leadWs > 0 || trailWs > 0) && rawSel.trim().length > 0) {
+    selStart += leadWs;
+    selEnd -= trailWs;
+  }
+
   // Toggle: check if markers already surround the selection (outside the selection range)
   const hasBefore = selStart >= mLen && text.slice(selStart - mLen, selStart) === marker;
   const hasAfter =

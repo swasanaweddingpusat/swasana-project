@@ -47,8 +47,7 @@ export function MessageReactions({ reactions, onToggle, isSelf, align = "start" 
   return (
     <div
       className={cn(
-        "flex flex-wrap gap-1 mt-1",
-        align === "end" ? "justify-end" : "justify-start",
+        "inline-flex flex-nowrap w-fit rounded-full border border-border bg-card shadow-sm overflow-hidden",
       )}
     >
       {reactions.map(({ emoji, count, reactedByMe, names }) => (
@@ -58,19 +57,15 @@ export function MessageReactions({ reactions, onToggle, isSelf, align = "start" 
           onClick={() => onToggle(emoji)}
           title={names.length > 0 ? names.join(", ") : undefined}
           className={cn(
-            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
-            "border transition-colors select-none cursor-pointer",
-            reactedByMe
-              ? isSelf
-                ? "bg-primary-foreground/20 border-primary-foreground/60 text-primary-foreground font-medium"
-                : "bg-accent border-primary/40 text-foreground font-medium"
-              : "bg-card border-border text-foreground hover:bg-accent",
+            "inline-flex items-center gap-px px-1 py-0.5 leading-none",
+            "transition-colors select-none cursor-pointer",
+            reactedByMe ? "bg-accent" : "hover:bg-accent/60",
           )}
           aria-pressed={reactedByMe}
           aria-label={`${emoji} ${count} reaksi`}
         >
-          <span>{emoji}</span>
-          <span className="font-mono tabular-nums">{count}</span>
+          <span className="text-[13px]">{emoji}</span>
+          {count > 1 && <span className="text-[10px] font-medium tabular-nums text-muted-foreground">{count}</span>}
         </button>
       ))}
     </div>
@@ -84,9 +79,11 @@ interface AddReactionButtonProps {
   side?: "top" | "bottom";
   align?: "start" | "end" | "center";
   onOpenChange?: (open: boolean) => void;
+  /** Render just the preset row inline (no Popover wrapper) — for use inside DropdownMenu */
+  inline?: boolean;
 }
 
-export function AddReactionButton({ onToggle, side = "top", align = "start", onOpenChange }: AddReactionButtonProps) {
+export function AddReactionButton({ onToggle, side = "top", align = "start", onOpenChange, inline }: AddReactionButtonProps) {
   const [open, setOpen] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -110,6 +107,40 @@ export function AddReactionButton({ onToggle, side = "top", align = "start", onO
     onOpenChange?.(nextOpen);
   };
 
+  // Inline mode: just the preset row, no Popover
+  if (inline) {
+    return (
+      <div className="flex items-center gap-0.5">
+        {PRESET_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); handlePreset(emoji); }}
+            className="h-7 w-7 flex items-center justify-center rounded-lg text-base hover:bg-accent transition-colors cursor-pointer"
+            aria-label={`Reaksi ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
+        <Popover>
+          <PopoverTrigger
+            className={cn(
+              "h-7 w-7 flex items-center justify-center rounded-lg",
+              "text-muted-foreground hover:text-foreground hover:bg-accent",
+              "transition-colors cursor-pointer",
+            )}
+            aria-label="Pilih emoji lainnya"
+          >
+            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+          </PopoverTrigger>
+          <PopoverContent side="top" align="start" className="p-2 w-auto">
+            <EmojiPicker onSelect={handleFullPick} />
+          </PopoverContent>
+        </Popover>
+      </div>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
@@ -126,18 +157,13 @@ export function AddReactionButton({ onToggle, side = "top", align = "start", onO
       <PopoverContent
         side={side}
         align={align}
-        className={cn(
-          "p-2 w-auto",
-          showFullPicker ? "!w-auto" : "w-auto",
-        )}
+        className="p-2 w-auto"
       >
         {showFullPicker ? (
-          /* Full emoji picker */
           <div>
             <EmojiPicker onSelect={handleFullPick} />
           </div>
         ) : (
-          /* Preset row + expand button */
           <div className="flex items-center gap-1">
             {PRESET_EMOJIS.map((emoji) => (
               <button
@@ -150,7 +176,6 @@ export function AddReactionButton({ onToggle, side = "top", align = "start", onO
                 {emoji}
               </button>
             ))}
-            {/* Open full picker */}
             <button
               type="button"
               onMouseDown={(e) => { e.preventDefault(); setShowFullPicker(true); }}
@@ -167,5 +192,58 @@ export function AddReactionButton({ onToggle, side = "top", align = "start", onO
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ─── QuickReactionBar ─────────────────────────────────────────────────────────
+// Floating preset-emoji row shown on bubble hover. Full picker via "+" button.
+
+interface QuickReactionBarProps {
+  onToggle: (emoji: string) => void;
+  isSelf: boolean;
+  onPickerOpenChange?: (open: boolean) => void;
+}
+
+export function QuickReactionBar({ onToggle, isSelf, onPickerOpenChange }: QuickReactionBarProps) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const handlePickerOpen = (open: boolean) => {
+    setPickerOpen(open);
+    onPickerOpenChange?.(open);
+  };
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-md",
+      )}
+    >
+      {PRESET_EMOJIS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); onToggle(emoji); }}
+          className="h-7 w-7 flex items-center justify-center rounded-full text-base hover:bg-accent hover:scale-110 transition-all cursor-pointer"
+          aria-label={`Reaksi ${emoji}`}
+        >
+          {emoji}
+        </button>
+      ))}
+      <Popover open={pickerOpen} onOpenChange={handlePickerOpen}>
+        <PopoverTrigger
+          className={cn(
+            "h-7 w-7 flex items-center justify-center rounded-full",
+            "text-muted-foreground hover:text-foreground hover:bg-accent",
+            "transition-colors cursor-pointer",
+          )}
+          aria-label="Pilih emoji lainnya"
+        >
+          <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+        </PopoverTrigger>
+        <PopoverContent side="top" align={isSelf ? "end" : "start"} className="p-2 w-auto">
+          <EmojiPicker onSelect={(emoji) => { onToggle(emoji); handlePickerOpen(false); }} />
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }

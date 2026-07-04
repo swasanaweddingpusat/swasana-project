@@ -25,10 +25,14 @@ interface Props {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const SPEEDS = [1, 1.5, 2] as const;
+type Speed = typeof SPEEDS[number];
+
 export function VoiceNotePlayer({ url, duration, peaks: rawPeaks, isSelf }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0); // 0..1
   const [currentTime, setCurrentTime] = useState(0);
+  const [speed, setSpeed] = useState<Speed>(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveRef = useRef<HTMLDivElement | null>(null);
 
@@ -42,11 +46,18 @@ export function VoiceNotePlayer({ url, duration, peaks: rawPeaks, isSelf }: Prop
     if (isPlaying) {
       audio.pause();
     } else {
+      audio.playbackRate = speed;
       audio.play().catch(() => {});
     }
-  }, [isPlaying]);
+  }, [isPlaying, speed]);
 
   // ── Waveform click → seek ─────────────────────────────────────────────────
+
+  const cycleSpeed = useCallback(() => {
+    const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
+    setSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  }, [speed]);
 
   const handleWaveClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
@@ -165,6 +176,21 @@ export function VoiceNotePlayer({ url, duration, peaks: rawPeaks, isSelf }: Prop
           />
         ))}
       </div>
+
+      {/* Playback speed chip */}
+      <button
+        type="button"
+        onClick={cycleSpeed}
+        className={cn(
+          "shrink-0 text-[10px] font-semibold font-mono tabular-nums leading-none",
+          "px-1 py-0.5 rounded",
+          isSelf ? "bg-white/20 hover:bg-white/30 text-primary-foreground" : "bg-black/10 hover:bg-black/15 text-foreground",
+          "transition-colors cursor-pointer select-none",
+        )}
+        aria-label="Ubah kecepatan putar"
+      >
+        {speed}x
+      </button>
 
       {/* Duration / current time */}
       <span className={cn("shrink-0 text-xs font-mono tabular-nums min-w-9 text-right", timeClass)}>
