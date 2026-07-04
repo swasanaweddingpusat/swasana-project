@@ -85,14 +85,27 @@ function inlineToHtml(text: string): string {
 
 function toHtml(md: string): string {
   if (!md) return "";
-  return md.split("\n").map((line) => inlineToHtml(line)).join("<br>");
+  return md.split("\n").map((line) => {
+    // Line-prefix formats → styled block with marker hidden (data-prefix keeps it for serialize)
+    if (line.startsWith("> ")) {
+      return `<div data-prefix="&gt; " class="border-l-2 border-primary/50 pl-2 italic opacity-90">${inlineToHtml(line.slice(2)) || "<br>"}</div>`;
+    }
+    if (line.startsWith("- ")) {
+      return `<div data-prefix="- " class="pl-3 relative before:content-['•'] before:absolute before:left-0 before:opacity-60">${inlineToHtml(line.slice(2)) || "<br>"}</div>`;
+    }
+    const numMatch = line.match(/^(\d+)\.\s/);
+    if (numMatch) {
+      return `<div data-prefix="${numMatch[0]}" class="pl-4 relative"><span class="absolute left-0 opacity-60 font-mono text-xs">${numMatch[1]}.</span>${inlineToHtml(line.slice(numMatch[0].length)) || "<br>"}</div>`;
+    }
+    return inlineToHtml(line);
+  }).join("<br>");
 }
 
 function serialize(node: Node): string {
   let s = "";
   node.childNodes.forEach((child) => {
     if (child.nodeType === Node.TEXT_NODE) {
-      s += child.textContent ?? "";
+      s += (child.textContent ?? "").replace(/​/g, ""); // strip zero-width space anchors
     } else if (child instanceof HTMLElement) {
       const tag = child.tagName;
       if (tag === "BR") s += "\n";
@@ -100,7 +113,11 @@ function serialize(node: Node): string {
       else if (tag === "EM" || tag === "I") s += "_" + serialize(child) + "_";
       else if (tag === "S" || tag === "STRIKE" || tag === "DEL") s += "~" + serialize(child) + "~";
       else if (tag === "CODE") s += "```" + serialize(child) + "```";
-      else if (tag === "DIV") { if (s && !s.endsWith("\n")) s += "\n"; s += serialize(child); }
+      else if (tag === "DIV") {
+        if (s && !s.endsWith("\n")) s += "\n";
+        const prefix = child.getAttribute("data-prefix") ?? "";
+        s += prefix + serialize(child);
+      }
       else s += serialize(child);
     }
   });
@@ -192,6 +209,11 @@ export const RichTextInput = forwardRef<RichTextInputHandle, Props>(function Ric
       if (range.collapsed || !el.contains(range.commonAncestorContainer)) return;
 
       const tag = type === "bold" ? "STRONG" : type === "italic" ? "EM" : type === "strike" ? "S" : "CODE";
+      const tagClass =
+        type === "bold" ? "font-semibold"
+        : type === "italic" ? "italic"
+        : type === "strike" ? "line-through"
+        : "font-mono text-[0.9em] px-1 rounded bg-black/10";
 
       // Toggle off: if selection sits inside an element of this tag, unwrap it
       let ancestor: Node | null = range.commonAncestorContainer;
@@ -209,11 +231,17 @@ export const RichTextInput = forwardRef<RichTextInputHandle, Props>(function Ric
         }
       } else {
         const wrap = document.createElement(tag.toLowerCase());
+        wrap.className = tagClass;
         try {
           wrap.appendChild(range.extractContents());
           range.insertNode(wrap);
+          // Collapse caret OUTSIDE the wrapper (after the closing marker) so
+          // typing continues in normal text, not inside the format.
+          const after = document.createTextNode("​"); // zero-width space anchor
+          wrap.parentNode?.insertBefore(after, wrap.nextSibling);
           const r = document.createRange();
-          r.selectNodeContents(wrap);
+          r.setStart(after, 1);
+          r.collapse(true);
           sel.removeAllRanges();
           sel.addRange(r);
         } catch {

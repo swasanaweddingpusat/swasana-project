@@ -45,6 +45,18 @@ function getInitials(name: string | null | undefined) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
+/** Preview label for a comment — falls back to attachment type when text is empty (VN, image, file) */
+function commentPreviewText(content: string, attachments: unknown): string {
+  const text = content.trim();
+  if (text) return text;
+  const list = Array.isArray(attachments) ? (attachments as { type?: string }[]) : [];
+  const first = list[0];
+  if (first?.type?.startsWith("audio/")) return "🎤 Pesan suara";
+  if (first?.type?.startsWith("image/")) return "📷 Foto";
+  if (list.length > 0) return "📎 Lampiran";
+  return "";
+}
+
 async function compressImage(file: File): Promise<{ blob: Blob; url: string }> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -424,7 +436,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
       attachments: capturedAttachments.length ? capturedAttachments.map((a) => ({ path: "", name: a.name, size: a.size, type: a.type, url: a.url, _uploading: true })) : [],
       createdAt: new Date(),
       author: { id: user?.profileId ?? "", fullName: user?.name ?? "Kamu", avatarUrl: null },
-      replyTo: replyTo ? { id: replyTo.id, content: replyTo.content, author: { fullName: replyTo.author.fullName } } : null,
+      replyTo: replyTo ? { id: replyTo.id, content: replyTo.content, attachments: replyTo.attachments, author: { fullName: replyTo.author.fullName } } : null,
       reactions: [],
     };
 
@@ -488,7 +500,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
       createdAt: new Date(),
       author: { id: user?.profileId ?? "", fullName: user?.name ?? "Kamu", avatarUrl: null },
       replyTo: capturedReplyTo
-        ? { id: capturedReplyTo.id, content: capturedReplyTo.content, author: { fullName: capturedReplyTo.author.fullName } }
+        ? { id: capturedReplyTo.id, content: capturedReplyTo.content, attachments: capturedReplyTo.attachments, author: { fullName: capturedReplyTo.author.fullName } }
         : null,
       reactions: [],
     };
@@ -704,7 +716,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                                 onClick={() => scrollToMessage(comment.replyTo!.id)}
                               >
                                 <span className={cn('font-medium', 'text-primary/70')}>{comment.replyTo.author.fullName}</span>
-                                <span className={cn('text-muted-foreground', 'ml-1', 'truncate', 'block')}>{comment.replyTo.content.slice(0, 60)}</span>
+                                <span className={cn('text-muted-foreground', 'ml-1', 'truncate', 'block')}>{commentPreviewText(comment.replyTo.content, (comment.replyTo as { attachments?: unknown }).attachments).slice(0, 60)}</span>
                               </div>
                             )}
 
@@ -881,7 +893,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
             <div className={cn('shrink-0', 'mx-3', 'mb-1', 'px-3', 'py-1.5', 'bg-muted', 'rounded-lg', 'border-l-2', 'border-primary', 'flex', 'items-start', 'justify-between', 'gap-2')}>
               <div className="min-w-0">
                 <p className={cn('text-[10px]', 'font-medium', 'text-primary')}>{replyTo.author.fullName}</p>
-                <p className={cn('text-[10px]', 'text-muted-foreground', 'truncate')}>{replyTo.content.slice(0, 80)}</p>
+                <p className={cn('text-[10px]', 'text-muted-foreground', 'truncate')}>{commentPreviewText(replyTo.content, replyTo.attachments).slice(0, 80)}</p>
               </div>
               <button onClick={() => setReplyTo(null)} className={cn('shrink-0', 'text-muted-foreground', 'hover:text-foreground', 'mt-0.5')}>
                 <CloseCircle weight="BoldDuotone" className={cn('h-3.5', 'w-3.5')} />

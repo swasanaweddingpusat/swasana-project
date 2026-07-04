@@ -21,6 +21,7 @@ const COMMENT_SELECT = {
     select: {
       id: true,
       content: true,
+      attachments: true,
       author: { select: { fullName: true } },
     },
   },
