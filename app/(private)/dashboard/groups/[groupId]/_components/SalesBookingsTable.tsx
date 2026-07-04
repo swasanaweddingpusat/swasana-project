@@ -120,7 +120,7 @@ interface ApprovalStep {
   approverRoleId: string | null;
   approverUserId: string | null;
   status: string;
-  signature: string | null;
+  // signature not included — list payload omits it; ApprovalDialog fetches its own record.
   decidedAt: string | null;
   notes: string | null;
   revisionId: string | null;
@@ -182,7 +182,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
   const [restoreTarget, setRestoreTarget] = useState<BookingListItem | null>(null);
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookingListItem | null>(null);
-  const [commentTarget, setCommentTarget] = useState<BookingListItem | null>(null);
+  const [commentTarget, setCommentTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [activityLogTarget, setActivityLogTarget] = useState<BookingListItem | null>(null);
   const [approvalDialogTarget, setApprovalDialogTarget] = useState<BookingListItem | null>(null);
   const [approveModal, setApproveModal] = useState<{ stepId: string; stepLabel: string; bookingName: string } | null>(null);
@@ -426,7 +426,7 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
         {can("booking", "comment") && (
           <TooltipProvider delay={200}>
             <Tooltip>
-              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8 relative" onClick={(e) => { e.stopPropagation(); setCommentTarget(booking); }} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" className="cursor-pointer h-8 w-8 relative" onClick={(e) => { e.stopPropagation(); setCommentTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "" }); }} onMouseEnter={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} onFocus={() => { qc.prefetchQuery({ queryKey: ["booking-comments", booking.id], queryFn: () => fetchBookingComments(booking.id), staleTime: 30_000 }); }} />}>
                 <MessageSquare weight="BoldDuotone" className="h-4 w-4" />
                 {(unreadCounts[booking.id] ?? 0) > 0 && (
                   <span className={cn("absolute", "-top-0.5", "-right-0.5", "min-w-4", "h-4", "rounded-full", "bg-destructive", "text-destructive-foreground", "text-[9px]", "font-bold", "flex", "items-center", "justify-center", "px-0.5")}>
@@ -1037,8 +1037,8 @@ export function SalesBookingsTable({ salesId }: SalesBookingsTableProps): React.
             console.error("[SalesBookingsTable] invalidateQueries error:", err);
           });
         }}
-        bookingId={commentTarget?.id ?? null}
-        customerName={commentTarget?.snapCustomer?.name ?? ""}
+        bookingId={commentTarget?.bookingId ?? null}
+        customerName={commentTarget?.customerName ?? ""}
       />
 
       {/* Upload Document */}

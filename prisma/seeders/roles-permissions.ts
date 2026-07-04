@@ -36,6 +36,7 @@ const moduleActions: Record<string, string[]> = {
   "settings-quotation-templates": ["view", "create", "edit", "delete"],
   "settings-role-permission": ["view", "create", "edit", "delete"],
   "settings-source-of-information": ["view", "create", "edit", "delete"],
+  "settings-tutorial": ["view", "create", "edit", "delete"],
   complimentary: ["view", "create", "edit", "delete"],
   // CRM modules
   leads: ["view", "create", "edit", "delete"],

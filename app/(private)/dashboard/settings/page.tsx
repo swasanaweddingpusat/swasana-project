@@ -17,6 +17,7 @@ import {
   Route,
   Sledgehammer,
   Document,
+  Book,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -105,6 +106,13 @@ const GROUPS: SettingGroup[] = [
         module: "settings-quotation-templates",
       },
       {
+        title: "Tutorial CMS",
+        description: "Atur konten tutorial aplikasi yang dapat diakses user.",
+        icon: Book,
+        href: "/dashboard/settings/tutorial",
+        module: "settings-tutorial",
+      },
+      {
         title: "Source of Information",
         description: "Sumber informasi customer untuk tracking lead.",
         icon: InfoCircle,
@@ -169,7 +177,7 @@ export default async function SettingsHubPage() {
     "settings-role-permission", "settings-payment-methods",
     "settings-source-of-information", "settings-education-level",
     "settings-event-types", "settings-order-status",
-    "settings-quotation-templates",
+    "settings-quotation-templates", "settings-tutorial",
     "customers", "settings-role-permission",
     "settings-maintenance-category",
     "settings-maintenance-priority",
