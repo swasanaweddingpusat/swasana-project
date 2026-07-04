@@ -929,7 +929,7 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                 onCancel={() => setRecording(false)}
               />
             ) : (
-              <div className={cn('flex', 'gap-2', 'items-center')}>
+              <div className={cn('flex', 'gap-2', 'items-end')}>
                 {/* Attachment picker */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
