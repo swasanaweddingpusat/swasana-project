@@ -50,25 +50,13 @@ function computeBreakdown(
   };
 }
 
-// ─── Main query ───────────────────────────────────────────────────────────────
+// ─── Internal query logic ─────────────────────────────────────────────────────
 
-/**
- * Returns top-5 sales ranked by confirmed revenue (highest first).
- * Admin (profileId = undefined) sees all sales.
- * Non-admin scoped to the given profileId list (their group members).
- *
- * BigInt `UserTarget.amount` is converted to Number before returning —
- * safe for amounts up to ~9 quadrillion IDR.
- */
-export async function getTopSalesByRecentBooking(
+async function _queryTopSales(
   startDate: Date,
   endDate: Date,
   allowedProfileIds?: string[],
 ): Promise<SalesPerformanceCardItem[]> {
-  "use cache";
-  cacheTag("bookings", "groups");
-  cacheLife("minutes");
-
   // Step 1: Get all distinct salesIds active in the date range (candidates pool).
   // Cap at 500 rows to bound memory; deduplication done in-memory.
   const candidateBookings = await db.booking.findMany({
@@ -178,6 +166,30 @@ export async function getTopSalesByRecentBooking(
   return aggregated
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
+}
+
+// ─── Cached wrapper ──────────────────────────────────────────────────────────
+
+export async function getTopSalesByRecentBooking(
+  startDate: Date,
+  endDate: Date,
+  allowedProfileIds?: string[],
+): Promise<SalesPerformanceCardItem[]> {
+  "use cache";
+  cacheTag("bookings", "groups");
+  cacheLife("minutes");
+
+  return _queryTopSales(startDate, endDate, allowedProfileIds);
+}
+
+// ─── Raw (uncached) for API route ────────────────────────────────────────────
+
+export async function getTopSalesByRecentBookingRaw(
+  startDate: Date,
+  endDate: Date,
+  allowedProfileIds?: string[],
+): Promise<SalesPerformanceCardItem[]> {
+  return _queryTopSales(startDate, endDate, allowedProfileIds);
 }
 
 // ─── Return type alias ────────────────────────────────────────────────────────

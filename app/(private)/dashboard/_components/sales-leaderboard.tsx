@@ -1,14 +1,11 @@
+"use client";
+
 import { Crown } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { useDashboardLeaderboard } from "@/hooks/useDashboardLeaderboard";
+import type { SalesPerformanceItem } from "@/lib/queries/dashboard";
 
-export interface SalesPerformanceItem {
-  profileId: string;
-  name: string;
-  avatarUrl: string | null;
-  revenue: number;
-  confirmedBookings: number;
-  target: number;
-}
+export type { SalesPerformanceItem } from "@/lib/queries/dashboard";
 
 function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000) return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
@@ -25,7 +22,15 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export function SalesLeaderboard({ sales }: { sales: SalesPerformanceItem[] }) {
+interface SalesLeaderboardProps {
+  initialSales: SalesPerformanceItem[];
+  year: number;
+  month: number;
+}
+
+export function SalesLeaderboard({ initialSales, year, month }: SalesLeaderboardProps) {
+  const { data } = useDashboardLeaderboard(year, month, initialSales);
+  const sales = data ?? initialSales;
   const sorted = [...sales].sort((a, b) => b.revenue - a.revenue);
 
   return (

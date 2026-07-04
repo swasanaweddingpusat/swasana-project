@@ -21,6 +21,7 @@ import {
   CalendarDate,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { useDashboardSalesPerformance } from "@/hooks/useDashboardSalesPerformance";
 import type { SalesPerformanceCardItem } from "@/lib/queries/salesPerformance";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -368,11 +369,20 @@ function CategorySplitSummary({ data }: { data: SalesPerformanceCardItem[] }) {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
+interface SalesPerformanceSectionProps {
+  initialData: SalesPerformanceCardItem[];
+  year: number;
+  month: number;
+}
+
 export function SalesPerformanceSection({
-  data,
-}: {
-  data: SalesPerformanceCardItem[];
-}) {
+  initialData,
+  year,
+  month,
+}: SalesPerformanceSectionProps) {
+  const { data: liveData } = useDashboardSalesPerformance(year, month, initialData);
+  const data = liveData ?? initialData;
+
   if (data.length === 0) {
     return (
       <div className="bg-card border rounded-2xl p-6 flex flex-col items-center gap-3 text-center shadow-sm">
