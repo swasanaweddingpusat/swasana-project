@@ -186,12 +186,12 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       }
 
       const bullet = type === "ol" ? `${idx + startNum}. ` : "• ";
-      const indent = depth * 10;
+      const indent = depth * 6;
 
       if (mainText) {
         nodes.push(
           <View key={k++} wrap={depth === 0 ? false : undefined} style={{ flexDirection: "row", marginLeft: indent, marginBottom: depth === 0 ? 2 : 1 }}>
-            <Text style={{ fontSize, width: type === "ol" ? 18 : 10, lineHeight: 1.3 }}>{bullet}</Text>
+            <Text style={{ fontSize, width: type === "ol" ? 13 : 8, lineHeight: 1.3 }}>{bullet}</Text>
             <Text style={{ fontSize, flex: 1, lineHeight: 1.3 }}>{parseInlineHtml(mainText)}</Text>
           </View>
         );
@@ -274,7 +274,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       const text = nm ? nm[2] : (bulRe.exec(b)?.[1] ?? b);
       return (
         <View key={i} wrap={false} style={{ flexDirection: "row", marginBottom: 2, alignItems: "flex-start" }}>
-          <Text style={{ fontSize, lineHeight: 1.3, width: 18, textAlign: "right", marginRight: 4 }}>{bullet}</Text>
+          <Text style={{ fontSize, lineHeight: 1.3, width: 13, textAlign: "right", marginRight: 3 }}>{bullet}</Text>
           <Text style={{ fontSize, flex: 1, lineHeight: 1.3, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(text)}</Text>
         </View>
       );
@@ -784,9 +784,17 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               .map((t) => {
                 const d = t.dueDate ?? createdAt;
                 const tgl = new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
+                // Bank tujuan lengkap: "BCA a.n. PT CITRA SWASANA BARU (1234567890)".
+                // Rakit hanya bagian yang ada isinya biar gak muncul "a.n." / "()" kosong.
+                const pm = booking.paymentMethod;
+                const bankParts: string[] = [];
+                if (pm?.bankName?.trim()) bankParts.push(pm.bankName.trim());
+                if (pm?.bankRecipient?.trim()) bankParts.push(`a.n. ${pm.bankRecipient.trim()}`);
+                if (pm?.bankAccountNumber?.trim()) bankParts.push(`(${pm.bankAccountNumber.trim()})`);
+                const bankInfo = bankParts.join(" ");
                 return (
                   <View key={t.id} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
-                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{t.name} via {booking.paymentMethod?.bankName ?? ""} {tgl}</Text>
+                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{t.name}{bankInfo ? ` via ${bankInfo}` : ""} · {tgl}</Text>
                     <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{fmtRp(t.amount)}</Text>
                   </View>
                 );
