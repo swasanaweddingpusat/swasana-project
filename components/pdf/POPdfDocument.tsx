@@ -133,13 +133,18 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
   // line breaks. Without this, .filter(Boolean) drops empty paragraphs and the
   // list-path collapses adjacent paragraphs with no separator — losing the
   // spacing the user typed in the editor entirely.
-  function renderParagraphRun(chunk: string, key: string, marginTop: number = 0): React.ReactNode {
+  function renderParagraphRun(chunk: string, key: string, marginTop: number = 0, keepTrailing: boolean = false): React.ReactNode {
     const lines = chunk
       .replace(/^\s*<p>|<\/p>\s*$/g, "")
       .split(/<\/p>\s*<p>|<br\s*\/?>/)
       .map((b) => b.replace(/<\/?p>/g, "").trim());
     while (lines.length && !lines[0]) lines.shift();
-    while (lines.length && !lines[lines.length - 1]) lines.pop();
+    // Trailing blank lines are dropped for standalone text (no dangling gap at the
+    // end of a block). But when this segment is FOLLOWED BY A LIST, those blank
+    // lines are the spacing the user typed between the text and the list — keep them.
+    if (!keepTrailing) {
+      while (lines.length && !lines[lines.length - 1]) lines.pop();
+    }
     if (lines.length === 0) return null;
     return (
       <Text key={key} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop }}>
@@ -251,9 +256,15 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       temp = temp.slice(pos);
     }
 
-    for (const seg of segments) {
+    for (let si = 0; si < segments.length; si++) {
+      const seg = segments[si];
       if (seg.type === "text") {
-        const node = renderParagraphRun(seg.content, `${k++}`, 10);
+        // keepTrailing only when a LIST follows this text — the blank lines at the
+        // end of the segment are the spacing the user typed between the paragraph
+        // and the list below. A trailing text block (list → text) still trims them
+        // so no gap dangles at the end of the document.
+        const followedByList = segments[si + 1]?.type === "list";
+        const node = renderParagraphRun(seg.content, `${k++}`, 10, followedByList);
         if (node) elements.push(node);
       } else {
         elements.push(<View key={k++}>{renderList(seg.content, seg.listType!, 0, seg.start ?? 1)}</View>);
