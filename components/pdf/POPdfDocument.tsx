@@ -128,6 +128,28 @@ function parseRichText(text: string, baseFontWeight: string = "normal", fontSize
 function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fontSize: number = 8): React.ReactNode {
   let k = 0;
 
+  // Render a run of <p>…</p> paragraphs into a single <Text>, preserving blank
+  // lines (empty <p></p> produced by pressing Enter on an empty line) as real
+  // line breaks. Without this, .filter(Boolean) drops empty paragraphs and the
+  // list-path collapses adjacent paragraphs with no separator — losing the
+  // spacing the user typed in the editor entirely.
+  function renderParagraphRun(chunk: string, key: string, marginTop: number = 0): React.ReactNode {
+    const lines = chunk
+      .replace(/^\s*<p>|<\/p>\s*$/g, "")
+      .split(/<\/p>\s*<p>|<br\s*\/?>/)
+      .map((b) => b.replace(/<\/?p>/g, "").trim());
+    while (lines.length && !lines[0]) lines.shift();
+    while (lines.length && !lines[lines.length - 1]) lines.pop();
+    if (lines.length === 0) return null;
+    return (
+      <Text key={key} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop }}>
+        {lines.map((c, i) => (
+          <React.Fragment key={i}>{i > 0 && "\n"}{c ? parseInlineHtml(c) : ""}</React.Fragment>
+        ))}
+      </Text>
+    );
+  }
+
   function renderList(listHtml: string, type: "ol" | "ul", depth: number, startNum: number = 1): React.ReactNode[] {
     const nodes: React.ReactNode[] = [];
     // Use a stack-based approach to find top-level <li> items
@@ -231,8 +253,8 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
 
     for (const seg of segments) {
       if (seg.type === "text") {
-        const clean = seg.content.replace(/<\/?p>/g, "").trim();
-        if (clean) elements.push(<Text key={k++} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop: 10 }}>{parseInlineHtml(clean)}</Text>);
+        const node = renderParagraphRun(seg.content, `${k++}`, 10);
+        if (node) elements.push(node);
       } else {
         elements.push(<View key={k++}>{renderList(seg.content, seg.listType!, 0, seg.start ?? 1)}</View>);
       }
@@ -258,7 +280,7 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       );
     })}</>;
   }
-  return (<Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }}>{cleanBlocks.map((c, i) => (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>))}</Text>);
+  return renderParagraphRun(html, `${k++}`) ?? <Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }} />;
 }
 
 function renderHtmlToPdf(html: string) {
