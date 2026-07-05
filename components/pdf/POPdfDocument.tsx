@@ -149,7 +149,11 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
     return (
       <Text key={key} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop }}>
         {lines.map((c, i) => (
-          <React.Fragment key={i}>{i > 0 && "\n"}{c ? parseInlineHtml(c) : ""}</React.Fragment>
+          // Empty lines render a non-breaking space, not "". react-pdf collapses a
+          // blank line that has no glyph to ~zero height, so a single "enter-enter"
+          // gap would vanish — the user had to press Enter 3-4× before a gap showed.
+          // The   forces the line to occupy a real line-height.
+          <React.Fragment key={i}>{i > 0 && "\n"}{c ? parseInlineHtml(c) : " "}</React.Fragment>
         ))}
       </Text>
     );
