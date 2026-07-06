@@ -283,7 +283,7 @@ export function WorkShiftManager() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="shift-start">Jam Mulai</Label>
                 <Input
@@ -313,7 +313,7 @@ export function WorkShiftManager() {
                 type="number"
                 value={form.lateToleranceMinutes}
                 onChange={(e) => setForm((f) => ({ ...f, lateToleranceMinutes: parseInt(e.target.value, 10) || 0 }))}
-                className="rounded-xl w-32"
+                className="rounded-xl w-full sm:w-32"
               />
             </div>
 
