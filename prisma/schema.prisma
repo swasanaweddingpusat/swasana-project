@@ -197,6 +197,9 @@ model Profile {
   candidateNotesCreated     CandidateNote[] @relation("CandidateNoteCreator")
   onboardingAssignments     OnboardingAssignment[]
   onboardingTasksCompleted  OnboardingTask[] @relation("OnboardingTaskCompleter")
+  procurementItemsCreated    ProcurementItem[]   @relation("ProcurementCreator")
+  procurementItemsApproved   ProcurementItem[]   @relation("ProcurementApprover")
+  procurementAnnouncements   ProcurementAnnouncement[] @relation("ProcurementAnnouncementCreator")
 
   @@index([roleId])
   @@index([managerId])
@@ -339,6 +342,7 @@ model Venue {
   quotationTemplates QuotationTemplate[]
   maintenanceTickets MaintenanceTicket[]
   workLocations      WorkLocation[]
+  procurementItems   ProcurementItem[]
 
   @@index([brandId])
   @@map("venues")
@@ -748,6 +752,32 @@ enum EmploymentType {
   contract
   probation
   intern
+}
+
+enum ProcurementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum ProcurementDivision {
+  HR
+  OPERATIONAL
+  IT
+  FINANCE
+  MICE
+}
+
+enum ProcurementEventType {
+  WEDDING
+  NON_WEDDING
+}
+
+enum ProcurementAnnouncementTarget {
+  ALL
+  VENUE
+  DIVISION
 }
 
 model Booking {
@@ -2449,3 +2479,64 @@ model DiscountProgram {
   @@index([periodStart, periodEnd])
   @@map("discount_programs")
 }
+
+// ─── Procurement (Pengadaan Barang) ──────────────────────────────────────────
+
+model ProcurementItem {
+  id                 String               @id @default(uuid())
+  tanggalPermintaan  DateTime
+  venueId            String
+  namaBarang         String
+  jumlahBarang       Int
+  sisaBarang         Int
+  penggunaan         String?
+  picPenerima        String
+  linkBarang         String?
+  note               String?
+  keterangan         String?
+  keteranganAcara    ProcurementEventType @default(WEDDING)
+  weddingNote        String?
+  nonWeddingNote     String?
+  totalWedding       Decimal?
+  totalNonWedding    Decimal?
+  total              Decimal?
+  status             ProcurementStatus    @default(PENDING)
+  division           ProcurementDivision?
+  buktiBelUrl        String?
+  createdById        String
+  approvedById       String?
+  approvedAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  venue      Venue    @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  createdBy  Profile  @relation("ProcurementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy Profile? @relation("ProcurementApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([venueId])
+  @@index([status])
+  @@index([division])
+  @@index([createdById])
+  @@index([approvedById])
+  @@index([tanggalPermintaan])
+  @@map("procurement_items")
+}
+
+model ProcurementAnnouncement {
+  id             String                        @id @default(uuid())
+  title          String
+  content        String
+  isActive       Boolean                       @default(true)
+  targetAudience ProcurementAnnouncementTarget @default(ALL)
+  targetList     String[]                      @default([])
+  createdById    String
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+
+  createdBy Profile @relation("ProcurementAnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([isActive])
+  @@index([createdById])
+  @@map("procurement_announcements")
+}
+
