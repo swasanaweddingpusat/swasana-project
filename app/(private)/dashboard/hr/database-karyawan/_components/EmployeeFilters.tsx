@@ -74,9 +74,9 @@ export function EmployeeFilters({
   );
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
       {/* Search */}
-      <div className="relative min-w-60 flex-1">
+      <div className="relative min-w-full sm:min-w-60 flex-1">
         <Magnifer
           weight="BoldDuotone"
           className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -91,7 +91,7 @@ export function EmployeeFilters({
 
       {/* Department */}
       <Select value={departmentId} onValueChange={onDepartmentChange}>
-        <SelectTrigger className="w-44 rounded-xl">
+        <SelectTrigger className="w-full sm:w-44 rounded-xl">
           <SelectValue placeholder="Departemen" />
         </SelectTrigger>
         <SelectContent>
@@ -106,7 +106,7 @@ export function EmployeeFilters({
 
       {/* Position */}
       <Select value={positionId} onValueChange={onPositionChange}>
-        <SelectTrigger className="w-44 rounded-xl">
+        <SelectTrigger className="w-full sm:w-44 rounded-xl">
           <SelectValue placeholder="Posisi" />
         </SelectTrigger>
         <SelectContent>
@@ -121,7 +121,7 @@ export function EmployeeFilters({
 
       {/* Status */}
       <Select value={status} onValueChange={onStatusChange}>
-        <SelectTrigger className="w-40 rounded-xl">
+        <SelectTrigger className="w-full sm:w-40 rounded-xl">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
@@ -135,7 +135,7 @@ export function EmployeeFilters({
 
       {/* Employment Type */}
       <Select value={employmentType} onValueChange={onEmploymentTypeChange}>
-        <SelectTrigger className="w-40 rounded-xl">
+        <SelectTrigger className="w-full sm:w-40 rounded-xl">
           <SelectValue placeholder="Tipe" />
         </SelectTrigger>
         <SelectContent>
