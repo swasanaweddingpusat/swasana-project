@@ -5,6 +5,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
+import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -95,6 +96,7 @@ export default function RootLayout({
             <TooltipProvider>
               {children}
               <Toaster richColors position="top-center" />
+              <ServiceWorkerRegister />
             </TooltipProvider>
           </QueryProvider>
         </SessionProvider>
