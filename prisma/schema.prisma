@@ -200,6 +200,7 @@ model Profile {
   procurementItemsCreated    ProcurementItem[]   @relation("ProcurementCreator")
   procurementItemsApproved   ProcurementItem[]   @relation("ProcurementApprover")
   procurementAnnouncements   ProcurementAnnouncement[] @relation("ProcurementAnnouncementCreator")
+  pushSubscriptions          PushSubscription[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2538,5 +2539,21 @@ model ProcurementAnnouncement {
   @@index([isActive])
   @@index([createdById])
   @@map("procurement_announcements")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  authKey   String
+  p256dhKey String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
