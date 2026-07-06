@@ -36,6 +36,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: "#0F4159",
 };
 
 export const metadata: Metadata = {
@@ -48,6 +49,15 @@ export const metadata: Metadata = {
     template: "%s | Swasana Wedding",
   },
   description: "Sistem Manajemen Wedding Swasana",
+  manifest: "/manifest.json",
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Swasana",
+  },
   // Default OG/Twitter card — inherited by every public & internal route unless a
   // page sets its own openGraph. Uses the shared brand image in /public for now.
   openGraph: {
