@@ -82,7 +82,7 @@ export function TutorialManager({ initialCategories }: Props) {
   const [editingStep, setEditingStep] = useState<TutorialStep | null>(null);
 
   const [stepVideoUrl, setStepVideoUrl] = useState("");
-  const [stepVideoType, setStepVideoType] = useState<"youtube" | "mp4" | "minio" | "">("");
+  const [stepVideoType, setStepVideoType] = useState<"youtube" | "mp4" | "minio" | "none">("none");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
 
   const [uploadingDocStepId, setUploadingDocStepId] = useState<string | null>(null);
@@ -130,7 +130,7 @@ export function TutorialManager({ initialCategories }: Props) {
     setStepCaption("");
     setStepImage("");
     setStepVideoUrl("");
-    setStepVideoType("");
+    setStepVideoType("none");
     setStepDialogOpen(true);
   };
 
@@ -140,7 +140,7 @@ export function TutorialManager({ initialCategories }: Props) {
     setStepCaption(step.caption);
     setStepImage(step.image ?? "");
     setStepVideoUrl(step.videoUrl ?? "");
-    setStepVideoType((step.videoType as "youtube" | "mp4" | "minio" | "") ?? "");
+    setStepVideoType((step.videoType as "youtube" | "mp4" | "minio") ?? "none");
     setStepDialogOpen(true);
   };
 
@@ -246,7 +246,7 @@ export function TutorialManager({ initialCategories }: Props) {
     const caption = stepCaption.trim();
     const image = stepImage.trim() || undefined;
     const videoUrl = stepVideoUrl.trim() || undefined;
-    const videoType = stepVideoType || undefined;
+    const videoType = stepVideoType === "none" ? undefined : stepVideoType;
     if (!title || !caption) {
       toast.error("Judul dan keterangan step wajib diisi.");
       return;
@@ -779,7 +779,7 @@ export function TutorialManager({ initialCategories }: Props) {
                   <SelectValue placeholder="Tidak ada video" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tidak ada video</SelectItem>
+                  <SelectItem value="none">Tidak ada video</SelectItem>
                   <SelectItem value="youtube">YouTube</SelectItem>
                   <SelectItem value="mp4">URL Video (MP4)</SelectItem>
                   <SelectItem value="minio">Upload ke MinIO</SelectItem>
