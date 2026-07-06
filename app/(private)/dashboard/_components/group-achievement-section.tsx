@@ -1,15 +1,11 @@
+"use client";
+
 import { UsersGroupRounded } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { useDashboardGroups } from "@/hooks/useDashboardGroups";
+import type { GroupAchievementData } from "@/lib/queries/dashboard";
 
-export interface GroupAchievementData {
-  id: string;
-  name: string;
-  leaderName: string;
-  memberCount: number;
-  revenue: number;
-  target: number;
-  confirmedBookings: number;
-}
+export type { GroupAchievementData } from "@/lib/queries/dashboard";
 
 function formatCurrency(amount: number): string {
   if (amount >= 1_000_000_000) return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
@@ -58,7 +54,16 @@ function GroupAchievementCard({ group }: { group: GroupAchievementData }) {
   );
 }
 
-export function GroupAchievementSection({ groups }: { groups: GroupAchievementData[] }) {
+interface GroupAchievementSectionProps {
+  initialGroups: GroupAchievementData[];
+  year: number;
+  month: number;
+}
+
+export function GroupAchievementSection({ initialGroups, year, month }: GroupAchievementSectionProps) {
+  const { data } = useDashboardGroups(year, month, initialGroups);
+  const groups = data ?? initialGroups;
+
   return (
     <div className={cn("flex", "flex-col", "gap-4")}>
       <h2 className={cn("text-base", "font-semibold", "text-foreground")}>Achievement per Group</h2>

@@ -99,12 +99,12 @@ export default async function DashboardPage({
       <CalendarWidget events={calendarEvents} year={year} month={month + 1} />
 
       {/* Achievement & Performance Sales — below calendar */}
-      <SalesPerformanceSection data={topSalesData} />
+      <SalesPerformanceSection initialData={topSalesData} year={year} month={month + 1} />
 
       {/* Group & Leaderboard — below performance section */}
       <div className={cn("grid", "grid-cols-1", "lg:grid-cols-2", "gap-6")}>
-        <GroupAchievementSection groups={groups} />
-        <SalesLeaderboard sales={salesLeaderboard} />
+        <GroupAchievementSection initialGroups={groups} year={year} month={month + 1} />
+        <SalesLeaderboard initialSales={salesLeaderboard} year={year} month={month + 1} />
       </div>
     </div>
   );
