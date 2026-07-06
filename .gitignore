@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# ad-hoc build output dumps (e.g. `npm run build > build-check.txt`) — never commit
+build-check*.txt
+
 # env files (can opt-in for committing if needed)
 .env
 .env.production
