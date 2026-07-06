@@ -21,6 +21,15 @@ export async function POST(req: Request): Promise<Response> {
 
   const { endpoint, keys } = parsed.data;
 
+  const existing = await db.pushSubscription.findUnique({
+    where: { endpoint },
+    select: { userId: true },
+  });
+
+  if (existing && existing.userId !== session.user.profileId) {
+    await db.pushSubscription.delete({ where: { endpoint } });
+  }
+
   await db.pushSubscription.upsert({
     where: { endpoint },
     create: {
@@ -31,6 +40,7 @@ export async function POST(req: Request): Promise<Response> {
       isActive: true,
     },
     update: {
+      userId: session.user.profileId,
       authKey: keys.auth,
       p256dhKey: keys.p256dh,
       isActive: true,

@@ -1,15 +1,16 @@
 import webpush from "web-push";
 import { db } from "@/lib/db";
 
-if (
-  process.env.VAPID_SUBJECT &&
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
-  process.env.VAPID_PRIVATE_KEY
-) {
+const vapidConfigured =
+  !!process.env.VAPID_SUBJECT &&
+  !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
+  !!process.env.VAPID_PRIVATE_KEY;
+
+if (vapidConfigured) {
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT,
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY,
+    process.env.VAPID_SUBJECT!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!,
   );
 }
 
@@ -24,6 +25,7 @@ export async function sendPushNotification(
   userId: string,
   payload: PushPayload,
 ): Promise<void> {
+  if (!vapidConfigured) return;
   try {
     const subscriptions = await db.pushSubscription.findMany({
       where: { userId, isActive: true },
