@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { sendPushNotification, getNotificationUrl } from "@/lib/push";
 
 interface CreateNotificationInput {
   userId: string;
@@ -18,6 +19,13 @@ interface CreateNotificationInput {
 export async function createNotification(input: CreateNotificationInput): Promise<void> {
   try {
     await db.notification.create({ data: input });
+
+    sendPushNotification(input.userId, {
+      title: input.title,
+      body: input.message,
+      url: getNotificationUrl(input.type, input.entityId),
+      tag: input.type,
+    }).catch(() => {});
   } catch {
     // Silent fail — notification failure must never block business logic
   }
@@ -33,6 +41,15 @@ export async function createNotifications(inputs: CreateNotificationInput[]): Pr
   if (inputs.length === 0) return;
   try {
     await db.$transaction(inputs.map((input) => db.notification.create({ data: input })));
+
+    for (const input of inputs) {
+      sendPushNotification(input.userId, {
+        title: input.title,
+        body: input.message,
+        url: getNotificationUrl(input.type, input.entityId),
+        tag: input.type,
+      }).catch(() => {});
+    }
   } catch {
     // Silent fail
   }
