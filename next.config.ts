@@ -19,6 +19,13 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/client-agreement/:path*", headers: noStore },
       { source: "/client-agreement", headers: noStore },
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Service-Worker-Allowed", value: "/" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
     ];
   },
   async redirects() {

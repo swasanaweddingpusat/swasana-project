@@ -410,7 +410,7 @@ export function RekrutmenOnboardingClient() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl p-1">
+        <TabsList className="flex h-auto w-full flex-col gap-1 rounded-2xl p-1 sm:grid sm:grid-cols-3 sm:gap-0">
           <TabsTrigger value="lowongan" className="rounded-xl gap-2"><Buildings weight="BoldDuotone" className="h-4 w-4" />Lowongan</TabsTrigger>
           <TabsTrigger value="kandidat" className="rounded-xl gap-2"><UserPlus weight="BoldDuotone" className="h-4 w-4" />Kandidat</TabsTrigger>
           <TabsTrigger value="onboarding" className="rounded-xl gap-2"><CheckCircle weight="BoldDuotone" className="h-4 w-4" />Onboarding</TabsTrigger>
@@ -437,45 +437,47 @@ export function RekrutmenOnboardingClient() {
             <Card className="rounded-2xl shadow-sm">
               <CardHeader className="space-y-2"><CardTitle className="text-lg font-heading">Daftar lowongan</CardTitle><p className="text-sm text-muted-foreground">Status lowongan, kandidat, dan aksi cepat publish/close.</p></CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader><TableRow><TableHead>Lowongan</TableHead><TableHead>Status</TableHead><TableHead>Kandidat</TableHead><TableHead>Detail</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {jobPostings.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">Belum ada lowongan.</TableCell></TableRow>
-                    ) : jobPostings.map((posting: JobPostingItem) => (
-                      <TableRow 
-                        key={posting.id} 
-                        onClick={() => handleViewJobPostingCandidates(posting.id)}
-                        className="group cursor-pointer hover:bg-muted/50 transition-colors"
-                      >
-                        <TableCell><div className="flex flex-col gap-0.5"><button onClick={(e) => { e.stopPropagation(); handleViewJobPostingCandidates(posting.id); }} className="font-medium text-foreground hover:text-primary hover:underline text-left transition-colors">{posting.title}</button><span className="text-xs text-muted-foreground">{posting.department?.name ?? posting.position?.name ?? "Umum"}</span></div></TableCell>
-                        <TableCell><Badge variant={posting.status === "open" ? "default" : "secondary"} className="rounded-full">{posting.status === "open" ? "Open" : posting.status}</Badge></TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-between gap-2">
-                            <span>{posting._count.candidates} kandidat</span>
-                            <ArrowRight weight="BoldDuotone" className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </TableCell>
-                        <TableCell><div className="flex flex-col gap-0.5 text-xs text-muted-foreground"><span>{posting.location ?? "Lokasi belum diisi"}</span><span>{formatCurrency(posting.salaryRangeMin ? Number(posting.salaryRangeMin) : null)} - {formatCurrency(posting.salaryRangeMax ? Number(posting.salaryRangeMax) : null)}</span><span>Open: {formatDate(posting.openDate)}</span></div></TableCell>
-                        <TableCell>
-                          <div className="flex justify-end gap-2">
-                            {posting.status === "open" ? (
-                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async () => {
-                                const result = await closeJobPostingMutation.mutateAsync(posting.id);
-                                if (result.success) toast.success("Lowongan ditutup"); else toast.error(result.error ?? "Gagal menutup lowongan");
-                              }} disabled={closeJobPostingMutation.isPending}><TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />Close</Button>
-                            ) : (
-                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async () => {
-                                const result = await publishJobPostingMutation.mutateAsync(posting.id);
-                                if (result.success) toast.success("Lowongan dipublikasikan"); else toast.error(result.error ?? "Gagal publish lowongan");
-                              }} disabled={publishJobPostingMutation.isPending}><ArrowRight weight="BoldDuotone" className="h-4 w-4" />Publish</Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Lowongan</TableHead><TableHead>Status</TableHead><TableHead>Kandidat</TableHead><TableHead>Detail</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {jobPostings.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">Belum ada lowongan.</TableCell></TableRow>
+                      ) : jobPostings.map((posting: JobPostingItem) => (
+                        <TableRow
+                          key={posting.id}
+                          onClick={() => handleViewJobPostingCandidates(posting.id)}
+                          className="group cursor-pointer hover:bg-muted/50 transition-colors"
+                        >
+                          <TableCell><div className="flex flex-col gap-0.5"><button onClick={(e) => { e.stopPropagation(); handleViewJobPostingCandidates(posting.id); }} className="font-medium text-foreground hover:text-primary hover:underline text-left transition-colors">{posting.title}</button><span className="text-xs text-muted-foreground">{posting.department?.name ?? posting.position?.name ?? "Umum"}</span></div></TableCell>
+                          <TableCell><Badge variant={posting.status === "open" ? "default" : "secondary"} className="rounded-full">{posting.status === "open" ? "Open" : posting.status}</Badge></TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-between gap-2">
+                              <span>{posting._count.candidates} kandidat</span>
+                              <ArrowRight weight="BoldDuotone" className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </TableCell>
+                          <TableCell><div className="flex flex-col gap-0.5 text-xs text-muted-foreground"><span>{posting.location ?? "Lokasi belum diisi"}</span><span>{formatCurrency(posting.salaryRangeMin ? Number(posting.salaryRangeMin) : null)} - {formatCurrency(posting.salaryRangeMax ? Number(posting.salaryRangeMax) : null)}</span><span>Open: {formatDate(posting.openDate)}</span></div></TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              {posting.status === "open" ? (
+                                <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async () => {
+                                  const result = await closeJobPostingMutation.mutateAsync(posting.id);
+                                  if (result.success) toast.success("Lowongan ditutup"); else toast.error(result.error ?? "Gagal menutup lowongan");
+                                }} disabled={closeJobPostingMutation.isPending}><TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />Close</Button>
+                              ) : (
+                                <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={async () => {
+                                  const result = await publishJobPostingMutation.mutateAsync(posting.id);
+                                  if (result.success) toast.success("Lowongan dipublikasikan"); else toast.error(result.error ?? "Gagal publish lowongan");
+                                }} disabled={publishJobPostingMutation.isPending}><ArrowRight weight="BoldDuotone" className="h-4 w-4" />Publish</Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -506,28 +508,30 @@ export function RekrutmenOnboardingClient() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Kandidat</TableHead><TableHead>Lowongan</TableHead><TableHead>Tahap</TableHead><TableHead>Rating</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {visibleCandidates.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">Belum ada kandidat untuk filter ini.</TableCell></TableRow>
-                      ) : visibleCandidates.map((candidate: CandidateItem) => (
-                        <TableRow key={candidate.id}>
-                          <TableCell><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">{getInitials(candidate.fullName)}</div><div className="flex flex-col gap-0.5"><span className="font-medium text-foreground">{candidate.fullName}</span><span className="text-xs text-muted-foreground">{candidate.email}</span></div></div></TableCell>
-                          <TableCell>{candidate.jobPosting?.title ?? "-"}</TableCell>
-                          <TableCell><Badge variant={candidate.stage === "hired" ? "default" : candidate.stage === "rejected" ? "destructive" : "secondary"} className="rounded-full">{STAGE_LABELS[candidate.stage] ?? candidate.stage}</Badge></TableCell>
-                          <TableCell>{candidate.rating ? `${candidate.rating}/5` : "-"}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap justify-end gap-2">
-                              <select value={candidateStageDrafts[candidate.id] ?? candidate.stage} onChange={(event) => setCandidateStageDrafts((current) => ({ ...current, [candidate.id]: event.target.value }))} className="h-10 rounded-full border border-input bg-background px-3 text-sm outline-none">{STAGE_OPTIONS.map((stage) => <option key={stage} value={stage}>{STAGE_LABELS[stage]}</option>)}</select>
-                              <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={() => handleMoveCandidateStage(candidate.id)}><Pen weight="BoldDuotone" className="h-4 w-4" />Pindah tahap</Button>
-                              <Button size="sm" className="rounded-full gap-1.5" onClick={() => handleHireCandidate(candidate.id)}><CheckCircle weight="BoldDuotone" className="h-4 w-4" />Hire</Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Kandidat</TableHead><TableHead>Lowongan</TableHead><TableHead>Tahap</TableHead><TableHead>Rating</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {visibleCandidates.length === 0 ? (
+                          <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">Belum ada kandidat untuk filter ini.</TableCell></TableRow>
+                        ) : visibleCandidates.map((candidate: CandidateItem) => (
+                          <TableRow key={candidate.id}>
+                            <TableCell><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">{getInitials(candidate.fullName)}</div><div className="flex flex-col gap-0.5"><span className="font-medium text-foreground">{candidate.fullName}</span><span className="text-xs text-muted-foreground">{candidate.email}</span></div></div></TableCell>
+                            <TableCell>{candidate.jobPosting?.title ?? "-"}</TableCell>
+                            <TableCell><Badge variant={candidate.stage === "hired" ? "default" : candidate.stage === "rejected" ? "destructive" : "secondary"} className="rounded-full">{STAGE_LABELS[candidate.stage] ?? candidate.stage}</Badge></TableCell>
+                            <TableCell>{candidate.rating ? `${candidate.rating}/5` : "-"}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <select value={candidateStageDrafts[candidate.id] ?? candidate.stage} onChange={(event) => setCandidateStageDrafts((current) => ({ ...current, [candidate.id]: event.target.value }))} className="h-10 rounded-full border border-input bg-background px-3 text-sm outline-none">{STAGE_OPTIONS.map((stage) => <option key={stage} value={stage}>{STAGE_LABELS[stage]}</option>)}</select>
+                                <Button size="sm" variant="outline" className="rounded-full gap-1.5" onClick={() => handleMoveCandidateStage(candidate.id)}><Pen weight="BoldDuotone" className="h-4 w-4" />Pindah tahap</Button>
+                                <Button size="sm" className="rounded-full gap-1.5" onClick={() => handleHireCandidate(candidate.id)}><CheckCircle weight="BoldDuotone" className="h-4 w-4" />Hire</Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
 

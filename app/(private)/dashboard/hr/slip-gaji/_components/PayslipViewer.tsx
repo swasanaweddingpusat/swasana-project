@@ -100,7 +100,7 @@ export function PayslipViewer() {
               value={resolvedId}
               onValueChange={(val) => setSelectedId(val)}
             >
-              <SelectTrigger className="w-52 rounded-xl">
+              <SelectTrigger className="w-full sm:w-52 rounded-xl">
                 <SelectValue placeholder="Pilih periode" />
               </SelectTrigger>
               <SelectContent>

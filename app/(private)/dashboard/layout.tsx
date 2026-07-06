@@ -9,6 +9,7 @@ import { LeadDrawerProvider } from "@/components/providers/lead-drawer-provider"
 import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
 import { MiceBookingDrawerProvider } from "@/components/providers/mice-booking-drawer-provider";
 import { MobileBottomNav } from "./_components/mobile-bottom-nav/MobileBottomNav";
+import { PwaInstallPrompt } from "@/components/shared/PwaInstallPrompt";
 
 export default function DashboardLayout({
   children,
@@ -37,6 +38,7 @@ export default function DashboardLayout({
                   <Suspense fallback={null}>
                     <MobileBottomNav />
                   </Suspense>
+                  <PwaInstallPrompt />
                 </SidebarInset>
               </LeadDrawerProvider>
             </QuotationDrawerProvider>

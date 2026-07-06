@@ -44,7 +44,7 @@ export function LeaveBalanceCards() {
             value={String(year)}
             onValueChange={(v) => setYear(Number(v))}
           >
-            <SelectTrigger className="w-28 rounded-xl">
+            <SelectTrigger className="w-full sm:w-28 rounded-xl">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
