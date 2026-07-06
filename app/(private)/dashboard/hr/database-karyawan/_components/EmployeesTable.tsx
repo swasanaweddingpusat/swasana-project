@@ -336,13 +336,13 @@ export function EmployeesTable() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-12">No</TableHead>
+                          <TableHead className="hidden w-12 sm:table-cell">No</TableHead>
                           <TableHead>Karyawan</TableHead>
-                          <TableHead>Departemen</TableHead>
-                          <TableHead>Posisi</TableHead>
-                          <TableHead>Tipe</TableHead>
+                          <TableHead className="hidden sm:table-cell">Departemen</TableHead>
+                          <TableHead className="hidden sm:table-cell">Posisi</TableHead>
+                          <TableHead className="hidden sm:table-cell">Tipe</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Tgl Masuk</TableHead>
+                          <TableHead className="hidden sm:table-cell">Tgl Masuk</TableHead>
                           <TableHead className="w-28 text-center">
                             Aksi
                           </TableHead>
@@ -361,7 +361,7 @@ export function EmployeesTable() {
 
                           return (
                             <TableRow key={emp.id}>
-                              <TableCell className="text-muted-foreground">
+                              <TableCell className="hidden text-muted-foreground sm:table-cell">
                                 {rowNum}
                               </TableCell>
                               <TableCell>
@@ -385,13 +385,13 @@ export function EmployeesTable() {
                                   </div>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="hidden text-sm sm:table-cell">
                                 {emp.department?.name ?? "-"}
                               </TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="hidden text-sm sm:table-cell">
                                 {emp.position?.name ?? "-"}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="hidden sm:table-cell">
                                 <Badge variant="outline" className="rounded-full">
                                   {empTypeLabel}
                                 </Badge>
@@ -401,7 +401,7 @@ export function EmployeesTable() {
                                   {statusBadge.label}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="hidden text-sm sm:table-cell">
                                 {formatDate(emp.joinDate)}
                               </TableCell>
                               <TableCell>
