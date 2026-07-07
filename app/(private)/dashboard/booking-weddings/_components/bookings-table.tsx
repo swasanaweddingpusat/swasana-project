@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice, Gift, Tag, HandMoney } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice, Gift, Tag, HandMoney, ClockCircle } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,6 +20,7 @@ import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { useSearchParams, useRouter as useNextRouter } from "next/navigation";
 import { useBookings, useDeleteBooking } from "@/hooks/use-bookings";
+import { useSyncBookingPackage } from "@/hooks/use-booking-revisions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +40,8 @@ import { BookingTCDrawer } from "./booking-tc-drawer";
 import { EditPackageDrawer, type EditPackageTarget } from "./EditPackageDrawer";
 import { SetHargaBookingDrawer } from "./SetHargaBookingDrawer";
 import { EditComplimentaryDrawer, type EditComplimentaryTarget } from "./EditComplimentaryDrawer";
+import { RevisionHistoryDrawer } from "./RevisionHistoryDrawer";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EditTakeoutDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/EditTakeoutDrawer";
 import { EditTopDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-top-drawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
@@ -116,6 +119,7 @@ const ROWS_PER_PAGE = 10;
 export function BookingsTable({ initialData, salesProfiles }: { initialData: BookingsResult; salesProfiles: SalesProfile[] }) {
   const qc = useQueryClient();
   const deleteMut = useDeleteBooking();
+  const syncPackageMut = useSyncBookingPackage();
   const { can, isAdmin } = usePermissions();
   const { openBookingDrawer } = useBookingDrawer();
   const { user } = useCurrentUser();
@@ -206,6 +210,8 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
   const [editComplimentaryTarget, setEditComplimentaryTarget] = useState<EditComplimentaryTarget | null>(null);
   const [editTakeoutTarget, setEditTakeoutTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
+  const [revisionHistoryTarget, setRevisionHistoryTarget] = useState<BookingListItem | null>(null);
+  const [syncPackageTarget, setSyncPackageTarget] = useState<BookingListItem | null>(null);
   const [editTopTarget, setEditTopTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   // Approval records now ride along on each booking row (Fix #1: getBookings attaches
   // booking.bookingApprovals for the active page only), so no separate fetch of ALL
@@ -349,6 +355,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <span className="truncate">Rev {rev.revisionNumber} — {rev.packageName}{rev.pax ? ` · ${rev.pax} PAX` : ""}</span>
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="cursor-pointer" onClick={() => setRevisionHistoryTarget(booking)}>
+          <ClockCircle weight="BoldDuotone" className="mr-2 h-4 w-4" />
+          Kelola Versi…
+        </DropdownMenuItem>
       </>
     );
   }
@@ -369,6 +380,11 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         {can("booking", "edit-package") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && booking.bookingStatus !== "Canceled" && (
           <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditPackageTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
             <Widget weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Package
+          </DropdownMenuItem>
+        )}
+        {can("booking", "edit") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && booking.bookingStatus !== "Canceled" && (
+          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSyncPackageTarget(booking); }}>
+            <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Sync Paket dari Master
           </DropdownMenuItem>
         )}
         {can("booking", "edit-package") && (
@@ -1606,6 +1622,38 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         open={!!poPreviewTarget}
         onOpenChange={(open) => { if (!open) setPoPreviewTarget(null); }}
         target={poPreviewTarget}
+      />
+
+      {/* Riwayat Versi — lihat & restore versi lama (append-only) */}
+      <RevisionHistoryDrawer
+        booking={revisionHistoryTarget}
+        open={!!revisionHistoryTarget}
+        onOpenChange={(open) => { if (!open) setRevisionHistoryTarget(null); }}
+        onPreviewPO={previewPO}
+      />
+
+      {/* Sync Paket dari Master — tarik ulang data paket terbaru ke snapshot booking */}
+      <ConfirmDialog
+        open={!!syncPackageTarget}
+        onOpenChange={(o) => { if (!o) setSyncPackageTarget(null); }}
+        title="Sync paket dari master?"
+        description={
+          "Data paket (nama, harga, item, T&C) akan ditarik ulang dari data master terbaru dan menimpa " +
+          "snapshot booking ini. Setelan takeout tetap dipertahankan. Ini membuat versi baru, me-reset " +
+          "approval ke Pending, dan klien harus tanda tangan ulang." +
+          ((syncPackageTarget?.termOfPayments ?? []).some((t) => t.paymentStatus === "paid" || t.paymentStatus === "refund" || t.ackStatus === "acknowledged")
+            ? " ⚠️ Booking ini sudah punya pembayaran tercatat — jika harga berubah, cek ulang cicilan (TOP) via Set Harga."
+            : "")
+        }
+        confirmLabel={syncPackageMut.isPending ? "Memproses..." : "Ya, sync sekarang"}
+        onConfirm={async () => {
+          if (!syncPackageTarget) return;
+          const res = await syncPackageMut.mutateAsync({ bookingId: syncPackageTarget.id });
+          if (!res.success) { toast.error(res.error ?? "Gagal sync paket."); return; }
+          toast.success("Paket berhasil di-sync dari master");
+          invalidateDetail(syncPackageTarget.id);
+          setSyncPackageTarget(null);
+        }}
       />
 
       {/* Booking Approval Dialog (from chip) */}

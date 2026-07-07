@@ -55,6 +55,36 @@ export async function updateTermOfPayments(
   }
 
   try {
+    // ── Guard: the payment schedule must reconcile to the package price ──────────
+    // Total of all billable (non-refund) terms MUST equal price-after-discount.
+    // Refund terms are a separate reconciliation and are never part of the payload,
+    // so they are excluded here (mirrors the drawer's on-screen "Selisih"). Reject
+    // a mismatched schedule server-side so an under/over-billed TOP can never persist,
+    // even if the client-side guard is bypassed.
+    const pricing = await db.snapPackagePricing.findUnique({
+      where: { bookingId },
+      select: { price: true },
+    });
+    const packagePrice = pricing?.price ?? 0;
+    // Use the discount being saved when provided; otherwise the booking's stored value.
+    let effectiveDiscount = discount?.discountAmount ?? 0;
+    if (!discount) {
+      const b = await db.booking.findUnique({ where: { id: bookingId }, select: { discountAmount: true } });
+      effectiveDiscount = b?.discountAmount ?? 0;
+    }
+    const priceAfterDiscount = Math.max(0, packagePrice - effectiveDiscount);
+    const totalTerms =
+      terms.reduce((s, t) => s + (Number(t.amount) || 0), 0) +
+      (newTerms?.reduce((s, t) => s + (Number(t.amount) || 0), 0) ?? 0);
+    if (totalTerms !== priceAfterDiscount) {
+      const diff = totalTerms - priceAfterDiscount;
+      const fmt = new Intl.NumberFormat("id-ID").format(Math.abs(diff));
+      return {
+        success: false,
+        error: `Total cicilan tidak sesuai harga paket. ${diff < 0 ? "Kurang" : "Lebih"} Rp${fmt}. Sesuaikan dulu sebelum menyimpan.`,
+      };
+    }
+
     // Fetch current ackStatus for all terms being updated so we can skip
     // those already acknowledged (same protection as paid — they are locked).
     const existingTerms = await db.termOfPayment.findMany({
