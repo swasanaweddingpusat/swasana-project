@@ -75,6 +75,16 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
+# sharp (Next.js image optimization) is a native module needing libvips. The
+# `output: "standalone"` trace does NOT reliably bundle its linux-x64 binary +
+# libvips shared lib, so the runtime hits ERR_DLOPEN_FAILED (libvips-cpp.so
+# missing). Install it explicitly for this platform AFTER the standalone COPY so
+# a partial sharp folder from the trace can't overwrite this clean install.
+# --include=optional pulls the platform @img/* packages (binary + libvips).
+RUN npm install --no-save --no-audit --no-fund --include=optional \
+      --os=linux --cpu=x64 sharp@0.35.3 \
+  && npm cache clean --force
+
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh \
   && chown -R nextjs:nodejs /app/node_modules
