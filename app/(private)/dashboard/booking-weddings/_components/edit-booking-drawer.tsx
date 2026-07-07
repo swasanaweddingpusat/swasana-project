@@ -89,14 +89,9 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
 
-  // ── Change detection (untuk trigger continue flow setelah save) ──
+  // ── Change detection (venue/package → triggers continue flow after save) ──
   const [originalVenueId, setOriginalVenueId] = useState("");
   const [originalPackageId, setOriginalPackageId] = useState("");
-  const [originalBookingDate, setOriginalBookingDate] = useState("");
-  const [originalWeddingSession, setOriginalWeddingSession] = useState("");
-  const [originalWeddingType, setOriginalWeddingType] = useState("");
-  const [originalTime, setOriginalTime] = useState("");
-  const [originalNoteDateEvent, setOriginalNoteDateEvent] = useState("");
 
   // ── Venue availability ──
   type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
@@ -177,14 +172,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setTime(booking.eventTime ?? "");
     setNoteDateEvent(booking.notes ?? "");
 
-    // Snapshot originals for change detection
+    // Snapshot venue/package for change detection — only these two drive the
+    // continue flow (they re-derive package items / takeout / TOP). Other step-2
+    // fields (date, session, type, time, note) just save in place.
     setOriginalVenueId(booking.venueId ?? "");
     setOriginalPackageId(booking.packageId ?? "");
-    setOriginalBookingDate(eventDateStr);
-    setOriginalWeddingSession(booking.weddingSession ?? "");
-    setOriginalWeddingType(booking.weddingType ?? "");
-    setOriginalTime(booking.eventTime ?? "");
-    setOriginalNoteDateEvent(booking.notes ?? "");
   }, [open, booking]);
 
   // ── Init detail fields (email, NIK, address, bitrix, name, contact) ──
@@ -250,15 +242,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     return sessions;
   }
 
-  // ── Change detection (step 2 fields) ──
+  // ── Continue-flow trigger: ONLY venue or package changes require re-deriving
+  // package items / takeout / TOP. Editing date/session/type/time/note alone just
+  // saves in place — the button reads "Save" and the drawer stays open. ──
   const hasVenueTabChange =
-    venueId !== originalVenueId ||
-    packageId !== originalPackageId ||
-    bookingDate !== originalBookingDate ||
-    weddingSession !== originalWeddingSession ||
-    weddingType !== originalWeddingType ||
-    time !== originalTime ||
-    noteDateEvent !== originalNoteDateEvent;
+    venueId !== originalVenueId || packageId !== originalPackageId;
 
   // ── Completeness ──
   const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0);
@@ -334,7 +322,11 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       if (hasVenueTabChange) {
         setContinueFlowStep("package-items");
       } else {
-        onOpenChange(false);
+        // No venue/package change → plain save, keep the drawer open. Re-sync the
+        // baseline so the freshly-saved values become the new "original" (nothing
+        // else here triggers the continue flow anyway).
+        setOriginalVenueId(venueId);
+        setOriginalPackageId(packageId);
       }
     } finally {
       setIsSubmitting(false);
