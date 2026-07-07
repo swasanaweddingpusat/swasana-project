@@ -61,3 +61,5 @@ docs/superpowers/
 # Throwaway/ad-hoc dev & migration scripts (DB clone, MinIO tests, investigations) — not for repo
 /scripts/_*
 /prisma/seeders/_*
+# Exception: _client.ts is a real shared dependency imported by every seeder — must be tracked
+!/prisma/seeders/_client.ts
