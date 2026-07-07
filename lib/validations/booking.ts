@@ -151,6 +151,22 @@ export const updateBookingClientInfoSchema = z.object({
   sourceOfInformationId: z.string().optional().nullable(),
 });
 
+/** Restore a past BookingRevision as the active version. Rolls the snapshot back
+ *  to the target revision's content (package/venue/pricing/items), creating a NEW
+ *  revision so history stays append-only. Resets approval + re-signature. */
+export const restoreBookingRevisionSchema = z.object({
+  bookingId: z.string().min(1),
+  revisionId: z.string().min(1),
+});
+
+/** Sync the booking's package snapshot from the current master Package. Re-pulls
+ *  name/notes/pricing/items/category-prices/T&C from the master (e.g. after the
+ *  master was corrected), preserving per-booking takeout toggles. Creates a new
+ *  revision + resets approval. */
+export const syncBookingPackageSchema = z.object({
+  bookingId: z.string().min(1),
+});
+
 /** Signature-only update: updates signingLocation + ApprovalRecordStep signature
  *  WITHOUT touching venue/package/TOP or triggering approval reset. */
 export const updateBookingSignatureSchema = z.object({
@@ -166,3 +182,5 @@ export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 export type EditBookingInput = z.infer<typeof editBookingSchema>;
 export type UpdateBookingClientInfoInput = z.infer<typeof updateBookingClientInfoSchema>;
 export type UpdateBookingSignatureInput = z.infer<typeof updateBookingSignatureSchema>;
+export type RestoreBookingRevisionInput = z.infer<typeof restoreBookingRevisionSchema>;
+export type SyncBookingPackageInput = z.infer<typeof syncBookingPackageSchema>;

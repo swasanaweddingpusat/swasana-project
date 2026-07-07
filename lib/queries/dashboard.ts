@@ -7,8 +7,6 @@ import {
   getAllGroups,
   getGroupPerformance,
 } from "@/lib/queries/groups";
-import type { GroupAchievementData } from "@/app/(private)/dashboard/_components/group-achievement-section";
-import type { SalesPerformanceItem } from "@/app/(private)/dashboard/_components/sales-leaderboard";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -17,6 +15,25 @@ export interface DashboardStats {
   totalRevenue: number;
   pendingBookings: number;
   lostBookings: number;
+}
+
+export interface GroupAchievementData {
+  id: string;
+  name: string;
+  leaderName: string;
+  memberCount: number;
+  revenue: number;
+  target: number;
+  confirmedBookings: number;
+}
+
+export interface SalesPerformanceItem {
+  profileId: string;
+  name: string;
+  avatarUrl: string | null;
+  revenue: number;
+  confirmedBookings: number;
+  target: number;
 }
 
 export interface DashboardData {
@@ -138,4 +155,75 @@ export async function getDashboardData(
   );
 
   return { stats, groups: dashboardGroups, salesLeaderboard };
+}
+
+// ─── Raw (uncached) query functions for API routes ──────────────────────────
+
+async function _queryGroupsAndLeaderboard(
+  profileId: string | undefined,
+  startDate: Date,
+  endDate: Date,
+): Promise<{ groups: GroupAchievementData[]; leaderboard: SalesPerformanceItem[] }> {
+  const groups = profileId
+    ? await getUserGroups(profileId)
+    : await getAllGroups();
+
+  const groupPerformances = await Promise.all(
+    groups.map(async (g) => ({
+      group: g,
+      members: await getGroupPerformance(g.id, startDate, endDate),
+    })),
+  );
+
+  const dashboardGroups: GroupAchievementData[] = groupPerformances.map(
+    ({ group, members }) => ({
+      id: group.id,
+      name: group.name,
+      leaderName: group.leader?.fullName ?? "—",
+      memberCount: group._count.members,
+      revenue: members.reduce((s, m) => s + m.actual, 0),
+      target: members.reduce((s, m) => s + m.target, 0),
+      confirmedBookings: members.reduce((s, m) => s + m.confirmed, 0),
+    }),
+  );
+
+  const salesMap = new Map<string, SalesPerformanceItem>();
+  for (const { members } of groupPerformances) {
+    for (const m of members) {
+      if (!salesMap.has(m.profileId)) {
+        salesMap.set(m.profileId, {
+          profileId: m.profileId,
+          name: m.fullName ?? "—",
+          avatarUrl: resolveAvatarUrl(m.avatarUrl),
+          revenue: m.actual,
+          confirmedBookings: m.confirmed,
+          target: m.target,
+        });
+      }
+    }
+  }
+
+  const leaderboard = [...salesMap.values()].sort(
+    (a, b) => b.revenue - a.revenue,
+  );
+
+  return { groups: dashboardGroups, leaderboard };
+}
+
+export async function getGroupAchievementRaw(
+  profileId: string | undefined,
+  startDate: Date,
+  endDate: Date,
+): Promise<GroupAchievementData[]> {
+  const { groups } = await _queryGroupsAndLeaderboard(profileId, startDate, endDate);
+  return groups;
+}
+
+export async function getSalesLeaderboardRaw(
+  profileId: string | undefined,
+  startDate: Date,
+  endDate: Date,
+): Promise<SalesPerformanceItem[]> {
+  const { leaderboard } = await _queryGroupsAndLeaderboard(profileId, startDate, endDate);
+  return leaderboard;
 }

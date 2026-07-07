@@ -128,6 +128,37 @@ function parseRichText(text: string, baseFontWeight: string = "normal", fontSize
 function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fontSize: number = 8): React.ReactNode {
   let k = 0;
 
+  // Render a run of <p>…</p> paragraphs into a single <Text>, preserving blank
+  // lines (empty <p></p> produced by pressing Enter on an empty line) as real
+  // line breaks. Without this, .filter(Boolean) drops empty paragraphs and the
+  // list-path collapses adjacent paragraphs with no separator — losing the
+  // spacing the user typed in the editor entirely.
+  function renderParagraphRun(chunk: string, key: string, marginTop: number = 0, keepTrailing: boolean = false): React.ReactNode {
+    const lines = chunk
+      .replace(/^\s*<p>|<\/p>\s*$/g, "")
+      .split(/<\/p>\s*<p>|<br\s*\/?>/)
+      .map((b) => b.replace(/<\/?p>/g, "").trim());
+    while (lines.length && !lines[0]) lines.shift();
+    // Trailing blank lines are dropped for standalone text (no dangling gap at the
+    // end of a block). But when this segment is FOLLOWED BY A LIST, those blank
+    // lines are the spacing the user typed between the text and the list — keep them.
+    if (!keepTrailing) {
+      while (lines.length && !lines[lines.length - 1]) lines.pop();
+    }
+    if (lines.length === 0) return null;
+    return (
+      <Text key={key} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop }}>
+        {lines.map((c, i) => (
+          // Empty lines render a non-breaking space, not "". react-pdf collapses a
+          // blank line that has no glyph to ~zero height, so a single "enter-enter"
+          // gap would vanish — the user had to press Enter 3-4× before a gap showed.
+          // The   forces the line to occupy a real line-height.
+          <React.Fragment key={i}>{i > 0 && "\n"}{c ? parseInlineHtml(c) : " "}</React.Fragment>
+        ))}
+      </Text>
+    );
+  }
+
   function renderList(listHtml: string, type: "ol" | "ul", depth: number, startNum: number = 1): React.ReactNode[] {
     const nodes: React.ReactNode[] = [];
     // Use a stack-based approach to find top-level <li> items
@@ -164,12 +195,12 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       }
 
       const bullet = type === "ol" ? `${idx + startNum}. ` : "• ";
-      const indent = depth * 10;
+      const indent = depth * 6;
 
       if (mainText) {
         nodes.push(
           <View key={k++} wrap={depth === 0 ? false : undefined} style={{ flexDirection: "row", marginLeft: indent, marginBottom: depth === 0 ? 2 : 1 }}>
-            <Text style={{ fontSize, width: type === "ol" ? 18 : 10, lineHeight: 1.3 }}>{bullet}</Text>
+            <Text style={{ fontSize, width: type === "ol" ? 13 : 8, lineHeight: 1.3 }}>{bullet}</Text>
             <Text style={{ fontSize, flex: 1, lineHeight: 1.3 }}>{parseInlineHtml(mainText)}</Text>
           </View>
         );
@@ -229,10 +260,16 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       temp = temp.slice(pos);
     }
 
-    for (const seg of segments) {
+    for (let si = 0; si < segments.length; si++) {
+      const seg = segments[si];
       if (seg.type === "text") {
-        const clean = seg.content.replace(/<\/?p>/g, "").trim();
-        if (clean) elements.push(<Text key={k++} style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold", marginTop: 10 }}>{parseInlineHtml(clean)}</Text>);
+        // keepTrailing only when a LIST follows this text — the blank lines at the
+        // end of the segment are the spacing the user typed between the paragraph
+        // and the list below. A trailing text block (list → text) still trims them
+        // so no gap dangles at the end of the document.
+        const followedByList = segments[si + 1]?.type === "list";
+        const node = renderParagraphRun(seg.content, `${k++}`, 10, followedByList);
+        if (node) elements.push(node);
       } else {
         elements.push(<View key={k++}>{renderList(seg.content, seg.listType!, 0, seg.start ?? 1)}</View>);
       }
@@ -252,13 +289,13 @@ function parseHtmlToReactPdf(html: string, baseFontWeight: string = "normal", fo
       const text = nm ? nm[2] : (bulRe.exec(b)?.[1] ?? b);
       return (
         <View key={i} wrap={false} style={{ flexDirection: "row", marginBottom: 2, alignItems: "flex-start" }}>
-          <Text style={{ fontSize, lineHeight: 1.3, width: 18, textAlign: "right", marginRight: 4 }}>{bullet}</Text>
+          <Text style={{ fontSize, lineHeight: 1.3, width: 13, textAlign: "right", marginRight: 3 }}>{bullet}</Text>
           <Text style={{ fontSize, flex: 1, lineHeight: 1.3, fontWeight: baseFontWeight as "normal" | "bold" }}>{parseInlineHtml(text)}</Text>
         </View>
       );
     })}</>;
   }
-  return (<Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }}>{cleanBlocks.map((c, i) => (<React.Fragment key={i}>{i > 0 && "\n"}{parseInlineHtml(c)}</React.Fragment>))}</Text>);
+  return renderParagraphRun(html, `${k++}`) ?? <Text style={{ fontSize, fontWeight: baseFontWeight as "normal" | "bold" }} />;
 }
 
 function renderHtmlToPdf(html: string) {
@@ -762,9 +799,17 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               .map((t) => {
                 const d = t.dueDate ?? createdAt;
                 const tgl = new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
+                // Bank tujuan lengkap: "BCA a.n. PT CITRA SWASANA BARU (1234567890)".
+                // Rakit hanya bagian yang ada isinya biar gak muncul "a.n." / "()" kosong.
+                const pm = booking.paymentMethod;
+                const bankParts: string[] = [];
+                if (pm?.bankName?.trim()) bankParts.push(pm.bankName.trim());
+                if (pm?.bankRecipient?.trim()) bankParts.push(`a.n. ${pm.bankRecipient.trim()}`);
+                if (pm?.bankAccountNumber?.trim()) bankParts.push(`(${pm.bankAccountNumber.trim()})`);
+                const bankInfo = bankParts.join(" ");
                 return (
                   <View key={t.id} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
-                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{t.name} via {booking.paymentMethod?.bankName ?? ""} {tgl}</Text>
+                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{t.name}{bankInfo ? ` via ${bankInfo}` : ""} · {tgl}</Text>
                     <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{fmtRp(t.amount)}</Text>
                   </View>
                 );

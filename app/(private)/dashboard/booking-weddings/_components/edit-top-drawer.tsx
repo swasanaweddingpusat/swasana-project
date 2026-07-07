@@ -285,6 +285,17 @@ function TopContent({
     // Order changed if any term appears at a different position than in initialTerms
     const orderChanged = terms.some((t, i) => initialTerms[i]?.id !== t.id);
     if (orderChanged) return true;
+    // Payment method (bank tujuan) lives in a separate state map, NOT on the term
+    // object — compare it explicitly, otherwise changing only the bank leaves the
+    // Update button disabled even though updateTermOfPayments does persist it.
+    const methodChanged = terms.some((t) => {
+      const init = initById.get(t.id);
+      if (!init) return false; // new term already caught by length check
+      return (termPaymentMethods[t.id] ?? "") !== (init.paymentMethodId ?? "");
+    });
+    if (methodChanged) return true;
+    // A freshly-picked evidence file (not yet uploaded) counts as a change too.
+    if (Object.keys(pendingFiles).length > 0) return true;
     return terms.some((t) => {
       const init = initById.get(t.id);
       if (!init) return true; // new term
@@ -293,10 +304,11 @@ function TopContent({
         Number(t.amount) !== Number(init.amount) ||
         t.dueDate !== init.dueDate ||
         t.paymentStatus !== init.paymentStatus ||
-        (t.notes ?? "") !== (init.notes ?? "")
+        (t.notes ?? "") !== (init.notes ?? "") ||
+        (t.paymentEvidence ?? "") !== (init.paymentEvidence ?? "") // evidence removed
       );
     });
-  }, [terms, initialTerms, discountName, initialDiscountName, discountAmount, initialDiscountAmount]);
+  }, [terms, initialTerms, discountName, initialDiscountName, discountAmount, initialDiscountAmount, termPaymentMethods, pendingFiles]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -334,6 +346,21 @@ function TopContent({
   };
 
   const handleUpdate = async () => {
+    // Reconciliation guard: total billable terms MUST equal price-after-discount.
+    // Button stays clickable (so the user gets clear feedback), but a mismatch shows
+    // a toast and stops — nothing is saved and the continue flow does not advance.
+    // Runs BEFORE the no-change early-return so an already-mismatched TOP can't slip
+    // through by simply clicking Continue without edits. Server re-validates too.
+    if (difference !== 0) {
+      const absDiff = fmtRp(Math.abs(difference));
+      toast.error(
+        difference < 0
+          ? `Total cicilan kurang Rp${absDiff} dari harga paket. Sesuaikan dulu sebelum lanjut.`
+          : `Total cicilan lebih Rp${absDiff} dari harga paket. Sesuaikan dulu sebelum lanjut.`,
+      );
+      return;
+    }
+
     // Continue flow with no changes — skip API call and advance immediately.
     if (!isChanged && onSaved) {
       onSaved();
