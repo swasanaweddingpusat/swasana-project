@@ -326,7 +326,7 @@ export function WorkLocationManager() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="loc-lat">Latitude (-90 s/d 90)</Label>
                 <Input
@@ -361,7 +361,7 @@ export function WorkLocationManager() {
                 type="number"
                 value={form.radiusMeters}
                 onChange={(e) => setForm((f) => ({ ...f, radiusMeters: parseInt(e.target.value, 10) || 100 }))}
-                className="rounded-xl w-32"
+                className="rounded-xl w-full sm:w-32"
               />
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { sendPushNotification, getNotificationUrl } from "@/lib/push";
 
 interface CreateNotificationInput {
   userId: string;
@@ -18,6 +19,13 @@ interface CreateNotificationInput {
 export async function createNotification(input: CreateNotificationInput): Promise<void> {
   try {
     await db.notification.create({ data: input });
+
+    sendPushNotification(input.userId, {
+      title: input.title,
+      body: input.message,
+      url: getNotificationUrl(input.type, input.entityId),
+      tag: input.type,
+    }).catch(() => {});
   } catch {
     // Silent fail — notification failure must never block business logic
   }
@@ -33,6 +41,15 @@ export async function createNotifications(inputs: CreateNotificationInput[]): Pr
   if (inputs.length === 0) return;
   try {
     await db.$transaction(inputs.map((input) => db.notification.create({ data: input })));
+
+    for (const input of inputs) {
+      sendPushNotification(input.userId, {
+        title: input.title,
+        body: input.message,
+        url: getNotificationUrl(input.type, input.entityId),
+        tag: input.type,
+      }).catch(() => {});
+    }
   } catch {
     // Silent fail
   }
@@ -46,12 +63,21 @@ export async function notifyRole(roleId: string, notification: Omit<CreateNotifi
     const profiles = await db.profile.findMany({
       where: { roleId, status: "active" },
       select: { id: true },
+      take: 500,
     });
     if (profiles.length === 0) return;
-    // One array-form transaction (1 round-trip) instead of one create per profile.
     await db.$transaction(
       profiles.map((p) => db.notification.create({ data: { ...notification, userId: p.id } })),
     );
+
+    for (const p of profiles) {
+      sendPushNotification(p.id, {
+        title: notification.title,
+        body: notification.message,
+        url: getNotificationUrl(notification.type, notification.entityId),
+        tag: notification.type,
+      }).catch(() => {});
+    }
   } catch {
     // Silent fail
   }
@@ -67,12 +93,21 @@ export async function notifySuperAdmins(notification: Omit<CreateNotificationInp
     const profiles = await db.profile.findMany({
       where: { roleId: adminRole.id, status: "active", ...(excludeUserId ? { id: { not: excludeUserId } } : {}) },
       select: { id: true },
+      take: 100,
     });
     if (profiles.length === 0) return;
-    // One array-form transaction (1 round-trip) instead of one create per admin.
     await db.$transaction(
       profiles.map((p) => db.notification.create({ data: { ...notification, userId: p.id } })),
     );
+
+    for (const p of profiles) {
+      sendPushNotification(p.id, {
+        title: notification.title,
+        body: notification.message,
+        url: getNotificationUrl(notification.type, notification.entityId),
+        tag: notification.type,
+      }).catch(() => {});
+    }
   } catch {
     // Silent fail
   }

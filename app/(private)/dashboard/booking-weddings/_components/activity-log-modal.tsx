@@ -43,9 +43,12 @@ const FIELD_LABEL: Record<string, string> = {
   packageId: "Paket",
   weddingSession: "Sesi",
   weddingType: "Tipe Acara",
+  eventTime: "Jam Acara",
+  notes: "Catatan",
   rejectionNotes: "Alasan Reject",
   lostReason: "Alasan Lost",
   paymentMethodId: "Metode Pembayaran",
+  sourceOfInformationId: "Sumber Informasi",
 };
 
 export function ActivityLogModal({ open, onClose, bookingId, customerName }: Props) {

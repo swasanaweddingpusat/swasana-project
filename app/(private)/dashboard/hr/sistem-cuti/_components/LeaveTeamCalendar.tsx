@@ -166,7 +166,7 @@ export function LeaveTeamCalendar() {
               value={departmentId}
               onValueChange={setDepartmentId}
             >
-              <SelectTrigger className="w-44 rounded-xl">
+              <SelectTrigger className="w-full sm:w-44 rounded-xl">
                 <SelectValue placeholder="Semua Departemen" />
               </SelectTrigger>
               <SelectContent>
@@ -209,7 +209,7 @@ export function LeaveTeamCalendar() {
         )}
 
         {!isLoading && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             <div className="grid grid-cols-7 gap-px min-w-[640px]">
               {/* Header */}
               {DAY_LABELS.map((label) => (

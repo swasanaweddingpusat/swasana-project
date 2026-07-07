@@ -5,8 +5,11 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
+-- Drop old attendances table from previous migration (different schema)
+DROP TABLE IF EXISTS "attendances" CASCADE;
+
 -- Create attendances table
-CREATE TABLE IF NOT EXISTS "attendances" (
+CREATE TABLE "attendances" (
   "id"               TEXT NOT NULL,
   "profileId"        TEXT NOT NULL,
   "date"             TIMESTAMP(3) NOT NULL,

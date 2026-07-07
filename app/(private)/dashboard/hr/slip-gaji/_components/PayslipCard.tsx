@@ -142,7 +142,7 @@ export function PayslipCard({ payslip }: PayslipCardProps) {
         {/* ── Ringkasan Kehadiran ── */}
         <div>
           <h3 className="font-heading font-semibold text-base mb-3">Ringkasan Kehadiran</h3>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {[
               { label: "Hari Kerja", value: payslip.totalWorkDays },
               { label: "Hadir", value: payslip.totalPresent },

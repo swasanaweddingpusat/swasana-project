@@ -124,7 +124,7 @@ export function AttendanceClock() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="text-center space-y-1">
-            <p className="text-3xl font-heading font-bold tabular-nums tracking-tight">
+            <p className="text-2xl sm:text-3xl font-heading font-bold tabular-nums tracking-tight">
               {formatTime(currentTime)}
             </p>
             <p className="text-sm text-muted-foreground">{formatDate(currentTime)}</p>
@@ -184,7 +184,7 @@ export function AttendanceClock() {
             </div>
           )}
 
-          <div className="flex gap-3 justify-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 justify-center">
             {canClockIn && (
               <Button
                 size="lg"

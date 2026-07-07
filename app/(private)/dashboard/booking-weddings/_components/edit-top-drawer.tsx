@@ -346,6 +346,21 @@ function TopContent({
   };
 
   const handleUpdate = async () => {
+    // Reconciliation guard: total billable terms MUST equal price-after-discount.
+    // Button stays clickable (so the user gets clear feedback), but a mismatch shows
+    // a toast and stops — nothing is saved and the continue flow does not advance.
+    // Runs BEFORE the no-change early-return so an already-mismatched TOP can't slip
+    // through by simply clicking Continue without edits. Server re-validates too.
+    if (difference !== 0) {
+      const absDiff = fmtRp(Math.abs(difference));
+      toast.error(
+        difference < 0
+          ? `Total cicilan kurang Rp${absDiff} dari harga paket. Sesuaikan dulu sebelum lanjut.`
+          : `Total cicilan lebih Rp${absDiff} dari harga paket. Sesuaikan dulu sebelum lanjut.`,
+      );
+      return;
+    }
+
     // Continue flow with no changes — skip API call and advance immediately.
     if (!isChanged && onSaved) {
       onSaved();

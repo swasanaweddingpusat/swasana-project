@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# ad-hoc build output dumps (e.g. `npm run build > build-check.txt`) — never commit
+build-check*.txt
+
 # env files (can opt-in for committing if needed)
 .env
 .env.production
@@ -58,3 +61,5 @@ docs/superpowers/
 # Throwaway/ad-hoc dev & migration scripts (DB clone, MinIO tests, investigations) — not for repo
 /scripts/_*
 /prisma/seeders/_*
+# Exception: _client.ts is a real shared dependency imported by every seeder — must be tracked
+!/prisma/seeders/_client.ts
