@@ -1095,7 +1095,7 @@ export async function editBooking(data: unknown) {
       where: { id },
       select: {
         customerId: true, salesId: true, venueId: true, packageId: true,
-        eventDate: true, weddingSession: true, weddingType: true,
+        eventDate: true, eventTime: true, notes: true, weddingSession: true, weddingType: true,
         paymentMethodId: true, sourceOfInformationId: true,
         discountName: true, discountAmount: true, currentRevisionId: true, poNumber: true,
         snapshotFrozenAt: true,
@@ -1853,6 +1853,22 @@ export async function editBooking(data: unknown) {
         if (rest.eventDate !== booking.eventDate!.toISOString().split("T")[0]) diff.eventDate = rest.eventDate;
         if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
         if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
+        // Non-material fields a plain Save (no venue/package change) commonly edits.
+        // These were previously omitted from the diff, so the log row rendered empty
+        // and looked like nothing was recorded. Only emit when the caller sent the
+        // field (undefined = not provided → leave untouched) AND it actually changed.
+        if (rest.eventTime !== undefined && (rest.eventTime || "") !== (booking.eventTime ?? "")) {
+          diff.eventTime = `${booking.eventTime ?? "—"} → ${rest.eventTime || "—"}`;
+        }
+        if (rest.notes !== undefined && (rest.notes || "") !== (booking.notes ?? "")) {
+          diff.notes = `${booking.notes ?? "—"} → ${rest.notes || "—"}`;
+        }
+        if (rest.paymentMethodId !== undefined && (rest.paymentMethodId ?? "") !== (booking.paymentMethodId ?? "")) {
+          diff.paymentMethodId = { from: booking.paymentMethodId ?? "", to: rest.paymentMethodId ?? "" };
+        }
+        if (rest.sourceOfInformationId !== undefined && (rest.sourceOfInformationId ?? "") !== (booking.sourceOfInformationId ?? "")) {
+          diff.sourceOfInformationId = { from: booking.sourceOfInformationId ?? "", to: rest.sourceOfInformationId ?? "" };
+        }
 
         if (hasMaterialChange) {
           // New snap values (already updated by transaction)
