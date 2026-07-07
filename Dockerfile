@@ -75,6 +75,19 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
+# sharp (Next.js image optimization) is a native module needing libvips. The
+# `output: "standalone"` trace copies sharp + @img/sharp-linux-x64 but DROPS
+# @img/sharp-libvips-linux-x64 (the actual libvips-cpp.so provider — its path is
+# loaded dynamically so nft can't trace it), so the runtime hits
+# ERR_DLOPEN_FAILED. Reinstalling via `npm install --os/--cpu` is flaky: npm
+# frequently skips the NESTED optional dep @img/sharp-libvips-linux-x64. The
+# builder stage already has a complete, version-matched linux-x64 sharp tree
+# from `npm ci` (sharp 0.35.3, @img/sharp-linux-x64 0.35.3, libvips 1.3.2).
+# Copy it wholesale over the partial traced copy — deterministic, no network.
+RUN rm -rf node_modules/sharp node_modules/@img
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/sharp ./node_modules/sharp
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@img ./node_modules/@img
+
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh \
   && chown -R nextjs:nodejs /app/node_modules
