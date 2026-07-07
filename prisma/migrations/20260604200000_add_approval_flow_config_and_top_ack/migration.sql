@@ -17,8 +17,11 @@ CREATE TABLE IF NOT EXISTS "approval_flow_configs" (
 CREATE UNIQUE INDEX IF NOT EXISTS "approval_flow_configs_module_key"
     ON "approval_flow_configs"("module");
 
--- ── 2. Create approval_flow_steps ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS "approval_flow_steps" (
+-- ── 2. Drop old approval_flow_steps (different schema from 20260427 migration)
+DROP TABLE IF EXISTS "approval_flow_steps" CASCADE;
+
+-- Create approval_flow_steps
+CREATE TABLE "approval_flow_steps" (
     "id"             TEXT NOT NULL,
     "flowId"         TEXT NOT NULL,
     "stepOrder"      INTEGER NOT NULL,

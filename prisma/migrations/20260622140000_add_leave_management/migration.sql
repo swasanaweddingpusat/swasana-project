@@ -10,6 +10,10 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+-- Drop old leave tables from previous migration (different schema)
+DROP TABLE IF EXISTS "leave_balances" CASCADE;
+DROP TABLE IF EXISTS "leave_requests" CASCADE;
+
 -- CreateTable: leave_types
 CREATE TABLE IF NOT EXISTS "leave_types" (
     "id" TEXT NOT NULL,
@@ -36,7 +40,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "leave_types_name_key" ON "leave_types"("name"
 CREATE UNIQUE INDEX IF NOT EXISTS "leave_types_code_key" ON "leave_types"("code");
 
 -- CreateTable: leave_balances
-CREATE TABLE IF NOT EXISTS "leave_balances" (
+CREATE TABLE "leave_balances" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "leaveTypeId" TEXT NOT NULL,
@@ -56,7 +60,7 @@ CREATE INDEX IF NOT EXISTS "leave_balances_leaveTypeId_idx" ON "leave_balances"(
 CREATE INDEX IF NOT EXISTS "leave_balances_year_idx" ON "leave_balances"("year");
 
 -- CreateTable: leave_requests
-CREATE TABLE IF NOT EXISTS "leave_requests" (
+CREATE TABLE "leave_requests" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "leaveTypeId" TEXT NOT NULL,

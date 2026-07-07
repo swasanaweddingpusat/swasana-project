@@ -9,6 +9,7 @@ import { id as localeId } from "date-fns/locale";
 import { useRouter } from "next/navigation";
 import { cn } from "../../../../../lib/utils";
 import type { NotificationItem } from "@/lib/queries/notifications";
+import { PushNotificationManager } from "@/components/shared/PushNotificationManager";
 
 const TYPE_ICON: Record<string, typeof Bell> = {
   booking_created: CalendarAdd,
@@ -177,6 +178,10 @@ export function NotificationBell() {
                 );
               })
             )}
+          </div>
+
+          <div className="border-t border-border">
+            <PushNotificationManager onClose={() => setOpen(false)} />
           </div>
 
           {notifications.length > 0 && (

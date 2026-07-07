@@ -18,16 +18,20 @@ export function PwaInstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem(DISMISS_KEY);
-    if (dismissed) {
-      const dismissedAt = Number(dismissed);
-      const daysSince = (Date.now() - dismissedAt) / (1000 * 60 * 60 * 24);
-      if (daysSince < DISMISS_DAYS) return;
-    }
+    try {
+      const dismissed = localStorage.getItem(DISMISS_KEY);
+      if (dismissed) {
+        const dismissedAt = Number(dismissed);
+        const daysSince = (Date.now() - dismissedAt) / (1000 * 60 * 60 * 24);
+        if (daysSince < DISMISS_DAYS) return;
+      }
 
-    const visits = Number(localStorage.getItem(VISIT_KEY) || "0") + 1;
-    localStorage.setItem(VISIT_KEY, String(visits));
-    if (visits < 2) return;
+      const visits = Number(localStorage.getItem(VISIT_KEY) || "0") + 1;
+      localStorage.setItem(VISIT_KEY, String(visits));
+      if (visits < 2) return;
+    } catch {
+      // localStorage unavailable (private browsing) — skip
+    }
 
     const handler = (e: Event) => {
       e.preventDefault();
@@ -49,7 +53,7 @@ export function PwaInstallPrompt() {
   }, [deferredPrompt]);
 
   const handleDismiss = useCallback(() => {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* noop */ }
     setVisible(false);
   }, []);
 

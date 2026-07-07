@@ -18,16 +18,23 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- CreateEnum: OnboardingStatus
-DO $$ BEGIN
-  CREATE TYPE "OnboardingStatus" AS ENUM ('in_progress', 'completed');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+-- Drop old OnboardingStatus enum (old migration used uppercase values)
+DROP TYPE IF EXISTS "OnboardingStatus" CASCADE;
+CREATE TYPE "OnboardingStatus" AS ENUM ('in_progress', 'completed');
 
 -- ─── Tables ──────────────────────────────────────────────────────────────────
 
+-- Drop old tables from previous migration (different schema)
+DROP TABLE IF EXISTS "onboarding_template_items" CASCADE;
+DROP TABLE IF EXISTS "employee_onboardings" CASCADE;
+DROP TABLE IF EXISTS "onboarding_templates" CASCADE;
+DROP TABLE IF EXISTS "job_offers" CASCADE;
+DROP TABLE IF EXISTS "interviews" CASCADE;
+DROP TABLE IF EXISTS "applicants" CASCADE;
+DROP TABLE IF EXISTS "job_postings" CASCADE;
+
 -- CreateTable: job_postings
-CREATE TABLE IF NOT EXISTS "job_postings" (
+CREATE TABLE "job_postings" (
   "id"             TEXT NOT NULL,
   "title"          TEXT NOT NULL,
   "departmentId"   TEXT,
@@ -81,7 +88,7 @@ CREATE TABLE IF NOT EXISTS "candidate_notes" (
 );
 
 -- CreateTable: onboarding_templates
-CREATE TABLE IF NOT EXISTS "onboarding_templates" (
+CREATE TABLE "onboarding_templates" (
   "id"          TEXT NOT NULL,
   "name"        TEXT NOT NULL,
   "description" TEXT,

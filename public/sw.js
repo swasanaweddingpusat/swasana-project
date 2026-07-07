@@ -49,19 +49,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // API calls: network-first, fallback to cache
+  // API calls: network-only (authenticated data must never be cached)
   if (url.pathname.startsWith("/api/")) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || Response.json({ error: "Offline" }, { status: 503 })))
-    );
     return;
   }
 
