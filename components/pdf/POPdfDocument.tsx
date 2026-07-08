@@ -83,6 +83,14 @@ function stripHtml(text: string): string {
   return text.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").trim();
 }
 
+// Decode HTML entities WITHOUT stripping tags or trimming whitespace. Used on the
+// plain-text render branches (parseRichText, bold header rows) where the source data
+// may contain a stray entity like "&amp;" but no tags — stripHtml would trim the
+// intentional indent on vendor sub-lines, so we keep a trim-free variant here.
+function decodeEntities(text: string): string {
+  return text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+}
+
 function parseInlineHtml(text: string): React.ReactNode {
   if (!text) return null;
   if (/<br\s*\/?>/i.test(text)) {
@@ -110,18 +118,18 @@ function parseInlineHtml(text: string): React.ReactNode {
 function parseRichText(text: string, baseFontWeight: string = "normal", fontSize: number = 8) {
   if (!text) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }} />;
   if (text.includes("<")) return parseHtmlToReactPdf(text, baseFontWeight, fontSize);
-  if (!text.includes("*")) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{text}</Text>;
+  if (!text.includes("*")) return <Text style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{decodeEntities(text)}</Text>;
   const parts: React.ReactNode[] = [];
   const regex = /\*([^*]+)\*/g;
   let lastIndex = 0;
   let match;
   let k = 0;
   while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{text.slice(lastIndex, match.index)}</Text>);
-    parts.push(<Text key={k++} style={{ fontWeight: "bold", fontSize }}>{match[1]}</Text>);
+    if (match.index > lastIndex) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{decodeEntities(text.slice(lastIndex, match.index))}</Text>);
+    parts.push(<Text key={k++} style={{ fontWeight: "bold", fontSize }}>{decodeEntities(match[1])}</Text>);
     lastIndex = regex.lastIndex;
   }
-  if (lastIndex < text.length) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{text.slice(lastIndex)}</Text>);
+  if (lastIndex < text.length) parts.push(<Text key={k++} style={{ fontWeight: baseFontWeight as "normal" | "bold", fontSize }}>{decodeEntities(text.slice(lastIndex))}</Text>);
   return <>{parts}</>;
 }
 
@@ -669,7 +677,7 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                           {row.desc.includes("<ul>") || row.desc.includes("<ol>") ? (
                             <View style={{ flex: 1, padding: 2, ...(row.isTakeout ? { opacity: 0.4 } : {}) }}>{parseRichText(row.desc, "normal", 7)}</View>
                           ) : (
-                            <Text style={{ flex: 1, padding: 2, fontWeight: row.descBold ? "bold" : "normal", fontSize: 7, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? row.desc : parseRichText(row.desc, "normal", 7)}</Text>
+                            <Text style={{ flex: 1, padding: 2, fontWeight: row.descBold ? "bold" : "normal", fontSize: 7, textDecoration: row.isTakeout ? "line-through" : "none", color: row.isTakeout ? "#999" : "#000" }}>{row.descBold ? decodeEntities(row.desc) : parseRichText(row.desc, "normal", 7)}</Text>
                           )}
                         </View>
                       ))}
