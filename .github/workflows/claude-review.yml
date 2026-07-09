@@ -40,6 +40,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Mint token dari GitHub App milik kita sendiri (bukan Claude App resmi).
+      # Efeknya: comment ke-post sebagai <nama-app>[bot] + logo yang di-upload,
+      # BUKAN github-actions[bot]. App ID & private key disimpen di repo secrets.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.SW_APP_ID }}
+          private-key: ${{ secrets.SW_APP_PRIVATE_KEY }}
+
       - name: Claude Review
         uses: anthropics/claude-code-action@v1
         # Base URL & token 9router ditaruh di STEP-LEVEL env — bukan di `settings`.
@@ -50,10 +60,10 @@ jobs:
           ANTHROPIC_BASE_URL: https://sw-9router.up.railway.app/v1
           ANTHROPIC_API_KEY: ${{ secrets.NINEROUTER_TOKEN }}
         with:
-          # Token GitHub bawaan buat posting review comment. Ini SKIP OIDC exchange
-          # (yang butuh Claude GitHub App resmi keinstall — kita gak pake itu, cuma 9router).
-          # Comment bakal ke-post sebagai github-actions[bot].
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Token dari GitHub App kita (step app-token di atas). Skip OIDC exchange,
+          # dan comment ke-post sebagai <nama-app>[bot] + logo custom — bukan
+          # github-actions[bot]. Fallback ke GITHUB_TOKEN kalau app-token gagal.
+          github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           # Model WAJIB prefix cc/ — itu format yang dikenal 9router.
           prompt: |
             ${{ (github.event_name == 'pull_request') && format('Review Pull Request #{0} di repo {1}. PR branch udah ke-checkout di working directory.
