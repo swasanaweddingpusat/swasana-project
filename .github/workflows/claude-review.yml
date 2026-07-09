@@ -43,8 +43,13 @@ jobs:
       # Mint token dari GitHub App milik kita sendiri (bukan Claude App resmi).
       # Efeknya: comment ke-post sebagai <nama-app>[bot] + logo yang di-upload,
       # BUKAN github-actions[bot]. App ID & private key disimpen di repo secrets.
+      #
+      # continue-on-error: kalau App belum di-install ke repo (404) atau key salah,
+      # step ini GAGAL tapi job TETAP lanjut — github_token di bawah fallback ke
+      # GITHUB_TOKEN, jadi review selalu jalan (paling nama bot-nya github-actions).
       - name: Generate app token
         id: app-token
+        continue-on-error: true
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.SW_APP_ID }}
