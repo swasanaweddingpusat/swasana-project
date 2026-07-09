@@ -1,0 +1,76 @@
+name: Claude Review
+
+# AI code review lewat 9router (self-hosted gateway di Railway) — BUKAN API key resmi.
+# Base URL & token diinject ke Claude Code CLI via `settings.env`, persis kayak config lokal.
+# Auto-review tiap PR dibuka / di-push. Bisa juga dipanggil manual lewat @claude di komentar.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+    branches:
+      - main
+      - production
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    # Skip draft PR biar gak boros; @claude mention tetep jalan walau draft.
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Base URL & token 9router diinject sebagai env ke Claude Code CLI.
+          # Token disimpen di GitHub Secret NINEROUTER_TOKEN.
+          settings: |
+            {
+              "env": {
+                "ANTHROPIC_BASE_URL": "https://sw-9router.up.railway.app/v1",
+                "ANTHROPIC_AUTH_TOKEN": "${{ secrets.NINEROUTER_TOKEN }}"
+              }
+            }
+          # Model WAJIB prefix cc/ — itu format yang dikenal 9router.
+          prompt: |
+            ${{ (github.event_name == 'pull_request') && format('Review Pull Request #{0} di repo {1}.
+
+            RUANG LINGKUP — WAJIB DIPATUHI:
+            - Review HANYA baris yang BERUBAH di PR ini (yang muncul di `git diff origin/{2}...HEAD`). Jangan review kode lama yang tidak disentuh PR ini.
+            - Kalau nemu masalah di kode LAMA (di luar diff), abaikan — kecuali perubahan di PR ini secara langsung bikin kode lama itu jadi bug (regresi).
+            - Baca file di sekitar diff SECUKUPNYA cuma buat paham konteks. Tujuannya paham dampak perubahan, BUKAN audit seluruh codebase.
+
+            LANGKAH:
+            1. Jalankan `git diff origin/{2}...HEAD` buat lihat perubahan persisnya.
+            2. Untuk tiap perubahan, cek: correctness bug, security hole, edge case yang kelewat, regresi, dan pelanggaran aturan di CLAUDE.md / AGENTS.md (rate-limit, transaction array-form, requirePermission, Zod, logAudit, no-hardcode-color, dll).
+            3. Post tiap temuan sebagai INLINE COMMENT tepat di baris yang berubah. Tag severity: [BLOCKER] / [WARNING] / [NIT].
+            4. Kalau gak ada masalah, bilang aja singkat \"LGTM, gak ada isu\" — jangan maksa nyari-nyari.
+
+            JANGAN:
+            - Komentarin style/format yang udah dihandle ESLint/Prettier.
+            - Komentarin file yang gak berubah di PR ini.
+            - Nyaranin refactor besar di luar scope PR.', github.event.pull_request.number, github.repository, github.event.pull_request.base.ref) || '' }}
+          claude_args: |
+            --max-turns 20
+            --model cc/claude-opus-4-8
