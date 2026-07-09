@@ -69,9 +69,6 @@ jobs:
           # dan comment ke-post sebagai <nama-app>[bot] + logo custom — bukan
           # github-actions[bot]. Fallback ke GITHUB_TOKEN kalau app-token gagal.
           github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          # Sementara ON buat debug — biar keliatan command mana yang kena denial.
-          # Matiin lagi (hapus baris ini) kalau review-nya udah stabil.
-          show_full_output: true
           # Model WAJIB prefix cc/ — itu format yang dikenal 9router.
           prompt: |
             ${{ (github.event_name == 'pull_request') && format('Review Pull Request #{0} di repo {1}. PR branch udah ke-checkout di working directory.
