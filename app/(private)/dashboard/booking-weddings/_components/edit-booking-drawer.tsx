@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -87,6 +87,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const [weddingType, setWeddingType] = useState("");
   const [time, setTime] = useState("");
   const [noteDateEvent, setNoteDateEvent] = useState("");
+  const [signingLocation, setSigningLocation] = useState("");
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
 
   // ── Change detection (venue/package → triggers continue flow after save) ──
@@ -171,6 +172,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     setWeddingType(booking.weddingType ?? "");
     setTime(booking.eventTime ?? "");
     setNoteDateEvent(booking.notes ?? "");
+    setSigningLocation(booking.signingLocation ?? "");
 
     // Snapshot venue/package for change detection — only these two drive the
     // continue flow (they re-derive package items / takeout / TOP). Other step-2
@@ -306,7 +308,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
         weddingType,
         eventTime: time || null,
         notes: noteDateEvent || null,
-        signingLocation: null,
+        signingLocation: signingLocation || null,
         // Pass empty arrays — server skips TOP/takeout when empty (booking.ts line 1138 & 1583)
         termOfPayments: [],
         categoryToggles: [],
@@ -379,10 +381,19 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     onOpenChange(false);
   }
 
+  // Hide the header close (X) whenever the drawer is mid-wizard, so the only way
+  // forward/back is Continue/Previous. That means: any continue-flow sub-step
+  // (item paket → takeout → TOP → signature), AND step 2 when the primary button
+  // reads "Continue" (venue/package changed → about to enter the flow). Step 1 and
+  // a plain step-2 "Save" keep the X.
+  const hideCloseButton =
+    continueFlowStep !== null || (currentStep === 2 && hasVenueTabChange);
+
   return (
     <Drawer
       isOpen={open}
       onClose={handleCloseAll}
+      isCloseButton={!hideCloseButton}
       title={drawerTitle}
       maxWidth="sm:max-w-xl"
       headerActions={<span className="text-sm text-muted-foreground">{stepHeader}</span>}
@@ -678,6 +689,17 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
                   />
                 </div>
 
+                {/* Lokasi TTD */}
+                <div>
+                  <label className={LBL}>Lokasi TTD</label>
+                  <Input
+                    className="mt-1"
+                    value={signingLocation}
+                    onChange={(e) => setSigningLocation(e.target.value)}
+                    placeholder="Contoh: Jakarta, ..."
+                  />
+                </div>
+
               </div>
             )}
           </div>
@@ -759,3 +781,6 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     </Drawer>
   );
 }
+
+
+

@@ -91,10 +91,8 @@ export async function GET(req: Request): Promise<Response> {
       });
     }
 
-    // Excel: attempt dynamic import — exceljs is an optional dependency
+    // Excel: dynamic import keeps exceljs out of the base route bundle
     try {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error exceljs is optional and may not be installed
       const ExcelJS = await import("exceljs");
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Pengadaan Barang");
