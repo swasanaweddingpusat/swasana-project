@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
@@ -12,7 +12,7 @@ import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingCli
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
-import { createBookingRevision, refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
+import { createBookingRevision, refreshCurrentRevisionSnapshot, patchSnapshotAdminFields } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
@@ -1835,6 +1835,17 @@ export async function editBooking(data: unknown) {
       }
     }
 
+    // Non-material edit (no venue/package/date/price change): propagate signingLocation
+    // into the current revision snapshot even when frozen, so the signed PO PDF always
+    // reflects the latest Lokasi TTD. Best-effort — failure is non-fatal.
+    if (!hasMaterialChange) {
+      try {
+        await patchSnapshotAdminFields(id);
+      } catch (e) {
+        console.error("[editBooking] patchSnapshotAdminFields failed:", e);
+      }
+    }
+
     await logAudit({
       userId: session!.user.id,
       action: "updated",
@@ -1987,4 +1998,6 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
     return { success: false, error: "Gagal menyimpan tanda tangan." };
   }
 }
+
+
 

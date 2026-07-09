@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+﻿import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 
 const snapshotInclude = {
@@ -164,6 +164,47 @@ export async function refreshCurrentRevisionSnapshot(bookingId: string): Promise
       discountName: full.discountName,
       discountAmount: full.discountAmount,
     },
+  });
+
+  return true;
+}
+
+/**
+ * Targeted patch of administrative-only snapshot fields that do NOT affect pricing,
+ * package, or client-agreed terms. Called after a non-material editBooking save so
+ * that the frozen revision snapshot stays in sync for the signed PO PDF.
+ *
+ * Unlike refreshCurrentRevisionSnapshot, this helper intentionally writes EVEN when
+ * snapshotFrozenAt is set — the whole point is to propagate ops edits (signingLocation)
+ * into a signed snapshot without re-opening approval or client agreement.
+ *
+ * No-ops silently when there is no current revision (booking never went through
+ * approval). Best-effort: callers treat failure as non-fatal.
+ */
+export async function patchSnapshotAdminFields(bookingId: string): Promise<boolean> {
+  const booking = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { currentRevisionId: true, signingLocation: true },
+  });
+  if (!booking?.currentRevisionId) return false;
+
+  const revision = await db.bookingRevision.findUnique({
+    where: { id: booking.currentRevisionId },
+    select: { snapshotData: true },
+  });
+  if (!revision) return false;
+
+  // Merge only the two admin fields into the existing snapshot JSON, leaving
+  // all pricing/package/customer/TOP data untouched.
+  const existingSnap = (revision.snapshotData ?? {}) as Record<string, unknown>;
+  const patched: Record<string, unknown> = {
+    ...existingSnap,
+    signingLocation: booking.signingLocation ?? null,
+  };
+
+  await db.bookingRevision.update({
+    where: { id: booking.currentRevisionId },
+    data: { snapshotData: patched as Prisma.InputJsonValue },
   });
 
   return true;
