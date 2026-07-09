@@ -56,23 +56,26 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Model WAJIB prefix cc/ — itu format yang dikenal 9router.
           prompt: |
-            ${{ (github.event_name == 'pull_request') && format('Review Pull Request #{0} di repo {1}.
+            ${{ (github.event_name == 'pull_request') && format('Review Pull Request #{0} di repo {1}. PR branch udah ke-checkout di working directory.
 
             RUANG LINGKUP — WAJIB DIPATUHI:
-            - Review HANYA baris yang BERUBAH di PR ini (yang muncul di `git diff origin/{2}...HEAD`). Jangan review kode lama yang tidak disentuh PR ini.
+            - Review HANYA baris yang BERUBAH di PR ini. Jangan review kode lama yang tidak disentuh PR ini.
             - Kalau nemu masalah di kode LAMA (di luar diff), abaikan — kecuali perubahan di PR ini secara langsung bikin kode lama itu jadi bug (regresi).
             - Baca file di sekitar diff SECUKUPNYA cuma buat paham konteks. Tujuannya paham dampak perubahan, BUKAN audit seluruh codebase.
 
             LANGKAH:
-            1. Jalankan `git diff origin/{2}...HEAD` buat lihat perubahan persisnya.
+            1. Jalankan `gh pr diff {0}` buat lihat perubahan persisnya.
             2. Untuk tiap perubahan, cek: correctness bug, security hole, edge case yang kelewat, regresi, dan pelanggaran aturan di CLAUDE.md / AGENTS.md (rate-limit, transaction array-form, requirePermission, Zod, logAudit, no-hardcode-color, dll).
-            3. Post tiap temuan sebagai INLINE COMMENT tepat di baris yang berubah. Tag severity: [BLOCKER] / [WARNING] / [NIT].
-            4. Kalau gak ada masalah, bilang aja singkat \"LGTM, gak ada isu\" — jangan maksa nyari-nyari.
+            3. Post tiap temuan pakai `mcp__github_inline_comment__create_inline_comment` (dengan confirmed: true) tepat di baris yang berubah. Tag severity: [BLOCKER] / [WARNING] / [NIT].
+            4. Tutup dengan ringkasan singkat pakai `gh pr comment {0} --body`. Kalau gak ada masalah, cukup post \"LGTM, gak ada isu\" — jangan maksa nyari-nyari.
+
+            PENTING: HANYA post lewat GitHub comment (inline tool + gh pr comment). JANGAN kirim hasil review sebagai teks pesan biasa — kalau gak di-post ke GitHub, review-nya ilang.
 
             JANGAN:
             - Komentarin style/format yang udah dihandle ESLint/Prettier.
             - Komentarin file yang gak berubah di PR ini.
-            - Nyaranin refactor besar di luar scope PR.', github.event.pull_request.number, github.repository, github.event.pull_request.base.ref) || '' }}
+            - Nyaranin refactor besar di luar scope PR.', github.event.pull_request.number, github.repository) || '' }}
           claude_args: |
             --max-turns 20
             --model cc/claude-opus-4-8
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
