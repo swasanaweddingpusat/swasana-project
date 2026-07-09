@@ -81,8 +81,8 @@ jobs:
             LANGKAH:
             1. Jalankan `gh pr diff {0}` buat lihat perubahan persisnya.
             2. Untuk tiap perubahan, cek: correctness bug, security hole, edge case yang kelewat, regresi, dan pelanggaran aturan di CLAUDE.md / AGENTS.md (rate-limit, transaction array-form, requirePermission, Zod, logAudit, no-hardcode-color, dll).
-            3. Post tiap temuan pakai `mcp__github_inline_comment__create_inline_comment` (dengan confirmed: true) tepat di baris yang berubah. Tag severity: [BLOCKER] / [WARNING] / [NIT].
-            4. Tutup dengan ringkasan singkat pakai `gh pr comment {0} --body`. Kalau gak ada masalah, cukup post \"LGTM, gak ada isu\" — jangan maksa nyari-nyari.
+            3. Post tiap temuan pakai `mcp__github_inline_comment__create_inline_comment` (dengan confirmed: true) tepat di baris yang berubah. Ikuti FORMAT dari REVIEW.md: awali marker emoji severity (🔴 Important / 🟡 Nit / 🟣 Pre-existing), lalu ringkasan 1 kalimat, lalu reasoning di dalam blok <details><summary>Reasoning</summary>. Kutip bukti `file:line` — jangan nebak dari nama.
+            4. Tutup dengan summary pakai `gh pr comment {0} --body`, ikuti \"Format Summary\" di REVIEW.md: baris pertama tally (\"<N> Important, <N> Nit\") atau \"✅ No blocking issues\" kalau bersih, lalu tabel temuan urut severity. Jangan maksa nyari-nyari.
 
             PENTING: HANYA post lewat GitHub comment (inline tool + gh pr comment). JANGAN kirim hasil review sebagai teks pesan biasa — kalau gak di-post ke GitHub, review-nya ilang.
 

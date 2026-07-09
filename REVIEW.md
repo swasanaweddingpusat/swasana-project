@@ -7,17 +7,40 @@ Instruksi ini prioritas tertinggi buat code review. Turunan dari `AGENTS.md`.
 - Review **HANYA** baris yang berubah di diff PR (`git diff origin/<base>...HEAD`). Jangan audit kode lama yang tidak disentuh PR ini.
 - Masalah di kode lama (di luar diff) → **abaikan**, KECUALI perubahan PR ini bikin kode lama jadi regresi.
 - Baca file sekitar diff secukupnya buat konteks — bukan buat nyari-nyari isu di luar scope.
-- Kalau gak ada isu → bilang **"LGTM, gak ada isu"**. Jangan maksa nyari masalah.
+- Kalau gak ada isu → summary dibuka dengan **"✅ No blocking issues"**. Jangan maksa nyari masalah.
+
+> **Mapping tag lama → marker baru:** aturan di bawah masih nulis `[BLOCKER]`/`[WARNING]`/`[NIT]`. Terjemahin pas posting: `[BLOCKER]` & `[WARNING]` → **🔴 Important**, `[NIT]` → **🟡 Nit**, bug kode lama di luar diff → **🟣 Pre-existing**.
 
 ## Severity
 
-| Tag | Arti |
-|---|---|
-| `[BLOCKER]` | Bug / lubang security / pelanggaran aturan keras. Wajib fix sebelum merge. |
-| `[WARNING]` | Bukan blocking tapi sebaiknya dibenerin. |
-| `[NIT]` | Minor. Maksimal 5 nit per review; sisanya ringkas di summary. |
+Tiap temuan WAJIB diawali marker emoji + label (bukan lagi `[BLOCKER]`):
+
+| Marker | Label | Arti |
+|---|---|---|
+| 🔴 | **Important** | Bug / lubang security / pelanggaran aturan keras yang diintro PR ini. Wajib fix sebelum merge. |
+| 🟡 | **Nit** | Minor — sebaiknya dibenerin tapi gak blocking. Maks 5 nit per review; sisanya ringkas di summary sebagai "plus N similar". |
+| 🟣 | **Pre-existing** | Bug yang udah ada di kode lama, BUKAN diintro PR ini. Cuma sebut kalau kelewat jelas & relevan sama baris yang berubah — jangan audit kode lama. |
 
 Jangan komentarin style/format yang udah dihandle ESLint/Prettier.
+
+### Format tiap inline comment (WAJIB)
+
+Tiap inline comment ngikut struktur ini — ringkas di atas, reasoning di-collapse:
+
+```markdown
+🔴 **Important** — <ringkasan 1 kalimat, apa masalahnya>
+
+<1–2 kalimat: dampak konkret + fix yang disaranin.>
+
+<details>
+<summary>Reasoning</summary>
+
+<Kenapa ini masalah, gimana diverifikasi (sebut `file:line`), dan aturan mana
+di AGENTS.md yang dilanggar kalau ada. Kutip bukti dari source, jangan nebak.>
+</details>
+```
+
+Gunakan `file:line` sebagai bukti. Klaim soal behavior WAJIB ada sitiran `file:line` di source — bukan inferensi dari nama variabel/fungsi.
 
 ---
 
@@ -92,3 +115,32 @@ Kalau ada file BARU di PR yang salah taruh, kasih catatan **[WARNING]** dengan l
   - Test yang di-skip (`.skip` / `xit` / `it.todo`) tanpa alasan → **[NIT]**.
   - Assertion kosong / test yang gak ngetes apa-apa (cuma render tanpa expect) → **[WARNING]**.
 - Kalau repo belum punya infra test sama sekali, JANGAN maksa — cukup catat sekali di summary kalau perubahan berisiko sebaiknya ditemani test.
+
+---
+
+## Format Summary (comment penutup — WAJIB)
+
+Comment penutup (via `gh pr comment`) ngikut bentuk ini. Buka dengan tally 1 baris biar author langsung tau bentuk kerjaannya, lalu tabel semua temuan urut severity:
+
+```markdown
+**Review — <N> Important, <N> Nit** _(<N> pre-existing)_
+
+<Kalau bersih: "✅ No blocking issues" di baris ini.>
+
+| Sev | Lokasi | Isu |
+|---|---|---|
+| 🔴 | `file.ts:142` | Ringkasan 1 baris |
+| 🟡 | `file.ts:88` | Ringkasan 1 baris |
+
+<details>
+<summary>Catatan</summary>
+
+- Nit yang gak di-inline: plus N similar items.
+- Test coverage / catatan struktur folder (kalau ada).
+</details>
+```
+
+Aturan:
+- Baris pertama SELALU tally: `<N> Important, <N> Nit` (+ `(N pre-existing)` kalau ada). Kalau nol semua → `✅ No blocking issues`.
+- Tabel cuma temuan yang di-post inline. Nit yang kena cap (maks 5) diringkas di `<details>` sebagai hitungan.
+- Jangan ngulang full reasoning di summary — itu udah di inline comment. Summary = peta, inline = detail.
