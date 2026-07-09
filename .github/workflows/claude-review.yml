@@ -43,6 +43,10 @@ jobs:
       - name: Claude Review
         uses: anthropics/claude-code-action@v1
         with:
+          # Token GitHub bawaan buat posting review comment. Ini SKIP OIDC exchange
+          # (yang butuh Claude GitHub App resmi keinstall — kita gak pake itu, cuma 9router).
+          # Comment bakal ke-post sebagai github-actions[bot].
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # Base URL & token 9router diinject sebagai env ke Claude Code CLI.
           # Token disimpen di GitHub Secret NINEROUTER_TOKEN.
           settings: |
