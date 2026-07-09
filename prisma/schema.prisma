@@ -201,6 +201,8 @@ model Profile {
   procurementItemsApproved   ProcurementItem[]   @relation("ProcurementApprover")
   procurementAnnouncements   ProcurementAnnouncement[] @relation("ProcurementAnnouncementCreator")
   pushSubscriptions          PushSubscription[]
+  evaluationsAsSpecialist    EventEvaluation[] @relation("EvaluationSpecialist")
+  weddingIndicators          WeddingIndicator[] @relation("WeddingIndicatorCreator")
 
   @@index([roleId])
   @@index([managerId])
@@ -344,6 +346,8 @@ model Venue {
   maintenanceTickets MaintenanceTicket[]
   workLocations      WorkLocation[]
   procurementItems   ProcurementItem[]
+  eventEvaluations   EventEvaluation[]
+  weddingIndicators  WeddingIndicator[]
 
   @@index([brandId])
   @@map("venues")
@@ -443,7 +447,8 @@ model VendorCategory {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  vendors     Vendor[]
+  vendors            Vendor[]
+  vendorEvaluations  VendorEvaluation[]
 
   @@map("vendor_categories")
 }
@@ -866,6 +871,7 @@ model Booking {
   revisions         BookingRevision[]
   convertedFromLeads Lead[]                    @relation("LeadConvertedBooking")
   editDraft         BookingEditDraft?
+  eventEvaluations  EventEvaluation[]
 
   @@index([salesId])
   @@index([managerId])
@@ -2557,3 +2563,152 @@ model PushSubscription {
   @@map("push_subscriptions")
 }
 
+// ─── Vendor Evaluations ─────────────────────────────────────────────────────
+
+enum RecommendationLevel {
+  HIGHLY_RECOMMENDED
+  RECOMMENDED
+  CONDITIONAL
+  NOT_RECOMMENDED
+}
+
+model EventEvaluation {
+  id                String              @id @default(uuid())
+  bookingId         String?
+  eventName         String
+  clientName        String
+  eventType         String
+  eventDate         DateTime
+  venueId           String
+  paxCount          Int
+  venueSpecialistId String
+  ballroomReview    String?
+  woEvaluationNotes String?
+  generalNotes      String?
+  eventFlow         Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  booking           Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  venue             Venue               @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  venueSpecialist   Profile             @relation("EvaluationSpecialist", fields: [venueSpecialistId], references: [id], onDelete: Restrict)
+  vendorEvaluations VendorEvaluation[]
+  summaryImages     EventEvaluationImage[]
+
+  @@index([bookingId])
+  @@index([venueId])
+  @@index([venueSpecialistId])
+  @@index([eventDate])
+  @@map("event_evaluations")
+}
+
+model VendorEvaluation {
+  id                   String              @id @default(uuid())
+  eventEvaluationId    String
+  vendorName           String
+  vendorCategoryId     String
+  notes                String?
+  actionsTaken         String?
+  followUp             String?
+  followUpDone         Boolean             @default(false)
+  recommendation       RecommendationLevel
+  recommendationReason String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  eventEvaluation  EventEvaluation       @relation(fields: [eventEvaluationId], references: [id], onDelete: Cascade)
+  vendorCategory   VendorCategory        @relation(fields: [vendorCategoryId], references: [id], onDelete: Restrict)
+  images           VendorEvaluationImage[]
+
+  @@index([eventEvaluationId])
+  @@index([vendorCategoryId])
+  @@index([recommendation])
+  @@map("vendor_evaluations")
+}
+
+model VendorEvaluationImage {
+  id                 String           @id @default(uuid())
+  vendorEvaluationId String
+  storageKey         String
+  createdAt          DateTime         @default(now())
+
+  vendorEvaluation VendorEvaluation @relation(fields: [vendorEvaluationId], references: [id], onDelete: Cascade)
+
+  @@index([vendorEvaluationId])
+  @@map("vendor_evaluation_images")
+}
+
+model EventEvaluationImage {
+  id                String          @id @default(uuid())
+  eventEvaluationId String
+  storageKey        String
+  createdAt         DateTime        @default(now())
+
+  eventEvaluation EventEvaluation @relation(fields: [eventEvaluationId], references: [id], onDelete: Cascade)
+
+  @@index([eventEvaluationId])
+  @@map("event_evaluation_images")
+}
+
+// ─── Wedding Indicator ───────────────────────────────────────────────────────
+
+model WeddingIndicator {
+  id                        String   @id @default(cuid())
+  coupleName                String
+  eventDate                 DateTime
+  venueId                   String
+  createdById               String
+
+  // Named people
+  eventManagerName          String
+  woName                    String?
+
+  // Relational rating columns
+  eventManagerRating        Float?
+  woRating                  Float?
+  ballroomFacilitiesRating  Float?
+  ballroomCleanlinessRating Float?
+  vendorsRating             Float?
+  salesRating               Float?
+  recommendationScore       Int      @default(5)
+
+  // Calculated on save
+  satisfactionScore         Float?
+  allowancePercentage       Int?
+  allowanceNominal          Int?
+
+  // Flexible JSONB for notes, PMs, wishes
+  questionnaireData         Json
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  venue                     Venue    @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  createdBy                 Profile  @relation("WeddingIndicatorCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  share                     WeddingIndicatorShare?
+
+  @@index([venueId])
+  @@index([createdById])
+  @@index([eventDate])
+  @@map("wedding_indicators")
+}
+
+enum WeddingIndicatorShareStatus {
+  Active
+  Revoked
+}
+
+model WeddingIndicatorShare {
+  id                   String                       @id @default(cuid())
+  weddingIndicatorId   String                       @unique
+  token                String                       @unique
+  accessCode           String
+  status               WeddingIndicatorShareStatus   @default(Active)
+  viewedAt             DateTime?
+  lastEditedAt         DateTime?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  weddingIndicator     WeddingIndicator             @relation(fields: [weddingIndicatorId], references: [id], onDelete: Cascade)
+
+  @@map("wedding_indicator_shares")
+}

@@ -29,6 +29,9 @@ import {
   Sledgehammer,
   Gift,
   TagPrice,
+  ClipboardCheck,
+  ChartSquare,
+  Star,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -127,6 +130,27 @@ export const navItems: NavItem[] = [
     href: "/dashboard/purchase-order",
     icon: Bill,
     permission: { module: "vendor-specialist", action: "view" },
+    submenu: [
+      {
+        name: "Purchase Order",
+        href: "/dashboard/purchase-order",
+      },
+      {
+        name: "Evaluasi",
+        href: "/dashboard/vendor-specialist/evaluations",
+        icon: ClipboardCheck,
+      },
+      {
+        name: "Analitik",
+        href: "/dashboard/vendor-specialist/analytics",
+        icon: ChartSquare,
+      },
+      {
+        name: "Indikator Pernikahan",
+        href: "/dashboard/vendor-specialist/wedding-indicators",
+        icon: Heart,
+      },
+    ],
   },
   {
     name: "Package",
