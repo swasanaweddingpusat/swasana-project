@@ -1,5 +1,6 @@
-import { requirePermission, isSuperAdmin, hasPermission } from "@/lib/permissions";
+import { requirePermission, hasPermission } from "@/lib/permissions";
 import { getWeddingIndicatorById } from "@/lib/queries/weddingIndicators";
+import { getVenues } from "@/lib/queries/venues";
 import { db } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import { WeddingIndicatorForm } from "@/components/shared/wedding-indicators/WeddingIndicatorForm";
@@ -28,22 +29,20 @@ export default async function WeddingIndicatorDetailPage({
     notFound();
   }
 
-  const isAdmin = await isSuperAdmin(session.user.roleId);
+  const isAdmin = session.user.isSuperAdmin;
   const canEditPermission = await hasPermission(session.user.roleId, "vendor-specialist", "edit");
   const canEdit = isAdmin || canEditPermission || session.user.id === indicator.createdById;
 
-  // Get venue and venues
-  const [venue, venues] = await Promise.all([
+  // Get venue and venues list
+  const [venue, allVenues] = await Promise.all([
     db.venue.findUnique({
       where: { id: indicator.venueId },
       select: { id: true, name: true },
     }),
-    db.venue.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+    getVenues(),
   ]);
+
+  const venues = allVenues.map((v) => ({ id: v.id, name: v.name }));
 
   // Prepare initial data
   const questionnaireData = (indicator.questionnaireData as {
@@ -61,6 +60,22 @@ export default async function WeddingIndicatorDetailPage({
 
   const initialData = {
     ...indicator,
+    questionnaireData: questionnaireData as {
+      projectManagers?: Array<{ name: string; rating: number | null; notes: string }>;
+      postWeddingWishes?: {
+        logamMulia: boolean;
+        mobil: boolean;
+        rumah: boolean;
+        honeymoon: boolean;
+        romanticDinner: boolean;
+        umroh: boolean;
+        custom1: string;
+        custom2: string;
+      };
+      signatures?: Record<string, string | null>;
+      signatureNames?: Record<string, string>;
+      signatureDate?: string;
+    } | null,
     eventDate: indicator.eventDate.toISOString().split("T")[0],
     eventManagerNotes: questionnaireData.eventManagerNotes || "",
     woNotes: questionnaireData.woNotes || "",

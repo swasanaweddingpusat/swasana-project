@@ -25,7 +25,11 @@ export const createWeddingIndicatorSchema = z.object({
   eventManagerRating: z.number().nullable().optional(),
   eventManagerNotes: z.string().optional().default(""),
   projectManagers: z.array(projectManagerSchema).optional().default([]),
-  woName: z.string().optional().default(""),
+  woName: z
+    .string()
+    .optional()
+    .transform((v) => v?.trim() || null)
+    .nullable(),
   woRating: z.number().nullable().optional(),
   woNotes: z.string().optional().default(""),
   ballroomFacilitiesRating: z.number().nullable().optional(),

@@ -2678,7 +2678,7 @@ model WeddingIndicator {
   allowanceNominal          Int?
 
   // Flexible JSONB for notes, PMs, wishes
-  questionnaireData         Json
+  questionnaireData         Json     @default(dbgenerated("'{}'::jsonb"))
 
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
@@ -2706,6 +2706,7 @@ model WeddingIndicatorShare {
   status               WeddingIndicatorShareStatus   @default(Active)
   viewedAt             DateTime?
   lastEditedAt         DateTime?
+  expiresAt            DateTime?
   createdAt            DateTime                     @default(now())
   updatedAt            DateTime                     @updatedAt
   weddingIndicator     WeddingIndicator             @relation(fields: [weddingIndicatorId], references: [id], onDelete: Cascade)

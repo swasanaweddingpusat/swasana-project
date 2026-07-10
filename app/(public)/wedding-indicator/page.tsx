@@ -5,7 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { WeddingIndicatorForm } from "@/components/shared/wedding-indicators/WeddingIndicatorForm";
+import {
+  WeddingIndicatorForm,
+  type QuestionnaireData,
+} from "@/components/shared/wedding-indicators/WeddingIndicatorForm";
 import { CheckCircle } from "@solar-icons/react";
 
 interface IndicatorData {
@@ -193,11 +196,11 @@ function WeddingIndicatorPublicContent() {
         recommendationScore: indicator.recommendationScore,
         questionnaireData: {
           projectManagers: indicator.projectManagers,
-          postWeddingWishes: indicator.postWeddingWishes,
-          signatures: indicator.signatures,
-          signatureNames: indicator.signatureNames,
+          postWeddingWishes: indicator.postWeddingWishes ?? undefined,
+          signatures: indicator.signatures ?? undefined,
+          signatureNames: indicator.signatureNames ?? undefined,
           signatureDate: indicator.signatureDate,
-        },
+        } as QuestionnaireData,
         notes: indicator.notes || "",
         satisfactionScore: indicator.satisfactionScore,
         allowancePercentage: indicator.allowancePercentage,

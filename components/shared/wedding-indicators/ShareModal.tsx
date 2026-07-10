@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,19 +21,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Copy, Refresh, CloseCircle } from "@solar-icons/react";
-import {
-  generateShareLink,
-  revokeShareLink,
-} from "@/actions/weddingIndicatorShare";
 import { toast } from "sonner";
-
-interface ShareData {
-  token: string;
-  accessCode: string;
-  status: string;
-  viewedAt: string | null;
-  lastEditedAt: string | null;
-}
+import {
+  useShareStatus,
+  useGenerateShareLink,
+  useRevokeShareLink,
+} from "@/hooks/useWeddingIndicators";
 
 interface ShareModalProps {
   indicatorId: string;
@@ -49,63 +41,28 @@ export function ShareModal({
   open,
   onOpenChange,
 }: ShareModalProps) {
-  const [loading, setLoading] = useState(false);
-  const [share, setShare] = useState<ShareData | null>(null);
-  const [fetching, setFetching] = useState(true);
+  const { data, isLoading, isError } = useShareStatus(indicatorId, open);
+  const generateMutation = useGenerateShareLink(indicatorId);
+  const revokeMutation = useRevokeShareLink(indicatorId);
 
-  useEffect(() => {
-    if (!open) return;
-    setFetching(true);
-    fetch(
-      `/api/wedding-indicator-share/status?indicatorId=${encodeURIComponent(indicatorId)}`
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.share) {
-          setShare(data.share);
-        } else {
-          setShare(null);
-        }
-      })
-      .catch(() => setShare(null))
-      .finally(() => setFetching(false));
-  }, [open, indicatorId]);
+  const share = data?.share ?? null;
+  const loading = generateMutation.isPending || revokeMutation.isPending;
 
   async function handleGenerate() {
-    setLoading(true);
-    try {
-      const result = await generateShareLink(indicatorId);
-      if (result.success) {
-        setShare({
-          token: result.share.token,
-          accessCode: result.share.accessCode,
-          status: "Active",
-          viewedAt: null,
-          lastEditedAt: null,
-        });
-        toast.success("Share link berhasil dibuat");
-      } else {
-        toast.error(result.error || "Gagal membuat share link");
-      }
-    } finally {
-      setLoading(false);
+    const result = await generateMutation.mutateAsync();
+    if (result.success) {
+      toast.success("Share link berhasil dibuat");
+    } else {
+      toast.error(result.error || "Gagal membuat share link");
     }
   }
 
   async function handleRevoke() {
-    setLoading(true);
-    try {
-      const result = await revokeShareLink(indicatorId);
-      if (result.success) {
-        setShare((prev) =>
-          prev ? { ...prev, status: "Revoked" } : null
-        );
-        toast.success("Share link berhasil dinonaktifkan");
-      } else {
-        toast.error(result.error || "Gagal menonaktifkan share link");
-      }
-    } finally {
-      setLoading(false);
+    const result = await revokeMutation.mutateAsync();
+    if (result.success) {
+      toast.success("Share link berhasil dinonaktifkan");
+    } else {
+      toast.error(result.error || "Gagal menonaktifkan share link");
     }
   }
 
@@ -127,9 +84,13 @@ export function ShareModal({
           </DialogTitle>
         </DialogHeader>
 
-        {fetching ? (
+        {isLoading ? (
           <div className="py-8 text-center text-muted-foreground text-sm">
             Memuat...
+          </div>
+        ) : isError ? (
+          <div className="py-8 text-center text-destructive text-sm">
+            Gagal memuat status share link.
           </div>
         ) : !share ? (
           <div className="space-y-4 py-4">
@@ -151,8 +112,8 @@ export function ShareModal({
               <span
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                   share.status === "Active"
-                    ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                    : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                    ? "bg-primary/10 text-primary"
+                    : "bg-destructive/10 text-destructive"
                 }`}
               >
                 {share.status}
@@ -211,20 +172,22 @@ export function ShareModal({
 
             <div className="flex gap-2 pt-2">
               <AlertDialog>
-                <AlertDialogTrigger>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={loading}
-                    className="flex-1"
-                  >
-                    <Refresh
-                      weight="BoldDuotone"
-                      className="h-4 w-4 mr-1"
-                    />
-                    Regenerate
-                  </Button>
-                </AlertDialogTrigger>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loading}
+                      className="flex-1"
+                    >
+                      <Refresh
+                        weight="BoldDuotone"
+                        className="h-4 w-4 mr-1"
+                      />
+                      Regenerate
+                    </Button>
+                  }
+                />
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Regenerate Link?</AlertDialogTitle>
@@ -244,20 +207,22 @@ export function ShareModal({
 
               {share.status === "Active" && (
                 <AlertDialog>
-                  <AlertDialogTrigger>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={loading}
-                      className="flex-1"
-                    >
-                      <CloseCircle
-                        weight="BoldDuotone"
-                        className="h-4 w-4 mr-1"
-                      />
-                      Revoke
-                    </Button>
-                  </AlertDialogTrigger>
+                  <AlertDialogTrigger
+                    render={
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={loading}
+                        className="flex-1"
+                      >
+                        <CloseCircle
+                          weight="BoldDuotone"
+                          className="h-4 w-4 mr-1"
+                        />
+                        Revoke
+                      </Button>
+                    }
+                  />
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Nonaktifkan Link?</AlertDialogTitle>

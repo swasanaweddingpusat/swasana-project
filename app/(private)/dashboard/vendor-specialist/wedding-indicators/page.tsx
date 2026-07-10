@@ -1,9 +1,10 @@
+import { Suspense } from "react";
 import { requirePermission } from "@/lib/permissions";
 import {
   getWeddingIndicators,
   getWeddingIndicatorsByVenue,
 } from "@/lib/queries/weddingIndicators";
-import { db } from "@/lib/db";
+import { getVenues } from "@/lib/queries/venues";
 import Link from "next/link";
 import { VenueFolderGrid } from "@/components/shared/wedding-indicators/VenueFolderGrid";
 import { IndicatorListTable } from "@/components/shared/wedding-indicators/IndicatorListTable";
@@ -34,11 +35,8 @@ export default async function WeddingIndicatorsPage({
   const search = params.search;
   const venueId = params.venueId;
 
-  const venues = await db.venue.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const allVenues = await getVenues();
+  const venues = allVenues.map((v) => ({ id: v.id, name: v.name }));
 
   let indicators: Awaited<ReturnType<typeof getWeddingIndicators>>["data"] = [];
   let venueFolders: Awaited<ReturnType<typeof getWeddingIndicatorsByVenue>> =
@@ -92,11 +90,19 @@ export default async function WeddingIndicatorsPage({
         {view === "folder" && venueFolders.length > 0 ? (
           <VenueFolderGrid folders={venueFolders} />
         ) : (
-          <IndicatorListTable
-            indicators={indicators}
-            venues={venues}
-            canCreate={false}
-          />
+          <Suspense
+            fallback={
+              <div className="rounded-2xl border py-12 text-center text-sm text-muted-foreground">
+                Memuat data...
+              </div>
+            }
+          >
+            <IndicatorListTable
+              indicators={indicators}
+              venues={venues}
+              canCreate={false}
+            />
+          </Suspense>
         )}
       </div>
     </div>

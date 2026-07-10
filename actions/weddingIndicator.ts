@@ -9,59 +9,11 @@ import {
   createWeddingIndicatorSchema,
   updateWeddingIndicatorSchema,
 } from "@/lib/validations/weddingIndicator";
+import {
+  calculateAllowance,
+  calculateSatisfactionScore,
+} from "@/lib/utils/weddingIndicatorUtils";
 import { z } from "zod";
-
-function calculateAllowance(satisfactionScore: number | null): {
-  percentage: number | null;
-  nominal: number | null;
-} {
-  if (satisfactionScore === null) {
-    return { percentage: null, nominal: null };
-  }
-
-  if (satisfactionScore >= 3.6) {
-    return { percentage: 100, nominal: 1000000 };
-  }
-  if (satisfactionScore >= 3.1) {
-    return { percentage: 80, nominal: 800000 };
-  }
-  if (satisfactionScore >= 2.1) {
-    return { percentage: 60, nominal: 600000 };
-  }
-  if (satisfactionScore >= 1.1) {
-    return { percentage: 30, nominal: 300000 };
-  }
-  return { percentage: 0, nominal: 0 };
-}
-
-function calculateSatisfactionScore(
-  eventManagerRating: number | null | undefined,
-  woRating: number | null | undefined,
-  ballroomFacilitiesRating: number | null | undefined,
-  ballroomCleanlinessRating: number | null | undefined,
-  vendorsRating: number | null | undefined,
-  salesRating: number | null | undefined,
-  projectManagers: Array<{ rating?: number | null | undefined }> = []
-): number | null {
-  const ratings: number[] = [];
-
-  if (eventManagerRating) ratings.push(eventManagerRating);
-  if (woRating) ratings.push(woRating);
-  if (ballroomFacilitiesRating) ratings.push(ballroomFacilitiesRating);
-  if (ballroomCleanlinessRating) ratings.push(ballroomCleanlinessRating);
-  if (vendorsRating) ratings.push(vendorsRating);
-  if (salesRating) ratings.push(salesRating);
-
-  // Add PM ratings
-  projectManagers.forEach((pm) => {
-    if (pm.rating) ratings.push(pm.rating);
-  });
-
-  if (ratings.length === 0) return null;
-
-  const sum = ratings.reduce((a, b) => a + b, 0);
-  return sum / ratings.length;
-}
 
 export async function createWeddingIndicator(formData: FormData) {
   const { session, error } = await requirePermission({
@@ -107,14 +59,37 @@ export async function createWeddingIndicator(formData: FormData) {
     if (data.notes) {
       additionalNotes = data.notes as string;
     }
+    const sigMapSchema = z
+      .record(z.string(), z.string().max(50000).nullable().optional())
+      .refine((obj) => Object.keys(obj).length <= 20, {
+        message: "Terlalu banyak tanda tangan",
+      });
+    const sigDateSchema = z.string().max(100);
+
     if (data.signatures) {
-      signatures = JSON.parse(data.signatures as string);
+      const parsed = sigMapSchema.safeParse(
+        JSON.parse(data.signatures as string)
+      );
+      if (!parsed.success) {
+        return { success: false, error: "Format tanda tangan tidak valid" };
+      }
+      signatures = parsed.data;
     }
     if (data.signatureNames) {
-      signatureNames = JSON.parse(data.signatureNames as string);
+      const parsed = sigMapSchema.safeParse(
+        JSON.parse(data.signatureNames as string)
+      );
+      if (!parsed.success) {
+        return { success: false, error: "Format nama tanda tangan tidak valid" };
+      }
+      signatureNames = parsed.data;
     }
     if (data.signatureDate) {
-      signatureDate = data.signatureDate as string;
+      const parsed = sigDateSchema.safeParse(data.signatureDate as string);
+      if (!parsed.success) {
+        return { success: false, error: "Format tanggal tanda tangan tidak valid" };
+      }
+      signatureDate = parsed.data;
     }
 
     // Construct payload for validation
@@ -265,14 +240,37 @@ export async function updateWeddingIndicator(id: string, formData: FormData) {
     if (data.postWeddingWishes) {
       postWeddingWishes = JSON.parse(data.postWeddingWishes as string);
     }
+    const sigMapSchema = z
+      .record(z.string(), z.string().max(50000).nullable().optional())
+      .refine((obj) => Object.keys(obj).length <= 20, {
+        message: "Terlalu banyak tanda tangan",
+      });
+    const sigDateSchema = z.string().max(100);
+
     if (data.signatures) {
-      signatures = JSON.parse(data.signatures as string);
+      const parsed = sigMapSchema.safeParse(
+        JSON.parse(data.signatures as string)
+      );
+      if (!parsed.success) {
+        return { success: false, error: "Format tanda tangan tidak valid" };
+      }
+      signatures = parsed.data;
     }
     if (data.signatureNames) {
-      signatureNames = JSON.parse(data.signatureNames as string);
+      const parsed = sigMapSchema.safeParse(
+        JSON.parse(data.signatureNames as string)
+      );
+      if (!parsed.success) {
+        return { success: false, error: "Format nama tanda tangan tidak valid" };
+      }
+      signatureNames = parsed.data;
     }
     if (data.signatureDate) {
-      signatureDate = data.signatureDate as string;
+      const parsed = sigDateSchema.safeParse(data.signatureDate as string);
+      if (!parsed.success) {
+        return { success: false, error: "Format tanggal tanda tangan tidak valid" };
+      }
+      signatureDate = parsed.data;
     }
 
     const payload = {

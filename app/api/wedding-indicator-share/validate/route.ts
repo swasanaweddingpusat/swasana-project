@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
-import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
+import { authLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { validateShareSchema } from "@/lib/validations/weddingIndicatorShare";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  if (!apiLimiter.check(`wi-share-validate:${ip}`)) return rateLimitResponse();
+  const userAgent = req.headers.get("user-agent") ?? undefined;
 
   try {
     const body = await req.json();
@@ -19,49 +21,115 @@ export async function POST(req: Request) {
 
     const { token, accessCode } = parsed.data;
 
+    // Rate limit per-token + IP to prevent brute-force on access codes
+    if (!authLimiter.check(`wi-share-validate:${token}:${ip}`)) {
+      return rateLimitResponse();
+    }
+
     const share = await db.weddingIndicatorShare.findUnique({
       where: { token },
-      include: {
+      select: {
+        id: true,
+        status: true,
+        expiresAt: true,
+        accessCode: true,
+        viewedAt: true,
         weddingIndicator: {
-          include: {
+          select: {
+            id: true,
+            coupleName: true,
+            eventDate: true,
+            venueId: true,
             venue: { select: { id: true, name: true } },
+            eventManagerName: true,
+            eventManagerRating: true,
+            woName: true,
+            woRating: true,
+            ballroomFacilitiesRating: true,
+            ballroomCleanlinessRating: true,
+            vendorsRating: true,
+            salesRating: true,
+            recommendationScore: true,
+            questionnaireData: true,
           },
         },
       },
     });
 
-    if (!share) {
+    // Generic error — do not distinguish "not found" vs "revoked" vs "expired"
+    if (!share || share.status !== "Active") {
+      await logAudit({
+        action: "wedding_indicator.share_validated",
+        result: "failure",
+        entityType: "WeddingIndicatorShare",
+        entityId: token,
+        ipAddress: ip,
+        userAgent,
+      });
       return NextResponse.json(
         { error: "Link tidak valid atau sudah tidak aktif" },
         { status: 404 }
       );
     }
 
-    if (share.status !== "Active") {
+    // Check expiry
+    if (!share.expiresAt || share.expiresAt < new Date()) {
+      await logAudit({
+        action: "wedding_indicator.share_validated",
+        result: "failure",
+        entityType: "WeddingIndicatorShare",
+        entityId: share.id,
+        ipAddress: ip,
+        userAgent,
+      });
       return NextResponse.json(
-        { error: "Link tidak valid atau sudah tidak aktif" },
-        { status: 400 }
+        { error: "Link tidak valid atau kedaluwarsa" },
+        { status: 404 }
       );
     }
 
-    if (share.accessCode !== accessCode.trim().toUpperCase()) {
+    // Timing-safe access code comparison
+    const a = Buffer.from(share.accessCode);
+    const b = Buffer.from(accessCode.trim().toUpperCase());
+    const codeOk = a.length === b.length && timingSafeEqual(a, b);
+
+    if (!codeOk) {
+      await logAudit({
+        action: "wedding_indicator.share_validated",
+        result: "failure",
+        entityType: "WeddingIndicatorShare",
+        entityId: share.id,
+        ipAddress: ip,
+        userAgent,
+      });
       return NextResponse.json(
-        { error: "Kode akses salah" },
+        { error: "Link tidak valid atau sudah tidak aktif" },
         { status: 401 }
       );
     }
 
     if (!share.viewedAt) {
       await db.weddingIndicatorShare.update({
-        where: { token },
+        where: { id: share.id },
         data: { viewedAt: new Date() },
       });
     }
+
+    await logAudit({
+      action: "wedding_indicator.share_validated",
+      result: "success",
+      entityType: "WeddingIndicatorShare",
+      entityId: share.id,
+      ipAddress: ip,
+      userAgent,
+    });
 
     const indicator = share.weddingIndicator;
     const questionnaireData =
       (indicator.questionnaireData as Record<string, unknown>) ?? {};
 
+    // Strip internal fields — satisfactionScore, allowancePercentage, allowanceNominal
+    // are calculated server-side on save and never exposed to the public client
     return NextResponse.json({
       indicator: {
         id: indicator.id,
@@ -78,13 +146,9 @@ export async function POST(req: Request) {
         vendorsRating: indicator.vendorsRating,
         salesRating: indicator.salesRating,
         recommendationScore: indicator.recommendationScore,
-        satisfactionScore: indicator.satisfactionScore,
-        allowancePercentage: indicator.allowancePercentage,
-        allowanceNominal: indicator.allowanceNominal,
         eventManagerNotes: questionnaireData.eventManagerNotes ?? "",
         woNotes: questionnaireData.woNotes ?? "",
-        ballroomFacilitiesNotes:
-          questionnaireData.ballroomFacilitiesNotes ?? "",
+        ballroomFacilitiesNotes: questionnaireData.ballroomFacilitiesNotes ?? "",
         ballroomCleanlinessNotes:
           questionnaireData.ballroomCleanlinessNotes ?? "",
         vendorsNotes: questionnaireData.vendorsNotes ?? "",

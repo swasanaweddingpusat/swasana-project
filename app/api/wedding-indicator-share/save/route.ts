@@ -1,47 +1,19 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { saveShareSchema } from "@/lib/validations/weddingIndicatorShare";
+import {
+  calculateAllowance,
+  calculateSatisfactionScore,
+} from "@/lib/utils/weddingIndicatorUtils";
 import { revalidateTag } from "next/cache";
+import { logAudit } from "@/lib/audit";
 import type { Prisma } from "@prisma/client";
-
-function calculateSatisfactionScore(
-  eventManagerRating: number | null | undefined,
-  woRating: number | null | undefined,
-  ballroomFacilitiesRating: number | null | undefined,
-  ballroomCleanlinessRating: number | null | undefined,
-  vendorsRating: number | null | undefined,
-  salesRating: number | null | undefined,
-  projectManagers: Array<{ rating?: number | null }> = []
-): number | null {
-  const ratings: number[] = [];
-  if (eventManagerRating) ratings.push(eventManagerRating);
-  if (woRating) ratings.push(woRating);
-  if (ballroomFacilitiesRating) ratings.push(ballroomFacilitiesRating);
-  if (ballroomCleanlinessRating) ratings.push(ballroomCleanlinessRating);
-  if (vendorsRating) ratings.push(vendorsRating);
-  if (salesRating) ratings.push(salesRating);
-  projectManagers.forEach((pm) => {
-    if (pm.rating) ratings.push(pm.rating);
-  });
-  if (ratings.length === 0) return null;
-  return ratings.reduce((a, b) => a + b, 0) / ratings.length;
-}
-
-function calculateAllowance(satisfactionScore: number | null): {
-  percentage: number | null;
-  nominal: number | null;
-} {
-  if (satisfactionScore === null) return { percentage: null, nominal: null };
-  if (satisfactionScore >= 3.6) return { percentage: 100, nominal: 1000000 };
-  if (satisfactionScore >= 3.1) return { percentage: 80, nominal: 800000 };
-  if (satisfactionScore >= 2.1) return { percentage: 60, nominal: 600000 };
-  if (satisfactionScore >= 1.1) return { percentage: 30, nominal: 300000 };
-  return { percentage: 0, nominal: 0 };
-}
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
+  const userAgent = req.headers.get("user-agent") ?? undefined;
   if (!mutationLimiter.check(`wi-share-save:${ip}`)) return rateLimitResponse();
 
   try {
@@ -61,6 +33,7 @@ export async function POST(req: Request) {
         weddingIndicatorId: true,
         accessCode: true,
         status: true,
+        expiresAt: true,
       },
     });
 
@@ -71,9 +44,21 @@ export async function POST(req: Request) {
       );
     }
 
-    if (share.accessCode !== accessCode.trim().toUpperCase()) {
+    // Check expiry
+    if (!share.expiresAt || share.expiresAt < new Date()) {
       return NextResponse.json(
-        { error: "Kode akses salah" },
+        { error: "Link tidak valid atau kedaluwarsa" },
+        { status: 404 }
+      );
+    }
+
+    // Timing-safe access code comparison
+    const a = Buffer.from(share.accessCode);
+    const b = Buffer.from(accessCode.trim().toUpperCase());
+    const codeOk = a.length === b.length && timingSafeEqual(a, b);
+    if (!codeOk) {
+      return NextResponse.json(
+        { error: "Link tidak valid atau sudah tidak aktif" },
         { status: 401 }
       );
     }
@@ -111,7 +96,7 @@ export async function POST(req: Request) {
         where: { id: share.weddingIndicatorId },
         data: {
           coupleName: formFields.coupleName,
-          eventDate: new Date(formFields.eventDate),
+          eventDate: formFields.eventDate,
           eventManagerName: formFields.eventManagerName,
           eventManagerRating: formFields.eventManagerRating,
           woName: formFields.woName,
@@ -132,6 +117,15 @@ export async function POST(req: Request) {
         data: { lastEditedAt: new Date() },
       }),
     ]);
+
+    await logAudit({
+      action: "wedding_indicator.client_saved",
+      result: "success",
+      entityType: "WeddingIndicator",
+      entityId: share.weddingIndicatorId,
+      ipAddress: ip,
+      userAgent,
+    });
 
     revalidateTag("wedding-indicators", "max");
 

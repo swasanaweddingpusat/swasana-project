@@ -1,6 +1,5 @@
 import { requirePermission } from "@/lib/permissions";
-import { db } from "@/lib/db";
-import { redirect } from "next/navigation";
+import { getVenues } from "@/lib/queries/venues";
 import { WeddingIndicatorForm } from "@/components/shared/wedding-indicators/WeddingIndicatorForm";
 
 export default async function CreateWeddingIndicatorPage() {
@@ -13,11 +12,8 @@ export default async function CreateWeddingIndicatorPage() {
     return null;
   }
 
-  const venues = await db.venue.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const allVenues = await getVenues();
+  const venues = allVenues.map((v) => ({ id: v.id, name: v.name }));
 
   return (
     <div className="space-y-6 max-w-4xl">

@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { randomUUID } from "crypto";
+import { randomBytes } from "crypto";
 import { revalidateTag } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { generateAccessCode } from "@/lib/access-code";
@@ -28,8 +28,9 @@ export async function generateShareLink(indicatorId: string) {
     return { success: false as const, error: "Indikator tidak ditemukan" };
   }
 
-  const token = randomUUID();
+  const token = randomBytes(32).toString("hex");
   const accessCode = generateAccessCode();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   try {
     const share = await db.weddingIndicatorShare.upsert({
@@ -40,11 +41,13 @@ export async function generateShareLink(indicatorId: string) {
         status: "Active",
         viewedAt: null,
         lastEditedAt: null,
+        expiresAt,
       },
       create: {
         weddingIndicatorId: indicatorId,
         token,
         accessCode,
+        expiresAt,
       },
     });
 

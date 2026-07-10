@@ -42,6 +42,21 @@ interface PostWeddingWishesData {
   custom2: string;
 }
 
+export interface QuestionnaireData {
+  projectManagers?: ProjectManager[];
+  postWeddingWishes?: PostWeddingWishesData;
+  signatures?: Record<string, string | null>;
+  signatureNames?: Record<string, string>;
+  signatureDate?: string;
+  eventManagerNotes?: string;
+  woNotes?: string;
+  ballroomFacilitiesNotes?: string;
+  ballroomCleanlinessNotes?: string;
+  vendorsNotes?: string;
+  salesNotes?: string;
+  notes?: string;
+}
+
 interface VenueOption {
   id: string;
   name: string;
@@ -70,7 +85,7 @@ interface WeddingIndicatorFormProps {
     salesRating: number | null;
     salesNotes: string;
     recommendationScore: number;
-    questionnaireData: any;
+    questionnaireData: QuestionnaireData | null;
     notes: string;
     satisfactionScore: number | null;
     allowancePercentage: number | null;
@@ -177,9 +192,9 @@ export function WeddingIndicatorForm({
   // Signatures
   const [signaturesData, setSignaturesData] = useState<SignaturesData>(() => {
     const qd = initialData?.questionnaireData;
-    const existingSigs = qd?.signatures as Record<string, string | null> | undefined;
-    const existingNames = qd?.signatureNames as Record<string, string> | undefined;
-    const existingDate = qd?.signatureDate as string | undefined;
+    const existingSigs = qd?.signatures;
+    const existingNames = qd?.signatureNames;
+    const existingDate = qd?.signatureDate;
 
     const slots: Record<string, { name: string; signature: string | null }> = {};
     const keys = [

@@ -1,5 +1,7 @@
 -- CreateEnum
-CREATE TYPE "WeddingIndicatorShareStatus" AS ENUM ('Active', 'Revoked');
+DO $$ BEGIN
+  CREATE TYPE "WeddingIndicatorShareStatus" AS ENUM ('Active', 'Revoked');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "wedding_indicator_shares" (
@@ -23,4 +25,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS "wedding_indicator_shares_weddingIndicatorId_k
 CREATE UNIQUE INDEX IF NOT EXISTS "wedding_indicator_shares_token_key" ON "wedding_indicator_shares"("token");
 
 -- AddForeignKey
+ALTER TABLE "wedding_indicator_shares" DROP CONSTRAINT IF EXISTS "wedding_indicator_shares_weddingIndicatorId_fkey";
 ALTER TABLE "wedding_indicator_shares" ADD CONSTRAINT "wedding_indicator_shares_weddingIndicatorId_fkey" FOREIGN KEY ("weddingIndicatorId") REFERENCES "wedding_indicators"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -128,7 +128,7 @@ export function SignatureCaptureSection({
 
               {hasExistingSignature && !isEditing ? (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-muted bg-white p-2 min-h-28">
+                  <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-muted bg-card p-2 min-h-28">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={slot.signature!}

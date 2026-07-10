@@ -2,14 +2,14 @@ import { z } from "zod";
 
 export const validateShareSchema = z.object({
   token: z.string().min(1, "Token wajib diisi"),
-  accessCode: z.string().min(1, "Kode akses wajib diisi"),
+  accessCode: z.string().min(4, "Kode akses minimal 4 karakter"),
 });
 
 export const saveShareSchema = z.object({
   token: z.string().min(1),
-  accessCode: z.string().min(1),
+  accessCode: z.string().min(4, "Kode akses minimal 4 karakter"),
   coupleName: z.string().min(1, "Nama pasangan wajib diisi"),
-  eventDate: z.string().min(1, "Tanggal acara wajib diisi"),
+  eventDate: z.coerce.date({ message: "Tanggal acara wajib diisi" }),
   venueId: z.string().min(1),
   eventManagerName: z.string().min(1, "Nama Event Manager wajib diisi"),
   eventManagerRating: z.number().nullable().optional(),

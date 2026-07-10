@@ -106,6 +106,7 @@ export async function getWeddingIndicatorsByVenue() {
   const venues = await db.venue.findMany({
     where: { id: { in: venueIds } },
     select: { id: true, name: true },
+    take: 500,
   });
 
   const venueMap = new Map(venues.map((v) => [v.id, v.name]));

@@ -31,10 +31,32 @@ export async function GET(req: Request) {
         status: true,
         viewedAt: true,
         lastEditedAt: true,
+        expiresAt: true,
+        weddingIndicator: {
+          select: {
+            createdById: true,
+          },
+        },
       },
     });
 
-    return NextResponse.json({ share });
+    if (!share) {
+      return NextResponse.json({ share: null });
+    }
+
+    // Only expose raw token+accessCode to the user who created the indicator
+    const isOwner = share.weddingIndicator.createdById === session.user.id;
+
+    return NextResponse.json({
+      share: {
+        token: isOwner ? share.token : "****",
+        accessCode: isOwner ? share.accessCode : "****",
+        status: share.status,
+        viewedAt: share.viewedAt,
+        lastEditedAt: share.lastEditedAt,
+        expiresAt: share.expiresAt,
+      },
+    });
   } catch (e) {
     console.error("[wi-share-status]", e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
