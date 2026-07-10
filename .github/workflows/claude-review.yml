@@ -6,7 +6,11 @@ name: Claude Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    # 'synchronize' sengaja DIBUANG: dulu tiap push ke PR bikin review baru dan
+    # cancel-in-progress mbunuh review yang lagi jalan — di PR gede (yang butuh
+    # 6-7 menit) hasilnya "canceled mulu", gak pernah kelar. Sekarang auto-review
+    # cuma pas PR dibuka / ready. Mau re-review commit baru? ketik @claude.
+    types: [opened, ready_for_review]
     branches:
       - main
       - production
@@ -16,13 +20,17 @@ on:
     types: [created]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.ref }}
+  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   review:
     name: Claude Code Review
     runs-on: ubuntu-latest
+    # Batasi biar gak gantung sampai default 6 jam kalau upstream (9router/opus)
+    # nyangkut. Juga bikin sebab mati kebedaan di log: "canceled" (concurrency)
+    # vs "timed out" (kelamaan) — 20 menit cukup lega buat Opus review PR gede.
+    timeout-minutes: 20
     # Skip draft PR biar gak boros; @claude mention tetep jalan walau draft.
     if: |
       (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
