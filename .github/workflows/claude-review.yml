@@ -6,6 +6,10 @@ name: Claude Review
 
 on:
   pull_request:
+    # Auto-review tetep jalan tiap push ('synchronize'). Yang bikin dulu
+    # "canceled mulu" itu BUKAN synchronize-nya, tapi cancel-in-progress:true —
+    # push baru mbunuh review yang lagi jalan. Sekarang cancel dimatiin (lihat
+    # bawah), jadi tiap push dapet review sampe kelar, gak ada yang dibunuh.
     types: [opened, synchronize, ready_for_review]
     branches:
       - main
@@ -16,13 +20,21 @@ on:
     types: [created]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  # false = review yang lagi jalan TIDAK dibunuh saat ada push baru. Tiap push
+  # bikin review sendiri dan semuanya kelar (antri, gak saling cancel). Trade-off:
+  # push beruntun bisa numpuk beberapa review sekaligus — sengaja, biar tiap
+  # commit dapet review lengkap tanpa pernah ke-cancel.
+  cancel-in-progress: false
 
 jobs:
   review:
     name: Claude Code Review
     runs-on: ubuntu-latest
+    # Batasi biar gak gantung sampai default 6 jam kalau upstream (9router/opus)
+    # nyangkut. Juga bikin sebab mati kebedaan di log: "canceled" (concurrency)
+    # vs "timed out" (kelamaan) — 20 menit cukup lega buat Opus review PR gede.
+    timeout-minutes: 20
     # Skip draft PR biar gak boros; @claude mention tetep jalan walau draft.
     if: |
       (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
