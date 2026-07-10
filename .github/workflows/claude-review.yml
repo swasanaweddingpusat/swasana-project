@@ -6,11 +6,11 @@ name: Claude Review
 
 on:
   pull_request:
-    # 'synchronize' sengaja DIBUANG: dulu tiap push ke PR bikin review baru dan
-    # cancel-in-progress mbunuh review yang lagi jalan — di PR gede (yang butuh
-    # 6-7 menit) hasilnya "canceled mulu", gak pernah kelar. Sekarang auto-review
-    # cuma pas PR dibuka / ready. Mau re-review commit baru? ketik @claude.
-    types: [opened, ready_for_review]
+    # Auto-review tetep jalan tiap push ('synchronize'). Yang bikin dulu
+    # "canceled mulu" itu BUKAN synchronize-nya, tapi cancel-in-progress:true —
+    # push baru mbunuh review yang lagi jalan. Sekarang cancel dimatiin (lihat
+    # bawah), jadi tiap push dapet review sampe kelar, gak ada yang dibunuh.
+    types: [opened, synchronize, ready_for_review]
     branches:
       - main
       - production
@@ -21,7 +21,11 @@ on:
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  # false = review yang lagi jalan TIDAK dibunuh saat ada push baru. Tiap push
+  # bikin review sendiri dan semuanya kelar (antri, gak saling cancel). Trade-off:
+  # push beruntun bisa numpuk beberapa review sekaligus — sengaja, biar tiap
+  # commit dapet review lengkap tanpa pernah ke-cancel.
+  cancel-in-progress: false
 
 jobs:
   review:
