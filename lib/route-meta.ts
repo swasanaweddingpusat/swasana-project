@@ -196,6 +196,36 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Purchase Order",
     subtitle: "Kelola purchase order vendor per booking",
   },
+  "/dashboard/vendor-specialist/evaluations": {
+    title: "Evaluasi Vendor",
+    subtitle: "Lihat dan kelola evaluasi kinerja vendor",
+    parent: "/dashboard/purchase-order",
+  },
+  "/dashboard/vendor-specialist/evaluations/create": {
+    title: "Buat Evaluasi",
+    subtitle: "Buat evaluasi vendor pasca event",
+    parent: "/dashboard/vendor-specialist/evaluations",
+  },
+  "/dashboard/vendor-specialist/analytics": {
+    title: "Analitik Vendor",
+    subtitle: "Statistik dan analisis kinerja vendor",
+    parent: "/dashboard/purchase-order",
+  },
+  "/dashboard/vendor-specialist/wedding-indicators": {
+    title: "Indikator Pernikahan",
+    subtitle: "Kelola kuesioner penilaian kepuasan pasangan pernikahan",
+    parent: "/dashboard/purchase-order",
+  },
+  "/dashboard/vendor-specialist/wedding-indicators/create": {
+    title: "Buat Kuesioner Pernikahan",
+    subtitle: "Isi form untuk membuat kuesioner penilaian kepuasan",
+    parent: "/dashboard/vendor-specialist/wedding-indicators",
+  },
+  "/dashboard/vendor-specialist/wedding-indicators/[id]": {
+    title: "Detail Kuesioner Pernikahan",
+    subtitle: "Lihat dan edit detail kuesioner pernikahan",
+    parent: "/dashboard/vendor-specialist/wedding-indicators",
+  },
 
   // ─── Pengadaan Barang ──────────────────────────────────────────────────────
   "/dashboard/pengadaan-barang": {

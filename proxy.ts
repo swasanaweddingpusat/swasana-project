@@ -8,6 +8,7 @@ const PUBLIC_EXACT = new Set<string>([
   "/auth/reset-password",
   "/auth/verify",
   "/client-agreement",
+  "/wedding-indicator",
 ]);
 
 // Auth pages that are redundant once logged in — redirect to dashboard.
@@ -24,6 +25,7 @@ const PUBLIC_PREFIXES = [
   "/api/auth/",
   "/api/send-email/",
   "/api/client-agreement/",
+  "/api/wedding-indicator-share/",
   "/api/health", // container/Dokploy liveness probe — must bypass auth redirect
 ];
 
