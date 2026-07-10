@@ -10,7 +10,10 @@ on:
     # "canceled mulu" itu BUKAN synchronize-nya, tapi cancel-in-progress:true —
     # push baru mbunuh review yang lagi jalan. Sekarang cancel dimatiin (lihat
     # bawah), jadi tiap push dapet review sampe kelar, gak ada yang dibunuh.
-    types: [opened, synchronize, ready_for_review]
+    # 'closed' dimasukin BUKAN buat mulai review (job review nge-skip event ini),
+    # tapi biar pas PR di-merge/close, job cancel-on-close bisa bunuh review yang
+    # masih jalan — merge langsung, gak usah nungguin review kelar.
+    types: [opened, synchronize, ready_for_review, closed]
     branches:
       - main
       - production
@@ -36,8 +39,10 @@ jobs:
     # vs "timed out" (kelamaan) — 20 menit cukup lega buat Opus review PR gede.
     timeout-minutes: 20
     # Skip draft PR biar gak boros; @claude mention tetep jalan walau draft.
+    # 'closed' di-exclude di sini — merge/close JANGAN mulai review baru; itu
+    # ditangani job cancel-on-close di bawah.
     if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.draft == false) ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
 
@@ -125,3 +130,42 @@ jobs:
             --max-turns 150
             --model cc/claude-opus-4-8
             --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,mcp__github_comment__update_claude_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*)"
+
+  # ── Bunuh review yang masih jalan pas PR di-merge/close ────────────────────
+  # Tujuan: push → merge langsung, gak usah nungguin review kelar. Karena
+  # cancel-in-progress:false (Opsi B) sengaja gak mbunuh review pas ada push,
+  # dia JUGA gak mbunuh pas merge — makanya perlu job eksplisit ini. Begitu PR
+  # ditutup (merged atau close biasa), semua run "Claude Review" yang masih
+  # queued/in_progress buat PR ini dibatalin, jadi gak ada comment nyasar di PR
+  # yang udah ke-merge.
+  cancel-on-close:
+    name: Cancel review on PR close
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel in-progress review runs for this PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+          THIS_RUN: ${{ github.run_id }}
+        run: |
+          # Cari run workflow "Claude Review" di branch PR ini yang statusnya
+          # masih queued / in_progress, lalu batalin satu per satu. Skip run ini
+          # sendiri (THIS_RUN) biar gak bunuh diri.
+          for status in queued in_progress; do
+            gh run list \
+              --repo "$REPO" \
+              --workflow "claude-review.yml" \
+              --branch "$PR_HEAD" \
+              --status "$status" \
+              --json databaseId \
+              --jq '.[].databaseId' | while read -r run_id; do
+                if [ "$run_id" != "$THIS_RUN" ]; then
+                  echo "Cancelling run $run_id ($status)"
+                  gh run cancel "$run_id" --repo "$REPO" || true
+                fi
+              done
+          done
