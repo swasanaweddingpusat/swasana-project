@@ -10,6 +10,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { toDateOnly } from "@/lib/utils";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
+import { validateBookingField, type BookingFieldKey } from "@/lib/validations/booking-form";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,11 @@ export interface EditBookingForm {
   isSavingClientInfo: boolean;
   isSubmitting: boolean;
 
+  // validation
+  errors: Record<string, string>;
+  clearError: (field: string) => void;
+  validateField: (field: BookingFieldKey, value: string) => void;
+
   // queries
   venues: VenueOption[];
   packages: PackageOption[];
@@ -175,6 +181,36 @@ export function useEditBookingForm(
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [signingLocation, setSigningLocation] = useState("");
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
+
+  // ── Validation errors ──
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  function clearError(field: string) {
+    setErrors((prev) => { if (!prev[field]) return prev; const n = { ...prev }; delete n[field]; return n; });
+  }
+  function validateField(field: BookingFieldKey, value: string) {
+    const msg = validateBookingField(field, value);
+    setErrors((prev) => { const n = { ...prev }; if (msg) n[field] = msg; else delete n[field]; return n; });
+  }
+  function validateStep1(): boolean {
+    const next: Record<string, string> = {};
+    const c = validateBookingField("customerName", customerName); if (c) next.customerName = c;
+    const ec = validateBookingField("emailCpp", contactEmailCpp); if (ec) next.emailCpp = ec;
+    const ew = validateBookingField("emailCpw", contactEmailCpw); if (ew) next.emailCpw = ew;
+    const nc = validateBookingField("nikCpp", contactNikCpp); if (nc) next.nikCpp = nc;
+    const nw = validateBookingField("nikCpw", contactNikCpw); if (nw) next.nikCpw = nw;
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+  function validateStep2(): boolean {
+    const next: Record<string, string> = {};
+    const v = validateBookingField("venueId", venueId); if (v) next.venueId = v;
+    const p = validateBookingField("packageId", packageId); if (p) next.packageId = p;
+    const d = validateBookingField("eventDate", bookingDate); if (d) next.eventDate = d;
+    const s = validateBookingField("weddingSession", weddingSession); if (s) next.weddingSession = s;
+    const t = validateBookingField("weddingType", weddingType); if (t) next.weddingType = t;
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
 
   // ── Change detection ──
   const [originalVenueId, setOriginalVenueId] = useState("");
@@ -376,6 +412,7 @@ export function useEditBookingForm(
   // ── Handlers ──
   async function handleSaveClientInfo(): Promise<void> {
     if (!booking) return;
+    if (!validateStep1()) { toast.error("Perbaiki isian yang tidak valid."); return; }
     if (!isStep1Complete) { toast.error("Lengkapi field yang wajib diisi."); return; }
     setIsSavingClientInfo(true);
     try {
@@ -404,6 +441,7 @@ export function useEditBookingForm(
 
   async function handleSubmit(): Promise<void> {
     if (!booking || !isStep2Complete) return;
+    if (!validateStep2()) { toast.error("Perbaiki isian yang tidak valid."); return; }
     setIsSubmitting(true);
     try {
       const r = await editBooking({
@@ -515,6 +553,9 @@ export function useEditBookingForm(
     availability,
     isSavingClientInfo,
     isSubmitting,
+    errors,
+    clearError,
+    validateField,
     venues,
     packages,
     packagesError,

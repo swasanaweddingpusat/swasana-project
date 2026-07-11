@@ -33,6 +33,9 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
     isSalesPIC,
     isBitrixSource,
     lockedSalesName,
+    errors,
+    clearError,
+    validateField,
   } = form;
 
   return (
@@ -44,7 +47,14 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
 
         <div>
           <label className={LBL}>Nama Customer <span className="text-destructive">*</span></label>
-          <Input className="mt-1" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
+          <Input
+            className="mt-1"
+            value={customerName}
+            onChange={(e) => { setCustomerName(e.target.value); clearError("customerName"); }}
+            onBlur={() => validateField("customerName", customerName)}
+            placeholder="Customer name"
+          />
+          {errors.customerName && <p className="mt-1 text-sm text-destructive">{errors.customerName}</p>}
         </div>
 
         {/* Contact Person */}
@@ -155,55 +165,75 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
         )}
       </div>
 
-      {/* Card 3: Data CPP & CPW */}
+      {/* Card 3: Data CPP */}
       <div className="rounded-2xl border bg-card p-5 space-y-3">
-        <p className="text-sm font-semibold text-foreground mb-1">Data CPP & CPW</p>
+        <p className="text-sm font-semibold text-foreground mb-1">Data CPP</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={LBL}>Email CPP</label>
-            <Input className="mt-1" value={contactEmailCpp} onChange={(e) => setContactEmailCpp(e.target.value)} placeholder="Email CPP" />
-          </div>
-          <div>
-            <label className={LBL}>Email CPW</label>
-            <Input className="mt-1" value={contactEmailCpw} onChange={(e) => setContactEmailCpw(e.target.value)} placeholder="Email CPW" />
-          </div>
+        <div>
+          <label className={LBL}>Email CPP</label>
+          <Input
+            className="mt-1"
+            value={contactEmailCpp}
+            onChange={(e) => { setContactEmailCpp(e.target.value); clearError("emailCpp"); }}
+            onBlur={() => validateField("emailCpp", contactEmailCpp)}
+            placeholder="Email CPP"
+          />
+          {errors.emailCpp && <p className="mt-1 text-sm text-destructive">{errors.emailCpp}</p>}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={LBL}>NIK CPP</label>
-            <Input
-              className="mt-1"
-              value={contactNikCpp}
-              onChange={(e) => setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16))}
-              inputMode="numeric"
-              maxLength={16}
-              placeholder="NIK CPP"
-            />
-          </div>
-          <div>
-            <label className={LBL}>NIK CPW</label>
-            <Input
-              className="mt-1"
-              value={contactNikCpw}
-              onChange={(e) => setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16))}
-              inputMode="numeric"
-              maxLength={16}
-              placeholder="NIK CPW"
-            />
-          </div>
+        <div>
+          <label className={LBL}>NIK CPP</label>
+          <Input
+            className="mt-1"
+            value={contactNikCpp}
+            onChange={(e) => { setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpp"); }}
+            onBlur={() => validateField("nikCpp", contactNikCpp)}
+            inputMode="numeric"
+            maxLength={16}
+            placeholder="NIK CPP"
+          />
+          {errors.nikCpp && <p className="mt-1 text-sm text-destructive">{errors.nikCpp}</p>}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={LBL}>Alamat CPP</label>
-            <Textarea className="mt-1" rows={3} value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} placeholder="Alamat CPP" />
-          </div>
-          <div>
-            <label className={LBL}>Alamat CPW</label>
-            <Textarea className="mt-1" rows={3} value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} placeholder="Alamat CPW" />
-          </div>
+        <div>
+          <label className={LBL}>Alamat CPP</label>
+          <Textarea className="mt-1" rows={3} value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} placeholder="Alamat CPP" />
+        </div>
+      </div>
+
+      {/* Card 4: Data CPW */}
+      <div className="rounded-2xl border bg-card p-5 space-y-3">
+        <p className="text-sm font-semibold text-foreground mb-1">Data CPW</p>
+
+        <div>
+          <label className={LBL}>Email CPW</label>
+          <Input
+            className="mt-1"
+            value={contactEmailCpw}
+            onChange={(e) => { setContactEmailCpw(e.target.value); clearError("emailCpw"); }}
+            onBlur={() => validateField("emailCpw", contactEmailCpw)}
+            placeholder="Email CPW"
+          />
+          {errors.emailCpw && <p className="mt-1 text-sm text-destructive">{errors.emailCpw}</p>}
+        </div>
+
+        <div>
+          <label className={LBL}>NIK CPW</label>
+          <Input
+            className="mt-1"
+            value={contactNikCpw}
+            onChange={(e) => { setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpw"); }}
+            onBlur={() => validateField("nikCpw", contactNikCpw)}
+            inputMode="numeric"
+            maxLength={16}
+            placeholder="NIK CPW"
+          />
+          {errors.nikCpw && <p className="mt-1 text-sm text-destructive">{errors.nikCpw}</p>}
+        </div>
+
+        <div>
+          <label className={LBL}>Alamat CPW</label>
+          <Textarea className="mt-1" rows={3} value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} placeholder="Alamat CPW" />
         </div>
       </div>
 

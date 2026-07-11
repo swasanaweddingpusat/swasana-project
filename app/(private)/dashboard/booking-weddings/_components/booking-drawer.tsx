@@ -65,6 +65,7 @@ import {
 } from "@/components/shared/PackageItemsEditor";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
+import { validateBookingField, type BookingFieldKey } from "@/lib/validations/booking-form";
 import type { BookingPrefillLead } from "@/types/lead";
 import {
   getWeddingTimeRange,
@@ -381,6 +382,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [time, setTime] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -590,6 +592,57 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     clearWeddingDraftFromStorage();
     // Migrate any residual old-system localStorage artifacts
     clearLocalDraftArtifacts();
+    setErrors({});
+  }
+
+  function clearError(field: string) {
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateField(field: BookingFieldKey, value: string) {
+    const msg = validateBookingField(field, value);
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (msg) { next[field] = msg; } else { delete next[field]; }
+      return next;
+    });
+  }
+
+  function validateStep1(): boolean {
+    const next: Record<string, string> = {};
+    const cn_ = validateBookingField("customerName", customerName);
+    if (cn_) next.customerName = cn_;
+    const ec = validateBookingField("emailCpp", contactEmailCpp);
+    if (ec) next.emailCpp = ec;
+    const ew = validateBookingField("emailCpw", contactEmailCpw);
+    if (ew) next.emailCpw = ew;
+    const nc = validateBookingField("nikCpp", contactNikCpp);
+    if (nc) next.nikCpp = nc;
+    const nw = validateBookingField("nikCpw", contactNikCpw);
+    if (nw) next.nikCpw = nw;
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+  function validateStep2(): boolean {
+    const next: Record<string, string> = {};
+    const v = validateBookingField("venueId", form.getValues("venueId") ?? "");
+    if (v) next.venueId = v;
+    const p = validateBookingField("packageId", form.getValues("packageId") ?? "");
+    if (p) next.packageId = p;
+    const d = validateBookingField("eventDate", form.getValues("eventDate") ?? "");
+    if (d) next.eventDate = d;
+    const s = validateBookingField("weddingSession", form.getValues("weddingSession") ?? "");
+    if (s) next.weddingSession = s;
+    const t = validateBookingField("weddingType", form.getValues("weddingType") ?? "");
+    if (t) next.weddingType = t;
+    setErrors(next);
+    return Object.keys(next).length === 0;
   }
 
   useEffect(() => {
@@ -1158,6 +1211,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     }
 
     if (currentStep === 1) {
+      if (!validateStep1()) { toast.error("Perbaiki isian yang tidak valid."); return; }
       setCurrentStep(2);
       return;
     }
@@ -1173,6 +1227,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       toast.error("Lengkapi field venue & paket terlebih dahulu.");
       return;
     }
+
+    if (currentStep === 2 && !validateStep2()) { toast.error("Perbaiki isian yang tidak valid."); return; }
 
     if (currentStep === 2) {
       // Build the full payload combining client (step 1) + venue/package (step 2) data.
@@ -1692,7 +1748,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           form.setValue("customerId", "");
                           setSelectedLeadId("");
                           setCustomerDropdownOpen(true);
+                          clearError("customerName");
                         }}
+                        onBlur={() => validateField("customerName", customerName)}
                         onFocus={() => { if (customerName.trim()) setCustomerDropdownOpen(true); }}
                         placeholder="Cari lead atau customer terdaftar..."
                         className="w-full"
@@ -1773,6 +1831,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         </div>
                       )}
                     </div>
+                    {errors.customerName && <p className="mt-1 text-sm text-destructive">{errors.customerName}</p>}
                   </div>
 
                   {/* Contact Person */}
@@ -1885,34 +1944,42 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     </div>
                   )}
 
+                  <p className="text-sm font-semibold text-foreground mt-2 mb-1">Data CPP</p>
+
                   {/* Email CPP */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Email CPP</FormLabel>
-                    <Input placeholder="e.g. cpp@email.com" value={contactEmailCpp} onChange={(e) => setContactEmailCpp(e.target.value)} className="mt-1" />
-                  </div>
-
-                  {/* Email CPW */}
-                  <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Email CPW</FormLabel>
-                    <Input placeholder="e.g. cpw@email.com" value={contactEmailCpw} onChange={(e) => setContactEmailCpw(e.target.value)} className="mt-1" />
+                    <Input placeholder="e.g. cpp@email.com" value={contactEmailCpp} onChange={(e) => { setContactEmailCpp(e.target.value); clearError("emailCpp"); }} onBlur={() => validateField("emailCpp", contactEmailCpp)} className="mt-1" />
+                    {errors.emailCpp && <p className="mt-1 text-sm text-destructive">{errors.emailCpp}</p>}
                   </div>
 
                   {/* NIK CPP */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPP</FormLabel>
-                    <Input placeholder="e.g. 3275010101010001" value={contactNikCpp} onChange={(e) => setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
-                  </div>
-
-                  {/* NIK CPW */}
-                  <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPW</FormLabel>
-                    <Input placeholder="e.g. 3275010101010002" value={contactNikCpw} onChange={(e) => setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
+                    <Input placeholder="e.g. 3275010101010001" value={contactNikCpp} onChange={(e) => { setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpp"); }} onBlur={() => validateField("nikCpp", contactNikCpp)} inputMode="numeric" maxLength={16} className="mt-1" />
+                    {errors.nikCpp && <p className="mt-1 text-sm text-destructive">{errors.nikCpp}</p>}
                   </div>
 
                   {/* Alamat CPP */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPP</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} rows={3} className="mt-1" />
+                  </div>
+
+                  <p className="text-sm font-semibold text-foreground mt-2 mb-1">Data CPW</p>
+
+                  {/* Email CPW */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Email CPW</FormLabel>
+                    <Input placeholder="e.g. cpw@email.com" value={contactEmailCpw} onChange={(e) => { setContactEmailCpw(e.target.value); clearError("emailCpw"); }} onBlur={() => validateField("emailCpw", contactEmailCpw)} className="mt-1" />
+                    {errors.emailCpw && <p className="mt-1 text-sm text-destructive">{errors.emailCpw}</p>}
+                  </div>
+
+                  {/* NIK CPW */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPW</FormLabel>
+                    <Input placeholder="e.g. 3275010101010002" value={contactNikCpw} onChange={(e) => { setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpw"); }} onBlur={() => validateField("nikCpw", contactNikCpw)} inputMode="numeric" maxLength={16} className="mt-1" />
+                    {errors.nikCpw && <p className="mt-1 text-sm text-destructive">{errors.nikCpw}</p>}
                   </div>
 
                   {/* Alamat CPW */}
@@ -1930,8 +1997,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Venue <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); clearError("venueId"); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
+                      {errors.venueId && <p className="mt-1 text-sm text-destructive">{errors.venueId}</p>}
                     </FormItem>
                   )} />
 
@@ -1939,9 +2007,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } clearError("packageId"); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
                       <FormMessage />
+                      {errors.packageId && <p className="mt-1 text-sm text-destructive">{errors.packageId}</p>}
                     </FormItem>
                   )} />
 
@@ -1963,6 +2032,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             // User explicitly changed event type → re-enable time auto-fill
                             isResumedDraftRef.current = false;
                             field.onChange(v || null);
+                            clearError("weddingType");
                           }}
                           placeholder="Pilih type"
                           searchPlaceholder="Cari event type..."
@@ -1970,6 +2040,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         />
                       </FormControl>
                       <FormMessage />
+                      {errors.weddingType && <p className="mt-1 text-sm text-destructive">{errors.weddingType}</p>}
                     </FormItem>
                   )} />
 
@@ -1995,7 +2066,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             mode="single"
                             captionLayout="dropdown"
                             selected={field.value ? parseDateOnly(field.value) : undefined}
-                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); form.setValue("weddingSession", null); }}
+                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); form.setValue("weddingSession", null); clearError("eventDate"); }}
                             disabled={(d) => getDateStatus(d) === "unavailable"}
                             fromYear={new Date().getFullYear() - 10}
                             toYear={new Date().getFullYear() + 10}
@@ -2016,6 +2087,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       </Popover>
                       {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Mengecek ketersediaan...</p>}
                       <FormMessage />
+                      {errors.eventDate && <p className="mt-1 text-sm text-destructive">{errors.eventDate}</p>}
                     </FormItem>
                   )} />
 
@@ -2036,6 +2108,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                               // User explicitly changed session → re-enable time auto-fill
                               isResumedDraftRef.current = false;
                               field.onChange(v || null);
+                              clearError("weddingSession");
                             }}
                             placeholder={!wBookingDate ? "Pilih tanggal dulu" : "Pilih session"}
                             searchPlaceholder="Cari session..."
@@ -2044,6 +2117,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           />
                         </FormControl>
                         <FormMessage />
+                        {errors.weddingSession && <p className="mt-1 text-sm text-destructive">{errors.weddingSession}</p>}
                       </FormItem>
                     );
                   }} />

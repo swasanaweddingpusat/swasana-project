@@ -79,7 +79,9 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
   const [localPerms, setLocalPerms] = useState<Record<string, Set<string>>>(() => {
     const state: Record<string, Set<string>> = {};
     initialRoles.forEach((r) => {
-      state[r.id] = new Set(r.rolePermissions.map((rp) => rp.permission.id));
+      // Guard against orphan rolePermissions whose permission row was deleted
+      // (Prisma returns permission: null for a dangling FK) — skip them.
+      state[r.id] = new Set(r.rolePermissions.filter((rp) => rp.permission).map((rp) => rp.permission.id));
     });
     return state;
   });
@@ -93,7 +95,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
       const next = { ...prev };
       roles.forEach((r) => {
         if (!next[r.id]) {
-          next[r.id] = new Set(r.rolePermissions.map((rp) => rp.permission.id));
+          next[r.id] = new Set(r.rolePermissions.filter((rp) => rp.permission).map((rp) => rp.permission.id));
         }
       });
       return next;
@@ -205,7 +207,7 @@ export function RolesManager({ initialRoles, initialPermissions }: RolesManagerP
     if (!selectedRoleId) return;
     const role = roles.find((r) => r.id === selectedRoleId);
     if (!role) return;
-    setLocalPerms((prev) => ({ ...prev, [selectedRoleId]: new Set(role.rolePermissions.map((rp) => rp.permission.id)) }));
+    setLocalPerms((prev) => ({ ...prev, [selectedRoleId]: new Set(role.rolePermissions.filter((rp) => rp.permission).map((rp) => rp.permission.id)) }));
     setIsDirty(false);
   };
 

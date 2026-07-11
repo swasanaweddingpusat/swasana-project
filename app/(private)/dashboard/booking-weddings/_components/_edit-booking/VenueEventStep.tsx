@@ -34,6 +34,8 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
     willResetApproval,
     getDateStatus,
     getAvailableSessions,
+    errors,
+    clearError,
   } = form;
 
   return (
@@ -59,11 +61,13 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
           onChange={(id) => {
             setVenueId(id);
             setPackageId("");
+            clearError("venueId");
           }}
           placeholder="Pilih venue..."
           searchPlaceholder="Cari venue..."
           emptyText="Tidak ada venue"
         />
+        {errors.venueId && <p className="mt-1 text-sm text-destructive">{errors.venueId}</p>}
       </div>
 
       {/* Package */}
@@ -72,19 +76,20 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
         <SearchableSelect
           options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` · ${p.pax} PAX` : ""}` }))}
           value={packageId}
-          onChange={(id) => setPackageId(id)}
+          onChange={(id) => { setPackageId(id); clearError("packageId"); }}
           placeholder={venueId ? "Pilih paket..." : "Pilih venue dulu"}
           disabled={!venueId}
           searchPlaceholder="Cari paket..."
           emptyText="Tidak ada paket"
         />
         {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
+        {errors.packageId && <p className="mt-1 text-sm text-destructive">{errors.packageId}</p>}
       </div>
 
       {/* Event Type */}
       <div>
         <label className={LBL}>Tipe Event <span className="text-destructive">*</span></label>
-        <Select value={weddingType} onValueChange={setWeddingType}>
+        <Select value={weddingType} onValueChange={(v) => { setWeddingType(v); clearError("weddingType"); }}>
           <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Pilih type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="R">Resepsi</SelectItem>
@@ -94,6 +99,7 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
             <SelectItem value="VO">Venue Only</SelectItem>
           </SelectContent>
         </Select>
+        {errors.weddingType && <p className="mt-1 text-sm text-destructive">{errors.weddingType}</p>}
       </div>
 
       {/* Event Date */}
@@ -115,7 +121,7 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
               mode="single"
               captionLayout="dropdown"
               selected={bookingDate ? parseDateOnly(bookingDate) : undefined}
-              onSelect={(date) => { setBookingDate(date ? toDateOnly(date) : ""); setWeddingSession(""); }}
+              onSelect={(date) => { setBookingDate(date ? toDateOnly(date) : ""); setWeddingSession(""); clearError("eventDate"); }}
               fromYear={new Date().getFullYear() - 10}
               toYear={new Date().getFullYear() + 10}
               defaultMonth={bookingDate ? parseDateOnly(bookingDate) : new Date()}
@@ -136,12 +142,13 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
             />
           </PopoverContent>
         </Popover>
+        {errors.eventDate && <p className="mt-1 text-sm text-destructive">{errors.eventDate}</p>}
       </div>
 
       {/* Event Session */}
       <div>
         <label className={LBL}>Sesi Event <span className="text-destructive">*</span></label>
-        <Select value={weddingSession} onValueChange={setWeddingSession}>
+        <Select value={weddingSession} onValueChange={(v) => { setWeddingSession(v); clearError("weddingSession"); }}>
           <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Pilih session" /></SelectTrigger>
           <SelectContent>
             {(bookingDate ? getAvailableSessions(bookingDate) : ["morning", "evening", "fullday"]).map((s) => (
@@ -149,6 +156,7 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
             ))}
           </SelectContent>
         </Select>
+        {errors.weddingSession && <p className="mt-1 text-sm text-destructive">{errors.weddingSession}</p>}
       </div>
 
       {/* Time */}
