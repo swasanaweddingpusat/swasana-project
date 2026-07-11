@@ -80,6 +80,8 @@ function SubItemRow({
   const [open, setOpen] = useState(active || childActive);
 
   if (item.submenu) {
+    const submenu = item.submenu;
+    const childActiveHref = mostSpecificActiveHref(submenu, pathname);
     return (
       <SidebarMenuSubItem>
         <SidebarMenuSubButton
@@ -100,12 +102,12 @@ function SubItemRow({
         </SidebarMenuSubButton>
         {open && (
           <SidebarMenuSub>
-            {item.submenu.map((sub) => (
+            {submenu.map((sub) => (
               <SubItemRow
                 key={sub.href}
                 item={sub}
                 pathname={pathname}
-                activeHref={mostSpecificActiveHref(item.submenu!, pathname)}
+                activeHref={childActiveHref}
               />
             ))}
           </SidebarMenuSub>
@@ -138,6 +140,8 @@ export function NavItemRow({ item }: { item: NavItem }) {
   const Icon = item.icon;
 
   if (item.submenu) {
+    const submenu = item.submenu;
+    const childActiveHref = mostSpecificActiveHref(submenu, pathname);
     return (
       <SidebarMenuItem>
         <NavTooltip label={item.name}>
@@ -158,12 +162,12 @@ export function NavItemRow({ item }: { item: NavItem }) {
         </NavTooltip>
         {open && (
           <SidebarMenuSub>
-            {item.submenu.map((sub) => (
+            {submenu.map((sub) => (
               <SubItemRow
                 key={sub.href}
                 item={sub}
                 pathname={pathname}
-                activeHref={mostSpecificActiveHref(item.submenu!, pathname)}
+                activeHref={childActiveHref}
               />
             ))}
           </SidebarMenuSub>
