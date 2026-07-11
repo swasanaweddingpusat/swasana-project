@@ -1296,20 +1296,6 @@ export async function editBooking(data: unknown) {
     // NOTE: complimentaries are intentionally excluded from material-change detection.
     // They are managed independently via saveSnapComplimentaries (EditComplimentaryDrawer)
     // which does NOT reset approval or client agreement.
-    const hasMaterialChange =
-      venueChanged ||
-      packageChanged ||
-      priceRefreshed ||
-      eventDateChanged ||
-      discountChanged ||
-      takeoutChanged ||
-      topChanged ||
-      paidReversed;
-    // Terms must be re-written whenever structure, status, or sort-order changed.
-    // sortOrder-only change (drag reorder) is non-material but still needs a write
-    // so the new display order is persisted correctly.
-    const termsNeedWrite = topChanged || topStatusChanged || topSortOrderChanged;
-
     // Snapshot freeze gate. Once the client signs (snapshotFrozenAt set), the frozen
     // snapshot (SnapCustomer, pricing, internal items) must not be silently overwritten.
     // A material change is the legitimate re-edit path: it spins a NEW revision the
@@ -1318,6 +1304,26 @@ export async function editBooking(data: unknown) {
     // Client step) must leave the SIGNED SnapCustomer untouched — the Customer master
     // still updates for CRM, but the PO snapshot the client signed stays intact.
     const isFrozen = booking.snapshotFrozenAt != null;
+    // Material-change detection only applies AFTER the client has signed (snapshotFrozenAt set).
+    // Before the client signs, the booking is still in its first-draft revision — sales may
+    // freely change package/venue/price/terms without spinning a new revision or resetting
+    // approval. Snap tables (venue/package/pricing) still update so the PO reflects the latest
+    // data, but no revision is created and approval is not reset.
+    const hasMaterialChange =
+      isFrozen &&
+      (venueChanged ||
+        packageChanged ||
+        priceRefreshed ||
+        eventDateChanged ||
+        discountChanged ||
+        takeoutChanged ||
+        topChanged ||
+        paidReversed);
+    // Terms must be re-written whenever structure, status, or sort-order changed.
+    // sortOrder-only change (drag reorder) is non-material but still needs a write
+    // so the new display order is persisted correctly.
+    const termsNeedWrite = topChanged || topStatusChanged || topSortOrderChanged;
+
     const skipSnapCustomerWrite = isFrozen && !hasMaterialChange;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
