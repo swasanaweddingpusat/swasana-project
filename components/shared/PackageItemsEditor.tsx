@@ -81,33 +81,34 @@ function SortableRow({
         isDragging && "opacity-50 shadow-md",
       )}
     >
-      {/* Drag handle on top — full-width grab bar, keeps the content edge-to-edge. */}
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex w-full items-center justify-center rounded-lg py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
-        tabIndex={-1}
-        aria-label="Geser urutan item"
-      >
-        <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4 rotate-90" />
-      </button>
+      {/* Top row: compact grab handle on the left, delete button pinned to the right. */}
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
+          tabIndex={-1}
+          aria-label="Geser urutan item"
+        >
+          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4 rotate-90" />
+          Geser
+        </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          aria-label="Hapus item"
+          className="shrink-0 gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+          Hapus
+        </Button>
+      </div>
 
       {/* Content — full width */}
       <div className="min-w-0 space-y-3">{children}</div>
-
-      {/* Delete at the bottom */}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={onDelete}
-        aria-label="Hapus item"
-        className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
-      >
-        <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-        Hapus
-      </Button>
     </div>
   );
 }
