@@ -68,6 +68,8 @@ export interface ARTermin {
   ackStatus: ARTerminAckStatus;
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
+  /** Bank tujuan transfer, e.g. "BCA 149" (bankName + 3 digit akhir rekening). Null = belum di-set. */
+  viaRekening: string | null;
 }
 
 export type ARBookingStatus = "Pending" | "Uploaded" | "Confirmed" | "Rejected" | "Canceled" | "Lost";
@@ -91,6 +93,44 @@ export interface ARBooking {
   jatuhTempo: string;
   statusTermin: ARTerminStatus;
   termins: ARTermin[];
+}
+
+// ─── AR Aging & Client (UI-derived, no new query) ────────────────────────────
+
+/** Aging bucket keys — derived client-side from ARTermin.agingDays. */
+export type AgingBucketKey = "not_due" | "d1_30" | "d31_60" | "d61_90" | "d90_plus";
+
+/** One termin flattened into the aging report table. */
+export interface AgingRow {
+  bookingId: string;
+  terminId: string;
+  client: string;
+  noPo: string;
+  terminName: string;
+  dueDate: string;
+  outstanding: number;
+  agingDays: number | null;
+  bucket: AgingBucketKey;
+  salesPicName: string;
+  venueId: string;
+  salesId: string;
+}
+
+/** Aggregated AR per customer for the Client page. */
+export interface ARClientRow {
+  client: string;
+  bookingCount: number;
+  totalKontrak: number;
+  dibayar: number;
+  sisa: number;
+  bookings: {
+    id: string;
+    noPo: string;
+    namaEvent: string;
+    totalPrice: number;
+    outstanding: number;
+    statusTermin: ARTerminStatus;
+  }[];
 }
 
 // ─── AP Types (Accounts Payable) ─────────────────────────────────────────────
@@ -168,4 +208,100 @@ export interface APFilters {
   ack?: APAckStatus;
   search?: string;
   dateRange?: { from?: string; to?: string };
+}
+
+// ─── Ledger Types (Buku Besar / Cashflow) ────────────────────────────────────
+
+/**
+ * Lifecycle status of one ledger row — the 3-phase money journey.
+ * - receivable: client sudah teken kontrak, belum bayar (piutang)
+ * - unearned:   uang sudah masuk, tapi acara belum jalan → belum jadi pendapatan (kredit/titipan)
+ * - earned:     acara selesai + approval lengkap → pendapatan sah (debit)
+ * - void:       dibatalkan (koreksi non-destruktif, append-only)
+ */
+export type LedgerStatus = "receivable" | "unearned" | "earned" | "void";
+
+/**
+ * What kind of movement a row records.
+ * - receivable:  baris kontrak per termin (dibuat saat signing)
+ * - cash_in:     uang riil masuk (pembayaran/cicilan) → nambah saldo bank
+ * - discount:    potongan promo — nutup piutang tapi BUKAN uang riil (contra-receivable)
+ * - recognition: penanda flip unearned → earned
+ * - adjustment:  koreksi delta akibat revisi (append, bukan edit)
+ * - refund:      pengembalian ke client
+ */
+export type LedgerEntryType =
+  | "receivable"
+  | "cash_in"
+  | "discount"
+  | "recognition"
+  | "adjustment"
+  | "refund";
+
+/** Finance confirmation that money actually landed (per-transaction — "PENANDA TANGAN"). */
+export type LedgerAckStatus = "pending" | "acknowledged" | "rejected";
+
+/** One row in the append-only cashflow ledger. Denormalized for UI-first dummy. */
+export interface LedgerEntry {
+  id: string;
+  /** Tanggal uang benar-benar bergerak, e.g. "2026-01-02". */
+  occurredAt: string;
+  bookingId: string;
+  /** Denormalized display name, e.g. "Ridho & Tiara". */
+  clientName: string;
+  entryType: LedgerEntryType;
+  status: LedgerStatus;
+  /** Rupiah penuh (Int). Untuk baris discount = nilai potongan. */
+  amount: number;
+  ackStatus: LedgerAckStatus;
+  /** Nama yang meng-acknowledge ("PENANDA TANGAN"), null selama pending. */
+  acknowledgedBy: string | null;
+  /** Rekening tujuan, e.g. "BCA 149". Null untuk baris discount (bukan uang riil). */
+  paymentMethod: string | null;
+  /** Nomor kwitansi/invoice, null untuk baris non-cash. */
+  invoiceNumber: string | null;
+  /** Nama program promo — hanya keisi saat entryType = "discount". */
+  discountProgramName: string | null;
+  /**
+   * Termin (Term of Payment) yang di-cover pembayaran ini — OPSIONAL & bisa lebih dari satu.
+   * Kosong = pembayaran tidak dilink ke termin manapun. Denormalized labels buat display.
+   */
+  linkedTerminIds: string[];
+  linkedTerminLabels: string[];
+  /** Nama file bukti bayar (kwitansi/transfer). Null = belum diupload. FE-only: nama file aja. */
+  paymentEvidenceName: string | null;
+  notes: string | null;
+}
+
+/** Termin/TOP option buat multi-select linking di entry drawer (FE-only dummy). */
+export interface LedgerTerminOption {
+  id: string;
+  bookingId: string;
+  /** Label termin, e.g. "DP 60%" atau "Pelunasan". */
+  name: string;
+  amount: number;
+  dueDate: string;
+}
+
+export interface LedgerFilters {
+  status?: LedgerStatus;
+  entryType?: LedgerEntryType;
+  search?: string;
+  dateRange?: { from?: string; to?: string };
+}
+
+/** Aggregated totals for the KPI cards + money-flow bar. */
+export interface LedgerSummary {
+  piutang: number;
+  unearned: number;
+  earned: number;
+  potongan: number;
+}
+
+/** Mock discount program for the entry drawer promo picker (FE-only). */
+export interface LedgerPromoOption {
+  id: string;
+  name: string;
+  discountType: "PERCENTAGE" | "NOMINAL";
+  discountValue: number;
 }

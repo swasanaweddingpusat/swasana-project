@@ -62,6 +62,8 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
           ackStatus: true,
           acknowledgedAt: true,
           acknowledgedBy: { select: { fullName: true, nickName: true } },
+          paymentMethodId: true,
+          paymentMethod: { select: { bankName: true, bankAccountNumber: true } },
           partialPayments: {
             select: { id: true, amount: true, paidAt: true, notes: true },
             orderBy: { paidAt: "asc" },
@@ -89,6 +91,11 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
       const paidSoFar = partialPayments.reduce((s, p) => s + p.amount, 0);
       const remaining = status === "paid" ? 0 : Number(t.amount) - paidSoFar;
 
+      // "BCA 149" — bank + 3 digit akhir rekening. Null kalau bank belum di-set.
+      const viaRekening = t.paymentMethod
+        ? `${t.paymentMethod.bankName} ${t.paymentMethod.bankAccountNumber.slice(-3)}`
+        : null;
+
       const statusInvoice: ARInvoiceStatus = t.invoiceNumber
         ? t.paymentStatus === "paid"
           ? "paid"
@@ -112,6 +119,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         ackStatus: (t.ackStatus ?? "pending") as "pending" | "acknowledged" | "rejected",
         acknowledgedAt: t.acknowledgedAt ? t.acknowledgedAt.toISOString() : null,
         acknowledgedByName: t.acknowledgedBy?.fullName ?? t.acknowledgedBy?.nickName ?? null,
+        viaRekening,
       };
     });
 
