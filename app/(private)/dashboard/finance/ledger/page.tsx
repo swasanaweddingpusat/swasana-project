@@ -54,6 +54,7 @@ export default function LedgerPage(): React.ReactElement {
   const [tab, setTab] = useState<TabKey>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState<LedgerEntry | null>(null);
   const [kwitansiEntry, setKwitansiEntry] = useState<LedgerEntry | null>(null);
   const [kwitansiOpen, setKwitansiOpen] = useState(false);
   const [ackEntry, setAckEntry] = useState<LedgerEntry | null>(null);
@@ -166,6 +167,28 @@ export default function LedgerPage(): React.ReactElement {
     setDrawerOpen(false);
   }
 
+  // Edit — buka drawer dalam mode edit, prefill dari entry yang dipilih.
+  function handleEdit(target: LedgerEntry): void {
+    setEditEntry(target);
+    setDrawerOpen(true);
+  }
+
+  // Update — replace satu entry di state berdasarkan id, plus catat activity "edited".
+  function handleUpdate(updated: LedgerEntry): void {
+    setLedger((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    const activity: LedgerActivity = {
+      id: `act-edit-${updated.id}-${new Date().getTime()}`,
+      entryId: updated.id,
+      action: "edited",
+      actorName: "Bintang",
+      actorRole: "Sales",
+      signatureDataUrl: null,
+      note: null,
+      createdAt: new Date().toISOString(),
+    };
+    setActivities((prev) => [activity, ...prev]);
+  }
+
   // Ack = butuh approval + ttd → buka modal verifikasi (bukan langsung acknowledge).
   function handleAck(target: LedgerEntry): void {
     setAckEntry(target);
@@ -255,7 +278,10 @@ export default function LedgerPage(): React.ReactElement {
           </div>
           <Button
             className="ml-auto shrink-0 rounded-full"
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => {
+              setEditEntry(null);
+              setDrawerOpen(true);
+            }}
           >
             <AddCircle weight="BoldDuotone" className="size-4" />
             <span className="hidden sm:inline">Catat Transaksi</span>
@@ -274,6 +300,7 @@ export default function LedgerPage(): React.ReactElement {
             onAck={handleAck}
             onKwitansi={handleKwitansi}
             onActivity={handleActivity}
+            onEdit={handleEdit}
             activityCounts={activityCounts}
             currentPage={currentPage}
             totalPages={totalPages}
@@ -283,11 +310,16 @@ export default function LedgerPage(): React.ReactElement {
         </div>
       </div>
 
-      {/* 4. Entry drawer */}
+      {/* 4. Entry drawer — mode Create (editEntry=null) dan mode Edit (editEntry terisi) */}
       <LedgerEntryDrawer
         isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditEntry(null);
+        }}
         onSubmit={handleRecord}
+        editEntry={editEntry}
+        onUpdate={handleUpdate}
       />
 
       {/* 5. Kwitansi preview + download */}

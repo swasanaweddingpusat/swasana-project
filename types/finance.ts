@@ -315,7 +315,7 @@ export interface LedgerPromoOption {
  * - rejected:     Finance tolak (mis. mutasi tidak ketemu)
  * - voided:       transaksi dibatalkan (koreksi non-destruktif)
  */
-export type LedgerActivityAction = "created" | "acknowledged" | "rejected" | "voided";
+export type LedgerActivityAction = "created" | "acknowledged" | "rejected" | "voided" | "edited";
 
 /**
  * Satu baris di activity log ledger — append-only, satu transaksi bisa punya

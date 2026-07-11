@@ -12,6 +12,7 @@ import {
   UploadMinimalistic,
   InfoCircle,
   Link as LinkIcon,
+  Pen,
 } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,10 @@ interface LedgerEntryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (rows: LedgerEntry[]) => void;
+  /** Jika diisi → mode Edit. Drawer ter-prefill dari entry ini, save via onUpdate. */
+  editEntry?: LedgerEntry | null;
+  /** Dipanggil saat mode Edit & user klik Perbarui. Returning entry yg sudah di-update. */
+  onUpdate?: (updated: LedgerEntry) => void;
 }
 
 /* ─── Generic searchable combobox (mirrors LeaderCombobox) ────────────────── */
@@ -201,8 +206,9 @@ function TerminMultiSelect({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Kartu termin — tap buat toggle, bisa pilih banyak */}
-      <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+      {/* Kartu termin — tap buat toggle, bisa pilih banyak. Tanpa max-height:
+          semua termin tampil sekaligus, scroll ikut body drawer. */}
+      <div className="flex flex-col gap-2">
         {termins.map((t) => {
           const selected = value.includes(t.id);
           return (
@@ -300,8 +306,16 @@ function RequiredMark() {
 
 const ACCEPTED_EVIDENCE = "image/jpeg,image/png,image/webp,application/pdf";
 
-export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDrawerProps) {
+export function LedgerEntryDrawer({
+  isOpen,
+  onClose,
+  onSubmit,
+  editEntry = null,
+  onUpdate,
+}: LedgerEntryDrawerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isEditMode = editEntry !== null && editEntry !== undefined;
 
   const {
     control,
@@ -326,12 +340,38 @@ export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDraw
 
   useEffect(() => {
     if (isOpen) {
-      // Default tanggal transaksi = hari ini tiap kali drawer dibuka.
-      setValue("occurredAt", todayISO());
+      if (isEditMode && editEntry) {
+        // Mode Edit: pre-fill semua field dari entry yang mau diedit.
+        reset({
+          bookingId: editEntry.bookingId,
+          occurredAt: editEntry.occurredAt,
+          // amount di-store sebagai number; form expects string
+          amount: String(editEntry.amount),
+          paymentMethod: editEntry.paymentMethod ?? DUMMY_REKENING[0],
+          promoId: editEntry.discountProgramName
+            ? (DUMMY_PROMOS.find((p) => p.name === editEntry.discountProgramName)?.id ?? "")
+            : "",
+          linkedTerminIds: editEntry.linkedTerminIds ?? [],
+          paymentEvidenceName: editEntry.paymentEvidenceName ?? "",
+          notes: editEntry.notes ?? "",
+        });
+      } else {
+        // Mode Create: default tanggal hari ini saja, sisanya kosong.
+        reset({
+          bookingId: "",
+          occurredAt: todayISO(),
+          amount: "",
+          paymentMethod: DUMMY_REKENING[0],
+          promoId: "",
+          linkedTerminIds: [],
+          paymentEvidenceName: "",
+          notes: "",
+        });
+      }
     } else {
       reset();
     }
-  }, [isOpen, reset, setValue]);
+  }, [isOpen, isEditMode, editEntry, reset]);
 
   /* ── Watched values for the live preview ──────────────────────────────── */
 
@@ -461,7 +501,35 @@ export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDraw
   }
 
   function onValid(data: LedgerEntryFormValues) {
-    onSubmit(buildRows(data));
+    if (isEditMode && editEntry && onUpdate) {
+      // Mode Edit: rebuild entry dengan data baru, pertahankan id & invoiceNumber lama.
+      const clientName =
+        DUMMY_BOOKINGS.find((b) => b.id === data.bookingId)?.clientName ?? data.bookingId;
+      const termins = terminsForBooking(data.bookingId);
+      const linkedIds = data.linkedTerminIds ?? [];
+      const linkedLabels = termins.filter((t) => linkedIds.includes(t.id)).map((t) => t.name);
+      const paidNum = Number(data.amount.replace(/[^\d]/g, "")) || 0;
+
+      const updated: LedgerEntry = {
+        ...editEntry,
+        occurredAt: data.occurredAt,
+        bookingId: data.bookingId,
+        clientName,
+        amount: paidNum,
+        paymentMethod: data.paymentMethod,
+        linkedTerminIds: linkedIds,
+        linkedTerminLabels: linkedLabels,
+        paymentEvidenceName: data.paymentEvidenceName ?? null,
+        notes: data.notes?.trim() || null,
+        // invoiceNumber intentionally preserved from editEntry (JANGAN berubah)
+        // discountProgramName: baris discount sibling ditangani terpisah di page — biarkan
+      };
+
+      onUpdate(updated);
+    } else {
+      // Mode Create
+      onSubmit(buildRows(data));
+    }
     reset();
     onClose();
   }
@@ -471,8 +539,10 @@ export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDraw
     onClose();
   }
 
+  const drawerTitle = isEditMode ? "Edit Transaksi" : "Catat Transaksi";
+
   return (
-    <Drawer isOpen={isOpen} onClose={handleClose} title="Catat Transaksi" maxWidth="sm:max-w-lg">
+    <Drawer isOpen={isOpen} onClose={handleClose} title={drawerTitle} maxWidth="sm:max-w-lg">
       <form onSubmit={(e) => { void handleSubmit(onValid)(e); }} className="flex h-full flex-col">
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-1 pb-4">
 
@@ -557,13 +627,21 @@ export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDraw
 
             <div className="flex flex-col gap-1.5">
               <Label>No. Kwitansi / Invoice</Label>
-              <div className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5">
-                <InfoCircle weight="BoldDuotone" className="size-4 shrink-0 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  Otomatis dibuat saat transaksi disimpan — format{" "}
-                  <span className="font-mono text-foreground">0006/KW/GWN/SMSR/VII/2026</span>
-                </span>
-              </div>
+              {isEditMode && editEntry?.invoiceNumber ? (
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+                  <InfoCircle weight="BoldDuotone" className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="font-mono text-sm text-foreground">{editEntry.invoiceNumber}</span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">Tidak berubah</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5">
+                  <InfoCircle weight="BoldDuotone" className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Otomatis dibuat saat transaksi disimpan — format{" "}
+                    <span className="font-mono text-foreground">0006/KW/GWN/SMSR/VII/2026</span>
+                  </span>
+                </div>
+              )}
             </div>
           </section>
 
@@ -719,10 +797,17 @@ export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDraw
           <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
             Batal
           </Button>
-          <Button type="submit" className="rounded-full">
-            <CardReceive weight="BoldDuotone" className="size-4" />
-            Catat Transaksi
-          </Button>
+          {isEditMode ? (
+            <Button type="submit" className="rounded-full">
+              <Pen weight="BoldDuotone" className="size-4" />
+              Perbarui
+            </Button>
+          ) : (
+            <Button type="submit" className="rounded-full">
+              <CardReceive weight="BoldDuotone" className="size-4" />
+              Catat Transaksi
+            </Button>
+          )}
         </div>
       </form>
     </Drawer>

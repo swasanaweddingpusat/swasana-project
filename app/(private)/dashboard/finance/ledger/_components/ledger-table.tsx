@@ -2,7 +2,7 @@
 
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { AltArrowLeft, AltArrowRight, CheckCircle, Copy, Paperclip2, Bill, Documents, History } from "@solar-icons/react";
+import { AltArrowLeft, AltArrowRight, CheckCircle, Copy, Paperclip2, Bill, Documents, History, Pen } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Table,
@@ -26,6 +26,8 @@ interface LedgerTableProps {
   onKwitansi: (e: LedgerEntry) => void;
   /** Buka riwayat/activity log transaksi ini. */
   onActivity: (e: LedgerEntry) => void;
+  /** Buka drawer edit untuk baris ini (hanya cash_in + pending). */
+  onEdit: (e: LedgerEntry) => void;
   /** Jumlah baris activity per entryId — buat badge di tombol Riwayat. */
   activityCounts: Record<string, number>;
   currentPage: number;
@@ -36,7 +38,7 @@ interface LedgerTableProps {
 
 const TH = "h-10 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
 const THR = cn(TH, "text-right");
-const COL_COUNT = 8;
+const COL_COUNT = 9;
 /** Shared focus style for interactive elements inside the list — keyboard users need a visible ring. */
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card";
@@ -313,6 +315,50 @@ function AckCell({
   return compact ? null : <span className="text-sm text-muted-foreground">—</span>;
 }
 
+/* ─── Edit button — hanya cash_in yang belum di-ack ─────────────────────────── */
+
+/**
+ * Entry yang aman diedit: hanya cash_in + ackStatus pending.
+ * - discount: system-generated, gak punya form yang relevan
+ * - receivable/recognition/adjustment/refund: bukan transaksi langsung
+ * - acknowledged: sudah diverifikasi Finance, gak boleh diubah
+ */
+function canEdit(entry: LedgerEntry): boolean {
+  return entry.entryType === "cash_in" && entry.ackStatus === "pending";
+}
+
+function EditButton({
+  entry,
+  onEdit,
+}: {
+  entry: LedgerEntry;
+  onEdit: (e: LedgerEntry) => void;
+}): React.ReactElement | null {
+  if (!canEdit(entry)) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={() => onEdit(entry)}
+            aria-label={`Edit transaksi ${entry.clientName}`}
+            className={cn(
+              "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
+              FOCUS_RING,
+            )}
+          >
+            <Pen weight="BoldDuotone" className="size-4" />
+          </button>
+        }
+      />
+      <TooltipContent>Edit transaksi</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /* ─── Kwitansi action — hanya untuk baris cash_in (uang riil masuk) ──────────── */
 
 /** Entry types yang punya kwitansi/tanda-terima yang bisa dicetak. */
@@ -397,12 +443,14 @@ function LedgerRow({
   onAck,
   onKwitansi,
   onActivity,
+  onEdit,
   activityCount,
 }: {
   entry: LedgerEntry;
   onAck: (e: LedgerEntry) => void;
   onKwitansi: (e: LedgerEntry) => void;
   onActivity: (e: LedgerEntry) => void;
+  onEdit: (e: LedgerEntry) => void;
   activityCount: number;
 }): React.ReactElement {
   const isDiscount = entry.entryType === "discount";
@@ -447,6 +495,9 @@ function LedgerRow({
         <RiwayatButton entry={entry} count={activityCount} onActivity={onActivity} />
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
+        <EditButton entry={entry} onEdit={onEdit} />
+      </TableCell>
+      <TableCell className="px-4 py-3 align-middle">
         <KwitansiButton entry={entry} onKwitansi={onKwitansi} />
       </TableCell>
     </TableRow>
@@ -460,12 +511,14 @@ function MobileRecord({
   onAck,
   onKwitansi,
   onActivity,
+  onEdit,
   activityCount,
 }: {
   entry: LedgerEntry;
   onAck: (e: LedgerEntry) => void;
   onKwitansi: (e: LedgerEntry) => void;
   onActivity: (e: LedgerEntry) => void;
+  onEdit: (e: LedgerEntry) => void;
   activityCount: number;
 }): React.ReactElement {
   const isDiscount = entry.entryType === "discount";
@@ -509,6 +562,20 @@ function MobileRecord({
                 </span>
               )}
             </button>
+            {canEdit(entry) && (
+              <button
+                type="button"
+                onClick={() => onEdit(entry)}
+                aria-label={`Edit transaksi ${entry.clientName}`}
+                className={cn(
+                  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
+                  FOCUS_RING,
+                )}
+              >
+                <Pen weight="BoldDuotone" className="size-3.5" />
+                Edit
+              </button>
+            )}
             {canPrintKwitansi(entry) && (
               <button
                 type="button"
@@ -549,6 +616,7 @@ export function LedgerTable({
   onAck,
   onKwitansi,
   onActivity,
+  onEdit,
   activityCounts,
   currentPage,
   totalPages,
@@ -583,12 +651,13 @@ export function LedgerTable({
           <Table className="table-fixed">
             <TableCaption className="sr-only">Daftar transaksi ledger</TableCaption>
             <colgroup>
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "22%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "24%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
             </colgroup>
@@ -616,6 +685,9 @@ export function LedgerTable({
                   Riwayat
                 </TableHead>
                 <TableHead scope="col" className={TH}>
+                  Edit
+                </TableHead>
+                <TableHead scope="col" className={TH}>
                   Aksi
                 </TableHead>
               </TableRow>
@@ -628,6 +700,7 @@ export function LedgerTable({
                   onAck={onAck}
                   onKwitansi={onKwitansi}
                   onActivity={onActivity}
+                  onEdit={onEdit}
                   activityCount={activityCounts[e.id] ?? 0}
                 />
               ))}
@@ -644,6 +717,7 @@ export function LedgerTable({
               onAck={onAck}
               onKwitansi={onKwitansi}
               onActivity={onActivity}
+              onEdit={onEdit}
               activityCount={activityCounts[e.id] ?? 0}
             />
           ))}

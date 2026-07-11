@@ -11,6 +11,7 @@ import {
   Refresh,
   AddCircle,
   PenNewSquare,
+  Pen,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type {
@@ -203,4 +204,5 @@ export const LEDGER_ACTIVITY_META: Record<LedgerActivityAction, ActivityActionMe
   acknowledged: { label: "Diverifikasi (Ack)", Icon: PenNewSquare, dot: "bg-primary", text: "text-primary" },
   rejected: { label: "Ditolak", Icon: Forbidden, dot: "bg-destructive/15", text: "text-destructive" },
   voided: { label: "Dibatalkan", Icon: MinusCircle, dot: "bg-destructive/15", text: "text-destructive" },
+  edited: { label: "Diedit", Icon: Pen, dot: "bg-secondary", text: "text-muted-foreground" },
 };
