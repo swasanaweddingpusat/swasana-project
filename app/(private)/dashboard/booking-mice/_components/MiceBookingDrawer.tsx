@@ -295,6 +295,7 @@ export function MiceBookingDrawer({
   }, [currentUserIsSalesMice, salesMice, user]);
 
   // Watch venueId and eventDate from form to drive availability + session filtering
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedVenueId = form.watch("venueId");
   const watchedEventDate = form.watch("eventDate");
 

@@ -1005,6 +1005,7 @@ export function QuotationDrawer({
   // Persist draft on form changes (create mode only).
   useEffect(() => {
     if (!open || isEdit) return;
+    // eslint-disable-next-line react-hooks/incompatible-library
     const sub = form.watch((values) => {
       persistQuotationDraft(values as Partial<QuotationFormValues>, signingLocation);
     });

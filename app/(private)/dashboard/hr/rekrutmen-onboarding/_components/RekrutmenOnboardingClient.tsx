@@ -177,7 +177,7 @@ export function RekrutmenOnboardingClient() {
   const [candidateStageFilter, setCandidateStageFilter] = useState("all");
   const [candidateStageDrafts, setCandidateStageDrafts] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState("lowongan");
-  const [selectedJobPostingId, setSelectedJobPostingId] = useState<string | null>(null);
+  const [_selectedJobPostingId, setSelectedJobPostingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!candidateForm.jobPostingId && jobPostings[0]?.id) {
@@ -185,7 +185,6 @@ export function RekrutmenOnboardingClient() {
     }
 
     if (!assignmentForm.profileId && employees[0]?.id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAssignmentForm((current) => ({ ...current, profileId: employees[0].id }));
     }
 
@@ -196,10 +195,10 @@ export function RekrutmenOnboardingClient() {
     if (!rejectForm.candidateId && candidates[0]?.id) {
       setRejectForm((current) => ({ ...current, candidateId: candidates[0].id }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobPostings.length, employees.length, templates.length, candidates.length]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCandidateStageDrafts((current) => {
       const next = { ...current };
       let hasChanges = false;
@@ -211,19 +210,17 @@ export function RekrutmenOnboardingClient() {
       }
       return hasChanges ? next : current;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidates.length]);
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const visibleCandidates = useMemo(() => {
     return candidates.filter((candidate) => {
       if (candidatePostingFilter !== "all" && candidate.jobPostingId !== candidatePostingFilter) return false;
       if (candidateStageFilter !== "all" && candidate.stage !== candidateStageFilter) return false;
       return true;
     });
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
   }, [candidates, candidatePostingFilter, candidateStageFilter]);
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const stats = useMemo(() => {
     return {
       openJobPostings: jobPostings.filter((item) => item.status === "open").length,
@@ -231,7 +228,6 @@ export function RekrutmenOnboardingClient() {
       activeTemplates: templates.filter((item) => item.isActive).length,
       activeAssignments: assignments.filter((item) => item.status === "in_progress").length,
     };
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
   }, [jobPostings, candidates, templates, assignments]);
 
   const totalTasks = countTotalTasks(myOnboarding);

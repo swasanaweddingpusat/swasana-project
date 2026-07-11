@@ -41,7 +41,7 @@ interface MessageReactionsProps {
   align?: "start" | "end";
 }
 
-export function MessageReactions({ reactions, onToggle, isSelf, align = "start" }: MessageReactionsProps) {
+export function MessageReactions({ reactions, onToggle, isSelf: _isSelf, align: _align = "start" }: MessageReactionsProps) {
   if (reactions.length === 0) return null;
 
   return (

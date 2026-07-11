@@ -161,7 +161,7 @@ export async function createWeddingIndicator(formData: FormData) {
         coupleName: validatedData.coupleName,
         eventDate: validatedData.eventDate,
         venueId: validatedData.venueId,
-        createdById: session.user.id,
+        createdById: session.user.profileId,
         eventManagerName: validatedData.eventManagerName,
         eventManagerRating: validatedData.eventManagerRating,
         woName: validatedData.woName,

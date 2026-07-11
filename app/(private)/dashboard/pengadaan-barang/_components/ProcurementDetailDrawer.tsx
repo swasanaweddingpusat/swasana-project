@@ -32,9 +32,9 @@ function formatDate(date: Date | string | null | undefined): string {
   });
 }
 
-function formatCurrency(val: Decimal | number | null | undefined): string {
+function formatCurrency(val: Decimal | number | string | null | undefined): string {
   if (val == null) return "—";
-  const num = typeof val === "number" ? val : val.toNumber();
+  const num = typeof val === "number" ? val : Number(val);
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
@@ -168,6 +168,7 @@ export function ProcurementDetailDrawer({
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Bukti Beli</p>
             {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={item.buktiBelUrl}
                 alt="Bukti beli"

@@ -434,6 +434,7 @@ export function PreventiveDrawer({
               <div className="flex flex-wrap gap-2 mb-2">
                 {existingImages.map((img) => (
                   <div key={img.id} className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={img.url}
                       alt={img.fileName}
@@ -455,6 +456,7 @@ export function PreventiveDrawer({
               <div className="flex flex-wrap gap-2 mb-2">
                 {selectedFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={URL.createObjectURL(file)}
                       alt={file.name}
