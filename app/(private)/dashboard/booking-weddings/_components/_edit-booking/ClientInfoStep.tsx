@@ -160,7 +160,8 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
             <label className={LBL}>
               Bitrix ID <span className="text-destructive">*</span>
             </label>
-            <Input className="mt-1" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} placeholder="Bitrix ID" />
+            <Input className="mt-1" value={contactBitrixId} onChange={(e) => { setContactBitrixId(e.target.value); clearError("bitrixId"); }} placeholder="Bitrix ID" />
+            {errors.bitrixId && <p className="mt-1 text-sm text-destructive">{errors.bitrixId}</p>}
           </div>
         )}
       </div>

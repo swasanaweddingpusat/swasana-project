@@ -148,6 +148,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Daftar rekening pembayaran venue",
     parent: "/dashboard/finance/accounts-payable",
   },
+  "/dashboard/finance/ledger": {
+    title: "Cashflow",
+    subtitle: "Buku besar cashflow — piutang, uang masuk, sampai pendapatan diakui.",
+    parent: "/dashboard/finance",
+  },
   "/dashboard/discount-promo": {
     title: "Discount / Promo",
     subtitle: "Program promo & discount aktif",

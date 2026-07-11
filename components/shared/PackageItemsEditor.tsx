@@ -81,27 +81,33 @@ function SortableRow({
         isDragging && "opacity-50 shadow-md",
       )}
     >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="mt-1 shrink-0 p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
-          tabIndex={-1}
-        >
-          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
-        </button>
-        <div className="flex-1 space-y-3">{children}</div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onDelete}
-          className="mt-0.5 shrink-0 h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-        >
-          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-        </Button>
-      </div>
+      {/* Drag handle on top — full-width grab bar, keeps the content edge-to-edge. */}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="flex w-full items-center justify-center rounded-lg py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
+        tabIndex={-1}
+        aria-label="Geser urutan item"
+      >
+        <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4 rotate-90" />
+      </button>
+
+      {/* Content — full width */}
+      <div className="min-w-0 space-y-3">{children}</div>
+
+      {/* Delete at the bottom */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onDelete}
+        aria-label="Hapus item"
+        className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+      >
+        <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+        Hapus
+      </Button>
     </div>
   );
 }

@@ -7,7 +7,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, toDateOnly, parseDateOnly } from "@/lib/utils";
@@ -25,7 +24,6 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
     weddingType, setWeddingType,
     time, setTime,
     noteDateEvent, setNoteDateEvent,
-    signingLocation, setSigningLocation,
     setVisibleMonth,
     venues,
     packages,
@@ -180,17 +178,6 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
           onChange={(e) => setNoteDateEvent(e.target.value)}
           rows={3}
           className="mt-1"
-        />
-      </div>
-
-      {/* Lokasi TTD */}
-      <div>
-        <label className={LBL}>Lokasi TTD</label>
-        <Input
-          className="mt-1"
-          value={signingLocation}
-          onChange={(e) => setSigningLocation(e.target.value)}
-          placeholder="Contoh: Jakarta, ..."
         />
       </div>
 

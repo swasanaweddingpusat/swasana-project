@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useMySignature } from "@/hooks/use-my-signature";
 import { updateBookingSignature } from "@/actions/booking";
+import { validateBookingField } from "@/lib/validations/booking-form";
 
 interface Props {
   isOpen: boolean;
@@ -69,6 +70,8 @@ export function SalesSignatureContent({
 
   async function handleSave() {
     if (!canSave) return;
+    const locErr = validateBookingField("signingLocation", signingLocation);
+    if (locErr) { toast.error(locErr); return; }
     setSaving(true);
     try {
       const payload = isSalesPIC

@@ -49,8 +49,33 @@ function hasActiveChild(
   );
 }
 
-function SubItemRow({ item, pathname }: { item: SubMenuItem; pathname: string }) {
-  const active = isPathActive(item.href, pathname);
+/**
+ * Di antara sibling yang cocok, yang paling spesifik (href terpanjang) menang.
+ * Mencegah leaf ber-href pendek (mis. Overview "/dashboard/finance") ikut aktif
+ * saat sibling yang lebih dalam (Cashflow "/dashboard/finance/ledger") yang
+ * sebenarnya cocok.
+ */
+function mostSpecificActiveHref(items: { href: string }[], pathname: string): string | null {
+  let best: string | null = null;
+  for (const it of items) {
+    if (isPathActive(it.href, pathname) && (best === null || it.href.length > best.length)) {
+      best = it.href;
+    }
+  }
+  return best;
+}
+
+function SubItemRow({
+  item,
+  pathname,
+  activeHref,
+}: {
+  item: SubMenuItem;
+  pathname: string;
+  /** href sibling paling spesifik yang aktif — leaf hanya aktif kalau ini href-nya. */
+  activeHref: string | null;
+}) {
+  const active = isPathActive(item.href, pathname) && item.href === activeHref;
   const childActive = item.submenu ? hasActiveChild(item.submenu, pathname) : false;
   const [open, setOpen] = useState(active || childActive);
 
@@ -76,7 +101,12 @@ function SubItemRow({ item, pathname }: { item: SubMenuItem; pathname: string })
         {open && (
           <SidebarMenuSub>
             {item.submenu.map((sub) => (
-              <SubItemRow key={sub.href} item={sub} pathname={pathname} />
+              <SubItemRow
+                key={sub.href}
+                item={sub}
+                pathname={pathname}
+                activeHref={mostSpecificActiveHref(item.submenu!, pathname)}
+              />
             ))}
           </SidebarMenuSub>
         )}
@@ -129,7 +159,12 @@ export function NavItemRow({ item }: { item: NavItem }) {
         {open && (
           <SidebarMenuSub>
             {item.submenu.map((sub) => (
-              <SubItemRow key={sub.href} item={sub} pathname={pathname} />
+              <SubItemRow
+                key={sub.href}
+                item={sub}
+                pathname={pathname}
+                activeHref={mostSpecificActiveHref(item.submenu!, pathname)}
+              />
             ))}
           </SidebarMenuSub>
         )}

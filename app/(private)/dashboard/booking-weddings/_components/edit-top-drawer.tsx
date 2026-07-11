@@ -1525,42 +1525,6 @@ const DUMMY_PROMOS = [
   },
 ];
 
-/* ─── EditTopDrawer (props-langsung) ──────────────────────────────────────── */
-
-export interface EditTopDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  bookingId: string;
-  customerName: string;
-  initialTerms: FinanceTerm[];
-  packagePrice: number;
-  discountName: string | null;
-  discountAmount: number;
-}
-
-export function EditTopDrawer({
-  isOpen,
-  onClose,
-  bookingId,
-  customerName,
-  initialTerms,
-  packagePrice,
-  discountName,
-  discountAmount,
-}: EditTopDrawerProps): React.ReactElement {
-  return (
-    <Drawer isOpen={isOpen} onClose={onClose} title={`Term of Payment — ${customerName}`}>
-      <TopContent
-        bookingId={bookingId}
-        initialTerms={initialTerms}
-        packagePrice={packagePrice}
-        discountName={discountName}
-        discountAmount={discountAmount}
-      />
-    </Drawer>
-  );
-}
-
 /* ─── EditTopDrawerById (lazy fetch) ──────────────────────────────────────────
  * Fetches booking finance detail on open. Used by Finance AR table.
  * ─────────────────────────────────────────────────────────────────────────── */

@@ -16,6 +16,8 @@ import {
   Copy,
   Copy as CopyIcon,
   ChatRoundLine,
+  VerifiedCheck,
+  UndoLeft,
 } from "@solar-icons/react";
 import {
   Table,
@@ -26,6 +28,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Drawer } from "@/components/shared/drawer";
@@ -36,6 +49,7 @@ import {
   getInvoiceBadge,
   getAckBadge,
   getBookingStatusBadge,
+  getRecognizedRevenueBadge,
   StatusBadge,
 } from "./ar-format";
 import { KwitansiPreviewDrawer } from "./kwitansi-preview-drawer";
@@ -59,6 +73,12 @@ interface ARTableProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   canEditKeuangan?: boolean; // booking:edit OR finance-ar:edit
+  /** Confirm + recognize all "paid" termin revenue for a booking (client-level, all at once). Preview-only, no backend. */
+  onRecognize?: (booking: ARBooking) => void;
+  /** Undo a previously recognized booking. Preview-only, no backend. */
+  onUndoRecognize?: (booking: ARBooking) => void;
+  /** Booking ids whose revenue has been recognized (client-side dummy state). */
+  recognizedIds?: Set<string>;
 }
 
 /** Shared header cell styling — small uppercase labels, the data-table convention. */
@@ -96,6 +116,9 @@ export function ARTable({
   totalPages,
   onPageChange,
   canEditKeuangan = false,
+  onRecognize,
+  onUndoRecognize,
+  recognizedIds,
 }: ARTableProps) {
   // Doc-preview drawers live at the table level so a single instance serves every row.
   const [kwitansiTarget, setKwitansiTarget] = useState<DocTarget | null>(null);
@@ -175,6 +198,9 @@ export function ARTable({
                   onRekap={() => setRekapBooking(booking)}
                   onOpenInvoice={(termin) => setInvoiceTarget({ booking, termin })}
                   onOpenKwitansi={(termin) => setKwitansiTarget({ booking, termin })}
+                  onRecognize={onRecognize ? () => onRecognize(booking) : undefined}
+                  onUndoRecognize={onUndoRecognize ? () => onUndoRecognize(booking) : undefined}
+                  isRecognized={recognizedIds?.has(booking.id) ?? false}
                 />
               ))
             )}
@@ -272,6 +298,9 @@ function BookingRow({
   onRekap,
   onOpenInvoice,
   onOpenKwitansi,
+  onRecognize,
+  onUndoRecognize,
+  isRecognized = false,
 }: {
   booking: ARBooking;
   isExpanded: boolean;
@@ -282,6 +311,9 @@ function BookingRow({
   onRekap: () => void;
   onOpenInvoice: (termin: ARTermin) => void;
   onOpenKwitansi: (termin: ARTermin) => void;
+  onRecognize?: () => void;
+  onUndoRecognize?: () => void;
+  isRecognized?: boolean;
 }) {
   const bookingStatusBadge = getBookingStatusBadge(booking.bookingStatus);
   const terminBadge = getTerminBadge(booking.statusTermin);
@@ -334,7 +366,10 @@ function BookingRow({
           <StatusBadge config={bookingStatusBadge} />
         </TableCell>
         <TableCell className="px-4 py-3 align-middle">
-          <StatusBadge config={terminBadge} />
+          <div className="flex flex-wrap items-center gap-1">
+            <StatusBadge config={terminBadge} />
+            {isRecognized && <StatusBadge config={getRecognizedRevenueBadge()} />}
+          </div>
         </TableCell>
         <TableCell className="px-4 py-3 align-middle">
           <div
@@ -364,6 +399,14 @@ function BookingRow({
               >
                 <Wallet weight="BoldDuotone" className="size-4" />
               </button>
+            )}
+            {canEditKeuangan && (
+              <RecognizeRevenueAction
+                booking={booking}
+                isRecognized={isRecognized}
+                onRecognize={onRecognize}
+                onUndoRecognize={onUndoRecognize}
+              />
             )}
           </div>
         </TableCell>
@@ -626,6 +669,98 @@ function ReminderPopover({ booking }: { booking: ARBooking }): React.ReactElemen
         </p>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/* ─── Recognize Revenue Action (VerifiedCheck) — bulk client-level ack (PREVIEW) ─
+   Mengakui SELURUH pendapatan termin "paid" milik satu booking/client sekaligus.
+   Murni state lokal di halaman (recognizedIds) — belum nyambung ledger/backend. */
+
+function RecognizeRevenueAction({
+  booking,
+  isRecognized,
+  onRecognize,
+  onUndoRecognize,
+}: {
+  booking: ARBooking;
+  isRecognized: boolean;
+  onRecognize?: () => void;
+  onUndoRecognize?: () => void;
+}): React.ReactElement | null {
+  const [open, setOpen] = useState(false);
+
+  if (isRecognized) {
+    if (!onUndoRecognize) return null;
+    return (
+      <button
+        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          onUndoRecognize();
+        }}
+        title="Batalkan pengakuan"
+      >
+        <UndoLeft weight="BoldDuotone" className="size-4" />
+      </button>
+    );
+  }
+
+  const paidTermins = booking.termins.filter((t) => t.status === "paid");
+  const hasPaidTermin = paidTermins.length > 0;
+
+  if (!onRecognize || !hasPaidTermin) return null;
+
+  const totalToRecognize = paidTermins.reduce((sum, t) => sum + t.amount, 0);
+  const hasOutstanding = booking.outstanding > 0;
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        title="Akui pendapatan"
+        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <VerifiedCheck weight="BoldDuotone" className="size-4" />
+      </AlertDialogTrigger>
+      <AlertDialogContent onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        <AlertDialogHeader>
+          <div className="flex w-full items-center justify-between gap-2">
+            <AlertDialogTitle>Akui Pendapatan</AlertDialogTitle>
+            <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              PREVIEW
+            </span>
+          </div>
+          <AlertDialogDescription>
+            Akui seluruh pendapatan termin lunas milik{" "}
+            <strong className="text-foreground">{booking.customerEvent}</strong> secara serentak —
+            bukan per-termin.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-2 px-6 pb-2">
+          <div className="flex items-center justify-between rounded-xl bg-secondary/40 p-3 text-sm">
+            <span className="text-muted-foreground">Total diakui ({paidTermins.length} termin lunas)</span>
+            <span className="font-semibold tabular-nums text-foreground">{fmtRp(totalToRecognize)}</span>
+          </div>
+          {hasOutstanding && (
+            <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">
+              Masih ada piutang {fmtRp(booking.outstanding)} — pengakuan tetap bisa dilakukan
+              (override Finance).
+            </p>
+          )}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onRecognize();
+              setOpen(false);
+            }}
+          >
+            Akui Pendapatan
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

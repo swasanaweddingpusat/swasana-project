@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AltArrowDown, AltArrowUp } from "@solar-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ARFilterBar } from "../_components/ar-filter-bar";
 import { ARTable } from "../_components/ar-table";
@@ -29,6 +30,10 @@ export default function AccountsReceivableTerminPage() {
   // Track rows the user explicitly collapsed; everything else stays open, so
   // freshly loaded rows default to expanded without an effect.
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
+
+  // Bulk "Akui Pendapatan" — client-level, all-at-once. Pure UI state (preview),
+  // no backend/ledger call yet. Resets on refresh by design.
+  const [recognizedIds, setRecognizedIds] = useState<Set<string>>(new Set());
 
   const venues = useMemo(() => {
     const seen = new Map<string, string>();
@@ -90,6 +95,24 @@ export default function AccountsReceivableTerminPage() {
     else setCollapsedRows(new Set());
   }
 
+  function handleRecognize(booking: ARBooking) {
+    setRecognizedIds((prev) => {
+      const next = new Set(prev);
+      next.add(booking.id);
+      return next;
+    });
+    toast.success(`Pendapatan ${booking.customerEvent} diakui (preview)`);
+  }
+
+  function handleUndoRecognize(booking: ARBooking) {
+    setRecognizedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(booking.id);
+      return next;
+    });
+    toast.success(`Pengakuan pendapatan ${booking.customerEvent} dibatalkan (preview)`);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -131,6 +154,9 @@ export default function AccountsReceivableTerminPage() {
         totalPages={totalPages}
         onPageChange={setCurrentPage}
         canEditKeuangan={canEditKeuangan}
+        onRecognize={handleRecognize}
+        onUndoRecognize={handleUndoRecognize}
+        recognizedIds={recognizedIds}
       />
 
       <ARDetailDrawer

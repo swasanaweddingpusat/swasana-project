@@ -305,3 +305,34 @@ export interface LedgerPromoOption {
   discountType: "PERCENTAGE" | "NOMINAL";
   discountValue: number;
 }
+
+// ─── Ledger Activity Log ("table baru" — FE-only, no migration) ──────────────
+
+/**
+ * Aksi yang tercatat di riwayat sebuah transaksi ledger.
+ * - created:      transaksi dicatat (oleh sales) → lahir "Menunggu Verifikasi"
+ * - acknowledged: Finance verifikasi + tanda tangan → uang sah masuk
+ * - rejected:     Finance tolak (mis. mutasi tidak ketemu)
+ * - voided:       transaksi dibatalkan (koreksi non-destruktif)
+ */
+export type LedgerActivityAction = "created" | "acknowledged" | "rejected" | "voided";
+
+/**
+ * Satu baris di activity log ledger — append-only, satu transaksi bisa punya
+ * banyak baris (created → acknowledged, dst). Denormalized buat UI-first dummy.
+ */
+export interface LedgerActivity {
+  id: string;
+  /** FK ke LedgerEntry.id yang diaksi. */
+  entryId: string;
+  action: LedgerActivityAction;
+  /** Siapa yang melakukan aksi (denormalized). */
+  actorName: string;
+  /** Role pelaku, e.g. "Finance" / "Sales". Null = system. */
+  actorRole: string | null;
+  /** Tanda tangan (data URL PNG) — cuma keisi saat action = acknowledged. FE-only. */
+  signatureDataUrl: string | null;
+  note: string | null;
+  /** ISO timestamp aksi terjadi. */
+  createdAt: string;
+}

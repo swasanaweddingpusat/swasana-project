@@ -20,7 +20,14 @@ export interface PackageOption { id: string; packageName: string; pax: number; m
 
 type DayAvail = { morning: boolean; evening: boolean; fullday: boolean };
 
-export const STEP_LABELS: Record<number, string> = { 1: "Client", 2: "Venue & Paket" };
+export const STEP_LABELS: Record<number, string> = {
+  1: "Client",
+  2: "Venue & Paket",
+  3: "Item Paket",
+  4: "Takeout",
+  5: "TOP",
+  6: "TTD",
+};
 export const LBL = "text-sm font-medium text-foreground";
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -40,8 +47,11 @@ export interface EditBookingForm {
   // step navigation
   currentStep: number;
   setCurrentStep: (s: number) => void;
+  /** Legacy alias for backward compat — maps to currentStep 3-6 names. */
   continueFlowStep: null | "package-items" | "takeout" | "top" | "signature";
   setContinueFlowStep: (s: null | "package-items" | "takeout" | "top" | "signature") => void;
+  /** When true, tab clicks are disabled and continue buttons advance linearly. */
+  linearMode: boolean;
 
   // step 1: client info state
   customerName: string;
@@ -132,7 +142,6 @@ export interface EditBookingForm {
   // handlers
   handleSaveClientInfo: () => Promise<void>;
   handleSubmit: () => Promise<void>;
-  handlePrevious: () => void;
   handleGoToStep: (step: number) => void;
   handleCloseAll: () => void;
 }
@@ -153,8 +162,26 @@ export function useEditBookingForm(
 
   const [currentStep, setCurrentStep] = useState(1);
 
-  // ── Sub-drawers (continue flow) ──
-  const [continueFlowStep, setContinueFlowStep] = useState<null | "package-items" | "takeout" | "top" | "signature">(null);
+  // ── Linear mode: forced walk-through when venue/package changes. ──
+  // When true the tab header is click-disabled, sub-step save buttons say
+  // "Continue" and advance automatically. Cleared on drawer close/open.
+  const [linearMode, setLinearMode] = useState(false);
+
+  // ── Legacy continueFlowStep: derived view of currentStep for back-compat ──
+  // We still expose this so the render block in edit-booking-drawer can read it.
+  // It is purely derived — setting it is a no-op alias that sets currentStep.
+  const continueFlowStepMap: Record<number, null | "package-items" | "takeout" | "top" | "signature"> = {
+    1: null, 2: null, 3: "package-items", 4: "takeout", 5: "top", 6: "signature",
+  };
+  const continueFlowStep = continueFlowStepMap[currentStep] ?? null;
+
+  function setContinueFlowStep(s: null | "package-items" | "takeout" | "top" | "signature") {
+    if (s === null) { setCurrentStep(2); return; }
+    if (s === "package-items") { setCurrentStep(3); return; }
+    if (s === "takeout") { setCurrentStep(4); return; }
+    if (s === "top") { setCurrentStep(5); return; }
+    if (s === "signature") { setCurrentStep(6); return; }
+  }
 
   // ── Step 1: Client info ──
   const [customerName, setCustomerName] = useState("");
@@ -198,6 +225,8 @@ export function useEditBookingForm(
     const ew = validateBookingField("emailCpw", contactEmailCpw); if (ew) next.emailCpw = ew;
     const nc = validateBookingField("nikCpp", contactNikCpp); if (nc) next.nikCpp = nc;
     const nw = validateBookingField("nikCpw", contactNikCpw); if (nw) next.nikCpw = nw;
+    // Bitrix ID is required when the source of information is Bitrix.
+    if (isBitrixSource && !contactBitrixId.trim()) next.bitrixId = "Bitrix ID wajib diisi";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -263,7 +292,7 @@ export function useEditBookingForm(
     if (!open || !booking) return;
     setIsSubmitting(false);
     setCurrentStep(1);
-    setContinueFlowStep(null);
+    setLinearMode(false);
 
     setCustomerName(booking.snapCustomer?.name ?? "");
     const raw = booking.snapCustomer?.mobileNumber ?? "";
@@ -374,7 +403,7 @@ export function useEditBookingForm(
       packageId !== originalPackageId ||
       bookingDate !== originalBookingDate);
 
-  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0);
+  const isStep1Complete = !!(customerName.trim() && contactNumbers.length > 0 && (!isBitrixSource || contactBitrixId.trim()));
   const isStep2Complete = !!(venueId && packageId && bookingDate && weddingSession && weddingType);
 
   const sessionLabels: Record<string, string> = { morning: "Pagi", evening: "Malam", fullday: "Fullday" };
@@ -384,30 +413,22 @@ export function useEditBookingForm(
     (isSalesPIC ? (currentUser?.name ?? "—") : "—");
 
   const TOTAL_FLOW_STEPS = 6;
-  const flowStepNumber =
-    continueFlowStep === "package-items"
-      ? 3
-      : continueFlowStep === "takeout"
-        ? 4
-        : continueFlowStep === "top"
-          ? 5
-          : continueFlowStep === "signature"
-            ? 6
-            : currentStep;
-  const drawerTitle =
-    continueFlowStep === null
-      ? "Edit Booking"
-      : continueFlowStep === "package-items"
-        ? "Item Paket"
-        : continueFlowStep === "takeout"
-          ? "Edit Takeout"
-          : continueFlowStep === "top"
-            ? "Term of Payment"
-            : "Tanda Tangan Sales";
+  const flowStepNumber = currentStep;
+
+  const STEP_TITLES: Record<number, string> = {
+    1: "Edit Booking",
+    2: "Edit Booking",
+    3: "Item Paket",
+    4: "Edit Takeout",
+    5: "Term of Payment",
+    6: "Tanda Tangan Sales",
+  };
+  const drawerTitle = STEP_TITLES[currentStep] ?? "Edit Booking";
   const stepHeader = `Step ${flowStepNumber} / ${TOTAL_FLOW_STEPS}`;
 
-  const hideCloseButton =
-    continueFlowStep !== null || (currentStep === 2 && hasVenueTabChange);
+  // Hide close button in linear mode (user must walk through steps) or when
+  // step 2 has venue changes that haven't been saved yet (pre-save state).
+  const hideCloseButton = linearMode || (currentStep === 2 && hasVenueTabChange);
 
   // ── Handlers ──
   async function handleSaveClientInfo(): Promise<void> {
@@ -474,7 +495,9 @@ export function useEditBookingForm(
       qc.invalidateQueries({ queryKey: ["booking-detail", booking.id] });
       toast.success("Booking berhasil diupdate");
       if (hasVenueTabChange) {
-        setContinueFlowStep("package-items");
+        // Enter linear mode: force user to walk steps 3→4→5→6.
+        setLinearMode(true);
+        setCurrentStep(3);
       } else {
         setOriginalVenueId(venueId);
         setOriginalPackageId(packageId);
@@ -485,16 +508,15 @@ export function useEditBookingForm(
     }
   }
 
-  function handlePrevious(): void {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  }
-
   function handleGoToStep(step: number): void {
-    setCurrentStep(step);
+    // In linear mode, tab navigation is disabled — user must follow Continue buttons.
+    if (linearMode) return;
+    if (step >= 1 && step <= 6) setCurrentStep(step);
   }
 
   function handleCloseAll(): void {
-    setContinueFlowStep(null);
+    setLinearMode(false);
+    setCurrentStep(1);
     onOpenChange(false);
   }
 
@@ -506,6 +528,7 @@ export function useEditBookingForm(
     setCurrentStep,
     continueFlowStep,
     setContinueFlowStep,
+    linearMode,
     customerName,
     setCustomerName,
     contactNumbers,
@@ -578,7 +601,6 @@ export function useEditBookingForm(
     getAvailableSessions,
     handleSaveClientInfo,
     handleSubmit,
-    handlePrevious,
     handleGoToStep,
     handleCloseAll,
   };

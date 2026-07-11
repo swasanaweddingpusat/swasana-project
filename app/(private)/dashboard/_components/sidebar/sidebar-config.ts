@@ -37,6 +37,7 @@ import {
   CardSend,
   CalendarMark,
   MoneyBag,
+  Notebook,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -187,13 +188,22 @@ export const navItems: NavItem[] = [
         icon: PieChart,
       },
       {
+        name: "Cashflow",
+        href: "/dashboard/finance/ledger",
+        icon: Notebook,
+      },
+      {
+        name: "Expense",
+        href: "/dashboard/finance/accounts-payable/expense",
+        icon: MoneyBag,
+      },
+      {
         name: "Accounts Receivable",
         href: "/dashboard/finance/accounts-receivable",
         icon: CardReceive,
         submenu: [
           { name: "Termin", href: "/dashboard/finance/accounts-receivable/termin", icon: Bill },
           { name: "Aging", href: "/dashboard/finance/accounts-receivable/aging", icon: ClockCircle },
-          { name: "Client", href: "/dashboard/finance/accounts-receivable/client", icon: UsersGroupRounded },
         ],
       },
       {
@@ -203,7 +213,6 @@ export const navItems: NavItem[] = [
         submenu: [
           { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
           { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },
-          { name: "Expense", href: "/dashboard/finance/accounts-payable/expense", icon: MoneyBag },
         ],
       },
     ],
