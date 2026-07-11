@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { fmtRp } from "./ledger-format";
+import { fmtDate, fmtRp } from "./ledger-format";
 import {
   DUMMY_BOOKINGS,
   DUMMY_PROMOS,
@@ -51,6 +51,14 @@ import type { LedgerEntry } from "@/types/finance";
 /** Command forbids an empty value silently swallowing selection, so "no promo"
  *  uses this sentinel and maps back to "" in form state. */
 const NO_PROMO = "__none__";
+
+/** Tanggal hari ini dalam format YYYY-MM-DD (lokal, buat default input date). */
+function todayISO(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -161,7 +169,6 @@ function TerminMultiSelect({
   value: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const termins = bookingId ? terminsForBooking(bookingId) : [];
 
   function toggle(id: string) {
@@ -172,8 +179,6 @@ function TerminMultiSelect({
     }
   }
 
-  const selectedTermins = termins.filter((t) => value.includes(t.id));
-
   if (!bookingId) {
     return (
       <p className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
@@ -182,87 +187,61 @@ function TerminMultiSelect({
     );
   }
 
+  if (termins.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+        Booking ini belum punya termin.
+      </p>
+    );
+  }
+
+  const selectedTotal = termins
+    .filter((t) => value.includes(t.id))
+    .reduce((sum, t) => sum + t.amount, 0);
+
   return (
     <div className="flex flex-col gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={
-            <Button
-              type="button"
-              variant="outline"
-              role="combobox"
-              aria-expanded={open}
-              className="w-full justify-between rounded-xl font-normal"
-            >
-              {value.length > 0 ? (
-                <span className="truncate">{value.length} termin dipilih</span>
-              ) : (
-                <span className="text-muted-foreground">Pilih termin (opsional)</span>
-              )}
-              <AltArrowDown weight="BoldDuotone" className="ml-2 size-4 shrink-0 opacity-50" />
-            </Button>
-          }
-        />
-        <PopoverContent className="w-[calc(100vw-2rem)] p-0 sm:w-96" align="start">
-          <Command>
-            <CommandInput placeholder="Cari termin..." autoFocus />
-            <CommandList>
-              <CommandEmpty>Tidak ada termin.</CommandEmpty>
-              <CommandGroup>
-                {termins.map((t) => (
-                  <CommandItem
-                    key={t.id}
-                    value={t.name}
-                    onSelect={() => toggle(t.id)}
-                    className="cursor-pointer"
-                  >
-                    <CheckCircle
-                      weight="BoldDuotone"
-                      className={cn(
-                        "mr-2 size-4 shrink-0",
-                        value.includes(t.id) ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <span className="flex-1 truncate">{t.name}</span>
-                    <span className="ml-2 shrink-0 text-xs text-muted-foreground">
-                      {fmtRp(t.amount)}
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-
-      {selectedTermins.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selectedTermins.map((t) => (
-            <span
+      {/* Kartu termin — tap buat toggle, bisa pilih banyak */}
+      <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+        {termins.map((t) => {
+          const selected = value.includes(t.id);
+          return (
+            <button
               key={t.id}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary py-0.5 pl-2.5 pr-1 text-xs font-medium text-foreground"
+              type="button"
+              onClick={() => toggle(t.id)}
+              aria-pressed={selected}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                selected
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40",
+              )}
             >
-              <LinkIcon weight="BoldDuotone" className="size-3 text-muted-foreground" />
-              {t.name}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => toggle(t.id)}
-                        className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={`Hapus ${t.name}`}
-                      >
-                        <CloseCircle weight="BoldDuotone" className="size-3.5" />
-                      </button>
-                    }
-                  />
-                  <TooltipContent>Lepas termin</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </span>
-          ))}
+              {selected ? (
+                <CheckCircle weight="BoldDuotone" className="size-5 shrink-0 text-primary" />
+              ) : (
+                <span className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{t.name}</p>
+                {t.dueDate && (
+                  <p className="text-xs text-muted-foreground">Jatuh tempo {fmtDate(t.dueDate)}</p>
+                )}
+              </div>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                {fmtRp(t.amount)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Ringkasan pilihan */}
+      {value.length > 0 && (
+        <div className="flex items-center justify-between rounded-xl bg-secondary/40 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">{value.length} termin dipilih</span>
+          <span className="font-semibold tabular-nums text-foreground">{fmtRp(selectedTotal)}</span>
         </div>
       )}
     </div>
@@ -346,10 +325,13 @@ export function LedgerEntryDrawer({ isOpen, onClose, onSubmit }: LedgerEntryDraw
   });
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      // Default tanggal transaksi = hari ini tiap kali drawer dibuka.
+      setValue("occurredAt", todayISO());
+    } else {
       reset();
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, setValue]);
 
   /* ── Watched values for the live preview ──────────────────────────────── */
 
