@@ -145,6 +145,7 @@ export function CameraModal({ open, onClose, onCapture }: CameraModalProps) {
             />
           )}
           {preview && (
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img src={preview} alt="Preview selfie" className="h-full w-full object-cover" />
           )}
           {!cameraReady && !preview && !cameraError && (
