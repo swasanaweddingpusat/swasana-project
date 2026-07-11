@@ -149,10 +149,22 @@ export interface PaginatedBookings {
 // were removed — they only existed because the sort key lived inside the poNumber
 // string, which is no longer the case.
 
+export type ApprovalStatusFilter =
+  | "pending"
+  | "approved"
+  | "sales-approved"
+  | "sales-pending"
+  | "manager-approved"
+  | "manager-pending"
+  | "finance-approved"
+  | "finance-pending"
+  | "client-approved"
+  | "client-pending";
+
 export async function getBookings(
   profileId?: string,
   dataScope?: DataScope,
-  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: "pending" | "approved" },
+  options?: { page?: number; pageSize?: number; search?: string; venueId?: string; category?: "WEDDINGS" | "MICE"; recordStatus?: "saved" | "draft" | "all"; dateFrom?: string; dateTo?: string; year?: number; salesId?: string; approvalStatus?: ApprovalStatusFilter },
 ): Promise<PaginatedBookings> {
   const scopeFilter = await buildScopeFilter(profileId, dataScope);
   const searchFilter = buildSearchFilter(options?.search);
@@ -166,7 +178,56 @@ export async function getBookings(
   const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo, options?.year);
   const salesIdFilter: Prisma.BookingWhereInput = options?.salesId ? { salesId: options.salesId } : {};
   let approvalStatusFilter: Prisma.BookingWhereInput = {};
-  if (options?.approvalStatus) {
+  const stageMatch = options?.approvalStatus?.match(/^(sales|manager|finance|client)-(approved|pending)$/);
+  if (stageMatch) {
+    const [, stage, state] = stageMatch;
+    // Pull all approval records + their steps (revision-aware, mirrors bookings-table.tsx logic)
+    const records = await db.approvalRecord.findMany({
+      where: { module: "booking" },
+      select: {
+        entityId: true,
+        steps: {
+          select: {
+            approverType: true,
+            status: true,
+            revisionId: true,
+            approverRole: { select: { name: true } },
+          },
+        },
+      },
+    });
+    // Fetch currentRevisionId for all bookings — used to pick the active revision's steps
+    const revRows = await db.booking.findMany({
+      where: { category: "WEDDINGS" },
+      select: { id: true, currentRevisionId: true },
+    });
+    const revMap = new Map(revRows.map((r) => [r.id, r.currentRevisionId]));
+
+    const approvedIds: string[] = [];
+    for (const rec of records) {
+      const currentRev = revMap.get(rec.entityId) ?? null;
+      const hasRevisioned = rec.steps.some((s) => s.revisionId !== null);
+      const currentSteps =
+        currentRev && hasRevisioned
+          ? rec.steps.filter((s) => s.revisionId === currentRev)
+          : rec.steps;
+      // Match step for the requested stage
+      const stageStep = currentSteps.find((s) => {
+        if (stage === "sales") return s.approverType === "user";
+        if (stage === "client") return s.approverType === "client";
+        // manager | finance: role-based, match by role name
+        return s.approverType === "role" && s.approverRole?.name === stage;
+      });
+      if (stageStep && stageStep.status === "approved") {
+        approvedIds.push(rec.entityId);
+      }
+    }
+    approvalStatusFilter =
+      state === "approved"
+        ? { id: { in: approvedIds } }
+        : { id: { notIn: approvedIds } };
+  } else if (options?.approvalStatus === "approved" || options?.approvalStatus === "pending") {
+    // Global legacy: booking whose approval record (overall) is approved/not
     const approvedRecords = await db.approvalRecord.findMany({
       where: { module: "booking", status: "approved" },
       select: { entityId: true },

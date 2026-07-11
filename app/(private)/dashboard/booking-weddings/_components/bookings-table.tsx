@@ -51,7 +51,7 @@ import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
+import type { BookingsResult, BookingListItem, SalesProfile, ApprovalStatusFilter } from "@/lib/queries/bookings";
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-primary",
@@ -136,7 +136,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateTo, setDateTo] = useState<string>("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const [yearFilter, setYearFilter] = useState<number | null>(null);
-  const [approvalFilter, setApprovalFilter] = useState<"pending" | "approved" | "">("");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalStatusFilter | "">("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
@@ -223,10 +223,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       .map((r) => [r.entityId, r]),
   );
 
-  const APPROVAL_STATUS_OPTIONS: { id: "" | "pending" | "approved"; name: string }[] = [
+  const APPROVAL_STATUS_OPTIONS: { id: ApprovalStatusFilter | ""; name: string }[] = [
     { id: "", name: "Semua" },
-    { id: "pending", name: "Pending" },
-    { id: "approved", name: "Approved" },
+    { id: "pending", name: "Pending (semua step)" },
+    { id: "approved", name: "Approved (semua step)" },
+    { id: "sales-approved", name: "Sales — Sudah Approve" },
+    { id: "sales-pending", name: "Sales — Belum Approve" },
+    { id: "manager-approved", name: "Manager — Sudah Approve" },
+    { id: "manager-pending", name: "Manager — Belum Approve" },
+    { id: "finance-approved", name: "Finance — Sudah Approve" },
+    { id: "finance-pending", name: "Finance — Belum Approve" },
+    { id: "client-approved", name: "Client — Sudah TTD" },
+    { id: "client-pending", name: "Client — Belum TTD" },
   ];
 
   // Open the PO preview in a modal (no new tab). The modal fetches + renders
@@ -742,7 +750,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <SearchableSelect
           options={APPROVAL_STATUS_OPTIONS}
           value={approvalFilter || ""}
-          onChange={(val) => { setApprovalFilter(val as "pending" | "approved" | ""); setCurrentPage(1); }}
+          onChange={(val) => { setApprovalFilter(val as ApprovalStatusFilter | ""); setCurrentPage(1); }}
           placeholder="Semua"
           searchPlaceholder="Cari status approval..."
           emptyText="Status tidak ditemukan"
