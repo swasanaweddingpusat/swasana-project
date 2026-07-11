@@ -32,6 +32,11 @@ import {
   ClipboardCheck,
   ChartSquare,
   Star,
+  PieChart,
+  CardReceive,
+  CardSend,
+  CalendarMark,
+  MoneyBag,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -175,6 +180,33 @@ export const navItems: NavItem[] = [
     href: "/dashboard/finance",
     icon: Wallet,
     permission: { module: "finance-ar", action: "view" },
+    submenu: [
+      {
+        name: "Overview",
+        href: "/dashboard/finance",
+        icon: PieChart,
+      },
+      {
+        name: "Accounts Receivable",
+        href: "/dashboard/finance/accounts-receivable",
+        icon: CardReceive,
+        submenu: [
+          { name: "Termin", href: "/dashboard/finance/accounts-receivable/termin", icon: Bill },
+          { name: "Aging", href: "/dashboard/finance/accounts-receivable/aging", icon: ClockCircle },
+          { name: "Client", href: "/dashboard/finance/accounts-receivable/client", icon: UsersGroupRounded },
+        ],
+      },
+      {
+        name: "Accounts Payable",
+        href: "/dashboard/finance/accounts-payable",
+        icon: CardSend,
+        submenu: [
+          { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
+          { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },
+          { name: "Expense", href: "/dashboard/finance/accounts-payable/expense", icon: MoneyBag },
+        ],
+      },
+    ],
   },
   {
     name: "Maintenance",
