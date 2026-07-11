@@ -379,12 +379,17 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
     });
   }
 
-  // Merge non-benefit internal items + vendor items, sort by sortOrder
+  // Group order: ALL internal items first (in their sortOrder), then ALL vendor
+  // items (in their sortOrder). We intentionally do NOT globally sort the merged
+  // list by sortOrder — internal and vendor each number from 0, so a global sort
+  // interleaves them (A internal, B vendor, C internal…). nonBenefitItems and
+  // packageVendorItems are already sorted by sortOrder above, so concatenating
+  // keeps each group contiguous: A,B,C… for internal, then D,E,F… for vendor.
   type MergedItem = { type: "internal"; itemName: string; itemDescription: string; sortOrder: number } | { type: "vendor"; categoryName: string; itemText: string; sortOrder: number; isTakeout: boolean };
   const mergedItems: MergedItem[] = [
     ...nonBenefitItems.map((i) => ({ type: "internal" as const, itemName: i.itemName, itemDescription: i.itemDescription, sortOrder: i.sortOrder })),
     ...packageVendorItems.map((i) => ({ type: "vendor" as const, categoryName: i.categoryName, itemText: i.itemText, sortOrder: i.sortOrder, isTakeout: i.isTakeout ?? false })),
-  ].sort((a, b) => a.sortOrder - b.sortOrder);
+  ];
 
   let alphaCounter = 0;
   mergedItems.forEach((item) => {

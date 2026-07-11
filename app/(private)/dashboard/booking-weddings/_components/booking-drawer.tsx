@@ -1714,25 +1714,26 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             <form
               className="space-y-4"
               onKeyDown={(e) => {
-                // Enter key navigation: advance step or submit on last step.
-                // Excluded: shift+Enter (multiline intent), and events inside textarea
-                // or select elements that use Enter for their own interaction.
+                // Enter must NOT advance the wizard or submit — the user moves on
+                // only by clicking Continue. We still block the browser's native
+                // form submission (buttons default to type="submit"), so Enter is a
+                // no-op here. Excluded: shift+Enter and Enter inside a textarea or a
+                // combobox/select (role="option"/"listbox"), which need it themselves.
                 if (e.key !== "Enter" || e.shiftKey) return;
                 const target = e.target as HTMLElement;
                 if (target.tagName === "TEXTAREA") return;
-                // Let Select / Combobox handle their own Enter (they use role="option")
                 if (target.closest("[role='listbox']") || target.closest("[role='option']")) return;
                 e.preventDefault();
-                if (currentStep < totalSteps) {
-                  void handleNext();
-                } else {
-                  void form.handleSubmit(onSubmit)();
-                }
               }}
             >
               {/* ─── Step 1: Data Booking ─── */}
               {currentStep === 1 && (
-                <div className="space-y-3">
+                <div className="space-y-4">
+
+                  {/* Card 1: Identitas Client */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Identitas Client</p>
+
                   {/* Customer / Lead selector */}
                   <div ref={customerDropdownRef}>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Customer Name <span className="text-destructive">*</span></FormLabel>
@@ -1878,6 +1879,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       </Popover>
                     </div>
                   </div>
+                  </div>
+
+                  {/* Card 2: Sales & Sumber */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Sales & Sumber</p>
 
                   {/* Sales PIC */}
                   {currentUserIsSales ? (
@@ -1943,8 +1949,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       <Input placeholder="e.g. 12345" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} className="mt-1" />
                     </div>
                   )}
+                  </div>
 
-                  <p className="text-sm font-semibold text-foreground mt-2 mb-1">Data CPP</p>
+                  {/* Card 3: Data CPP */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Data CPP</p>
 
                   {/* Email CPP */}
                   <div>
@@ -1965,8 +1974,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPP</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} rows={3} className="mt-1" />
                   </div>
+                  </div>
 
-                  <p className="text-sm font-semibold text-foreground mt-2 mb-1">Data CPW</p>
+                  {/* Card 4: Data CPW */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Data CPW</p>
 
                   {/* Email CPW */}
                   <div>
@@ -1986,6 +1998,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPW</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} rows={3} className="mt-1" />
+                  </div>
                   </div>
 
                 </div>
