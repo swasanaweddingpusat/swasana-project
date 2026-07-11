@@ -1819,6 +1819,8 @@ export async function editBooking(data: unknown) {
 
     // If signatureSales was provided without a material change (signature-only save
     // from SalesSignatureContent in the continue flow), update the current sales step.
+    // The sales rep signs the front "user" step (approverType "user", stepOrder 0 —
+    // see lib/approval-flows.ts); there is no "sales" approverType.
     if (!hasMaterialChange && rest.signatureSales) {
       const approvalRecord = await db.approvalRecord.findUnique({
         where: { module_entityId: { module: "booking", entityId: id } },
@@ -1828,7 +1830,7 @@ export async function editBooking(data: unknown) {
         await db.approvalRecordStep.updateMany({
           where: {
             recordId: approvalRecord.id,
-            approverType: "sales",
+            approverType: "user",
             revisionId: booking.currentRevisionId ?? undefined,
           },
           data: {
@@ -1966,7 +1968,9 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
       console.error("[updateBookingSignature] revision snapshot refresh failed:", e);
     }
 
-    // Only update the approval step when the caller is the sales PIC and provides a signature.
+    // Only update the approval step when the caller is the sales PIC and provides a
+    // signature. The sales rep signs the front "user" step (approverType "user",
+    // stepOrder 0 — see lib/approval-flows.ts); there is no "sales" approverType.
     if (signatureSales) {
       const approvalRecord = await db.approvalRecord.findUnique({
         where: { module_entityId: { module: "booking", entityId: id } },
@@ -1976,7 +1980,7 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
         await db.approvalRecordStep.updateMany({
           where: {
             recordId: approvalRecord.id,
-            approverType: "sales",
+            approverType: "user",
             revisionId: booking.currentRevisionId ?? undefined,
           },
           data: {

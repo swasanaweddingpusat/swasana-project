@@ -379,8 +379,8 @@ export async function getBookingById(id: string) {
       where: { module: "booking", entityId: id },
       include: {
         steps: {
-          where: { approverType: "client" },
-          select: { signature: true, status: true, decidedAt: true },
+          where: { approverType: { in: ["client", "user"] } },
+          select: { signature: true, status: true, decidedAt: true, approverType: true, revisionId: true, stepOrder: true },
         },
       },
     }),
@@ -388,9 +388,18 @@ export async function getBookingById(id: string) {
 
   if (!booking) return null;
 
-  const clientSignature = approvalRecord?.steps[0]?.signature ?? null;
+  const steps = approvalRecord?.steps ?? [];
+  const clientSignature = steps.find((s) => s.approverType === "client")?.signature ?? null;
+  // The sales rep signs the front "user" step (approverType "user", stepOrder 0) —
+  // render-po labels that step "Sales". Expose its signature for the current
+  // revision so the edit-booking TTD step can pre-fill the already-saved value.
+  const userSteps = steps
+    .filter((s) => s.approverType === "user")
+    .sort((a, b) => a.stepOrder - b.stepOrder);
+  const salesSignature =
+    (userSteps.find((s) => s.revisionId === booking.currentRevisionId) ?? userSteps[0])?.signature ?? null;
 
-  return { ...booking, clientSignature };
+  return { ...booking, clientSignature, salesSignature };
 }
 
 export type BookingsResult = PaginatedBookings;
