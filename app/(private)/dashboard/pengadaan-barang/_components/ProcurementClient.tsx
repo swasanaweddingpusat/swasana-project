@@ -71,16 +71,16 @@ export function ProcurementClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
             Pengadaan Barang
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Kelola pengajuan pengadaan dan pembelian barang
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="rounded-full">
+        <Button onClick={() => setAddOpen(true)} className="rounded-full w-full sm:w-auto">
           <AddSquare weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
           Tambah Pengajuan
         </Button>

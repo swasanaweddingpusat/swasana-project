@@ -373,6 +373,8 @@ export function WeddingIndicatorForm({
           toast.error(result.error || "Gagal menyimpan");
         }
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyimpan kuesioner");
     } finally {
       setLoading(false);
     }

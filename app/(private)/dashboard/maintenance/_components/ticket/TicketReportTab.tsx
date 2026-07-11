@@ -70,7 +70,7 @@ function BarChart({
         const pct = Math.round((item.count / max) * 100);
         return (
           <div key={item.name} className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground shrink-0 w-32 truncate text-right">
+            <span className="text-sm text-muted-foreground shrink-0 w-20 sm:w-32 truncate text-right">
               {item.name}
             </span>
             <div className="flex-1 bg-muted rounded-full h-2.5 overflow-hidden">
@@ -162,37 +162,39 @@ export function TicketReportTab() {
               ))}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="px-6">Venue</TableHead>
-                  <TableHead className="w-24 text-right pr-6">Jumlah</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {byVenue.length === 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={2}
-                      className="text-center py-6 text-muted-foreground text-sm"
-                    >
-                      Belum ada data.
-                    </TableCell>
+                    <TableHead className="px-6">Venue</TableHead>
+                    <TableHead className="w-24 text-right pr-6">Jumlah</TableHead>
                   </TableRow>
-                ) : (
-                  byVenue
-                    .sort((a, b) => b.count - a.count)
-                    .map((v) => (
-                      <TableRow key={v.name}>
-                        <TableCell className="px-6 text-sm">{v.name}</TableCell>
-                        <TableCell className="text-right pr-6 text-sm font-medium">
-                          {v.count}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {byVenue.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={2}
+                        className="text-center py-6 text-muted-foreground text-sm"
+                      >
+                        Belum ada data.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    byVenue
+                      .sort((a, b) => b.count - a.count)
+                      .map((v) => (
+                        <TableRow key={v.name}>
+                          <TableCell className="px-6 text-sm">{v.name}</TableCell>
+                          <TableCell className="text-right pr-6 text-sm font-medium">
+                            {v.count}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
