@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
-import { deleteFromStorage, getPublicUrl } from "@/lib/storage";
 import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
@@ -91,9 +90,6 @@ export interface DraftBookingDetail {
     amount: number;
     dueDate: string;
     sortOrder: number;
-    paymentStatus: "unpaid" | "paid" | "partial" | "refund";
-    /** Stored storage key. Caller should call getPublicUrl(key) to get a displayable URL. */
-    paymentEvidence: string | null;
   }>;
   draftCategoryToggles: Array<{
     categoryName: string;
@@ -481,7 +477,7 @@ export async function updateDraftBookingStep3(
     // term whose sortOrder happens to be missing from the payload (data loss).
     const existingTerms = await db.termOfPayment.findMany({
       where: { bookingId: draftId },
-      select: { id: true, sortOrder: true, paymentEvidence: true },
+      select: { id: true, sortOrder: true },
     });
     const sortedExisting = [...existingTerms].sort((a, b) => a.sortOrder - b.sortOrder);
     const incoming = (input.termOfPayments ?? [])
@@ -490,17 +486,6 @@ export async function updateDraftBookingStep3(
 
     // Existing rows beyond the incoming count are removed (user deleted terms).
     const toDelete = sortedExisting.slice(incoming.length);
-
-    // Fire-and-forget: best-effort cleanup of storage orphans for removed terms.
-    // We do this OUTSIDE the transaction because object storage is not transactional — a
-    // partial storage failure must not rollback the DB writes.
-    void Promise.allSettled(
-      toDelete
-        .filter((e) => e.paymentEvidence)
-        .map((e) => deleteFromStorage(e.paymentEvidence!).catch((err: unknown) => {
-          console.error("[updateDraftBookingStep3] Failed to delete storage orphan", e.paymentEvidence, err);
-        }))
-    );
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.booking.update({
@@ -515,7 +500,8 @@ export async function updateDraftBookingStep3(
       ...(toDelete.length > 0
         ? [db.termOfPayment.deleteMany({ where: { id: { in: toDelete.map((e) => e.id) } } })]
         : []),
-      // Reconcile each incoming term against the existing row at the same position
+      // Reconcile each incoming term against the existing row at the same position.
+      // TOP kini jadwal murni — status pembayaran DERIVED dari Ledger (Fase 5).
       ...incoming.map(({ t, effectiveSortOrder }, k) => {
         const existing = sortedExisting[k];
         if (existing) {
@@ -526,13 +512,6 @@ export async function updateDraftBookingStep3(
               amount: t.amount,
               dueDate: new Date(t.dueDate),
               sortOrder: effectiveSortOrder,
-              paymentStatus: (t.paymentStatus ?? "unpaid") as
-                | "unpaid"
-                | "paid"
-                | "partial"
-                | "refund",
-              // Preserve existing paymentEvidence — never overwrite with null from
-              // a payload that doesn't carry evidence (evidence is uploaded separately).
             },
           });
         }
@@ -543,11 +522,6 @@ export async function updateDraftBookingStep3(
             amount: t.amount,
             dueDate: new Date(t.dueDate),
             sortOrder: effectiveSortOrder,
-            paymentStatus: (t.paymentStatus ?? "unpaid") as
-              | "unpaid"
-              | "paid"
-              | "partial"
-              | "refund",
             // invoiceNumber stays null until finalize
           },
         });
@@ -705,7 +679,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
     // instead of sequential awaits. Invoice numbers use a single batched counter
     // increment (1 round-trip for N terms, not N). Over Neon HTTP every round-trip
     // is a network hop, so this collapses ~N+2 hops into effectively one.
-    const [poSeq, invoiceSeqs, bookingApprovalSteps] = await Promise.all([
+    const [poSeq, invoiceSeqs, bookingApprovalSteps, kwitansiSeqs] = await Promise.all([
       getNextSequence(`po-${year}`),
       getNextSequenceBatch(`invoice-${year}`, terms.length),
       // Resolve approval steps: conditional Sales + Manager → Finance.
@@ -717,12 +691,21 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         decidedAt: new Date(),
         includeClientStep: true, // Wedding: client TTD step included
       }),
+      // Nomor kwitansi buat cash-in step 6 (§7.2) — batch 1 hop untuk N payment.
+      input.payments.length > 0
+        ? getNextSequenceBatch(`kwitansi-${year}`, input.payments.length)
+        : Promise.resolve([] as number[]),
     ]);
 
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${eventTypeCode}/${dd}-${mm}-${year}`;
     const monthRoman = ROMAN[now.getMonth()];
     const invoiceNumbers: string[] = invoiceSeqs.map(
       (seq) => `${seq}/INV/${venue?.code ?? ""}/${monthRoman}/${year}`,
+    );
+    // KWITANSI pakai bulan ANGKA (beda dari INVOICE Romawi §7.2) — dua dokumen berbeda.
+    const kwitansiNumbers: string[] = kwitansiSeqs.map(
+      (seq) =>
+        `${seq.toString().padStart(4, "0")}/KW/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${mm}/${year}`,
     );
 
     // Build categoryToggles map from input (for snap creation)
@@ -977,6 +960,74 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       );
     }
 
+    // 6b. Step-6 payments → Ledger(`in`) + PaymentAllocation + activity (§8).
+    // Termin sudah persist di step-3 → resolve alokasi lewat sortOrder→termId di sini.
+    // Alokasi di-clamp defensif (drop sortOrder tak dikenal, cap Σ ≤ gross & ≤ nominal
+    // termin) supaya isu alokasi TIDAK pernah menggagalkan finalisasi booking.
+    // Catatan: bukti bayar (File) step-6 BELUM diupload di sini — Ledger lahir tanpa
+    // evidence; lampiran menyusul (gap yang sama dengan cashbook drawer Fase 4).
+    if (input.payments.length > 0) {
+      const termBySortOrder = new Map(
+        terms.map((t) => [t.sortOrder, { id: t.id, amount: Number(t.amount) }]),
+      );
+      const actorName = session!.user.name ?? "Sales";
+
+      input.payments.forEach((p, pi) => {
+        const gross = p.amount;
+        const discountAmount = Math.min(p.discountAmount ?? 0, gross);
+        const cashAmount = gross - discountAmount;
+
+        let budget = gross;
+        const allocOps: { termId: string; amount: number }[] = [];
+        for (const a of p.allocations) {
+          const term = termBySortOrder.get(a.sortOrder);
+          if (!term || budget <= 0) continue;
+          const amt = Math.min(a.amount, term.amount, budget);
+          if (amt > 0) {
+            allocOps.push({ termId: term.id, amount: amt });
+            budget -= amt;
+          }
+        }
+
+        const ledgerId = crypto.randomUUID();
+        ops.push(
+          db.ledger.create({
+            data: {
+              id: ledgerId,
+              bookingId: draftId,
+              direction: "in",
+              ackStatus: "pending",
+              paymentStatus: "paid",
+              occurredAt: new Date(p.occurredAt),
+              amount: gross,
+              discountProgramId: p.discountProgramId ?? null,
+              discountAmount,
+              cashAmount,
+              paymentMethodId: p.paymentMethodId ?? null,
+              evidence: null,
+              invoiceNumber: kwitansiNumbers[pi] ?? null,
+              notes: p.notes?.trim() || null,
+              createdById: session!.user.profileId!,
+            },
+          }),
+          ...allocOps.map((a) =>
+            db.paymentAllocation.create({
+              data: { ledgerId, termId: a.termId, amount: a.amount },
+            }),
+          ),
+          db.paymentActivity.create({
+            data: {
+              ledgerId,
+              action: "created",
+              actorId: session!.user.profileId!,
+              actorNameSnapshot: actorName,
+              note: p.notes?.trim() || null,
+            },
+          }),
+        );
+      });
+    }
+
     // 7. ApprovalRecord + steps (Sales → Manager → Finance)
     if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {
       const approvalRecordId = crypto.randomUUID();
@@ -1016,7 +1067,6 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
           bookingId: draftId,
           token: crypto.randomUUID(),
           accessCode: generateAccessCode(),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       })
     );
@@ -1101,6 +1151,10 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
+    if (input.payments.length > 0) {
+      revalidateTag("ledger", "max");
+      revalidateTag("ar-bookings", "max");
+    }
     if (input.leadId) revalidateTag("leads", "max");
 
     // Notify super admins (fire-and-forget — never blocks the response)
@@ -1259,8 +1313,6 @@ export async function getDraftBookingDetail(
           amount: true,
           dueDate: true,
           sortOrder: true,
-          paymentStatus: true,
-          paymentEvidence: true,
         },
       },
     },
@@ -1375,10 +1427,6 @@ export async function getDraftBookingDetail(
       amount: t.amount,
       dueDate: t.dueDate.toISOString(),
       sortOrder: t.sortOrder,
-      paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-      // Transform stored storage key → public URL for the drawer to display.
-      // Null when no evidence has been uploaded yet.
-      paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
     })),
     draftCategoryToggles,
     draftComplimentaries,

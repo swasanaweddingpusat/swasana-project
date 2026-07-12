@@ -91,15 +91,6 @@ function MobileField({ label, children }: { label: string; children: React.React
   );
 }
 
-/* ─── Payment status badge class helper ────────────────────────────────────── */
-
-function paymentStatusClass(status: string | null | undefined): string {
-  if (status === "paid") return "bg-primary/10 text-primary";
-  if (status === "partial") return "bg-muted text-foreground/70";
-  if (status === "refund") return "bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]";
-  return "bg-destructive/10 text-destructive";
-}
-
 /* ─── Component ────────────────────────────────────────────────────────────── */
 
 interface Props {
@@ -699,14 +690,9 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <div className="sm:hidden space-y-3">
                         {booking.termOfPayments.map((t, i) => (
                           <div key={t.id} className="rounded-2xl border bg-card p-4 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <Bill weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
-                                <p className="text-sm font-semibold text-foreground">{t.name || `Termin ${i + 1}`}</p>
-                              </div>
-                              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${paymentStatusClass(t.paymentStatus)}`}>
-                                {t.paymentStatus || "Unpaid"}
-                              </span>
+                            <div className="flex items-center gap-2">
+                              <Bill weight="BoldDuotone" className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <p className="text-sm font-semibold text-foreground">{t.name || `Termin ${i + 1}`}</p>
                             </div>
                             <div className="space-y-1.5 text-sm">
                               <div>
@@ -735,7 +721,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
                               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
                               <th className="text-left px-4 py-3 font-medium text-muted-foreground">No. Invoice</th>
-                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -745,11 +730,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                 <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
                                 <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
                                 <td className="px-4 py-3 text-foreground">{t.invoiceNumber ?? "-"}</td>
-                                <td className="px-4 py-3">
-                                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${paymentStatusClass(t.paymentStatus)}`}>
-                                    {t.paymentStatus || "Unpaid"}
-                                  </span>
-                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1002,7 +982,6 @@ function ClientAgreementSection({ booking }: { booking: BookingDetail }) {
               </Button>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Berlaku hingga: <span className="font-medium">{fmtDateTime(agreement.expiresAt)}</span></p>
           <div className="text-xs text-muted-foreground space-y-0.5">
             {agreement.sentAt && <p>Dikirim: {fmtDateTime(agreement.sentAt)}</p>}
             {agreement.viewedAt && <p>Dilihat: {fmtDateTime(agreement.viewedAt)}</p>}

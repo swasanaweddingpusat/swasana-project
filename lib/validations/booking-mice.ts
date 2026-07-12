@@ -1,11 +1,11 @@
 import { z } from "zod";
 
+// Fase 5: TOP = jadwal murni. Status pembayaran diturunkan dari Ledger.
 export const miceTermSchema = z.object({
   name: z.string().trim().min(1).max(100),
   amount: z.coerce.number().int().min(0),
   dueDate: z.string().min(1, "Tanggal jatuh tempo wajib diisi"),
   sortOrder: z.number().int().default(0),
-  paymentStatus: z.enum(["unpaid", "paid", "partial"]).default("unpaid"),
 });
 
 export const createMiceBookingSchema = z.object({

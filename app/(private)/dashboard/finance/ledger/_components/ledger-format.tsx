@@ -1,25 +1,33 @@
 import {
   CheckCircle,
   ClockCircle,
-  Wallet,
   Forbidden,
   MinusCircle,
-  Bill,
-  CardReceive,
-  TagPrice,
-  CardSend,
-  Refresh,
   AddCircle,
   PenNewSquare,
   Pen,
+  CardReceive,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import type {
-  LedgerAckStatus,
-  LedgerActivityAction,
-  LedgerEntryType,
-  LedgerStatus,
-} from "@/types/finance";
+
+/* ─── Local types (dipindahkan dari types/finance.ts) ───────────────────────── */
+
+export type LedgerAckStatus = "pending" | "acknowledged" | "rejected";
+export type LedgerActivityAction = "created" | "acknowledged" | "rejected" | "voided" | "edited";
+
+/**
+ * Satu baris riwayat transaksi (append-only). Bentuk FE — di-map dari
+ * PaymentActivity di lib/queries/ledger.ts::getLedgerActivities.
+ */
+export interface LedgerActivity {
+  id: string;
+  action: LedgerActivityAction;
+  actorName: string;
+  actorRole: string | null;
+  signatureDataUrl: string | null;
+  note: string | null;
+  createdAt: string;
+}
 
 /* ─── Formatters ───────────────────────────────────────────────────────────── */
 
@@ -78,60 +86,26 @@ export interface BadgeConfig {
   Icon: typeof CheckCircle;
 }
 
-/* ─── Status badges ────────────────────────────────────────────────────────── */
-
-export function getLedgerStatusBadge(status: LedgerStatus): BadgeConfig {
-  const map: Record<LedgerStatus, BadgeConfig> = {
-    receivable: {
-      label: "Piutang",
-      bg: "bg-secondary",
-      border: "border-border",
-      text: "text-muted-foreground",
-      Icon: ClockCircle,
-    },
-    unearned: {
-      label: "Unearned",
-      bg: "bg-primary/40",
-      border: "border-primary/30",
-      text: "text-primary-foreground",
-      Icon: Wallet,
-    },
-    earned: {
-      label: "Earned",
-      bg: "bg-primary",
-      border: "border-primary",
-      text: "text-primary-foreground",
-      Icon: CheckCircle,
-    },
-    void: {
-      label: "Void",
-      bg: "bg-destructive/10",
-      border: "border-destructive/20",
-      text: "text-destructive",
-      Icon: Forbidden,
-    },
-  };
-  return map[status] ?? map.receivable;
-}
+/* ─── Ack status badges ────────────────────────────────────────────────────── */
 
 export function getLedgerAckBadge(status: LedgerAckStatus): BadgeConfig {
   const map: Record<LedgerAckStatus, BadgeConfig> = {
     acknowledged: {
-      label: "Acknowledged",
+      label: "Terverifikasi",
       bg: "bg-primary",
       border: "border-primary",
       text: "text-primary-foreground",
       Icon: CheckCircle,
     },
     pending: {
-      label: "Pending",
+      label: "Menunggu Verifikasi",
       bg: "bg-secondary",
       border: "border-border",
       text: "text-muted-foreground",
-      Icon: MinusCircle,
+      Icon: ClockCircle,
     },
     rejected: {
-      label: "Rejected",
+      label: "Ditolak",
       bg: "bg-destructive/10",
       border: "border-destructive/20",
       text: "text-destructive",
@@ -141,22 +115,16 @@ export function getLedgerAckBadge(status: LedgerAckStatus): BadgeConfig {
   return map[status] ?? map.pending;
 }
 
-/* ─── Entry type meta (dengan icon field buat coin) ───────────────────────── */
-
-export interface EntryTypeMeta {
-  label: string;
-  /** Icon buat EntryTypeChip & StatusBadge. */
-  Icon: typeof CheckCircle;
+/** Badge "Dibatalkan" untuk row void (selalu ditampilkan menimpa ackStatus). */
+export function getVoidedBadge(): BadgeConfig {
+  return {
+    label: "Dibatalkan",
+    bg: "bg-destructive/10",
+    border: "border-destructive/20",
+    text: "text-destructive",
+    Icon: MinusCircle,
+  };
 }
-
-export const LEDGER_ENTRY_TYPE_META: Record<LedgerEntryType, EntryTypeMeta> = {
-  receivable: { label: "Piutang", Icon: Bill },
-  cash_in: { label: "Cash Masuk", Icon: CardReceive },
-  discount: { label: "Potongan", Icon: TagPrice },
-  recognition: { label: "Recognition", Icon: CheckCircle },
-  adjustment: { label: "Penyesuaian", Icon: Refresh },
-  refund: { label: "Refund", Icon: CardSend },
-};
 
 /* ─── Badge component ──────────────────────────────────────────────────────── */
 
@@ -177,14 +145,13 @@ export function StatusBadge({ config }: { config: BadgeConfig }): React.ReactEle
   );
 }
 
-/* ─── Entry type chip ──────────────────────────────────────────────────────── */
+/* ─── Cash In chip (semua row di cashbook = cash in) ───────────────────────── */
 
-export function EntryTypeChip({ type }: { type: LedgerEntryType }): React.ReactElement {
-  const { label, Icon } = LEDGER_ENTRY_TYPE_META[type];
+export function CashInChip(): React.ReactElement {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary py-0.5 pl-1.5 pr-2 text-xs font-medium text-foreground">
-      <Icon weight="BoldDuotone" className="size-3 text-muted-foreground" />
-      {label}
+      <CardReceive weight="BoldDuotone" className="size-3 text-muted-foreground" />
+      Cash Masuk
     </span>
   );
 }

@@ -1,17 +1,11 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
+import {
+  getTermPaidMapForBookings,
+  getTermAllocationsForBookings,
+  deriveTermStatus,
+} from "@/lib/queries/ledger";
 import type { ARBooking, ARInvoiceStatus, ARPartialPayment, ARTermin, ARTerminStatus } from "@/types/finance";
-
-function deriveTerminStatus(
-  status: "unpaid" | "paid" | "partial" | "refund",
-  dueDate: Date,
-  now: Date
-): ARTerminStatus {
-  if (status === "paid") return "paid";
-  if (status === "partial") return "partial";
-  if (status === "refund") return "paid";
-  return dueDate < now ? "overdue" : "not_due_yet";
-}
 
 function deriveBookingStatus(termins: ARTermin[]): ARTerminStatus {
   if (termins.every((t) => t.status === "paid")) return "paid";
@@ -56,50 +50,46 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
           name: true,
           amount: true,
           dueDate: true,
-          paymentStatus: true,
           invoiceNumber: true,
           notes: true,
-          ackStatus: true,
-          acknowledgedAt: true,
-          acknowledgedBy: { select: { fullName: true, nickName: true } },
-          paymentMethodId: true,
-          paymentMethod: { select: { bankName: true, bankAccountNumber: true } },
-          partialPayments: {
-            select: { id: true, amount: true, paidAt: true, notes: true },
-            orderBy: { paidAt: "asc" },
-          },
         },
       },
     },
   });
 
+  // Pure-derived (Fase 5): "terbayar" per termin = Σ alokasi Ledger cash-in ter-ack.
+  // paidMap = jumlah gross; allocMap = detail riwayat (ganti tabel PartialPayment).
+  const bookingIds = bookings.map((b) => b.id);
+  const [paidMap, allocMap] = await Promise.all([
+    getTermPaidMapForBookings(bookingIds),
+    getTermAllocationsForBookings(bookingIds),
+  ]);
+
   const mapped = bookings.map((b) => {
     const termins: ARTermin[] = b.termOfPayments.map((t) => {
-      const status = deriveTerminStatus(t.paymentStatus, t.dueDate, now);
+      // Pure-derived: terbayar = Σ alokasi Ledger cash-in ter-ack (voidedAt=null).
+      const derivedPaid = paidMap.get(t.id) ?? 0;
+
+      const status = deriveTermStatus(Number(t.amount), derivedPaid, t.dueDate, now);
       const agingDays =
         status === "overdue"
           ? Math.floor((now.getTime() - t.dueDate.getTime()) / 86_400_000)
           : null;
 
-      const partialPayments: ARPartialPayment[] = t.partialPayments.map((p) => ({
-        id: p.id,
-        amount: Number(p.amount),
-        paidAt: p.paidAt.toISOString(),
-        notes: p.notes ?? null,
+      // Riwayat pembayaran termin sekarang dari Ledger (bukan PartialPayment).
+      const partialPayments: ARPartialPayment[] = (allocMap.get(t.id) ?? []).map((a) => ({
+        id: a.id,
+        amount: a.amount,
+        paidAt: a.paidAt,
+        notes: a.notes,
       }));
 
-      const paidSoFar = partialPayments.reduce((s, p) => s + p.amount, 0);
-      const remaining = status === "paid" ? 0 : Number(t.amount) - paidSoFar;
-
-      // "BCA 149" — bank + 3 digit akhir rekening. Null kalau bank belum di-set.
-      const viaRekening = t.paymentMethod
-        ? `${t.paymentMethod.bankName} ${t.paymentMethod.bankAccountNumber.slice(-3)}`
-        : null;
+      const remaining = Math.max(0, Number(t.amount) - derivedPaid);
 
       const statusInvoice: ARInvoiceStatus = t.invoiceNumber
-        ? t.paymentStatus === "paid"
+        ? status === "paid"
           ? "paid"
-          : t.paymentStatus === "partial"
+          : status === "partial"
             ? "partial"
             : "unpaid"
         : "unissued";
@@ -116,10 +106,13 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         agingDays,
         catatan: t.notes ?? "",
         partialPayments,
-        ackStatus: (t.ackStatus ?? "pending") as "pending" | "acknowledged" | "rejected",
-        acknowledgedAt: t.acknowledgedAt ? t.acknowledgedAt.toISOString() : null,
-        acknowledgedByName: t.acknowledgedBy?.fullName ?? t.acknowledgedBy?.nickName ?? null,
-        viaRekening,
+        // Ack sekarang per-Ledger cash-in. Di level termin: "acknowledged" = sudah
+        // ada uang ter-ack yang menutup (derivedPaid>0). Metadata per-term (siapa/kapan
+        // ack, bank tujuan) hidup di Ledger, tidak lagi di TOP → null.
+        ackStatus: derivedPaid > 0 ? "acknowledged" : "pending",
+        acknowledgedAt: null,
+        acknowledgedByName: null,
+        viaRekening: null,
       };
     });
 

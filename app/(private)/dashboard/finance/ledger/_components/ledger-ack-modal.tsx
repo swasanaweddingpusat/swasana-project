@@ -15,19 +15,15 @@ import { SignaturePad } from "@/components/shared/signature-pad";
 import { useMySignature } from "@/hooks/use-my-signature";
 import { cn } from "@/lib/utils";
 import { fmtRp } from "./ledger-format";
-import type { LedgerEntry } from "@/types/finance";
-
-/** Hasil ack — dikirim balik ke page buat update state + append activity. */
-export interface LedgerAckResult {
-  signatureDataUrl: string;
-}
+import { acknowledgeCashIn } from "@/actions/ledger";
+import type { LedgerRow } from "@/lib/queries/ledger";
 
 interface LedgerAckModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entry: LedgerEntry | null;
-  /** Konfirmasi + tanda tangan → uang sah masuk. */
-  onConfirm: (entry: LedgerEntry, result: LedgerAckResult) => void;
+  entry: LedgerRow | null;
+  /** Dipanggil setelah verifikasi berhasil (caller → router.refresh()). */
+  onSuccess: () => void;
 }
 
 /* ─── Ringkasan transaksi ──────────────────────────────────────────────────── */
@@ -57,11 +53,12 @@ export function LedgerAckModal({
   open,
   onOpenChange,
   entry,
-  onConfirm,
+  onSuccess,
 }: LedgerAckModalProps): React.ReactElement | null {
   const { defaultSignature } = useMySignature();
   const [signature, setSignature] = useState<string | null>(null);
   const [useDefaultSig, setUseDefaultSig] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Reset semua field lalu tutup — dipanggil dari Batal, close, dan setelah confirm.
   function resetAndClose(): void {
@@ -89,15 +86,22 @@ export function LedgerAckModal({
     }
   }
 
-  function handleConfirm(): void {
+  async function handleConfirm(): Promise<void> {
     if (!entry) return;
     if (!signature) {
       toast.error("Tanda tangan wajib diisi untuk verifikasi");
       return;
     }
-    onConfirm(entry, { signatureDataUrl: signature });
+    setLoading(true);
+    const result = await acknowledgeCashIn({ ledgerId: entry.id, signature });
+    setLoading(false);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
     toast.success("Transaksi diverifikasi — uang sah masuk");
     resetAndClose();
+    onSuccess();
   }
 
   return (
@@ -133,8 +137,11 @@ export function LedgerAckModal({
             <SummaryRow label="Nominal masuk" value={fmtRp(entry.amount)} strong />
             {entry.paymentMethod && <SummaryRow label="Via rekening" value={entry.paymentMethod} />}
             {entry.invoiceNumber && <SummaryRow label="No. kwitansi" value={entry.invoiceNumber} />}
-            {entry.linkedTerminLabels.length > 0 && (
-              <SummaryRow label="Termin" value={entry.linkedTerminLabels.join(" · ")} />
+            {entry.linkedTermins.length > 0 && (
+              <SummaryRow
+                label="Termin"
+                value={entry.linkedTermins.map((t) => t.name).join(" · ")}
+              />
             )}
           </div>
 
@@ -169,10 +176,21 @@ export function LedgerAckModal({
 
         {/* ── Sticky footer ── */}
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={resetAndClose}>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={resetAndClose}
+            disabled={loading}
+          >
             Batal
           </Button>
-          <Button type="button" className="rounded-full" disabled={!signature} onClick={handleConfirm}>
+          <Button
+            type="button"
+            className="rounded-full"
+            disabled={!signature || loading}
+            onClick={() => { void handleConfirm(); }}
+          >
             <PenNewSquare weight="BoldDuotone" className="size-4" />
             Tanda Tangan & Verifikasi
           </Button>

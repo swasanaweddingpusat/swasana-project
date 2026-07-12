@@ -168,7 +168,6 @@ model Profile {
   leadsCreated             Lead[]
   leadsAssigned            Lead[]          @relation("LeadAssignee")
   quotations               Quotation[]
-  termOfPaymentsAcknowledged TermOfPayment[] @relation("TOPAcknowledger")
   ledgersCreated             Ledger[]        @relation("LedgerCreator")
   ledgersAcknowledged        Ledger[]        @relation("LedgerAcknowledger")
   ledgersVoided              Ledger[]        @relation("LedgerVoider")
@@ -489,7 +488,6 @@ model PaymentMethod {
   settlements        BookingPaymentSettlement[]
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
-  termOfPayments     TermOfPayment[]
   ledgers            Ledger[]
 
   @@index([vendorId])
@@ -1146,51 +1144,29 @@ model SnapVendorItem {
 
 // ─── Booking Live Tables ─────────────────────────────────────────────────────
 
+// Fase 5: TOP = JADWAL termin murni (name/amount/dueDate + invoiceNumber). "Berapa
+// sudah terbayar" DERIVED dari Ledger cash-in via PaymentAllocation (lib/queries/ledger.ts).
+// Kolom pembayaran lama (paymentStatus/paymentEvidence/paymentMethodId/ackStatus/
+// acknowledged*) + tabel PartialPayment sudah di-drop — sumbernya sekarang Ledger.
 model TermOfPayment {
   id              String              @id @default(uuid())
   bookingId       String
   name            String
   amount          Int
   dueDate         DateTime
-  paymentStatus   TermOfPaymentStatus @default(unpaid)
-  paymentEvidence String?
-  paymentMethodId String?             // bank tujuan transfer per-term (nullable)
   invoiceNumber   String?
   notes           String?
   sortOrder       Int                 @default(0)
-  // Acknowledgment fields — set when Finance acks a paid TOP
-  ackStatus       String              @default("pending") // "pending" | "acknowledged" | "rejected"
-  acknowledgedAt  DateTime?
-  acknowledgedById String?            // FK to profiles.id
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  partialPayments  PartialPayment[]
   allocations      PaymentAllocation[]
-  acknowledgedBy   Profile?            @relation("TOPAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
-  paymentMethod    PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   @@unique([invoiceNumber])
   @@index([bookingId])
-  @@index([acknowledgedById])
-  @@index([paymentMethodId])
   @@map("term_of_payments")
 }
 
-model PartialPayment {
-  id        String        @id @default(uuid())
-  termId    String
-  amount    Int
-  paidAt    DateTime
-  evidence  String?
-  notes     String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  term      TermOfPayment @relation(fields: [termId], references: [id], onDelete: Cascade)
-
-  @@index([termId])
-  @@map("partial_payments")
-}
 
 // ─── Cashflow Ledger (Buku Besar / Cashbook) ─────────────────────────────────
 // Single-entry cashbook. Sekarang cuma direction=in (cash in). PartialPayment
@@ -1404,12 +1380,6 @@ enum WeddingSession {
 
 
 
-enum TermOfPaymentStatus {
-  unpaid
-  paid
-  partial
-  refund
-}
 
 enum LedgerDirection {
   in
@@ -1476,7 +1446,6 @@ model ClientAgreement {
   sentAt     DateTime?
   viewedAt   DateTime?
   signedAt   DateTime?
-  expiresAt  DateTime
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 

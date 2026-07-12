@@ -3,26 +3,21 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { AltArrowDown, CalendarDate, CloseCircle, Filter, Magnifer } from "@solar-icons/react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AltArrowDown, CalendarDate, CloseCircle, Magnifer } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { LEDGER_ENTRY_TYPE_META } from "./ledger-format";
-import type { LedgerEntryType, LedgerFilters } from "@/types/finance";
+
+/** Filter client-side halaman Cashbook (tab ack status ditangani terpisah). */
+export interface LedgerFilters {
+  search?: string;
+  dateRange?: { from?: string; to?: string };
+}
 
 interface LedgerFilterBarProps {
   filters: LedgerFilters;
   onFiltersChange: (filters: LedgerFilters) => void;
 }
-
-const ENTRY_TYPE_OPTIONS: { value: LedgerEntryType | "all"; label: string }[] = [
-  { value: "all", label: "Semua Jenis" },
-  ...(Object.keys(LEDGER_ENTRY_TYPE_META) as LedgerEntryType[]).map((value) => ({
-    value,
-    label: LEDGER_ENTRY_TYPE_META[value].label,
-  })),
-];
 
 function fmt(iso: string): string {
   return format(new Date(iso), "dd MMM");
@@ -32,7 +27,7 @@ export function LedgerFilterBar({ filters, onFiltersChange }: LedgerFilterBarPro
   const [dateOpen, setDateOpen] = useState(false);
 
   const hasDateRange = !!(filters.dateRange?.from || filters.dateRange?.to);
-  const activeCount = [filters.entryType, filters.search].filter(Boolean).length + (hasDateRange ? 1 : 0);
+  const activeCount = [filters.search].filter(Boolean).length + (hasDateRange ? 1 : 0);
 
   const rangeSelected: DateRange | undefined = filters.dateRange
     ? {
@@ -40,10 +35,6 @@ export function LedgerFilterBar({ filters, onFiltersChange }: LedgerFilterBarPro
         to: filters.dateRange.to ? new Date(filters.dateRange.to) : undefined,
       }
     : undefined;
-
-  function setEntryType(v: LedgerEntryType | "all"): void {
-    onFiltersChange({ ...filters, entryType: v === "all" ? undefined : v });
-  }
 
   function setSearch(v: string): void {
     onFiltersChange({ ...filters, search: v || undefined });
@@ -106,32 +97,6 @@ export function LedgerFilterBar({ filters, onFiltersChange }: LedgerFilterBarPro
           </button>
         )}
       </div>
-
-      {/* ── Entry type dropdown ── */}
-      <Select
-        value={filters.entryType ?? "all"}
-        onValueChange={(v) => setEntryType(v as LedgerEntryType | "all")}
-      >
-        <SelectTrigger
-          size="sm"
-          className={cn(
-            "h-8 min-w-36 max-w-48 gap-1.5 rounded-full border-border px-3.5 text-xs font-medium",
-            filters.entryType
-              ? "border-primary/40 bg-primary/5 text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          <Filter weight="BoldDuotone" className="size-3.5 shrink-0 rotate-0!" />
-          <SelectValue placeholder="Jenis Transaksi" />
-        </SelectTrigger>
-        <SelectContent>
-          {ENTRY_TYPE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
 
       {/* ── Periode (date range) ── */}
       <Popover open={dateOpen} onOpenChange={setDateOpen}>

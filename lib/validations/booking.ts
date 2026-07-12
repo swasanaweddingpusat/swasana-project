@@ -48,12 +48,13 @@ export const bookingSchema = z.object({
     isTakeout: z.boolean().default(false),
     takeoutNominal: z.coerce.number().int().min(0).default(0),
   })).optional().default([]),
+  // Fase 5: TOP = jadwal murni (nama/nominal/tanggal). Status & bukti bayar
+  // dipindah ke Cashbook (Ledger) — bukan lagi kolom termin.
   termOfPayments: z.array(z.object({
     name: z.string().min(1),
     amount: z.coerce.number().min(0),
     dueDate: z.string().min(1),
     sortOrder: z.coerce.number().int().default(0),
-    paymentStatus: z.enum(["unpaid", "paid", "partial", "refund"]).default("unpaid"),
   })).optional().default([]),
   signingLocation: z.string().optional().nullable(),
   signatureSales: z.string().optional().nullable(),
@@ -114,16 +115,14 @@ export const editBookingSchema = z.object({
     isTakeout: z.boolean().default(false),
     takeoutNominal: z.coerce.number().int().min(0).default(0),
   })).optional().default([]),
+  // Fase 5: TOP = jadwal murni. Status/ack pembayaran diturunkan dari Ledger,
+  // tak lagi dikirim/disimpan per termin.
   termOfPayments: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(1),
     amount: z.coerce.number().min(0),
     dueDate: z.string().min(1),
     sortOrder: z.coerce.number().int().default(0),
-    // Read-only status fields — sent by client for UI logic only.
-    // Server ALWAYS re-fetches from DB and ignores these for authorization.
-    paymentStatus: z.enum(["unpaid", "paid", "partial", "refund"]).optional(),
-    ackStatus: z.string().optional(),
   })).optional().default([]),
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),

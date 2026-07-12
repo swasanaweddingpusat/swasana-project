@@ -10,10 +10,6 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { logAudit } from "@/lib/audit";
 import { generateAccessCode } from "@/lib/access-code";
 
-function getExpiresAt(): Date {
-  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-}
-
 export async function generateAgreementToken(bookingId: string) {
   const { session, error } = await requirePermission({ module: "booking", action: "client-agreement" });
   if (error) return { success: false as const, error };
@@ -28,7 +24,6 @@ export async function generateAgreementToken(bookingId: string) {
 
   const token = randomUUID();
   const accessCode = generateAccessCode();
-  const expiresAt = getExpiresAt();
 
   try {
     // Regenerating a link means the previously-signed PO is being replaced, so any
@@ -53,8 +48,8 @@ export async function generateAgreementToken(bookingId: string) {
     const ops: Prisma.PrismaPromise<unknown>[] = [
       db.clientAgreement.upsert({
         where: { bookingId },
-        update: { token, accessCode, expiresAt, status: "Pending", sentAt: null, viewedAt: null, signedAt: null },
-        create: { bookingId, token, accessCode, expiresAt },
+        update: { token, accessCode, status: "Pending", sentAt: null, viewedAt: null, signedAt: null },
+        create: { bookingId, token, accessCode },
       }),
     ];
 

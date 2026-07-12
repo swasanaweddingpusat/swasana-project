@@ -2,7 +2,18 @@
 
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { AltArrowLeft, AltArrowRight, CheckCircle, Copy, Paperclip2, Bill, Documents, History, Pen } from "@solar-icons/react";
+import {
+  AltArrowLeft,
+  AltArrowRight,
+  CheckCircle,
+  Copy,
+  Paperclip2,
+  Bill,
+  Documents,
+  History,
+  Forbidden,
+  MinusCircle,
+} from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Table,
@@ -15,21 +26,22 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EntryTypeChip, StatusBadge, fmtDate, fmtRp, getLedgerStatusBadge } from "./ledger-format";
-import type { LedgerEntry } from "@/types/finance";
+import { StatusBadge, fmtDate, fmtRp, getLedgerAckBadge, getVoidedBadge } from "./ledger-format";
+import type { LedgerRow } from "@/lib/queries/ledger";
 
 interface LedgerTableProps {
-  entries: LedgerEntry[];
+  entries: LedgerRow[];
   loading?: boolean;
-  onAck: (e: LedgerEntry) => void;
+  /** Verifikasi cash-in pending (buka modal ack). */
+  onAck: (e: LedgerRow) => void;
+  /** Tolak cash-in pending. */
+  onReject: (e: LedgerRow) => void;
+  /** Batalkan cash-in yang sudah ter-ack (void tombstone). */
+  onVoid: (e: LedgerRow) => void;
   /** Buka preview + download kwitansi PDF untuk baris ini. */
-  onKwitansi: (e: LedgerEntry) => void;
+  onKwitansi: (e: LedgerRow) => void;
   /** Buka riwayat/activity log transaksi ini. */
-  onActivity: (e: LedgerEntry) => void;
-  /** Buka drawer edit untuk baris ini (hanya cash_in + pending). */
-  onEdit: (e: LedgerEntry) => void;
-  /** Jumlah baris activity per entryId — buat badge di tombol Riwayat. */
-  activityCounts: Record<string, number>;
+  onActivity: (e: LedgerRow) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -38,7 +50,7 @@ interface LedgerTableProps {
 
 const TH = "h-10 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
 const THR = cn(TH, "text-right");
-const COL_COUNT = 9;
+const COL_COUNT = 7;
 /** Shared focus style for interactive elements inside the list — keyboard users need a visible ring. */
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card";
@@ -194,12 +206,12 @@ function LinkedTerminChips({ labels }: { labels: string[] }): React.ReactElement
 
 /* ─── Bukti bayar indicator ──────────────────────────────────────────────────── */
 
-function BuktiBayarChip({ name }: { name: string | null }): React.ReactElement | null {
-  if (!name) return null;
+function BuktiBayarChip({ evidence }: { evidence: string | null }): React.ReactElement | null {
+  if (!evidence) return null;
   return (
     <span className="inline-flex items-center gap-1 truncate rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
       <Paperclip2 weight="BoldDuotone" className="size-3 shrink-0" />
-      <span className="max-w-24 truncate">{name}</span>
+      Bukti
     </span>
   );
 }
@@ -246,168 +258,58 @@ function CopyableInvoice({ value }: { value: string | null }): React.ReactElemen
   );
 }
 
-/* ─── Shared meta line (kwitansi/via/termin/bukti — atau nama promo) ─────────── */
+/* ─── Shared meta line (kwitansi / via / termin / bukti) ─────────────────────── */
 
-function EntryMeta({ entry }: { entry: LedgerEntry }): React.ReactElement {
-  if (entry.entryType === "discount") {
-    return (
-      <p className="truncate text-xs text-muted-foreground">
-        {entry.discountProgramName ? `Promo: ${entry.discountProgramName}` : "—"}
-      </p>
-    );
-  }
+function EntryMeta({ entry }: { entry: LedgerRow }): React.ReactElement {
+  const terminLabels = entry.linkedTermins.map((t) => t.name);
   return (
     <div className="flex flex-col gap-1">
-      {/* Baris 1: nomor kwitansi/invoice */}
+      {/* Baris 1: nomor kwitansi */}
       <CopyableInvoice value={entry.invoiceNumber} />
       {/* Baris 2: via rekening + termin + bukti bayar */}
-      {(entry.paymentMethod ||
-        entry.linkedTerminLabels.length > 0 ||
-        entry.paymentEvidenceName) && (
+      {(entry.paymentMethod || terminLabels.length > 0 || entry.evidence) && (
         <div className="flex flex-wrap items-center gap-1">
           <ViaRekeningChip value={entry.paymentMethod} />
-          <LinkedTerminChips labels={entry.linkedTerminLabels} />
-          <BuktiBayarChip name={entry.paymentEvidenceName} />
+          <LinkedTerminChips labels={terminLabels} />
+          <BuktiBayarChip evidence={entry.evidence} />
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Ack cell — pill button (pending) / signee (acknowledged) / dash ────────── */
+/* ─── Nominal cell ───────────────────────────────────────────────────────────── */
 
-function AckCell({
-  entry,
-  onAck,
-  compact = false,
-}: {
-  entry: LedgerEntry;
-  onAck: (e: LedgerEntry) => void;
-  compact?: boolean;
-}): React.ReactElement | null {
-  if (entry.entryType !== "cash_in") {
-    return compact ? null : <span className="text-sm text-muted-foreground">—</span>;
-  }
-  if (entry.ackStatus === "pending") {
-    return (
-      <button
-        type="button"
-        onClick={() => onAck(entry)}
-        aria-label={`Konfirmasi pembayaran ${entry.clientName} sebesar ${fmtRp(entry.amount)}`}
-        className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15",
-          FOCUS_RING,
-        )}
-      >
-        <CheckCircle weight="BoldDuotone" className="size-3" />
-        Ack
-      </button>
-    );
-  }
-  if (entry.ackStatus === "acknowledged" && entry.acknowledgedBy) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <CheckCircle weight="BoldDuotone" className="size-3 text-primary" />
-        {entry.acknowledgedBy}
+function NominalCell({ entry }: { entry: LedgerRow }): React.ReactElement {
+  return (
+    <div className="flex flex-col items-end">
+      <span className={cn("font-semibold tabular-nums", entry.voided ? "text-muted-foreground line-through" : "text-foreground")}>
+        {fmtRp(entry.amount)}
       </span>
-    );
-  }
-  return compact ? null : <span className="text-sm text-muted-foreground">—</span>;
-}
-
-/* ─── Edit button — hanya cash_in yang belum di-ack ─────────────────────────── */
-
-/**
- * Entry yang aman diedit: hanya cash_in + ackStatus pending.
- * - discount: system-generated, gak punya form yang relevan
- * - receivable/recognition/adjustment/refund: bukan transaksi langsung
- * - acknowledged: sudah diverifikasi Finance, gak boleh diubah
- */
-function canEdit(entry: LedgerEntry): boolean {
-  return entry.entryType === "cash_in" && entry.ackStatus === "pending";
-}
-
-function EditButton({
-  entry,
-  onEdit,
-}: {
-  entry: LedgerEntry;
-  onEdit: (e: LedgerEntry) => void;
-}): React.ReactElement | null {
-  if (!canEdit(entry)) {
-    return <span className="text-sm text-muted-foreground">—</span>;
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            onClick={() => onEdit(entry)}
-            aria-label={`Edit transaksi ${entry.clientName}`}
-            className={cn(
-              "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-              FOCUS_RING,
-            )}
-          >
-            <Pen weight="BoldDuotone" className="size-4" />
-          </button>
-        }
-      />
-      <TooltipContent>Edit transaksi</TooltipContent>
-    </Tooltip>
+      {entry.discountAmount > 0 && (
+        <span className="text-[10px] tabular-nums text-muted-foreground">
+          potongan {fmtRp(entry.discountAmount)}
+        </span>
+      )}
+    </div>
   );
 }
 
-/* ─── Kwitansi action — hanya untuk baris cash_in (uang riil masuk) ──────────── */
+/* ─── Status badge (void menimpa ack) ────────────────────────────────────────── */
 
-/** Entry types yang punya kwitansi/tanda-terima yang bisa dicetak. */
-function canPrintKwitansi(entry: LedgerEntry): boolean {
-  return entry.entryType === "cash_in";
-}
-
-function KwitansiButton({
-  entry,
-  onKwitansi,
-}: {
-  entry: LedgerEntry;
-  onKwitansi: (e: LedgerEntry) => void;
-}): React.ReactElement | null {
-  if (!canPrintKwitansi(entry)) {
-    return <span className="text-sm text-muted-foreground">—</span>;
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            onClick={() => onKwitansi(entry)}
-            aria-label={`Preview & unduh kwitansi ${entry.clientName}`}
-            className={cn(
-              "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-              FOCUS_RING,
-            )}
-          >
-            <Documents weight="BoldDuotone" className="size-4" />
-          </button>
-        }
-      />
-      <TooltipContent>Kwitansi (PDF)</TooltipContent>
-    </Tooltip>
-  );
+function StatusCell({ entry }: { entry: LedgerRow }): React.ReactElement {
+  if (entry.voided) return <StatusBadge config={getVoidedBadge()} />;
+  return <StatusBadge config={getLedgerAckBadge(entry.ackStatus)} />;
 }
 
 /* ─── Riwayat / activity log trigger ─────────────────────────────────────────── */
 
 function RiwayatButton({
   entry,
-  count,
   onActivity,
 }: {
-  entry: LedgerEntry;
-  count: number;
-  onActivity: (e: LedgerEntry) => void;
+  entry: LedgerRow;
+  onActivity: (e: LedgerRow) => void;
 }): React.ReactElement {
   return (
     <Tooltip>
@@ -423,9 +325,9 @@ function RiwayatButton({
             )}
           >
             <History weight="BoldDuotone" className="size-4" />
-            {count > 0 && (
+            {entry.activityCount > 0 && (
               <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground">
-                {count}
+                {entry.activityCount}
               </span>
             )}
           </button>
@@ -436,30 +338,132 @@ function RiwayatButton({
   );
 }
 
-/* ─── Desktop row ────────────────────────────────────────────────────────────── */
+/* ─── Icon action button (kwitansi / void) ───────────────────────────────────── */
 
-function LedgerRow({
+function IconAction({
+  onClick,
+  label,
+  tooltip,
+  icon: Icon,
+  danger = false,
+}: {
+  onClick: () => void;
+  label: string;
+  tooltip: string;
+  icon: typeof Documents;
+  danger?: boolean;
+}): React.ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={label}
+            className={cn(
+              "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors",
+              danger
+                ? "text-muted-foreground hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
+                : "text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
+              FOCUS_RING,
+            )}
+          >
+            <Icon weight="BoldDuotone" className="size-4" />
+          </button>
+        }
+      />
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/* ─── Aksi cell (ack/reject/void/kwitansi tergantung state) ──────────────────── */
+
+function AksiCell({
   entry,
   onAck,
+  onReject,
+  onVoid,
+  onKwitansi,
+}: {
+  entry: LedgerRow;
+  onAck: (e: LedgerRow) => void;
+  onReject: (e: LedgerRow) => void;
+  onVoid: (e: LedgerRow) => void;
+  onKwitansi: (e: LedgerRow) => void;
+}): React.ReactElement {
+  const isPending = entry.ackStatus === "pending" && !entry.voided;
+  const isAcked = entry.ackStatus === "acknowledged" && !entry.voided;
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      {isPending && (
+        <>
+          <button
+            type="button"
+            onClick={() => onAck(entry)}
+            aria-label={`Verifikasi pembayaran ${entry.clientName}`}
+            className={cn(
+              "inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15",
+              FOCUS_RING,
+            )}
+          >
+            <CheckCircle weight="BoldDuotone" className="size-3.5" />
+            Ack
+          </button>
+          <IconAction
+            onClick={() => onReject(entry)}
+            label={`Tolak pembayaran ${entry.clientName}`}
+            tooltip="Tolak"
+            icon={Forbidden}
+            danger
+          />
+        </>
+      )}
+      {isAcked && (
+        <IconAction
+          onClick={() => onVoid(entry)}
+          label={`Batalkan transaksi ${entry.clientName}`}
+          tooltip="Batalkan (void)"
+          icon={MinusCircle}
+          danger
+        />
+      )}
+      {entry.invoiceNumber && (
+        <IconAction
+          onClick={() => onKwitansi(entry)}
+          label={`Preview & unduh kwitansi ${entry.clientName}`}
+          tooltip="Kwitansi (PDF)"
+          icon={Documents}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Desktop row ────────────────────────────────────────────────────────────── */
+
+function DesktopRow({
+  entry,
+  onAck,
+  onReject,
+  onVoid,
   onKwitansi,
   onActivity,
-  onEdit,
-  activityCount,
 }: {
-  entry: LedgerEntry;
-  onAck: (e: LedgerEntry) => void;
-  onKwitansi: (e: LedgerEntry) => void;
-  onActivity: (e: LedgerEntry) => void;
-  onEdit: (e: LedgerEntry) => void;
-  activityCount: number;
+  entry: LedgerRow;
+  onAck: (e: LedgerRow) => void;
+  onReject: (e: LedgerRow) => void;
+  onVoid: (e: LedgerRow) => void;
+  onKwitansi: (e: LedgerRow) => void;
+  onActivity: (e: LedgerRow) => void;
 }): React.ReactElement {
-  const isDiscount = entry.entryType === "discount";
-
   return (
     <TableRow
       className={cn(
         "h-18 bg-card align-middle transition-colors hover:bg-secondary/40",
-        isDiscount && "bg-secondary/20",
+        entry.voided && "bg-secondary/20",
       )}
     >
       <TableCell className="px-4 py-3 align-middle text-xs tabular-nums text-muted-foreground">
@@ -468,17 +472,15 @@ function LedgerRow({
       <TableCell className="px-4 py-3 align-middle">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-foreground">{entry.clientName}</p>
-          <div className="mt-1">
-            <EntryTypeChip type={entry.entryType} />
-          </div>
+          {entry.acknowledgedByName && !entry.voided && (
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              Ack: {entry.acknowledgedByName}
+            </p>
+          )}
         </div>
       </TableCell>
-      <TableCell className="px-4 py-3 text-right align-middle text-sm tabular-nums">
-        {isDiscount ? (
-          <span className="text-muted-foreground">–{fmtRp(entry.amount)}</span>
-        ) : (
-          <span className="font-semibold text-foreground">{fmtRp(entry.amount)}</span>
-        )}
+      <TableCell className="px-4 py-3 text-right align-middle text-sm">
+        <NominalCell entry={entry} />
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
         <div className="min-w-0">
@@ -486,19 +488,19 @@ function LedgerRow({
         </div>
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
-        <StatusBadge config={getLedgerStatusBadge(entry.status)} />
+        <StatusCell entry={entry} />
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
-        <AckCell entry={entry} onAck={onAck} />
+        <RiwayatButton entry={entry} onActivity={onActivity} />
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
-        <RiwayatButton entry={entry} count={activityCount} onActivity={onActivity} />
-      </TableCell>
-      <TableCell className="px-4 py-3 align-middle">
-        <EditButton entry={entry} onEdit={onEdit} />
-      </TableCell>
-      <TableCell className="px-4 py-3 align-middle">
-        <KwitansiButton entry={entry} onKwitansi={onKwitansi} />
+        <AksiCell
+          entry={entry}
+          onAck={onAck}
+          onReject={onReject}
+          onVoid={onVoid}
+          onKwitansi={onKwitansi}
+        />
       </TableCell>
     </TableRow>
   );
@@ -509,25 +511,23 @@ function LedgerRow({
 function MobileRecord({
   entry,
   onAck,
+  onReject,
+  onVoid,
   onKwitansi,
   onActivity,
-  onEdit,
-  activityCount,
 }: {
-  entry: LedgerEntry;
-  onAck: (e: LedgerEntry) => void;
-  onKwitansi: (e: LedgerEntry) => void;
-  onActivity: (e: LedgerEntry) => void;
-  onEdit: (e: LedgerEntry) => void;
-  activityCount: number;
+  entry: LedgerRow;
+  onAck: (e: LedgerRow) => void;
+  onReject: (e: LedgerRow) => void;
+  onVoid: (e: LedgerRow) => void;
+  onKwitansi: (e: LedgerRow) => void;
+  onActivity: (e: LedgerRow) => void;
 }): React.ReactElement {
-  const isDiscount = entry.entryType === "discount";
-
   return (
     <li
       className={cn(
         "border-b border-border/60 px-4 py-3.5 last:border-0",
-        isDiscount && "bg-secondary/20",
+        entry.voided && "bg-secondary/20",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -538,69 +538,24 @@ function MobileRecord({
               {fmtDate(entry.occurredAt)}
             </span>
           </div>
-          <div className="mt-1">
-            <EntryTypeChip type={entry.entryType} />
-          </div>
           <div className="mt-1.5 text-xs text-muted-foreground">
             <EntryMeta entry={entry} />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onActivity(entry)}
-              aria-label={`Lihat riwayat transaksi ${entry.clientName}`}
-              className={cn(
-                "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-                FOCUS_RING,
-              )}
-            >
-              <History weight="BoldDuotone" className="size-3.5" />
-              Riwayat
-              {activityCount > 0 && (
-                <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground">
-                  {activityCount}
-                </span>
-              )}
-            </button>
-            {canEdit(entry) && (
-              <button
-                type="button"
-                onClick={() => onEdit(entry)}
-                aria-label={`Edit transaksi ${entry.clientName}`}
-                className={cn(
-                  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-                  FOCUS_RING,
-                )}
-              >
-                <Pen weight="BoldDuotone" className="size-3.5" />
-                Edit
-              </button>
-            )}
-            {canPrintKwitansi(entry) && (
-              <button
-                type="button"
-                onClick={() => onKwitansi(entry)}
-                aria-label={`Preview & unduh kwitansi ${entry.clientName}`}
-                className={cn(
-                  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-                  FOCUS_RING,
-                )}
-              >
-                <Documents weight="BoldDuotone" className="size-3.5" />
-                Kwitansi
-              </button>
-            )}
+            <RiwayatButton entry={entry} onActivity={onActivity} />
+            <AksiCell
+              entry={entry}
+              onAck={onAck}
+              onReject={onReject}
+              onVoid={onVoid}
+              onKwitansi={onKwitansi}
+            />
           </div>
         </div>
         <div className="shrink-0 text-right">
-          {isDiscount ? (
-            <p className="text-sm tabular-nums text-muted-foreground">–{fmtRp(entry.amount)}</p>
-          ) : (
-            <p className="text-sm font-semibold tabular-nums text-foreground">{fmtRp(entry.amount)}</p>
-          )}
+          <NominalCell entry={entry} />
           <div className="mt-1.5 flex flex-col items-end gap-1.5">
-            <StatusBadge config={getLedgerStatusBadge(entry.status)} />
-            <AckCell entry={entry} onAck={onAck} compact />
+            <StatusCell entry={entry} />
           </div>
         </div>
       </div>
@@ -614,10 +569,10 @@ export function LedgerTable({
   entries,
   loading = false,
   onAck,
+  onReject,
+  onVoid,
   onKwitansi,
   onActivity,
-  onEdit,
-  activityCounts,
   currentPage,
   totalPages,
   onPageChange,
@@ -649,17 +604,15 @@ export function LedgerTable({
         {/* ── Desktop table (sm dan lebih besar) ── */}
         <div className="hidden sm:block">
           <Table className="table-fixed">
-            <TableCaption className="sr-only">Daftar transaksi ledger</TableCaption>
+            <TableCaption className="sr-only">Daftar transaksi cashbook</TableCaption>
             <colgroup>
               <col style={{ width: "9%" }} />
-              <col style={{ width: "18%" }} />
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "24%" }} />
               <col style={{ width: "12%" }} />
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
+              <col style={{ width: "15%" }} />
             </colgroup>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -679,29 +632,23 @@ export function LedgerTable({
                   Status
                 </TableHead>
                 <TableHead scope="col" className={TH}>
-                  Ack
-                </TableHead>
-                <TableHead scope="col" className={TH}>
                   Riwayat
                 </TableHead>
-                <TableHead scope="col" className={TH}>
-                  Edit
-                </TableHead>
-                <TableHead scope="col" className={TH}>
+                <TableHead scope="col" className={THR}>
                   Aksi
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.map((e) => (
-                <LedgerRow
+                <DesktopRow
                   key={e.id}
                   entry={e}
                   onAck={onAck}
+                  onReject={onReject}
+                  onVoid={onVoid}
                   onKwitansi={onKwitansi}
                   onActivity={onActivity}
-                  onEdit={onEdit}
-                  activityCount={activityCounts[e.id] ?? 0}
                 />
               ))}
             </TableBody>
@@ -709,16 +656,16 @@ export function LedgerTable({
         </div>
 
         {/* ── Mobile list (di bawah sm) — record list, bukan tabel terkompres ── */}
-        <ul className="sm:hidden" aria-label="Daftar transaksi ledger">
+        <ul className="sm:hidden" aria-label="Daftar transaksi cashbook">
           {entries.map((e) => (
             <MobileRecord
               key={e.id}
               entry={e}
               onAck={onAck}
+              onReject={onReject}
+              onVoid={onVoid}
               onKwitansi={onKwitansi}
               onActivity={onActivity}
-              onEdit={onEdit}
-              activityCount={activityCounts[e.id] ?? 0}
             />
           ))}
         </ul>

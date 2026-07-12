@@ -1,6 +1,6 @@
 import React from "react";
 import { Document, Page, Text, View, StyleSheet, Image, Svg, Line } from "@react-pdf/renderer";
-import type { LedgerEntry } from "@/types/finance";
+import type { LedgerRow } from "@/lib/queries/ledger";
 
 /**
  * Kwitansi (payment receipt) PDF — FE-only, rendered client-side via `pdf().toBlob()`.
@@ -237,7 +237,7 @@ function DiagonalFill({ width, height }: { width: number; height: number }): Rea
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 export interface KwitansiPdfDocumentProps {
-  entry: LedgerEntry;
+  entry: LedgerRow;
   logoBase64?: string | null;
 }
 
@@ -246,11 +246,12 @@ export function KwitansiPdfDocument({ entry, logoBase64 }: KwitansiPdfDocumentPr
     entry.invoiceNumber?.trim() || `KW-${entry.id.slice(0, 8).toUpperCase()}`;
   // "Untuk pembayaran" = tujuan/termin (bukan catatan) — biar tidak kembar
   // dengan KETERANGAN yang memang diambil dari catatan.
+  const terminLabels = entry.linkedTermins.map((t) => t.name);
   const untukPembayaran = (
-    (entry.linkedTerminLabels.length ? entry.linkedTerminLabels.join(" · ") : "") ||
+    (terminLabels.length ? terminLabels.join(" · ") : "") ||
     "Pembayaran"
   ).toUpperCase();
-  const signer = entry.acknowledgedBy?.trim() || DEFAULT_SIGNER;
+  const signer = entry.acknowledgedByName?.trim() || DEFAULT_SIGNER;
   // Keterangan diambil dari catatan transaksi (input "Catatan" saat create).
   const keterangan = entry.notes?.trim() || "—";
 

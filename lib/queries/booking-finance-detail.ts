@@ -1,4 +1,9 @@
 import { db } from "@/lib/db";
+import {
+  getTermPaidMap,
+  getTermAllocationsForBookings,
+  deriveTermStatus,
+} from "@/lib/queries/ledger";
 
 export interface BookingFinanceDetail {
   id: string;
@@ -18,6 +23,10 @@ export interface BookingFinanceDetail {
     paymentEvidence: string | null;
     paymentMethodId: string | null;
     notes: string | null;
+    /** Dual-source: max(Σ acked Ledger allocations, legacy paid amount). */
+    effectivePaid: number;
+    /** Derived status from effectivePaid — source of truth for UI display. */
+    effectiveStatus: "paid" | "partial" | "overdue" | "not_due_yet";
     partialPayments: {
       id: string;
       amount: number;
@@ -60,21 +69,7 @@ export async function getBookingFinanceDetail(
           amount: true,
           dueDate: true,
           sortOrder: true,
-          paymentStatus: true,
-          ackStatus: true,
-          paymentEvidence: true,
-          paymentMethodId: true,
           notes: true,
-          partialPayments: {
-            orderBy: { paidAt: "asc" },
-            select: {
-              id: true,
-              amount: true,
-              paidAt: true,
-              evidence: true,
-              notes: true,
-            },
-          },
         },
       },
       snapPackageCategoryPrices: {
@@ -94,6 +89,14 @@ export async function getBookingFinanceDetail(
 
   if (!booking) return null;
 
+  // Pure-derived (Fase 5): terbayar = Σ alokasi Ledger cash-in ter-ack.
+  // paidMap = jumlah; allocMap = detail riwayat (ganti PartialPayment).
+  const [paidMap, allocMap] = await Promise.all([
+    getTermPaidMap(bookingId),
+    getTermAllocationsForBookings([bookingId]),
+  ]);
+  const now = new Date();
+
   return {
     id: booking.id,
     customerName: booking.snapCustomer?.name ?? "",
@@ -101,25 +104,39 @@ export async function getBookingFinanceDetail(
     discountName: booking.discountName ?? null,
     discountAmount: Number(booking.discountAmount ?? 0),
     margin: booking.snapPackagePricing?.margin ?? 0,
-    terms: booking.termOfPayments.map((t) => ({
-      id: t.id,
-      name: t.name,
-      amount: Number(t.amount),
-      dueDate: new Date(t.dueDate).toISOString(),
-      sortOrder: t.sortOrder,
-      paymentStatus: t.paymentStatus as "unpaid" | "paid" | "partial" | "refund",
-      ackStatus: t.ackStatus ?? null,
-      paymentEvidence: t.paymentEvidence ?? null,
-      paymentMethodId: t.paymentMethodId ?? null,
-      notes: t.notes ?? null,
-      partialPayments: t.partialPayments.map((p) => ({
-        id: p.id,
-        amount: Number(p.amount),
-        paidAt: new Date(p.paidAt).toISOString(),
-        evidence: p.evidence ?? null,
-        notes: p.notes ?? null,
-      })),
-    })),
+    terms: booking.termOfPayments.map((t) => {
+      const amount = Number(t.amount);
+      const effectivePaid = Math.min(paidMap.get(t.id) ?? 0, amount);
+      const effectiveStatus = deriveTermStatus(amount, effectivePaid, new Date(t.dueDate), now);
+
+      // paymentStatus/ackStatus legacy sudah di-drop — turunkan dari status derived
+      // biar konsumen (drawer TOP) tetap kompatibel tanpa refactor besar.
+      const paymentStatus: "unpaid" | "paid" | "partial" | "refund" =
+        effectiveStatus === "paid" ? "paid" : effectiveStatus === "partial" ? "partial" : "unpaid";
+
+      return {
+        id: t.id,
+        name: t.name,
+        amount,
+        dueDate: new Date(t.dueDate).toISOString(),
+        sortOrder: t.sortOrder,
+        paymentStatus,
+        ackStatus: effectivePaid > 0 ? "acknowledged" : "pending",
+        paymentEvidence: null,
+        paymentMethodId: null,
+        notes: t.notes ?? null,
+        effectivePaid,
+        effectiveStatus,
+        // Riwayat pembayaran per termin sekarang dari Ledger allocation (bukan PartialPayment).
+        partialPayments: (allocMap.get(t.id) ?? []).map((a) => ({
+          id: a.id,
+          amount: a.amount,
+          paidAt: a.paidAt,
+          evidence: null,
+          notes: a.notes,
+        })),
+      };
+    }),
     categories:
       booking.snapPackageCategoryPrices.length > 0
         ? booking.snapPackageCategoryPrices.map((c) => ({

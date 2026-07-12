@@ -1,28 +1,62 @@
 "use client";
 
-import { CloseCircle, History } from "@solar-icons/react";
+import { useEffect, useState } from "react";
+import { CloseCircle, History, Refresh } from "@solar-icons/react";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LedgerActivityTimeline } from "./ledger-activity-timeline";
-import type { LedgerActivity, LedgerEntry } from "@/types/finance";
+import type { LedgerActivity } from "./ledger-format";
+import type { LedgerRow } from "@/lib/queries/ledger";
 
 interface LedgerActivityModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entry: LedgerEntry | null;
-  activities: LedgerActivity[];
+  entry: LedgerRow | null;
 }
 
-/** Modal riwayat/activity log satu transaksi (dibuka dari kolom Riwayat). */
+/**
+ * Modal riwayat/activity log satu transaksi (dibuka dari kolom Riwayat).
+ * Riwayat di-fetch on-demand pas modal dibuka lewat /api/ledger/[id]/activities
+ * (bukan embed di LedgerRow — biar listing tetap ringan).
+ */
 export function LedgerActivityModal({
   open,
   onOpenChange,
   entry,
-  activities,
 }: LedgerActivityModalProps): React.ReactElement | null {
+  const [activities, setActivities] = useState<LedgerActivity[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !entry) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setActivities([]);
+
+    async function run(ledgerId: string): Promise<void> {
+      try {
+        const res = await fetch(`/api/ledger/${ledgerId}/activities`);
+        if (!res.ok) throw new Error("gagal");
+        const data: LedgerActivity[] = await res.json();
+        if (!cancelled) setActivities(data);
+      } catch {
+        if (!cancelled) setActivities([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void run(entry.id);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, entry]);
+
   if (!entry) return null;
 
   return (
@@ -50,7 +84,13 @@ export function LedgerActivityModal({
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
-          <LedgerActivityTimeline activities={activities} />
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Refresh weight="BoldDuotone" className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <LedgerActivityTimeline activities={activities} />
+          )}
         </div>
       </DialogContent>
     </Dialog>

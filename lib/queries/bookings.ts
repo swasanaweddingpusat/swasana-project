@@ -12,13 +12,13 @@ const bookingListInclude = {
   manager: { select: { id: true, fullName: true } },
   paymentMethod: { select: { bankName: true } },
   sourceOfInformation: { select: { name: true } },
-  clientAgreement: { select: { token: true, accessCode: true, status: true, expiresAt: true } },
+  clientAgreement: { select: { token: true, accessCode: true, status: true } },
   // List rows only need the TOP base fields (table computes paid/total). The nested
   // partialPayments are NOT consumed from list items (the edit-finance drawer fetches
   // them via useBookingFinanceDetail), so they're dropped here to keep the list payload
   // small. snapPackageCategoryPrices likewise is only read from BookingDetail — kept on
   // bookingDetailInclude below, not the list.
-  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true, paymentEvidence: true, notes: true } },
+  termOfPayments: { orderBy: { sortOrder: "asc" as const }, select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, notes: true } },
   // Only id/editorProfileId/updatedAt needed for the "Sedang diedit" badge (truthiness
   // check). formState and pendingUploads are large JSON blobs not read by any list
   // consumer — the edit drawer hydrates via useDraftBookingDetail (detail endpoint).
@@ -429,7 +429,7 @@ const miceListInclude = {
   sourceOfInformation: { select: { id: true, name: true } },
   termOfPayments: {
     orderBy: { sortOrder: "asc" as const },
-    select: { id: true, name: true, amount: true, dueDate: true, paymentStatus: true },
+    select: { id: true, name: true, amount: true, dueDate: true },
   },
 } as const;
 

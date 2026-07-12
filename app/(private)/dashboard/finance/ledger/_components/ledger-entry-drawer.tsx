@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 import {
   CardReceive,
   TagPrice,
@@ -12,7 +13,7 @@ import {
   UploadMinimalistic,
   InfoCircle,
   Link as LinkIcon,
-  Pen,
+  Refresh,
 } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
@@ -37,15 +38,20 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtRp } from "./ledger-format";
-import {
-  DUMMY_BOOKINGS,
-  DUMMY_PROMOS,
-  DUMMY_REKENING,
-  bookableBookings,
-  terminsForBooking,
-} from "./ledger-dummy";
+import { createCashIn } from "@/actions/ledger";
+import type { BookingPickerItem, TermForBooking } from "@/lib/queries/ledger";
+import type { PaymentMethodPickerItem } from "@/lib/queries/payment-methods";
 import { ledgerEntrySchema, type LedgerEntryFormValues } from "@/lib/validations/ledger";
-import type { LedgerEntry } from "@/types/finance";
+
+/* ─── Picker option types ────────────────────────────────────────────────── */
+
+/** Program promo untuk picker drawer (subset dari getPromoPrograms). */
+export interface LedgerPromoOption {
+  id: string;
+  name: string;
+  discountType: "PERCENTAGE" | "NOMINAL";
+  discountValue: number;
+}
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
 
@@ -66,11 +72,11 @@ function todayISO(): string {
 interface LedgerEntryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (rows: LedgerEntry[]) => void;
-  /** Jika diisi → mode Edit. Drawer ter-prefill dari entry ini, save via onUpdate. */
-  editEntry?: LedgerEntry | null;
-  /** Dipanggil saat mode Edit & user klik Perbarui. Returning entry yg sudah di-update. */
-  onUpdate?: (updated: LedgerEntry) => void;
+  /** Dipanggil setelah cash-in berhasil dicatat (caller → router.refresh()). */
+  onSuccess: () => void;
+  bookings: BookingPickerItem[];
+  promos: LedgerPromoOption[];
+  paymentMethods: PaymentMethodPickerItem[];
 }
 
 /* ─── Generic searchable combobox (mirrors LeaderCombobox) ────────────────── */
@@ -100,7 +106,7 @@ function Combobox({
   emptyText?: string;
   id?: string;
   disabled?: boolean;
-}) {
+}): React.ReactElement {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
@@ -167,16 +173,18 @@ function Combobox({
 
 function TerminMultiSelect({
   bookingId,
+  termins,
+  loading,
   value,
   onChange,
 }: {
   bookingId: string;
+  termins: TermForBooking[];
+  loading: boolean;
   value: string[];
   onChange: (ids: string[]) => void;
-}) {
-  const termins = bookingId ? terminsForBooking(bookingId) : [];
-
-  function toggle(id: string) {
+}): React.ReactElement {
+  function toggle(id: string): void {
     if (value.includes(id)) {
       onChange(value.filter((v) => v !== id));
     } else {
@@ -189,6 +197,15 @@ function TerminMultiSelect({
       <p className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
         Pilih client / booking dulu untuk melihat termin.
       </p>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-4 text-xs text-muted-foreground">
+        <Refresh weight="BoldDuotone" className="size-4 animate-spin" />
+        Memuat termin...
+      </div>
     );
   }
 
@@ -206,8 +223,7 @@ function TerminMultiSelect({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Kartu termin — tap buat toggle, bisa pilih banyak. Tanpa max-height:
-          semua termin tampil sekaligus, scroll ikut body drawer. */}
+      {/* Kartu termin — tap buat toggle, bisa pilih banyak. */}
       <div className="flex flex-col gap-2">
         {termins.map((t) => {
           const selected = value.includes(t.id);
@@ -254,7 +270,7 @@ function TerminMultiSelect({
   );
 }
 
-/* ─── InfoRow helper (mirrors ap-pay-drawer style) ───────────────────────── */
+/* ─── InfoRow helper ─────────────────────────────────────────────────────── */
 
 function InfoRow({
   label,
@@ -266,7 +282,7 @@ function InfoRow({
   value: string;
   strong?: boolean;
   muted?: boolean;
-}) {
+}): React.ReactElement {
   return (
     <div className="flex items-center justify-between gap-4 py-1 text-sm">
       <span className="shrink-0 text-muted-foreground">{label}</span>
@@ -287,19 +303,45 @@ function InfoRow({
 
 /* ─── Field error line ────────────────────────────────────────────────────── */
 
-function FieldError({ message }: { message?: string }) {
+function FieldError({ message }: { message?: string }): React.ReactElement | null {
   if (!message) return null;
   return <p className="text-xs text-destructive">{message}</p>;
 }
 
 /* ─── Required marker (bintang merah) ─────────────────────────────────────── */
 
-function RequiredMark() {
+function RequiredMark(): React.ReactElement {
   return (
     <span className="ml-0.5 text-destructive" aria-hidden="true">
       *
     </span>
   );
+}
+
+/* ─── Allocation builder (§6.4 GROSS greedy) ──────────────────────────────── */
+
+/**
+ * Bagi nominal GROSS ke termin terpilih (urut sesuai fetch = sortOrder).
+ * Tiap termin diisi penuh sampai budget habis; termin terakhir bisa parsial.
+ * Server (validateAllocations) tetap jadi guard final untuk over-allocation.
+ */
+function buildAllocations(
+  gross: number,
+  selectedIds: string[],
+  termins: TermForBooking[],
+): { termId: string; amount: number }[] {
+  const selected = termins.filter((t) => selectedIds.includes(t.id));
+  const out: { termId: string; amount: number }[] = [];
+  let budget = gross;
+  for (const t of selected) {
+    if (budget <= 0) break;
+    const amount = Math.min(t.amount, budget);
+    if (amount > 0) {
+      out.push({ termId: t.id, amount });
+      budget -= amount;
+    }
+  }
+  return out;
 }
 
 /* ─── Main component ─────────────────────────────────────────────────────── */
@@ -309,13 +351,15 @@ const ACCEPTED_EVIDENCE = "image/jpeg,image/png,image/webp,application/pdf";
 export function LedgerEntryDrawer({
   isOpen,
   onClose,
-  onSubmit,
-  editEntry = null,
-  onUpdate,
-}: LedgerEntryDrawerProps) {
+  onSuccess,
+  bookings,
+  promos,
+  paymentMethods,
+}: LedgerEntryDrawerProps): React.ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const isEditMode = editEntry !== null && editEntry !== undefined;
+  const [termins, setTermins] = useState<TermForBooking[]>([]);
+  const [terminsLoading, setTerminsLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     control,
@@ -330,7 +374,7 @@ export function LedgerEntryDrawer({
       bookingId: "",
       occurredAt: "",
       amount: "",
-      paymentMethod: DUMMY_REKENING[0],
+      paymentMethodId: paymentMethods[0]?.id ?? "",
       promoId: "",
       linkedTerminIds: [],
       paymentEvidenceName: "",
@@ -340,56 +384,68 @@ export function LedgerEntryDrawer({
 
   useEffect(() => {
     if (isOpen) {
-      if (isEditMode && editEntry) {
-        // Mode Edit: pre-fill semua field dari entry yang mau diedit.
-        reset({
-          bookingId: editEntry.bookingId,
-          occurredAt: editEntry.occurredAt,
-          // amount di-store sebagai number; form expects string
-          amount: String(editEntry.amount),
-          paymentMethod: editEntry.paymentMethod ?? DUMMY_REKENING[0],
-          promoId: editEntry.discountProgramName
-            ? (DUMMY_PROMOS.find((p) => p.name === editEntry.discountProgramName)?.id ?? "")
-            : "",
-          linkedTerminIds: editEntry.linkedTerminIds ?? [],
-          paymentEvidenceName: editEntry.paymentEvidenceName ?? "",
-          notes: editEntry.notes ?? "",
-        });
-      } else {
-        // Mode Create: default tanggal hari ini saja, sisanya kosong.
-        reset({
-          bookingId: "",
-          occurredAt: todayISO(),
-          amount: "",
-          paymentMethod: DUMMY_REKENING[0],
-          promoId: "",
-          linkedTerminIds: [],
-          paymentEvidenceName: "",
-          notes: "",
-        });
-      }
+      reset({
+        bookingId: "",
+        occurredAt: todayISO(),
+        amount: "",
+        paymentMethodId: paymentMethods[0]?.id ?? "",
+        promoId: "",
+        linkedTerminIds: [],
+        paymentEvidenceName: "",
+        notes: "",
+      });
+      setTermins([]);
     } else {
       reset();
+      setTermins([]);
     }
-  }, [isOpen, isEditMode, editEntry, reset]);
+  }, [isOpen, reset, paymentMethods]);
 
-  /* ── Watched values for the live preview ──────────────────────────────── */
+  /* ── Watched values ─────────────────────────────────────────────────────── */
 
   const bookingId = useWatch({ control, name: "bookingId" });
   const amount = useWatch({ control, name: "amount" });
   const promoId = useWatch({ control, name: "promoId" });
   const evidenceName = useWatch({ control, name: "paymentEvidenceName" });
 
+  /* ── Fetch termins saat booking dipilih ──────────────────────────────────── */
+
+  useEffect(() => {
+    if (!bookingId) {
+      setTermins([]);
+      return;
+    }
+    let cancelled = false;
+    setTerminsLoading(true);
+
+    async function run(id: string): Promise<void> {
+      try {
+        const res = await fetch(`/api/bookings/${id}/terms`);
+        if (!res.ok) throw new Error("gagal");
+        const data: TermForBooking[] = await res.json();
+        if (!cancelled) setTermins(data);
+      } catch {
+        if (!cancelled) setTermins([]);
+      } finally {
+        if (!cancelled) setTerminsLoading(false);
+      }
+    }
+
+    void run(bookingId);
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId]);
+
   const bayarNum = Number((amount ?? "").replace(/[^\d]/g, "")) || 0;
-  const promo = DUMMY_PROMOS.find((p) => p.id === promoId) ?? null;
+  const promo = promos.find((p) => p.id === promoId) ?? null;
 
   let potongan = 0;
   if (promo) {
-    if (promo.discountType === "PERCENTAGE") {
-      potongan = Math.round((bayarNum * promo.discountValue) / 100);
-    } else {
-      potongan = promo.discountValue;
-    }
+    potongan =
+      promo.discountType === "PERCENTAGE"
+        ? Math.round((bayarNum * promo.discountValue) / 100)
+        : promo.discountValue;
   }
   if (potongan > bayarNum) {
     potongan = bayarNum;
@@ -399,150 +455,85 @@ export function LedgerEntryDrawer({
 
   /* ── Options ──────────────────────────────────────────────────────────── */
 
-  // Hanya booking yang sudah Confirmed/approved yang boleh dicatat transaksinya.
-  const bookingOptions: ComboOption[] = bookableBookings().map((b) => ({
+  const bookingOptions: ComboOption[] = bookings.map((b) => ({
     value: b.id,
     label: b.clientName,
   }));
 
-  const rekeningOptions: ComboOption[] = DUMMY_REKENING.map((r) => ({ value: r, label: r }));
+  const rekeningOptions: ComboOption[] = paymentMethods.map((r) => ({ value: r.id, label: r.label }));
 
   const promoOptions: ComboOption[] = [
     { value: NO_PROMO, label: "Tanpa promo" },
-    ...DUMMY_PROMOS.map((p) => ({
+    ...promos.map((p) => ({
       value: p.id,
       label: p.name,
-      hint:
-        p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : fmtRp(p.discountValue),
+      hint: p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : fmtRp(p.discountValue),
     })),
   ];
 
   /* ── File handlers ─────────────────────────────────────────────────────── */
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
     if (!file) return;
     setValue("paymentEvidenceName", file.name, { shouldValidate: true });
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function removeEvidence() {
+  function removeEvidence(): void {
     setValue("paymentEvidenceName", "", { shouldValidate: true });
   }
 
   /* ── Submit ────────────────────────────────────────────────────────────── */
 
-  function buildRows(data: LedgerEntryFormValues): LedgerEntry[] {
-    const clientName =
-      DUMMY_BOOKINGS.find((b) => b.id === data.bookingId)?.clientName ?? data.bookingId;
+  async function onValid(data: LedgerEntryFormValues): Promise<void> {
+    const gross = Number(data.amount.replace(/[^\d]/g, "")) || 0;
+    const selectedPromo = promos.find((p) => p.id === data.promoId) ?? null;
 
-    const termins = terminsForBooking(data.bookingId);
-    const linkedIds = data.linkedTerminIds ?? [];
-    const linkedLabels = termins.filter((t) => linkedIds.includes(t.id)).map((t) => t.name);
-
-    const paidNum = Number(data.amount.replace(/[^\d]/g, "")) || 0;
-    const selectedPromo = DUMMY_PROMOS.find((p) => p.id === data.promoId) ?? null;
-
-    let cut = 0;
+    let discountAmount = 0;
     if (selectedPromo) {
-      if (selectedPromo.discountType === "PERCENTAGE") {
-        cut = Math.round((paidNum * selectedPromo.discountValue) / 100);
-      } else {
-        cut = selectedPromo.discountValue;
-      }
+      discountAmount =
+        selectedPromo.discountType === "PERCENTAGE"
+          ? Math.round((gross * selectedPromo.discountValue) / 100)
+          : selectedPromo.discountValue;
+      if (discountAmount > gross) discountAmount = gross;
     }
-    if (cut > paidNum) cut = paidNum;
-    const cash = paidNum - cut;
 
-    const cashRow: LedgerEntry = {
-      id: crypto.randomUUID(),
-      occurredAt: data.occurredAt,
+    const allocations = buildAllocations(gross, data.linkedTerminIds ?? [], termins);
+
+    setSubmitting(true);
+    const result = await createCashIn({
       bookingId: data.bookingId,
-      clientName,
-      entryType: "cash_in",
-      status: "unearned",
-      amount: cash,
-      ackStatus: "pending",
-      acknowledgedBy: null,
-      paymentMethod: data.paymentMethod,
-      // Nomor kwitansi di-generate di page (butuh running sequence). Placeholder dulu.
-      invoiceNumber: null,
-      discountProgramName: null,
-      linkedTerminIds: linkedIds,
-      linkedTerminLabels: linkedLabels,
-      paymentEvidenceName: data.paymentEvidenceName ?? null,
+      occurredAt: new Date(data.occurredAt).toISOString(),
+      amount: gross,
+      paymentMethodId: data.paymentMethodId || null,
+      discountProgramId: data.promoId || null,
+      discountAmount,
+      evidence: data.paymentEvidenceName || null,
       notes: data.notes?.trim() || null,
-    };
+      allocations,
+    });
+    setSubmitting(false);
 
-    const rows: LedgerEntry[] = [cashRow];
-
-    if (selectedPromo && cut > 0) {
-      rows.push({
-        id: crypto.randomUUID(),
-        occurredAt: data.occurredAt,
-        bookingId: data.bookingId,
-        clientName,
-        entryType: "discount",
-        status: "unearned",
-        amount: cut,
-        ackStatus: "pending",
-        acknowledgedBy: null,
-        paymentMethod: null,
-        invoiceNumber: null,
-        discountProgramName: selectedPromo.name,
-        linkedTerminIds: [],
-        linkedTerminLabels: [],
-        paymentEvidenceName: null,
-        notes: `Potongan ${selectedPromo.name}`,
-      });
+    if (!result.success) {
+      toast.error(result.error);
+      return;
     }
-
-    return rows;
+    toast.success(`Transaksi dicatat — kwitansi ${result.data.invoiceNumber}`);
+    reset();
+    setTermins([]);
+    onClose();
+    onSuccess();
   }
 
-  function onValid(data: LedgerEntryFormValues) {
-    if (isEditMode && editEntry && onUpdate) {
-      // Mode Edit: rebuild entry dengan data baru, pertahankan id & invoiceNumber lama.
-      const clientName =
-        DUMMY_BOOKINGS.find((b) => b.id === data.bookingId)?.clientName ?? data.bookingId;
-      const termins = terminsForBooking(data.bookingId);
-      const linkedIds = data.linkedTerminIds ?? [];
-      const linkedLabels = termins.filter((t) => linkedIds.includes(t.id)).map((t) => t.name);
-      const paidNum = Number(data.amount.replace(/[^\d]/g, "")) || 0;
-
-      const updated: LedgerEntry = {
-        ...editEntry,
-        occurredAt: data.occurredAt,
-        bookingId: data.bookingId,
-        clientName,
-        amount: paidNum,
-        paymentMethod: data.paymentMethod,
-        linkedTerminIds: linkedIds,
-        linkedTerminLabels: linkedLabels,
-        paymentEvidenceName: data.paymentEvidenceName ?? null,
-        notes: data.notes?.trim() || null,
-        // invoiceNumber intentionally preserved from editEntry (JANGAN berubah)
-        // discountProgramName: baris discount sibling ditangani terpisah di page — biarkan
-      };
-
-      onUpdate(updated);
-    } else {
-      // Mode Create
-      onSubmit(buildRows(data));
-    }
+  function handleClose(): void {
     reset();
+    setTermins([]);
     onClose();
   }
-
-  function handleClose() {
-    reset();
-    onClose();
-  }
-
-  const drawerTitle = isEditMode ? "Edit Transaksi" : "Catat Transaksi";
 
   return (
-    <Drawer isOpen={isOpen} onClose={handleClose} title={drawerTitle} maxWidth="sm:max-w-lg">
+    <Drawer isOpen={isOpen} onClose={handleClose} title="Catat Transaksi" maxWidth="sm:max-w-lg">
       <form onSubmit={(e) => { void handleSubmit(onValid)(e); }} className="flex h-full flex-col">
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-1 pb-4">
 
@@ -573,6 +564,7 @@ export function LedgerEntryDrawer({
                     }}
                     placeholder="Pilih client / booking"
                     searchPlaceholder="Cari client..."
+                    emptyText="Belum ada booking dengan termin."
                   />
                 )}
               />
@@ -609,7 +601,7 @@ export function LedgerEntryDrawer({
                 <RequiredMark />
               </Label>
               <Controller
-                name="paymentMethod"
+                name="paymentMethodId"
                 control={control}
                 render={({ field }) => (
                   <Combobox
@@ -619,29 +611,22 @@ export function LedgerEntryDrawer({
                     onChange={field.onChange}
                     placeholder="Pilih rekening"
                     searchPlaceholder="Cari rekening..."
+                    emptyText="Belum ada rekening."
                   />
                 )}
               />
-              <FieldError message={errors.paymentMethod?.message} />
+              <FieldError message={errors.paymentMethodId?.message} />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label>No. Kwitansi / Invoice</Label>
-              {isEditMode && editEntry?.invoiceNumber ? (
-                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
-                  <InfoCircle weight="BoldDuotone" className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="font-mono text-sm text-foreground">{editEntry.invoiceNumber}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">Tidak berubah</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5">
-                  <InfoCircle weight="BoldDuotone" className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    Otomatis dibuat saat transaksi disimpan — format{" "}
-                    <span className="font-mono text-foreground">0006/KW/GWN/SMSR/VII/2026</span>
-                  </span>
-                </div>
-              )}
+              <Label>No. Kwitansi</Label>
+              <div className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5">
+                <InfoCircle weight="BoldDuotone" className="size-4 shrink-0 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  Otomatis dibuat saat transaksi disimpan — format{" "}
+                  <span className="font-mono text-foreground">0006/KW/GWN/SMSR/07/2026</span>
+                </span>
+              </div>
             </div>
           </section>
 
@@ -663,7 +648,7 @@ export function LedgerEntryDrawer({
                     }
                   />
                   <TooltipContent>
-                    Kaitkan pembayaran ke satu / beberapa termin.
+                    Kaitkan pembayaran ke satu / beberapa termin. Nominal dialokasikan berurutan.
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -675,6 +660,8 @@ export function LedgerEntryDrawer({
               render={({ field }) => (
                 <TerminMultiSelect
                   bookingId={bookingId}
+                  termins={termins}
+                  loading={terminsLoading}
                   value={field.value ?? []}
                   onChange={field.onChange}
                 />
@@ -794,20 +781,17 @@ export function LedgerEntryDrawer({
 
         {/* ── Footer ────────────────────────────────────────────────────── */}
         <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-background pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
+          <Button type="button" variant="outline" className="rounded-full" onClick={handleClose} disabled={submitting}>
             Batal
           </Button>
-          {isEditMode ? (
-            <Button type="submit" className="rounded-full">
-              <Pen weight="BoldDuotone" className="size-4" />
-              Perbarui
-            </Button>
-          ) : (
-            <Button type="submit" className="rounded-full">
+          <Button type="submit" className="rounded-full" disabled={submitting}>
+            {submitting ? (
+              <Refresh weight="BoldDuotone" className="size-4 animate-spin" />
+            ) : (
               <CardReceive weight="BoldDuotone" className="size-4" />
-              Catat Transaksi
-            </Button>
-          )}
+            )}
+            Catat Transaksi
+          </Button>
         </div>
       </form>
     </Drawer>

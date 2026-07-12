@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { KwitansiPdfDocument } from "@/components/pdf/KwitansiPdfDocument";
-import type { LedgerEntry } from "@/types/finance";
+import type { LedgerRow } from "@/lib/queries/ledger";
 
 // react-pdf viewer must not be SSR'd — load client-only
 const PdfCanvasViewer = dynamic(
@@ -28,7 +28,7 @@ const PdfCanvasViewer = dynamic(
 interface KwitansiPreviewModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entry: LedgerEntry | null;
+  entry: LedgerRow | null;
 }
 
 /** Fetch a public asset and encode it as a data URL for react-pdf <Image>. */
@@ -48,7 +48,7 @@ async function loadLogoDataUrl(): Promise<string | null> {
   }
 }
 
-function buildFileName(entry: LedgerEntry): string {
+function buildFileName(entry: LedgerRow): string {
   const no = entry.invoiceNumber?.trim() || `KW-${entry.id.slice(0, 8).toUpperCase()}`;
   const client = entry.clientName.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return `Kwitansi_${no}_${client}.pdf`.replace(/\/+/g, "-");

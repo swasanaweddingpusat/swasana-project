@@ -23,7 +23,7 @@ type ActionResult<T = undefined> =
  * Pola: `<seq>/KW/<brand>/<venue>/<bln-angka>/<thn>`, contoh `0006/KW/GWN/SMSR/07/2026`.
  * Sequence atomik via `@/lib/counter` (reuse pola poNumber/invoice). Bulan = ANGKA 2-digit.
  */
-async function generateKwitansiNumber(
+export async function generateKwitansiNumber(
   brandCode: string,
   venueCode: string,
   occurredAt: Date,

@@ -2,10 +2,10 @@ import { z } from "zod";
 
 /**
  * Entry-drawer form schema — "Catat Transaksi".
- * FE-only (no server action yet), but the schema is the single source of truth
- * for react-hook-form validation. `amount` is kept as a raw string in the form
- * (Rp thousand-separator input) and validated by digit content, not by Number()
- * blindly — so an empty / non-numeric value gives a friendly message.
+ * Single source of truth for react-hook-form validation. `amount` is kept as a raw
+ * string in the form (Rp thousand-separator input) and validated by digit content,
+ * not by Number() blindly — so an empty / non-numeric value gives a friendly message.
+ * On submit the drawer maps this to `CreateCashInInput` (actions/ledger.ts).
  */
 export const ledgerEntrySchema = z.object({
   bookingId: z.string().min(1, "Client / booking wajib dipilih"),
@@ -15,7 +15,8 @@ export const ledgerEntrySchema = z.object({
     .string()
     .min(1, "Jumlah dibayar wajib diisi")
     .refine((v) => Number(v.replace(/[^\d]/g, "")) > 0, "Jumlah harus lebih dari 0"),
-  paymentMethod: z.string().min(1, "Via rekening wajib dipilih"),
+  /** FK PaymentMethod (rekening tujuan). */
+  paymentMethodId: z.string().min(1, "Via rekening wajib dipilih"),
   /** "" = tanpa promo (pilihan sah — promo memang bisa tidak ada). */
   promoId: z.string().optional(),
   /** Termin (TOP) yang di-cover — wajib minimal satu. */

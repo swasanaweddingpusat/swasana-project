@@ -19,12 +19,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   SearchableSelect,
@@ -123,15 +117,14 @@ function firstPhone(mobileNumber: unknown): string {
   return "";
 }
 
+// Fase 5: TOP = jadwal murni (nama/nominal/tanggal). Status pembayaran dilacak
+// di Cashbook (Ledger), bukan lagi per termin.
 interface TermRow {
   name: string;
   amount: number;
   dueDate: string;
   sortOrder: number;
-  paymentStatus: "unpaid" | "paid" | "partial";
 }
-
-const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
 
 const DEFAULT_VALUES: MiceFormValues = {
   clientName: "",
@@ -175,8 +168,8 @@ function fmtAmount(n: number): string {
 
 function makeDefaultTerms(): TermRow[] {
   return [
-    { name: "Booking Fee / DP", amount: 0, dueDate: "", sortOrder: 0, paymentStatus: "unpaid" },
-    { name: "Final Payment", amount: 0, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
+    { name: "Booking Fee / DP", amount: 0, dueDate: "", sortOrder: 0 },
+    { name: "Final Payment", amount: 0, dueDate: "", sortOrder: 1 },
   ];
 }
 
@@ -357,21 +350,18 @@ export function MiceBookingDrawer({
         amount: bookingFeeterm ? Number(bookingFeeterm.amount) : 0,
         dueDate: bookingFeeterm?.dueDate ? new Date(bookingFeeterm.dueDate).toISOString().split("T")[0] : "",
         sortOrder: 0,
-        paymentStatus: (bookingFeeterm?.paymentStatus as TermRow["paymentStatus"]) ?? "unpaid",
       },
       ...otherTerms.map((t, i) => ({
         name: t.name,
         amount: Number(t.amount),
         dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split("T")[0] : "",
         sortOrder: i + 1,
-        paymentStatus: (t.paymentStatus as TermRow["paymentStatus"]) ?? "unpaid",
       })),
       {
         name: finalPaymentTerm?.name ?? "Final Payment",
         amount: finalPaymentTerm ? Number(finalPaymentTerm.amount) : 0,
         dueDate: finalPaymentTerm?.dueDate ? new Date(finalPaymentTerm.dueDate).toISOString().split("T")[0] : "",
         sortOrder: booking.terms.length - 1,
-        paymentStatus: (finalPaymentTerm?.paymentStatus as TermRow["paymentStatus"]) ?? "unpaid",
       },
     ];
   }, [booking]);
@@ -483,7 +473,6 @@ export function MiceBookingDrawer({
               ...defaultTerms[0],
               amount: prefillLead.bookingFeeAmount,
               dueDate: bookingFeeDueDateStr,
-              paymentStatus: "paid",
             };
           }
         }
@@ -594,7 +583,6 @@ export function MiceBookingDrawer({
               amount: t.amount,
               dueDate: t.dueDate,
               sortOrder: i,
-              paymentStatus: t.paymentStatus,
             })),
           },
         }),
@@ -615,7 +603,7 @@ export function MiceBookingDrawer({
   function addTerm() {
     setTerms((prev) => [
       ...prev.slice(0, -1),
-      { name: "Term Baru", amount: 0, dueDate: "", sortOrder: prev.length - 1, paymentStatus: "unpaid" as TermRow["paymentStatus"] },
+      { name: "Term Baru", amount: 0, dueDate: "", sortOrder: prev.length - 1 },
       { ...prev[prev.length - 1], sortOrder: prev.length },
     ]);
     // term baru otomatis kebuka (default open)
@@ -660,7 +648,6 @@ export function MiceBookingDrawer({
           amount: t.amount,
           dueDate: t.dueDate,
           sortOrder: i,
-          paymentStatus: t.paymentStatus,
         })),
         notes: values.notes || undefined,
         quotationId: null,
@@ -1031,8 +1018,6 @@ export function MiceBookingDrawer({
                     {terms.map((t, idx) => {
                       const isLast = idx === terms.length - 1;
                       const isOpen = !collapsedTerms.has(idx);
-                      const payStatus = t.paymentStatus;
-                      const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
                       // Middle terms (not first, not last) are removable
                       const canRemove = terms.length > 1 && !(idx === 0 || isLast);
                       return (
@@ -1062,10 +1047,7 @@ export function MiceBookingDrawer({
                                 </p>
                                 {!isOpen && (
                                   <p className="text-xs text-muted-foreground tabular-nums">
-                                    <span className={cn(payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                      {statusLabel}
-                                    </span>
-                                    {t.amount ? ` · Rp${fmtAmount(t.amount)}` : ""}
+                                    {t.amount ? `Rp${fmtAmount(t.amount)}` : "Rp0"}
                                     {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
                                   </p>
                                 )}
@@ -1100,23 +1082,6 @@ export function MiceBookingDrawer({
                                 />
                                 {idx === 0 && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
                               </div>
-
-                              {/* Status pembayaran */}
-                              <Select
-                                value={payStatus}
-                                onValueChange={(v) => updateTerm(idx, "paymentStatus", v as TermRow["paymentStatus"])}
-                              >
-                                <SelectTrigger className="w-32 h-8">
-                                  <span className={cn("text-xs font-semibold", payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                    {statusLabel}
-                                  </span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {PAYMENT_STATUS.map((s) => (
-                                    <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
 
                               {/* Amount + Due Date */}
                               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">

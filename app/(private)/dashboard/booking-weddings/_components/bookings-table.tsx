@@ -1589,9 +1589,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           "Data paket (nama, harga, item, T&C) akan ditarik ulang dari data master terbaru dan menimpa " +
           "snapshot booking ini. Setelan takeout tetap dipertahankan. Ini membuat versi baru, me-reset " +
           "approval ke Pending, dan klien harus tanda tangan ulang." +
-          ((syncPackageTarget?.termOfPayments ?? []).some((t) => t.paymentStatus === "paid" || t.paymentStatus === "refund" || t.ackStatus === "acknowledged")
-            ? " ⚠️ Booking ini sudah punya pembayaran tercatat — jika harga berubah, cek ulang cicilan (TOP) via Set Harga."
-            : "")
+          " ⚠️ Jika booking sudah punya pembayaran (cash-in ter-ack) dan harga berubah, cek ulang cicilan (TOP) via Set Harga."
         }
         confirmLabel={syncPackageMut.isPending ? "Memproses..." : "Ya, sync sekarang"}
         onConfirm={async () => {

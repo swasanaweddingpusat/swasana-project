@@ -136,6 +136,8 @@ interface PackageData {
 }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
+// Fase 5: TOP = jadwal murni. Status/bukti bayar dilacak di Cashbook (Ledger),
+// bukan lagi di termin. Step-5 hanya mengatur jadwal cicilan (nama/nominal/tanggal).
 interface TermRow {
   /** Stable client-side id for React keys + drag-drop. Never persisted. */
   uid: string;
@@ -143,11 +145,7 @@ interface TermRow {
   amount: number;
   dueDate: string;
   sortOrder: number;
-  paymentStatus: "unpaid" | "paid" | "partial" | "refund";
-  /** File = newly selected by user (not yet uploaded).
-   *  string = URL from DB (already uploaded). null = no evidence. */
-  paymentEvidence?: File | string | null;
-  /** DB term id — present once the draft term has been persisted. Used for upload. */
+  /** DB term id — present once the draft term has been persisted. */
   termId?: string | null;
 }
 
@@ -270,13 +268,13 @@ const DP_DEFAULT = 10_000_000;
 
 function makeDefaultTerms(): TermRow[] {
   return [
-    { uid: safeRandomUUID(), name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
-    { uid: safeRandomUUID(), name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Final", amount: 0, dueDate: "", sortOrder: 6, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0 },
+    { uid: safeRandomUUID(), name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1 },
+    { uid: safeRandomUUID(), name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2 },
+    { uid: safeRandomUUID(), name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3 },
+    { uid: safeRandomUUID(), name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4 },
+    { uid: safeRandomUUID(), name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5 },
+    { uid: safeRandomUUID(), name: "Final", amount: 0, dueDate: "", sortOrder: 6 },
   ];
 }
 
@@ -392,8 +390,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // so the button stays disabled even after the mutation's isPending flips back to false.
   // Prevents a double-click from creating two bookings.
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Tracks in-flight evidence uploads at step 4 → 5 transition.
-  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   // Holds the retry thunk for the last failed background save — calling it re-fires the save.
   const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
@@ -669,7 +665,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setPendingResumeDraftId(null);
     setHasPendingWriteError(false);
     setPendingWriteErrorMsg(null);
-    setIsUploadingEvidence(false);
     retryWriteRef.current = null;
     // Reset term customisation guard so a fresh allocation runs on the next package pick.
     setUserHasCustomizedTerms(false);
@@ -788,10 +783,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   ...updated[0],
                   amount: prefillLead.bookingFeeAmount!,
                   dueDate: prefillLead.bookingFeeDate ?? updated[0].dueDate,
-                  paymentStatus: "paid",
-                  ...(prefillLead.bookingFeeEvidenceUrl
-                    ? { paymentEvidence: prefillLead.bookingFeeEvidenceUrl }
-                    : {}),
                 };
               }
               return updated;
@@ -1142,10 +1133,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         amount: t.amount,
         dueDate: t.dueDate,
         sortOrder: t.sortOrder,
-        paymentStatus: t.paymentStatus,
-        // Restore persisted evidence (URL string) so the uploader shows it on resume.
-        paymentEvidence: t.paymentEvidence ?? null,
-        // Track stable DB id for evidence upload at step 4→5.
         termId: t.id,
       })));
       // Mark terms as user-customized so future allocatePrice calls use preserveFixed
@@ -1437,12 +1424,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     }
 
     // ── Step 5 → 6: Term of Payments ──────────────────────────────────────────
-    // Flow:
-    //   1. Validate (first term, diff check).
-    //   2. Save step-3 data to draft (background, awaited before advancing).
-    //   3. Upload any File evidence to storage — refetch termIds from the freshly-saved
-    //      draft so IDs are stable. Set state to URL string on success.
-    //   4. Advance to step 6.
+    // Fase 5: TOP = jadwal murni. Step-5 hanya validasi jadwal + simpan draft
+    // (nama/nominal/tanggal). Status & bukti bayar dipindah ke Cashbook (step 6).
     if (currentStep === 5) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
@@ -1455,8 +1438,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
-      const hasNewFiles = terms.some((t) => t.paymentEvidence instanceof File);
-
       if (draftId) {
         const step3Payload = {
           paymentMethodId: form.getValues("paymentMethodId") || null,
@@ -1467,89 +1448,20 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             amount: t.amount,
             dueDate: t.dueDate,
             sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus,
           })),
         };
         const capturedDraftId = draftId;
 
-        if (hasNewFiles) {
-          // Await step-3 save first so term IDs are stable, then upload evidence.
-          setIsUploadingEvidence(true);
-          try {
-            const prev = step3SaveInFlightRef.current;
-            const savePromise = backgroundSave(
-              async () => {
-                if (prev) await prev.catch(() => undefined);
-                return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
-              },
-              "Gagal menyimpan term of payment",
-            );
-            step3SaveInFlightRef.current = savePromise;
-            await savePromise;
-
-            if (hasPendingWriteError) {
-              // Step-3 save failed even after retry — block advance
-              setIsUploadingEvidence(false);
-              return;
-            }
-
-            // Fetch current term IDs from DB (stable after upsert)
-            const dbTermsRes = await fetch(`/api/bookings/${capturedDraftId}/terms`);
-            let termIdMap: Array<{ id: string; sortOrder: number }> = [];
-            if (dbTermsRes.ok) {
-              termIdMap = await dbTermsRes.json() as Array<{ id: string; sortOrder: number }>;
-            }
-
-            // Upload each new File in parallel
-            const uploads = await Promise.allSettled(
-              terms
-                .filter((t) => t.paymentEvidence instanceof File)
-                .map(async (t) => {
-                  const termId = termIdMap.find((r) => r.sortOrder === t.sortOrder)?.id ?? t.termId;
-                  if (!termId) return { sortOrder: t.sortOrder, url: null };
-                  const fd = new FormData();
-                  fd.append("termId", termId);
-                  fd.append("file", t.paymentEvidence as File);
-                  const res = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-                  if (!res.ok) throw new Error(`Upload failed for term sortOrder ${t.sortOrder}`);
-                  const json = await res.json() as { filePath: string };
-                  return { sortOrder: t.sortOrder, url: json.filePath };
-                })
-            );
-
-            // Update state: replace File with URL string on success
-            setTerms((prev) => prev.map((t) => {
-              if (!(t.paymentEvidence instanceof File)) return t;
-              const result = uploads.find(
-                (u) => u.status === "fulfilled" && u.value.sortOrder === t.sortOrder
-              );
-              if (result?.status === "fulfilled" && result.value.url) {
-                return { ...t, paymentEvidence: result.value.url };
-              }
-              return t;
-            }));
-
-            const failed = uploads.filter((u) => u.status === "rejected");
-            if (failed.length > 0) {
-              toast.error("Beberapa bukti bayar gagal di-upload. Silakan coba lagi.");
-              setIsUploadingEvidence(false);
-              return;
-            }
-          } finally {
-            setIsUploadingEvidence(false);
-          }
-        } else {
-          // No new files — just save step-3 in background as before
-          const prev = step3SaveInFlightRef.current;
-          const savePromise = backgroundSave(
-            async () => {
-              if (prev) await prev.catch(() => undefined);
-              return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
-            },
-            "Gagal menyimpan term of payment",
-          );
-          step3SaveInFlightRef.current = savePromise;
-        }
+        // Simpan step-3 di background — advance ke step-6 tak perlu menunggu.
+        const prev = step3SaveInFlightRef.current;
+        const savePromise = backgroundSave(
+          async () => {
+            if (prev) await prev.catch(() => undefined);
+            return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
+          },
+          "Gagal menyimpan term of payment",
+        );
+        step3SaveInFlightRef.current = savePromise;
       }
 
       setCurrentStep(6);
@@ -1639,26 +1551,45 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
           };
         }),
+        // Step 6 (Payment) → cash-in. Cuma baris yang terisi lengkap yang dikirim;
+        // alokasi nunjuk termin pakai sortOrder (server resolve ke termId). Potongan
+        // promo dihitung di sini (§6.4). Bukti bayar File belum diupload (menyusul).
+        payments: paymentReceipts.filter(isReceiptRowFilled).map((r) => {
+          const promo = promoOptions.find((p) => p.id === r.promoId) ?? null;
+          let discountAmount = 0;
+          if (promo) {
+            discountAmount =
+              promo.discountType === "PERCENTAGE"
+                ? Math.round((r.amount * promo.discountValue) / 100)
+                : promo.discountValue;
+            if (discountAmount > r.amount) discountAmount = r.amount;
+          }
+          // Greedy: alokasi gross ke tiap termin terpilih penuh sampai budget habis.
+          const linked = terms.filter((t) => r.linkedTermUids.includes(t.uid));
+          let budget = r.amount;
+          const allocations: { sortOrder: number; amount: number }[] = [];
+          for (const t of linked) {
+            if (budget <= 0) break;
+            const amt = Math.min(t.amount, budget);
+            if (amt > 0) {
+              allocations.push({ sortOrder: t.sortOrder, amount: amt });
+              budget -= amt;
+            }
+          }
+          return {
+            occurredAt: r.occurredAt,
+            amount: r.amount,
+            paymentMethodId: r.paymentMethodId || null,
+            discountProgramId: r.promoId || null,
+            discountAmount,
+            notes: r.notes.trim() || null,
+            allocations,
+          };
+        }),
       };
 
       const result = await finalizeMut.mutateAsync(finalizePayload);
       if (!result.success) { toast.error(result.error ?? "Gagal memfinalisasi booking."); return; }
-
-      // Upload payment evidence that is still a File (not yet uploaded at step 4→5).
-      // Evidence that was already uploaded (string URL) is already linked to the term — skip.
-      const termsWithNewFiles = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
-      if (termsWithNewFiles.length > 0 && result.termIds?.length) {
-        await Promise.allSettled(
-          termsWithNewFiles.map((t) => {
-            const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
-            if (!termId || !(t.paymentEvidence instanceof File)) return Promise.resolve();
-            const fd = new FormData();
-            fd.append("termId", termId);
-            fd.append("file", t.paymentEvidence);
-            return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-          })
-        );
-      }
 
       clearLocalDraftArtifacts();
       clearWeddingDraftFromStorage();
@@ -1688,7 +1619,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       complimentaries: complimentaries.map((c, i) => ({ complimentaryId: c.complimentaryId ?? null, name: c.name, price: c.price, isShowPrice: c.isShowPrice, description: c.description || null, qty: c.qty, sortOrder: i })),
-      termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
+      termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
       categoryToggles: allCategoryPrices.map((c) => {
         const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
         return {
@@ -1703,20 +1634,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     };
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
-
-    const termsWithNewFiles = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
-    if (termsWithNewFiles.length > 0 && result.termIds?.length) {
-      await Promise.allSettled(
-        termsWithNewFiles.map((t) => {
-          const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
-          if (!termId || !(t.paymentEvidence instanceof File)) return Promise.resolve();
-          const fd = new FormData();
-          fd.append("termId", termId);
-          fd.append("file", t.paymentEvidence);
-          return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-        })
-      );
-    }
 
     clearLocalDraftArtifacts();
     clearWeddingDraftFromStorage();
@@ -2646,8 +2563,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         const isFirstTerm = idx === 0;
                         const isFirstInvalid = isFirstTerm && (!t.amount || t.amount <= 0);
                         const isOpen = !collapsedTerms.has(t.uid);
-                        const payStatus = t.paymentStatus ?? "unpaid";
-                        const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
                         return (
                           <SortableTermWrapper key={t.uid} uid={t.uid}>
                           {({ attributes, listeners }) => (
@@ -2686,10 +2601,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                   </p>
                                   {!isOpen && (
                                     <p className="text-xs text-muted-foreground tabular-nums">
-                                      <span className={cn(payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                        {statusLabel}
-                                      </span>
-                                      {t.amount ? ` · Rp${fmtRp(t.amount)}` : ""}
+                                      {t.amount ? `Rp${fmtRp(t.amount)}` : "Rp0"}
                                       {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
                                     </p>
                                   )}
@@ -2800,7 +2712,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         variant="outline"
                         className="flex-1 border-dashed gap-1.5 text-muted-foreground"
                         onClick={() => {
-                          setTerms((prev) => recalcTermDates([...prev, { uid: safeRandomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid", paymentEvidence: null }], wBookingDate));
+                          setTerms((prev) => recalcTermDates([...prev, { uid: safeRandomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length }], wBookingDate));
                           // term baru otomatis kebuka (default open)
                         }}
                       >
@@ -3271,11 +3183,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             >
               {hasPendingWriteError
                 ? "Coba Lagi"
-                : isUploadingEvidence
-                  ? "Mengupload bukti..."
-                  : currentStep < totalSteps
-                    ? (isDraftMutating ? "Menyimpan..." : "Continue")
-                    : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
+                : currentStep < totalSteps
+                  ? (isDraftMutating ? "Menyimpan..." : "Continue")
+                  : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
             </Button>
           </div>
         </div>

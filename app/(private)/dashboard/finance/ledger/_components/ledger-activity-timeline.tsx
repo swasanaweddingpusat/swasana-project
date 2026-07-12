@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { fmtDateTime, LEDGER_ACTIVITY_META } from "./ledger-format";
-import type { LedgerActivity } from "@/types/finance";
+import type { LedgerActivity } from "./ledger-format";
 
 interface LedgerActivityTimelineProps {
   activities: LedgerActivity[];

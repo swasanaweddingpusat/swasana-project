@@ -1,7 +1,6 @@
 import { getBookings, type ApprovalStatusFilter } from "@/lib/queries/bookings";
 import { requirePermissionForRoute, canViewSalesBookings } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getPublicUrl } from "@/lib/storage";
 import type { DataScope } from "@/types/user";
 
 export async function GET(request: Request) {
@@ -92,12 +91,8 @@ export async function GET(request: Request) {
     ...result,
     data: result.data.map((booking) => ({
       ...booking,
-      // partialPayments dropped from the list include — only paymentEvidence on the
-      // TOP base fields needs URL resolution for the list view.
-      termOfPayments: booking.termOfPayments.map((t) => ({
-        ...t,
-        paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
-      })),
+      // TOP = jadwal murni (Fase 5) — bukti bayar pindah ke Ledger cashbook.
+      termOfPayments: booking.termOfPayments,
     })),
   };
 
