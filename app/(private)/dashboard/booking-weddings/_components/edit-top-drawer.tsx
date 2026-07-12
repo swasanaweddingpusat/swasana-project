@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Drawer } from "@/components/shared/drawer";
@@ -15,6 +16,7 @@ import {
   TrashBinTrash,
   Pen,
   AlignVerticalSpacing,
+  AltArrowDown,
   CheckCircle,
 } from "@solar-icons/react";
 import {
@@ -104,6 +106,16 @@ function TopContent({
   const [discountAmount, setDiscountAmount] = useState(initialDiscountAmount);
   const [discountEditing, setDiscountEditing] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState<string | null>(null);
+  // Accordion collapse state — a term's id here = collapsed (body hidden).
+  const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
+
+  const toggleTerm = (id: string): void => {
+    setCollapsedTerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  };
 
   // Reset when the booking data actually changes (drawer re-opened with different
   // booking). Compare by content fingerprint so a background refetch returning the
@@ -126,6 +138,9 @@ function TopContent({
     prevFingerprintRef.current = fingerprint;
     queueMicrotask(() => {
       setTerms(initialTerms.map((t) => ({ ...t, amount: Number(t.amount) })));
+      // Collapse terkunci (paid > 0) secara default — sudah settled, kartu mulai
+      // ringkas; termin aktif (belum ada cash-in) tetap kebuka.
+      setCollapsedTerms(new Set(initialTerms.filter((t) => t.paid > 0).map((t) => t.id)));
       setDiscountName(initialDiscountName ?? "Discount");
       setDiscountAmount(initialDiscountAmount);
       setDiscountEditing(false);
@@ -274,44 +289,87 @@ function TopContent({
             <div className="flex flex-col gap-2.5">
               {terms.map((term, i) => {
                 const locked = isLocked(term);
+                const isOpen = !collapsedTerms.has(term.id);
                 return (
                   <SortableTermItem key={term.id} id={term.id}>
                     {(drag) => (
-                      <div
+                      <Collapsible
+                        open={isOpen}
+                        onOpenChange={() => toggleTerm(term.id)}
                         className={cn(
-                          "rounded-2xl border bg-card p-3 shadow-sm transition-colors",
+                          "overflow-hidden rounded-2xl border bg-card shadow-sm transition-colors",
                           locked ? "border-primary/30 bg-primary/5" : "border-border",
                         )}
                       >
-                        <div className="flex items-start gap-2">
-                          {/* Drag handle */}
+                        {/* ── Header accordion — drag handle + trigger + hapus (sibling) ── */}
+                        <div className="flex items-center gap-1 px-3 py-2.5">
                           <button
                             type="button"
                             aria-label="Geser urutan termin"
-                            className="mt-2 shrink-0 cursor-grab text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+                            className="-ml-1.5 shrink-0 cursor-grab rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing touch-none"
                             {...drag.attributes}
                             {...drag.listeners}
                           >
                             <AlignVerticalSpacing weight="BoldDuotone" className="size-4" />
                           </button>
-
-                          <div className="min-w-0 flex-1 space-y-2">
-                            {/* Nama + status kunci */}
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={term.name}
-                                disabled={locked}
-                                placeholder={`Termin ${i + 1}`}
-                                onChange={(e) => handleFieldChange(term.id, "name", e.target.value)}
-                                className="h-9 flex-1 rounded-xl"
-                              />
-                              {locked && (
-                                <Badge variant="secondary" className="shrink-0 gap-1 rounded-full">
-                                  <CheckCircle weight="BoldDuotone" className="size-3 text-primary" />
-                                  Terkunci
-                                </Badge>
+                          <CollapsibleTrigger className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left">
+                            <AltArrowDown
+                              weight="BoldDuotone"
+                              className={cn(
+                                "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                isOpen && "rotate-180",
+                              )}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className={cn(
+                                  "truncate text-sm font-medium",
+                                  term.name ? "text-foreground" : "italic text-muted-foreground",
+                                )}
+                              >
+                                {term.name || `Termin ${i + 1}`}
+                              </p>
+                              {!isOpen && (
+                                <p className="text-xs tabular-nums text-muted-foreground">
+                                  {term.amount ? `Rp${fmtRp(term.amount)}` : "Rp0"}
+                                  {term.dueDate ? ` · ${format(new Date(term.dueDate), "dd MMM yyyy")}` : ""}
+                                </p>
                               )}
                             </div>
+                          </CollapsibleTrigger>
+                          {locked && (
+                            <Badge variant="secondary" className="shrink-0 gap-1 rounded-full">
+                              <CheckCircle weight="BoldDuotone" className="size-3 text-primary" />
+                              Terkunci
+                            </Badge>
+                          )}
+                          {/* Hapus — SIBLING dari trigger, hanya termin belum terkunci */}
+                          {!locked && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTerm(term.id);
+                              }}
+                              aria-label={`Hapus ${term.name || `termin ${i + 1}`}`}
+                              className="shrink-0 rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* ── Body accordion ── */}
+                        <CollapsibleContent>
+                          <div className="space-y-3 border-t border-border/60 px-3 pb-3 pt-3">
+                            {/* Nama */}
+                            <Input
+                              value={term.name}
+                              disabled={locked}
+                              placeholder={`Termin ${i + 1}`}
+                              onChange={(e) => handleFieldChange(term.id, "name", e.target.value)}
+                              className="h-9 rounded-xl"
+                            />
 
                             {/* Nominal + jatuh tempo */}
                             <div className="flex flex-wrap items-center gap-2">
@@ -357,18 +415,6 @@ function TopContent({
                                   />
                                 </PopoverContent>
                               </Popover>
-
-                              {/* Hapus — hanya termin belum terkunci */}
-                              {!locked && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTerm(term.id)}
-                                  aria-label={`Hapus ${term.name || `termin ${i + 1}`}`}
-                                  className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
-                                >
-                                  <TrashBinTrash weight="BoldDuotone" className="size-4" />
-                                </button>
-                              )}
                             </div>
 
                             {term.paid > 0 && (
@@ -377,8 +423,8 @@ function TopContent({
                               </p>
                             )}
                           </div>
-                        </div>
-                      </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </SortableTermItem>
                 );
@@ -393,29 +439,21 @@ function TopContent({
           Tambah Termin
         </Button>
 
-        {/* ── Diskon ── */}
+        {/* ── Diskon — label di ATAS input (stacked) ── */}
         <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            {discountEditing ? (
-              <Input
-                value={discountName}
-                onChange={(e) => setDiscountName(e.target.value)}
-                className="h-8 max-w-40 rounded-xl"
-              />
-            ) : (
-              <span className="text-sm text-muted-foreground">{discountName}</span>
-            )}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 rounded-xl border border-border bg-background px-2.5">
-                <span className="text-xs text-muted-foreground">Rp</span>
+          <div className="flex flex-col gap-2">
+            {/* Label / nama diskon */}
+            <div className="flex items-center justify-between gap-2">
+              {discountEditing ? (
                 <Input
-                  inputMode="numeric"
-                  value={discountAmount ? discountAmount.toLocaleString("id-ID") : ""}
-                  placeholder="0"
-                  onChange={(e) => setDiscountAmount(Number(e.target.value.replace(/[^\d]/g, "")) || 0)}
-                  className="h-8 w-28 border-0 bg-transparent px-0 tabular-nums shadow-none focus-visible:ring-0"
+                  value={discountName}
+                  onChange={(e) => setDiscountName(e.target.value)}
+                  placeholder="Nama diskon"
+                  className="h-8 flex-1 rounded-xl"
                 />
-              </div>
+              ) : (
+                <span className="text-sm font-medium text-foreground">{discountName}</span>
+              )}
               <button
                 type="button"
                 onClick={() => setDiscountEditing((v) => !v)}
@@ -425,17 +463,36 @@ function TopContent({
                 <Pen weight="BoldDuotone" className="size-3.5" />
               </button>
             </div>
+            {/* Nominal diskon — full width di bawah label */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-border bg-background px-2.5">
+              <span className="text-xs text-muted-foreground">Rp</span>
+              <Input
+                inputMode="numeric"
+                value={discountAmount ? discountAmount.toLocaleString("id-ID") : ""}
+                placeholder="0"
+                onChange={(e) => setDiscountAmount(Number(e.target.value.replace(/[^\d]/g, "")) || 0)}
+                className="h-9 flex-1 border-0 bg-transparent px-0 tabular-nums shadow-none focus-visible:ring-0"
+              />
+            </div>
           </div>
         </div>
 
         {/* ── Ringkasan reconciliation ── */}
         <div className="rounded-2xl border border-border bg-secondary/30 p-3 text-sm">
           <div className="flex items-center justify-between py-0.5">
-            <span className="text-muted-foreground">Harga setelah diskon</span>
+            <span className="text-muted-foreground">Harga Paket</span>
+            <span className="tabular-nums text-foreground">Rp{fmtRp(packagePrice)}</span>
+          </div>
+          <div className="flex items-center justify-between py-0.5">
+            <span className="text-destructive">{discountName || "Discount"}</span>
+            <span className="tabular-nums text-destructive">− Rp{fmtRp(discountAmount)}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between border-t border-border pt-1.5">
+            <span className="text-muted-foreground">Harga Setelah Discount</span>
             <span className="tabular-nums text-foreground">Rp{fmtRp(priceAfterDiscount)}</span>
           </div>
           <div className="flex items-center justify-between py-0.5">
-            <span className="text-muted-foreground">Total cicilan</span>
+            <span className="text-muted-foreground">Total Input User</span>
             <span className="tabular-nums text-foreground">Rp{fmtRp(totalTerms)}</span>
           </div>
           <div className="mt-1 flex items-center justify-between border-t border-border pt-1.5">
@@ -447,26 +504,53 @@ function TopContent({
               )}
             >
               {difference > 0 ? "+" : difference < 0 ? "−" : ""}Rp{fmtRp(Math.abs(difference))}
+              {difference === 0 ? " (Sesuai)" : difference < 0 ? " (Kurang)" : " (Lebih)"}
             </span>
           </div>
         </div>
       </div>
 
       {/* ── Footer ── */}
-      <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-background pt-4">
-        {onPrevious && (
-          <Button type="button" variant="outline" className="mr-auto rounded-full" onClick={onPrevious}>
-            Sebelumnya
+      <div className="sticky bottom-0 z-10 border-t border-border bg-background pt-3">
+        {/* Mini price summary — Harga Paket · Input User · Selisih */}
+        <div className="mb-2 grid grid-cols-3 gap-x-2 rounded-xl bg-muted px-3 py-2">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+            <span className="truncate text-xs font-semibold tabular-nums text-foreground">Rp{fmtRp(packagePrice)}</span>
+          </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[10px] text-muted-foreground">Input User</span>
+            <span className="truncate text-xs font-semibold tabular-nums text-foreground">Rp{fmtRp(totalTerms)}</span>
+          </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[10px] text-muted-foreground">Selisih</span>
+            <span
+              className={cn(
+                "truncate text-xs font-semibold tabular-nums",
+                difference === 0 ? "text-foreground" : "text-destructive",
+              )}
+            >
+              {difference === 0
+                ? "Sesuai"
+                : `${difference < 0 ? "−" : "+"} Rp${fmtRp(Math.abs(difference))}`}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {onPrevious && (
+            <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={onPrevious}>
+              Sebelumnya
+            </Button>
+          )}
+          <Button
+            type="button"
+            className="flex-1 rounded-full"
+            disabled={loading}
+            onClick={() => { void handleUpdate(); }}
+          >
+            {loading ? "Menyimpan..." : saveLabel}
           </Button>
-        )}
-        <Button
-          type="button"
-          className="rounded-full"
-          disabled={loading}
-          onClick={() => { void handleUpdate(); }}
-        >
-          {loading ? "Menyimpan..." : saveLabel}
-        </Button>
+        </div>
       </div>
     </div>
   );
