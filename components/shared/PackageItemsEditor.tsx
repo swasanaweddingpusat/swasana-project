@@ -81,27 +81,34 @@ function SortableRow({
         isDragging && "opacity-50 shadow-md",
       )}
     >
-      <div className="flex items-start gap-2">
+      {/* Top row: compact grab handle on the left, delete button pinned to the right. */}
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           {...attributes}
           {...listeners}
-          className="mt-1 shrink-0 p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
           tabIndex={-1}
+          aria-label="Geser urutan item"
         >
-          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
+          <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4 rotate-90" />
+          Geser
         </button>
-        <div className="flex-1 space-y-3">{children}</div>
         <Button
           type="button"
           variant="ghost"
-          size="icon"
+          size="sm"
           onClick={onDelete}
-          className="mt-0.5 shrink-0 h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+          aria-label="Hapus item"
+          className="shrink-0 gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
         >
           <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+          Hapus
         </Button>
       </div>
+
+      {/* Content — full width */}
+      <div className="min-w-0 space-y-3">{children}</div>
     </div>
   );
 }
@@ -206,7 +213,39 @@ export function PackageItemsEditor({
     [vendorItems, onVendorChange],
   );
 
-  const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name }));
+  // The category master was reseeded with fresh ids at some point, but snapshot /
+  // package vendor rows still carry the OLD categoryId (categoryName stayed intact).
+  // SearchableSelect matches strictly by id, so those rows render blank. We rescue
+  // them by (1) matching on categoryName to the current master, and (2) surfacing a
+  // synthetic option for any row whose id still can't be mapped, so the stored name
+  // always shows instead of an empty "Pilih kategori...".
+  const masterOptions = categories.map((c) => ({ id: c.id, name: c.name }));
+  const masterIdSet = new Set(masterOptions.map((o) => o.id));
+  const masterByName = new Map(
+    masterOptions.map((o) => [o.name.trim().toLowerCase(), o] as const),
+  );
+
+  const resolveVendorCategoryId = (item: PackageVendorItemDraft): string => {
+    if (item.categoryId && masterIdSet.has(item.categoryId)) return item.categoryId;
+    const byName = item.categoryName
+      ? masterByName.get(item.categoryName.trim().toLowerCase())
+      : undefined;
+    if (byName) return byName.id;
+    return item.categoryId ?? "";
+  };
+
+  const categoryOptions = (() => {
+    const opts = [...masterOptions];
+    const seen = new Set(opts.map((o) => o.id));
+    for (const item of vendorItems) {
+      const resolved = resolveVendorCategoryId(item);
+      if (resolved && !seen.has(resolved)) {
+        seen.add(resolved);
+        opts.push({ id: resolved, name: item.categoryName || "Kategori lama" });
+      }
+    }
+    return opts;
+  })();
 
   return (
     <div className="flex flex-col">
@@ -300,7 +339,7 @@ export function PackageItemsEditor({
                   <SortableRow key={item.uid} id={item.uid} onDelete={() => removeVendorItem(item.uid)}>
                     <SearchableSelect
                       options={categoryOptions}
-                      value={item.categoryId ?? ""}
+                      value={resolveVendorCategoryId(item)}
                       onChange={(val) => {
                         if (!val) {
                           // Defensive: a cleared selection must also clear the stored

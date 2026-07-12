@@ -5,6 +5,7 @@ import {
   MinusCircle,
   ClipboardCheck,
   FileSend,
+  VerifiedCheck,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type {
@@ -71,6 +72,17 @@ export function getAckBadge(status: ARTerminAckStatus): BadgeConfig {
     rejected: { label: "Rejected", bg: "bg-destructive/10", border: "border-destructive/20", text: "text-destructive", Icon: Forbidden },
   };
   return map[status] ?? map.pending;
+}
+
+/** Badge for a booking whose revenue was recognized in bulk (level client) — dummy/preview state, tracked client-side only. */
+export function getRecognizedRevenueBadge(): BadgeConfig {
+  return {
+    label: "Pendapatan Diakui",
+    bg: "bg-primary/10",
+    border: "border-primary/20",
+    text: "text-primary",
+    Icon: VerifiedCheck,
+  };
 }
 
 export function getBookingStatusBadge(status: ARBookingStatus): BadgeConfig {

@@ -159,7 +159,6 @@ export async function POST(req: Request) {
           name: PLACEHOLDER,
           amount: 0,
           dueDate: null,
-          paymentStatus: "pending",
         },
       ],
 

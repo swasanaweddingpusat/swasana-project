@@ -3,25 +3,17 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Drawer } from "@/components/shared/drawer";
+
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { saveSnapTakeout } from "@/actions/snap-package-items";
+import { firstError, takeoutRowsSchema } from "@/lib/validations/booking-form";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface EditTakeoutDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onPrevious?: () => void;
-  bookingId: string;
-  customerName: string;
-  step?: number;
-  totalSteps?: number;
-}
 
 interface TakeoutRow {
   categoryName: string;
@@ -42,9 +34,12 @@ interface TakeoutContentProps {
   onPrevious?: () => void;
   initialRows: TakeoutRow[];
   fullPrice: number;
+  /** Label for the save/continue button. Defaults to "Continue" (linear mode).
+   *  Pass "Simpan" in free-mode so the user stays on the tab after saving. */
+  saveLabel?: string;
 }
 
-function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice }: TakeoutContentProps): React.ReactElement {
+function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice, saveLabel = "Continue" }: TakeoutContentProps): React.ReactElement {
   const qc = useQueryClient();
   const [rows, setRows] = useState<TakeoutRow[]>(initialRows);
   const [saving, setSaving] = useState(false);
@@ -61,6 +56,12 @@ function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice
   const priceAfterTakeout = Math.max(0, fullPrice - totalTakeout);
 
   const handleSave = async () => {
+    // Guard: a category marked takeout must carry a nominal > 0.
+    const takeoutErr = firstError(takeoutRowsSchema, rows);
+    if (takeoutErr) {
+      toast.error(takeoutErr);
+      return;
+    }
     setSaving(true);
     const result = await saveSnapTakeout({
       bookingId,
@@ -181,7 +182,7 @@ function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice
             </Button>
           )}
           <Button type="button" onClick={handleSave} disabled={saving} className={cn("rounded-xl", onPrevious ? "flex-1" : "w-full")}>
-            {saving ? "Menyimpan..." : "Continue"}
+            {saving ? "Menyimpan..." : saveLabel}
           </Button>
         </div>
       </div>
@@ -199,11 +200,13 @@ export function EditTakeoutContent({
   bookingId,
   onClose,
   onPrevious,
+  saveLabel,
 }: {
   active: boolean;
   bookingId: string;
   onClose: () => void;
   onPrevious?: () => void;
+  saveLabel?: string;
 }): React.ReactElement {
   const { data: bookingDetail, isLoading } = useQuery<BookingDetail>({
     queryKey: ["booking-detail", bookingId],
@@ -248,24 +251,8 @@ export function EditTakeoutContent({
       onPrevious={onPrevious}
       initialRows={initialRows}
       fullPrice={fullPrice}
+      saveLabel={saveLabel}
     />
   );
 }
 
-// ─── Shell ────────────────────────────────────────────────────────────────────
-
-export function EditTakeoutDrawer({ isOpen, onClose, onPrevious, bookingId, customerName, step, totalSteps }: EditTakeoutDrawerProps): React.ReactElement {
-  return (
-    <Drawer
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`Edit Takeout — ${customerName}`}
-      maxWidth="sm:max-w-lg"
-      headerActions={step && totalSteps ? (
-        <span className="text-sm text-muted-foreground">Step {step} / {totalSteps}</span>
-      ) : undefined}
-    >
-      <EditTakeoutContent active={isOpen} bookingId={bookingId} onClose={onClose} onPrevious={onPrevious} />
-    </Drawer>
-  );
-}

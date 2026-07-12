@@ -24,11 +24,11 @@ export function RevisionHistoryDrawer({ booking, open, onOpenChange, onPreviewPO
   const restore = useRestoreBookingRevision();
   const [confirmTarget, setConfirmTarget] = useState<BookingRevisionItem | null>(null);
 
-  // Money guard (mirrors the server): a booking with a recorded payment cannot be
-  // rolled back to another price, so "Pakai versi ini" is disabled with a reason.
-  const hasRecordedPayment = (booking?.termOfPayments ?? []).some(
-    (t) => t.paymentStatus === "paid" || t.paymentStatus === "refund" || t.ackStatus === "acknowledged",
-  );
+  // Money guard: enforcement is authoritative on the server (restoreBookingRevision
+  // checks acked Ledger allocations — §6.6, pure-derived). Fase 5 dropped the legacy
+  // TOP.paymentStatus/ackStatus signal from this client payload, so we no longer
+  // pre-disable here; the server returns a clear error if a payment is recorded.
+  const hasRecordedPayment = false;
 
   async function handleRestore(rev: BookingRevisionItem) {
     if (!booking) return;

@@ -1,7 +1,6 @@
-import { getBookings } from "@/lib/queries/bookings";
+import { getBookings, type ApprovalStatusFilter } from "@/lib/queries/bookings";
 import { requirePermissionForRoute, canViewSalesBookings } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { getPublicUrl } from "@/lib/storage";
 import type { DataScope } from "@/types/user";
 
 export async function GET(request: Request) {
@@ -39,11 +38,23 @@ export async function GET(request: Request) {
   // per-request DB round-trip. Falls back to "own" defensively.
   const dataScope: DataScope = session.user.dataScope ?? "own";
 
+  const ALLOWED_APPROVAL = new Set<ApprovalStatusFilter>([
+    "pending",
+    "approved",
+    "sales-approved",
+    "sales-pending",
+    "manager-approved",
+    "manager-pending",
+    "finance-approved",
+    "finance-pending",
+    "client-approved",
+    "client-pending",
+  ]);
   const rawApprovalStatus = searchParams.get("approvalStatus");
-  const approvalStatus: "pending" | "approved" | undefined =
-    rawApprovalStatus === "pending" ? "pending" :
-    rawApprovalStatus === "approved" ? "approved" :
-    undefined;
+  const approvalStatus: ApprovalStatusFilter | undefined =
+    rawApprovalStatus && ALLOWED_APPROVAL.has(rawApprovalStatus as ApprovalStatusFilter)
+      ? (rawApprovalStatus as ApprovalStatusFilter)
+      : undefined;
 
   const rawSalesId = searchParams.get("salesId") ?? undefined;
   const salesId = rawSalesId?.trim() || undefined;
@@ -80,12 +91,8 @@ export async function GET(request: Request) {
     ...result,
     data: result.data.map((booking) => ({
       ...booking,
-      // partialPayments dropped from the list include — only paymentEvidence on the
-      // TOP base fields needs URL resolution for the list view.
-      termOfPayments: booking.termOfPayments.map((t) => ({
-        ...t,
-        paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
-      })),
+      // TOP = jadwal murni (Fase 5) — bukti bayar pindah ke Ledger cashbook.
+      termOfPayments: booking.termOfPayments,
     })),
   };
 

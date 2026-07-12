@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { LockKeyhole, CheckCircle } from "@solar-icons/react";
+import { CheckCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { adjustTermsForPriceChange } from "@/lib/package-prices";
 import { fmtRp, type FinanceTerm } from "./edit-finance-shared";
@@ -28,11 +28,9 @@ interface TakeoutTopStepProps {
   onChange: (result: TopStepResult) => void;
 }
 
+// Fase 5: pool = termin TANPA cash-in ter-ack (paid <= 0) → editable.
 function isPoolTerm(t: FinanceTerm): boolean {
-  return (
-    (t.paymentStatus === "unpaid" || t.paymentStatus === "partial") &&
-    t.ackStatus !== "acknowledged"
-  );
+  return t.paid <= 0;
 }
 
 export function TakeoutTopStep({
@@ -40,46 +38,39 @@ export function TakeoutTopStep({
   newPrice,
   onChange,
 }: TakeoutTopStepProps): React.ReactElement {
-  const nonRefundTerms = useMemo(
-    () => initialTerms.filter((t) => t.paymentStatus !== "refund"),
-    [initialTerms],
-  );
-
   const lockedTotal = useMemo(
     () =>
-      nonRefundTerms
+      initialTerms
         .filter((t) => !isPoolTerm(t))
         .reduce((s, t) => s + Number(t.amount), 0),
-    [nonRefundTerms],
+    [initialTerms],
   );
   const targetForPool = Math.max(0, newPrice - lockedTotal);
-  const overpayment = Math.max(0, lockedTotal - newPrice);
 
   // Seed the pool amounts from the shared recompute so the preview matches the
   // server result exactly (DP funded first, rest distributed proportionally).
   const seededAmounts = useMemo(() => {
     const { adjustedTerms } = adjustTermsForPriceChange(
-      nonRefundTerms.map((t) => ({
+      initialTerms.map((t) => ({
         id: t.id,
         name: t.name,
         amount: Number(t.amount),
-        paymentStatus: t.paymentStatus,
-        ackStatus: t.ackStatus,
+        paid: t.paid,
       })),
       newPrice,
     );
     return new Map(adjustedTerms.map((t) => [t.id, t.newAmount]));
-  }, [nonRefundTerms, newPrice]);
+  }, [initialTerms, newPrice]);
 
   const [amounts, setAmounts] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
-    for (const t of nonRefundTerms) {
+    for (const t of initialTerms) {
       if (isPoolTerm(t)) init[t.id] = seededAmounts.get(t.id) ?? Number(t.amount);
     }
     return init;
   });
 
-  const poolTerms = nonRefundTerms.filter(isPoolTerm);
+  const poolTerms = initialTerms.filter(isPoolTerm);
   const poolSum = poolTerms.reduce((s, t) => s + (amounts[t.id] ?? 0), 0);
   const difference = poolSum - targetForPool;
   const balanced = difference === 0;
@@ -128,11 +119,6 @@ export function TakeoutTopStep({
             </span>
           </div>
         )}
-        {overpayment > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Kelebihan bayar Rp{fmtRp(overpayment)} akan dibuat sebagai term refund.
-          </p>
-        )}
       </div>
 
       <div>
@@ -144,10 +130,8 @@ export function TakeoutTopStep({
       </div>
 
       <div className="space-y-2">
-        {nonRefundTerms.map((term) => {
+        {initialTerms.map((term) => {
           const editable = isPoolTerm(term);
-          const isAcknowledged = term.ackStatus === "acknowledged";
-          const isPaid = term.paymentStatus === "paid";
           const amount = editable ? (amounts[term.id] ?? 0) : Number(term.amount);
           return (
             <div
@@ -163,16 +147,12 @@ export function TakeoutTopStep({
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{term.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {isPaid ? "Sudah dibayar" : isAcknowledged ? "Acknowledged" : "Belum dibayar"}
+                    {editable ? "Belum ada pembayaran" : `Terbayar Rp${fmtRp(term.paid)}`}
                   </p>
                 </div>
                 {!editable && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground shrink-0">
-                    {isAcknowledged ? (
-                      <CheckCircle weight="BoldDuotone" className="h-3 w-3" />
-                    ) : (
-                      <LockKeyhole weight="BoldDuotone" className="h-3 w-3" />
-                    )}
+                    <CheckCircle weight="BoldDuotone" className="h-3 w-3" />
                     Terkunci
                   </span>
                 )}

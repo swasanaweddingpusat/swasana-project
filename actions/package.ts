@@ -70,7 +70,6 @@ export async function createPackage(data: unknown): Promise<
                 entityId: packageId,
                 status: "pending",
                 createdById: session!.user.profileId!,
-                signature: signature ?? null,
               },
             }),
             ...steps.map((step, i) => {
@@ -173,7 +172,6 @@ export async function updatePackage(id: string, data: unknown): Promise<
                   data: {
                     status: "pending",
                     updatedById: session!.user.profileId!,
-                    signature: signature ?? null,
                   },
                 })
               : db.approvalRecord.create({
@@ -183,7 +181,6 @@ export async function updatePackage(id: string, data: unknown): Promise<
                     entityId: id,
                     status: "pending",
                     createdById: session!.user.profileId!,
-                    signature: signature ?? null,
                   },
                 }),
             ...steps.map((step, i) => {

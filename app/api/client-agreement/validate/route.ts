@@ -39,20 +39,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Link tidak valid" }, { status: 404 });
     }
 
-    if (agreement.status === "Signed") {
-      return NextResponse.json({ error: "Agreement sudah ditandatangani" }, { status: 400 });
-    }
-
-    if (agreement.expiresAt < new Date()) {
-      return NextResponse.json({ error: "Link sudah expired" }, { status: 400 });
-    }
-
     if (agreement.accessCode !== accessCode.trim().toUpperCase()) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }
 
     const currentStatus = agreement.status as string;
 
+    // Links never expire (no expiry gate). An already-signed agreement is NOT rejected
+    // here — the client is let back in with `alreadySigned: true` so the public page
+    // routes them straight to the download step instead of the signing form.
     if (currentStatus !== "Viewed" && currentStatus !== "Signed") {
       await db.clientAgreement.update({
         where: { token },

@@ -25,10 +25,10 @@ export const createDraftStep1Schema = z.object({
   // New customer fields (used when customerName is provided without customerId/leadId)
   customerName: z.string().optional(),
   contactNumbers: z.string().optional().default(""),
-  contactEmailCpp: z.string().optional().default(""),
-  contactEmailCpw: z.string().optional().default(""),
-  contactNikCpp: z.string().optional().default(""),
-  contactNikCpw: z.string().optional().default(""),
+  contactEmailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).default(""),
+  contactEmailCpw: z.string().email("Email CPW tidak valid").optional().or(z.literal("")).default(""),
+  contactNikCpp: z.string().length(16, "NIK CPP harus 16 digit").regex(/^\d+$/, "NIK CPP hanya angka").optional().or(z.literal("")).default(""),
+  contactNikCpw: z.string().length(16, "NIK CPW harus 16 digit").regex(/^\d+$/, "NIK CPW hanya angka").optional().or(z.literal("")).default(""),
   contactCppAddress: z.string().optional().default(""),
   contactCpwAddress: z.string().optional().default(""),
   contactBitrixId: z.string().optional().default(""),
@@ -104,6 +104,7 @@ export const updateDraftStep3Schema = z.object({
   paymentMethodId: z.string().optional().nullable(),
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),
+  // Fase 5: TOP = jadwal murni. Status pembayaran DERIVED dari Ledger.
   termOfPayments: z
     .array(
       z.object({
@@ -111,9 +112,6 @@ export const updateDraftStep3Schema = z.object({
         amount: z.coerce.number().min(0),
         dueDate: z.string().min(1),
         sortOrder: z.coerce.number().int().default(0),
-        paymentStatus: z
-          .enum(["unpaid", "paid", "partial", "refund"])
-          .default("unpaid"),
       })
     )
     .optional()
@@ -186,6 +184,33 @@ export const finalizeDraftSchema = z.object({
         isShow: z.boolean().default(true),
         isTakeout: z.boolean().default(false),
         takeoutNominal: z.coerce.number().int().min(0).default(0),
+      })
+    )
+    .optional()
+    .default([]),
+
+  // Step 6 (Payment) — cash-in yang tercatat saat booking dibuat. Tiap payment →
+  // 1 Ledger(`in`) + PaymentAllocation (§8). Alokasi nunjuk termin pakai `sortOrder`
+  // (termin sudah persist di step-3, server resolve sortOrder→termId). OPSIONAL:
+  // default [] = tidak ada cash-in → finalize sama persis seperti sebelumnya.
+  payments: z
+    .array(
+      z.object({
+        occurredAt: z.string().min(1),
+        /** GROSS — nominal yang meng-offset termin (§6.4). Rupiah penuh (Int). */
+        amount: z.coerce.number().int().positive(),
+        paymentMethodId: z.string().optional().nullable(),
+        discountProgramId: z.string().optional().nullable(),
+        discountAmount: z.coerce.number().int().min(0).default(0),
+        notes: z.string().max(500).optional().nullable(),
+        allocations: z
+          .array(
+            z.object({
+              sortOrder: z.coerce.number().int(),
+              amount: z.coerce.number().int().positive(),
+            })
+          )
+          .default([]),
       })
     )
     .optional()

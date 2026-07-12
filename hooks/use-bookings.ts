@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import type { BookingsResult, BookingDetail } from "@/lib/queries/bookings";
+import type { BookingsResult, BookingDetail, ApprovalStatusFilter } from "@/lib/queries/bookings";
 import { createBooking, updateBooking, deleteBooking, transferBooking, transferBookingManager } from "@/actions/booking";
 import type { BookingInput, UpdateBookingInput } from "@/lib/validations/booking";
 
@@ -14,7 +14,7 @@ interface BookingsParams {
   dateFrom?: string;
   dateTo?: string;
   year?: number;
-  approvalStatus?: "pending" | "approved";
+  approvalStatus?: ApprovalStatusFilter;
   salesId?: string;
 }
 
