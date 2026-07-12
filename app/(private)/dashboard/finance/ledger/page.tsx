@@ -4,6 +4,7 @@ import {
   getPaymentMethodsForPicker,
   toPaymentMethodPickerItems,
 } from "@/lib/queries/payment-methods";
+import { requirePagePermission } from "@/lib/require-page-permission";
 import { LedgerClient } from "./_components/ledger-client";
 import type { LedgerPromoOption } from "./_components/ledger-entry-drawer";
 
@@ -13,6 +14,10 @@ import type { LedgerPromoOption } from "./_components/ledger-entry-drawer";
  * Judul/subtitle halaman diambil dari route-meta di header dashboard.
  */
 export default async function LedgerPage(): Promise<React.ReactElement> {
+  // Guard + bikin route dynamic (auth() akses cookies) — cegah Next static-prerender
+  // yang bakal nembak Prisma pas build.
+  await requirePagePermission("finance-ar");
+
   const [entriesResult, bookings, promoPrograms, paymentMethodRows] = await Promise.all([
     getLedgerEntries(),
     getBookingsForLedgerPicker(),
