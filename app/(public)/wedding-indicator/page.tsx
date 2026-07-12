@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   WeddingIndicatorForm,
-  type QuestionnaireData,
 } from "@/components/shared/wedding-indicators/WeddingIndicatorForm";
 import { CheckCircle } from "@solar-icons/react";
 
@@ -200,7 +199,7 @@ function WeddingIndicatorPublicContent() {
           signatures: indicator.signatures ?? undefined,
           signatureNames: indicator.signatureNames ?? undefined,
           signatureDate: indicator.signatureDate,
-        } as QuestionnaireData,
+        } as Record<string, unknown>,
         notes: indicator.notes || "",
         satisfactionScore: indicator.satisfactionScore,
         allowancePercentage: indicator.allowancePercentage,
