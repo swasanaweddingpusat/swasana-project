@@ -53,7 +53,6 @@ export async function GET(request: Request): Promise<Response> {
         name: t.name,
         amount: t.amount,
         dueDate: t.dueDate.toISOString(),
-        paymentStatus: String(t.paymentStatus),
       })),
       quotation: null,
     };

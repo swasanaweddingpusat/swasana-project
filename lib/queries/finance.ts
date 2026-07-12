@@ -1,24 +1,26 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { BookingStatus } from "@prisma/client";
+import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type TopRow = {
+  id: string;
   amount: number | bigint;
-  paymentStatus: string;
-  ackStatus: string;
-  partialPayments: { amount: number | bigint }[];
 };
 
 /**
- * Definisi piutang & kas diterima SAMA dengan groups.ts computeTopFinancials.
- * Cash-based:
- *   - Kas Diterima   = TOP paid + acknowledged
- *   - Piutang        = TOP unpaid + paid-not-acked + partial outstanding
- *   - Refund         = exclude (konsisten dengan ar.ts)
+ * Finance aggregation cash-based (pure-derived, Fase 5). "Berapa terbayar" HANYA
+ * dari Ledger cash-in ter-ack (Σ PaymentAllocation, direction=in, acknowledged,
+ * non-void) — kolom TOP.paymentStatus/ackStatus/partialPayments sudah di-drop.
+ *   - Kas Diterima = Σ min(derivedPaid, amount)  (uang sah masuk)
+ *   - Piutang      = Σ max(0, amount - derivedPaid)
  */
-function computeTopFinancials(tops: TopRow[]): {
+function computeTopFinancials(
+  tops: TopRow[],
+  paidMap: Map<string, number>,
+): {
   kasDiterima: number;
   piutang: number;
 } {
@@ -27,19 +29,9 @@ function computeTopFinancials(tops: TopRow[]): {
 
   for (const top of tops) {
     const amount = Number(top.amount);
-    const paidSoFar = top.partialPayments.reduce((s, p) => s + Number(p.amount), 0);
-
-    if (top.paymentStatus === "refund") continue;
-
-    if (top.paymentStatus === "paid" && top.ackStatus === "acknowledged") {
-      kasDiterima += amount;
-    } else if (top.paymentStatus === "paid" && top.ackStatus !== "acknowledged") {
-      piutang += amount;
-    } else if (top.paymentStatus === "partial") {
-      piutang += Math.max(0, amount - paidSoFar);
-    } else if (top.paymentStatus === "unpaid") {
-      piutang += amount;
-    }
+    const paid = Math.min(paidMap.get(top.id) ?? 0, amount);
+    kasDiterima += paid;
+    piutang += Math.max(0, amount - paid);
   }
 
   return { kasDiterima, piutang };
@@ -81,14 +73,13 @@ export async function getCompanyFinanceSummary(
       ...(startDate && endDate ? { eventDate: { gte: startDate, lte: endDate } } : {}),
     },
     select: {
+      id: true,
       bookingStatus: true,
       snapPackagePricing: { select: { price: true } },
       termOfPayments: {
         select: {
+          id: true,
           amount: true,
-          paymentStatus: true,
-          ackStatus: true,
-          partialPayments: { select: { amount: true } },
         },
       },
     },
@@ -103,6 +94,9 @@ export async function getCompanyFinanceSummary(
     select: { profileId: true, amount: true },
     take: 2_000,
   });
+
+  // ── Query 3: dual-source paid map (ONE bulk groupBy for all bookings) ────────
+  const paidMap = await getTermPaidMapForBookings(bookings.map((b) => b.id));
 
   // Dedupe: latest per profileId
   const seenProfiles = new Set<string>();
@@ -121,7 +115,7 @@ export async function getCompanyFinanceSummary(
   let totalConfirmed = 0;
 
   for (const b of bookings) {
-    const fin = computeTopFinancials(b.termOfPayments);
+    const fin = computeTopFinancials(b.termOfPayments, paidMap);
     kasDiterima += fin.kasDiterima;
     piutang += fin.piutang;
 
@@ -182,22 +176,24 @@ export async function getGroupsFinanceBreakdown(
       ...(startDate && endDate ? { eventDate: { gte: startDate, lte: endDate } } : {}),
     },
     select: {
+      id: true,
       salesId: true,
       bookingStatus: true,
       snapPackagePricing: { select: { price: true } },
       termOfPayments: {
         select: {
+          id: true,
           amount: true,
-          paymentStatus: true,
-          ackStatus: true,
-          partialPayments: { select: { amount: true } },
         },
       },
     },
     take: 10_000,
   });
 
-  // ── Query 3: latest target per sales ────────────────────────────────────────
+  // ── Query 3: dual-source paid map (ONE bulk groupBy for all bookings) ────────
+  const paidMap = await getTermPaidMapForBookings(bookings.map((b) => b.id));
+
+  // ── Query 4: latest target per sales ────────────────────────────────────────
   const allTargets = await db.userTarget.findMany({
     where: { profileId: { in: allSalesIds }, type: "sales" },
     orderBy: { createdAt: "desc" },
@@ -245,7 +241,7 @@ export async function getGroupsFinanceBreakdown(
       totalTarget += target;
 
       for (const b of memberBookings) {
-        const fin = computeTopFinancials(b.tops);
+        const fin = computeTopFinancials(b.tops, paidMap);
         kasDiterima += fin.kasDiterima;
         piutang += fin.piutang;
         if (b.bookingStatus === BookingStatus.Confirmed) {

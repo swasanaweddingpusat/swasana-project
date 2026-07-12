@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
  * Returns distinct years from poYear column (excluding NULL).
  * Used to populate year filter dropdown.
  */
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   // Auth check — must be logged in
   const session = await auth();
   if (!session?.user?.id) {
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     return new Response(JSON.stringify({ years }), {
       headers: { "content-type": "application/json" },
     });
-  } catch (error) {
+  } catch {
     return new Response(
       JSON.stringify({ error: "Failed to fetch years" }),
       { status: 500, headers: { "content-type": "application/json" } },

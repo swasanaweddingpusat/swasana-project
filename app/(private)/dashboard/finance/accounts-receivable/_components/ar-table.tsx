@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +14,10 @@ import {
   FileSend,
   Wallet,
   Copy,
+  Copy as CopyIcon,
+  ChatRoundLine,
+  VerifiedCheck,
+  UndoLeft,
 } from "@solar-icons/react";
 import {
   Table,
@@ -22,8 +27,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Drawer } from "@/components/shared/drawer";
 import {
   fmtRp,
   fmtDate,
@@ -31,9 +49,18 @@ import {
   getInvoiceBadge,
   getAckBadge,
   getBookingStatusBadge,
+  getRecognizedRevenueBadge,
   StatusBadge,
 } from "./ar-format";
+import { KwitansiPreviewDrawer } from "./kwitansi-preview-drawer";
+import { InvoicePreviewDrawer } from "./invoice-preview-drawer";
 import type { ARBooking, ARTermin } from "@/types/finance";
+
+/** A preview target ties a termin back to its parent booking for the doc drawers. */
+interface DocTarget {
+  booking: ARBooking;
+  termin: ARTermin;
+}
 
 interface ARTableProps {
   bookings: ARBooking[];
@@ -46,6 +73,12 @@ interface ARTableProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   canEditKeuangan?: boolean; // booking:edit OR finance-ar:edit
+  /** Confirm + recognize all "paid" termin revenue for a booking (client-level, all at once). Preview-only, no backend. */
+  onRecognize?: (booking: ARBooking) => void;
+  /** Undo a previously recognized booking. Preview-only, no backend. */
+  onUndoRecognize?: (booking: ARBooking) => void;
+  /** Booking ids whose revenue has been recognized (client-side dummy state). */
+  recognizedIds?: Set<string>;
 }
 
 /** Shared header cell styling — small uppercase labels, the data-table convention. */
@@ -83,7 +116,15 @@ export function ARTable({
   totalPages,
   onPageChange,
   canEditKeuangan = false,
+  onRecognize,
+  onUndoRecognize,
+  recognizedIds,
 }: ARTableProps) {
+  // Doc-preview drawers live at the table level so a single instance serves every row.
+  const [kwitansiTarget, setKwitansiTarget] = useState<DocTarget | null>(null);
+  const [invoiceTarget, setInvoiceTarget] = useState<DocTarget | null>(null);
+  const [rekapBooking, setRekapBooking] = useState<ARBooking | null>(null);
+
   if (loading) {
     return (
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -154,6 +195,12 @@ export function ARTable({
                   onDetail={() => onOpenDetail(booking)}
                   onEditKeuangan={onEditKeuangan ? () => onEditKeuangan(booking) : undefined}
                   canEditKeuangan={canEditKeuangan}
+                  onRekap={() => setRekapBooking(booking)}
+                  onOpenInvoice={(termin) => setInvoiceTarget({ booking, termin })}
+                  onOpenKwitansi={(termin) => setKwitansiTarget({ booking, termin })}
+                  onRecognize={onRecognize ? () => onRecognize(booking) : undefined}
+                  onUndoRecognize={onUndoRecognize ? () => onUndoRecognize(booking) : undefined}
+                  isRecognized={recognizedIds?.has(booking.id) ?? false}
                 />
               ))
             )}
@@ -213,6 +260,28 @@ export function ARTable({
           </div>
         </div>
       )}
+
+      <InvoicePreviewDrawer
+        isOpen={!!invoiceTarget}
+        onClose={() => setInvoiceTarget(null)}
+        booking={invoiceTarget?.booking ?? null}
+        termin={invoiceTarget?.termin ?? null}
+      />
+      <KwitansiPreviewDrawer
+        isOpen={!!kwitansiTarget}
+        onClose={() => setKwitansiTarget(null)}
+        booking={kwitansiTarget?.booking ?? null}
+        termin={kwitansiTarget?.termin ?? null}
+      />
+      <RekapKwitansiDrawer
+        isOpen={!!rekapBooking}
+        onClose={() => setRekapBooking(null)}
+        booking={rekapBooking}
+        onOpenKwitansi={(termin) => {
+          if (rekapBooking) setKwitansiTarget({ booking: rekapBooking, termin });
+          setRekapBooking(null);
+        }}
+      />
     </div>
   );
 }
@@ -226,6 +295,12 @@ function BookingRow({
   onDetail,
   onEditKeuangan,
   canEditKeuangan,
+  onRekap,
+  onOpenInvoice,
+  onOpenKwitansi,
+  onRecognize,
+  onUndoRecognize,
+  isRecognized = false,
 }: {
   booking: ARBooking;
   isExpanded: boolean;
@@ -233,6 +308,12 @@ function BookingRow({
   onDetail: () => void;
   onEditKeuangan?: () => void;
   canEditKeuangan: boolean;
+  onRekap: () => void;
+  onOpenInvoice: (termin: ARTermin) => void;
+  onOpenKwitansi: (termin: ARTermin) => void;
+  onRecognize?: () => void;
+  onUndoRecognize?: () => void;
+  isRecognized?: boolean;
 }) {
   const bookingStatusBadge = getBookingStatusBadge(booking.bookingStatus);
   const terminBadge = getTerminBadge(booking.statusTermin);
@@ -285,7 +366,10 @@ function BookingRow({
           <StatusBadge config={bookingStatusBadge} />
         </TableCell>
         <TableCell className="px-4 py-3 align-middle">
-          <StatusBadge config={terminBadge} />
+          <div className="flex flex-wrap items-center gap-1">
+            <StatusBadge config={terminBadge} />
+            {isRecognized && <StatusBadge config={getRecognizedRevenueBadge()} />}
+          </div>
         </TableCell>
         <TableCell className="px-4 py-3 align-middle">
           <div
@@ -299,12 +383,14 @@ function BookingRow({
             >
               <Eye weight="BoldDuotone" className="size-4" />
             </button>
-            <button disabled className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40" title="Segera hadir">
+            <button
+              className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={onRekap}
+              title="Rekap kwitansi booking"
+            >
               <Card weight="BoldDuotone" className="size-4" />
             </button>
-            <button disabled className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40" title="Segera hadir">
-              <Bell weight="BoldDuotone" className="size-4" />
-            </button>
+            <ReminderPopover booking={booking} />
             {canEditKeuangan && onEditKeuangan && (
               <button
                 className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -313,6 +399,14 @@ function BookingRow({
               >
                 <Wallet weight="BoldDuotone" className="size-4" />
               </button>
+            )}
+            {canEditKeuangan && (
+              <RecognizeRevenueAction
+                booking={booking}
+                isRecognized={isRecognized}
+                onRecognize={onRecognize}
+                onUndoRecognize={onUndoRecognize}
+              />
             )}
           </div>
         </TableCell>
@@ -327,14 +421,15 @@ function BookingRow({
               <div className="overflow-hidden rounded-xl border border-border bg-card">
                 <Table className="table-fixed">
                   <colgroup>
-                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "15%" }} />
+                    <col style={{ width: "10%" }} />
                     <col style={{ width: "11%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "9%" }} />
                     <col style={{ width: "12%" }} />
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "9%" }} />
-                    <col style={{ width: "14%" }} />
-                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "8%" }} />
                     <col style={{ width: "7%" }} />
                   </colgroup>
                   <TableHeader>
@@ -345,6 +440,7 @@ function BookingRow({
                       <TableHead className={TH}>Status Termin</TableHead>
                       <TableHead className={TH}>Status Invoice</TableHead>
                       <TableHead className={THR}>Aging</TableHead>
+                      <TableHead className={TH}>Via Rekening</TableHead>
                       <TableHead className={TH}>Piutang Ack</TableHead>
                       <TableHead className={TH}>Note</TableHead>
                       <TableHead className={cn(TH, "text-right")}>Aksi</TableHead>
@@ -352,7 +448,12 @@ function BookingRow({
                   </TableHeader>
                   <TableBody>
                     {booking.termins.map((termin) => (
-                      <TerminRow key={termin.id} termin={termin} />
+                      <TerminRow
+                        key={termin.id}
+                        termin={termin}
+                        onOpenInvoice={() => onOpenInvoice(termin)}
+                        onOpenKwitansi={() => onOpenKwitansi(termin)}
+                      />
                     ))}
                   </TableBody>
                 </Table>
@@ -367,7 +468,15 @@ function BookingRow({
 
 /* ─── Termin Row (child) ───────────────────────────────────────────────────── */
 
-function TerminRow({ termin }: { termin: ARTermin }) {
+function TerminRow({
+  termin,
+  onOpenInvoice,
+  onOpenKwitansi,
+}: {
+  termin: ARTermin;
+  onOpenInvoice: () => void;
+  onOpenKwitansi: () => void;
+}) {
   const terminBadge = getTerminBadge(termin.status);
   const invoiceBadge = getInvoiceBadge(termin.statusInvoice);
   const ackBadge = getAckBadge(termin.ackStatus);
@@ -394,6 +503,9 @@ function TerminRow({ termin }: { termin: ARTermin }) {
         {termin.agingDays != null ? `+${termin.agingDays}` : "-"}
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
+        <ViaRekeningChip value={termin.viaRekening} />
+      </TableCell>
+      <TableCell className="px-4 py-3 align-middle">
         <div className="space-y-0.5">
           <StatusBadge config={ackBadge} />
           {termin.acknowledgedAt && termin.acknowledgedByName && (
@@ -407,9 +519,22 @@ function TerminRow({ termin }: { termin: ARTermin }) {
         {termin.catatan || "-"}
       </TableCell>
       <TableCell className="px-4 py-3 align-middle">
-        <TerminActions termin={termin} />
+        <TerminActions termin={termin} onOpenInvoice={onOpenInvoice} onOpenKwitansi={onOpenKwitansi} />
       </TableCell>
     </TableRow>
+  );
+}
+
+/* ─── Via Rekening chip ────────────────────────────────────────────────────── */
+
+function ViaRekeningChip({ value }: { value: string | null }): React.ReactElement {
+  if (!value) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-border bg-secondary px-2 py-0.5 text-xs font-medium text-foreground">
+      {value}
+    </span>
   );
 }
 
@@ -444,26 +569,260 @@ function CopyableInvoice({ value }: { value: string }) {
 
 /* ─── Termin Actions ───────────────────────────────────────────────────────── */
 
-function TerminActions({ termin }: { termin: ARTermin }) {
-  // Termin actions: download invoice + download kwitansi only.
+function TerminActions({
+  termin,
+  onOpenInvoice,
+  onOpenKwitansi,
+}: {
+  termin: ARTermin;
+  onOpenInvoice: () => void;
+  onOpenKwitansi: () => void;
+}) {
+  // Termin actions: preview invoice + preview kwitansi.
   // Kwitansi (receipt) only makes sense once the termin is paid.
   const canKwitansi = termin.status === "paid";
   return (
     <div className="flex items-center justify-end gap-0.5">
       <button
-        disabled
-        className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
-        title="Download invoice — segera hadir"
+        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={onOpenInvoice}
+        title="Preview invoice"
       >
         <FileSend weight="BoldDuotone" className="size-4" />
       </button>
-      <button
-        disabled
-        className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
-        title={canKwitansi ? "Download kwitansi — segera hadir" : "Kwitansi tersedia setelah lunas"}
-      >
-        <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
-      </button>
+      {canKwitansi ? (
+        <button
+          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={onOpenKwitansi}
+          title="Preview kwitansi"
+        >
+          <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
+        </button>
+      ) : (
+        <button
+          disabled
+          className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
+          title="Kwitansi tersedia setelah lunas"
+        >
+          <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
+        </button>
+      )}
     </div>
+  );
+}
+
+/* ─── Reminder Popover (Bell) — collection reminder draft (PREVIEW) ─────────── */
+
+function ReminderPopover({ booking }: { booking: ARBooking }): React.ReactElement {
+  // Draft nyata dari data booking (nama, sisa, jatuh tempo). Pengiriman & log
+  // follow-up masih dummy — ditandai "preview" biar finance gak nyangka terkirim.
+  const draft =
+    `Halo ${booking.customerEvent}, mengingatkan pembayaran untuk ${booking.namaEvent} ` +
+    `(${booking.noPo}) sebesar ${fmtRp(booking.outstanding)} yang jatuh tempo ` +
+    `${fmtDate(booking.jatuhTempo)}. Mohon konfirmasinya, terima kasih. 🙏`;
+
+  function copyDraft(): void {
+    void navigator.clipboard.writeText(draft);
+    toast.success("Draft pesan disalin", { duration: 1500 });
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        title="Ingatkan penagihan"
+        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <Bell weight="BoldDuotone" className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-80 p-4"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-foreground">Ingatkan penagihan</p>
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            PREVIEW
+          </span>
+        </div>
+        <p className="mt-2 rounded-xl bg-secondary/40 p-3 text-xs leading-relaxed text-foreground">
+          {draft}
+        </p>
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" className="flex-1 gap-1.5 rounded-full" onClick={copyDraft}>
+            <CopyIcon weight="BoldDuotone" className="size-3.5" />
+            Salin draft
+          </Button>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(draft)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-border text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <ChatRoundLine weight="BoldDuotone" className="size-3.5" />
+            WhatsApp
+          </a>
+        </div>
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          * Pengiriman & log follow-up belum aktif — draft ini contoh dari data booking.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* ─── Recognize Revenue Action (VerifiedCheck) — bulk client-level ack (PREVIEW) ─
+   Mengakui SELURUH pendapatan termin "paid" milik satu booking/client sekaligus.
+   Murni state lokal di halaman (recognizedIds) — belum nyambung ledger/backend. */
+
+function RecognizeRevenueAction({
+  booking,
+  isRecognized,
+  onRecognize,
+  onUndoRecognize,
+}: {
+  booking: ARBooking;
+  isRecognized: boolean;
+  onRecognize?: () => void;
+  onUndoRecognize?: () => void;
+}): React.ReactElement | null {
+  const [open, setOpen] = useState(false);
+
+  if (isRecognized) {
+    if (!onUndoRecognize) return null;
+    return (
+      <button
+        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          onUndoRecognize();
+        }}
+        title="Batalkan pengakuan"
+      >
+        <UndoLeft weight="BoldDuotone" className="size-4" />
+      </button>
+    );
+  }
+
+  const paidTermins = booking.termins.filter((t) => t.status === "paid");
+  const hasPaidTermin = paidTermins.length > 0;
+
+  if (!onRecognize || !hasPaidTermin) return null;
+
+  const totalToRecognize = paidTermins.reduce((sum, t) => sum + t.amount, 0);
+  const hasOutstanding = booking.outstanding > 0;
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        title="Akui pendapatan"
+        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <VerifiedCheck weight="BoldDuotone" className="size-4" />
+      </AlertDialogTrigger>
+      <AlertDialogContent onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        <AlertDialogHeader>
+          <div className="flex w-full items-center justify-between gap-2">
+            <AlertDialogTitle>Akui Pendapatan</AlertDialogTitle>
+            <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              PREVIEW
+            </span>
+          </div>
+          <AlertDialogDescription>
+            Akui seluruh pendapatan termin lunas milik{" "}
+            <strong className="text-foreground">{booking.customerEvent}</strong> secara serentak —
+            bukan per-termin.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-2 px-6 pb-2">
+          <div className="flex items-center justify-between rounded-xl bg-secondary/40 p-3 text-sm">
+            <span className="text-muted-foreground">Total diakui ({paidTermins.length} termin lunas)</span>
+            <span className="font-semibold tabular-nums text-foreground">{fmtRp(totalToRecognize)}</span>
+          </div>
+          {hasOutstanding && (
+            <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">
+              Masih ada piutang {fmtRp(booking.outstanding)} — pengakuan tetap bisa dilakukan
+              (override Finance).
+            </p>
+          )}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onRecognize();
+              setOpen(false);
+            }}
+          >
+            Akui Pendapatan
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/* ─── Rekap Kwitansi Drawer (Card) — daftar termin sbagai shortcut kwitansi ── */
+
+function RekapKwitansiDrawer({
+  isOpen,
+  onClose,
+  booking,
+  onOpenKwitansi,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  booking: ARBooking | null;
+  onOpenKwitansi: (termin: ARTermin) => void;
+}): React.ReactElement {
+  return (
+    <Drawer isOpen={isOpen} onClose={onClose} title="Rekap Kwitansi" maxWidth="sm:max-w-lg">
+      {booking && (
+        <div className="flex flex-col gap-4 px-1 pb-6">
+          <div className="rounded-2xl border border-border bg-secondary/30 p-4">
+            <p className="text-sm font-semibold text-foreground">{booking.customerEvent}</p>
+            <p className="text-xs text-muted-foreground">
+              {booking.noPo} · {booking.namaEvent}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {booking.termins.map((termin) => {
+              const paid = termin.status === "paid";
+              return (
+                <div
+                  key={termin.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{termin.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fmtRp(termin.amount)} · {fmtDate(termin.dueDate)}
+                    </p>
+                  </div>
+                  {paid ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 gap-1.5 rounded-full"
+                      onClick={() => onOpenKwitansi(termin)}
+                    >
+                      <DownloadMinimalistic weight="BoldDuotone" className="size-3.5" />
+                      Kwitansi
+                    </Button>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                      Belum lunas
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Drawer>
   );
 }

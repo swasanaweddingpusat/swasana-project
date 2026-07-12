@@ -929,12 +929,12 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                 onCancel={() => setRecording(false)}
               />
             ) : (
-              <div className={cn('flex', 'gap-2', 'items-end')}>
+              <div className={cn('flex', 'gap-1.5', 'items-end')}>
                 {/* Attachment picker */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className={cn('h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
-                      <AddCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+                    <button className={cn('h-8', 'w-8', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}>
+                      <AddCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent side="top" align="start">
@@ -950,10 +950,10 @@ export function BookingCommentPanel({ open, onClose, bookingId, customerName, hi
                 {/* Emoji insert picker */}
                 <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
                   <PopoverTrigger
-                    className={cn('h-10', 'w-10', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}
+                    className={cn('h-8', 'w-8', 'flex', 'items-center', 'justify-center', 'rounded-xl', 'border', 'border-border', 'hover:bg-muted', 'text-muted-foreground', 'hover:text-foreground', 'shrink-0')}
                     aria-label="Sisipkan emoji"
                   >
-                    <SmileCircle weight="BoldDuotone" className={cn('h-5', 'w-5')} />
+                    <SmileCircle weight="BoldDuotone" className={cn('h-4', 'w-4')} />
                   </PopoverTrigger>
                   <PopoverContent side="top" align="start" className="p-0 w-auto">
                     <EmojiPicker onSelect={insertEmoji} />

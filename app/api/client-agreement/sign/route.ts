@@ -25,10 +25,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Agreement sudah ditandatangani" }, { status: 400 });
     }
 
-    if (agreement.expiresAt < new Date()) {
-      return NextResponse.json({ error: "Link sudah expired" }, { status: 400 });
-    }
-
+    // Links never expire — no expiry gate. The Signed guard above (and the atomic
+    // claim below) still prevent double-signing.
     if (agreement.accessCode !== accessCode.trim().toUpperCase()) {
       return NextResponse.json({ error: "Kode akses salah" }, { status: 401 });
     }

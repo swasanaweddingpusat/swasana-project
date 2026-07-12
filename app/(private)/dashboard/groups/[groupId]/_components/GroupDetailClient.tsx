@@ -542,11 +542,6 @@ type SubMode =
   | { mode: "add"; year: number | null; amount: string }
   | { mode: "edit"; year: number; amount: string };
 
-interface TargetEntry {
-  year: number;
-  amount: number;
-}
-
 interface MemberAnnualTargetDialogProps {
   member: { profileId: string; name: string; target: number };
   subMode: SubMode;

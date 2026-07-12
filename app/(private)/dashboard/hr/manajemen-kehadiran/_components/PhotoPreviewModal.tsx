@@ -25,6 +25,7 @@ export function PhotoPreviewModal({ record, onClose }: PhotoPreviewModalProps) {
             <p className="text-xs font-medium text-muted-foreground text-center">Clock In</p>
             <div className="aspect-[3/4] overflow-hidden rounded-xl bg-muted">
               {record?.clockInPhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={record.clockInPhotoUrl}
                   alt="Clock in selfie"
@@ -42,6 +43,7 @@ export function PhotoPreviewModal({ record, onClose }: PhotoPreviewModalProps) {
             <p className="text-xs font-medium text-muted-foreground text-center">Clock Out</p>
             <div className="aspect-[3/4] overflow-hidden rounded-xl bg-muted">
               {record?.clockOutPhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={record.clockOutPhotoUrl}
                   alt="Clock out selfie"

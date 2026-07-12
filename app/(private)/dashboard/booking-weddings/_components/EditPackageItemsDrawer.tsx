@@ -13,6 +13,7 @@ import {
   type PackageItemsTab,
 } from "@/components/shared/PackageItemsEditor";
 import { saveSnapInternalItems, saveSnapVendorItems } from "@/actions/snap-package-items";
+import { firstError, packageInternalItemsSchema, packageVendorItemsSchema } from "@/lib/validations/booking-form";
 import type { BookingDetail } from "@/lib/queries/bookings";
 
 // ─── Content (no Drawer shell) ──────────────────────────────────────────────────
@@ -27,6 +28,9 @@ interface PackageItemsBodyProps {
   initialVendor: PackageVendorItemDraft[];
   onClose: () => void;
   onPrevious?: () => void;
+  /** Label for the save/continue button. Defaults to "Continue" (linear mode).
+   *  Pass "Simpan" in free-mode so the user stays on the tab after saving. */
+  saveLabel?: string;
 }
 
 function PackageItemsBody({
@@ -35,6 +39,7 @@ function PackageItemsBody({
   initialVendor,
   onClose,
   onPrevious,
+  saveLabel = "Continue",
 }: PackageItemsBodyProps): React.ReactElement {
   const qc = useQueryClient();
   // State seeds once from props. The parent renders this component with
@@ -47,13 +52,15 @@ function PackageItemsBody({
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (internalItems.some((i) => !i.itemName.trim())) {
-      toast.error("Nama item internal tidak boleh kosong.");
+    const internalErr = firstError(packageInternalItemsSchema, internalItems);
+    if (internalErr) {
+      toast.error(internalErr);
       setActiveTab("internal");
       return;
     }
-    if (vendorItems.some((i) => !i.categoryName.trim() || !i.itemText.trim())) {
-      toast.error("Kategori dan deskripsi item vendor tidak boleh kosong.");
+    const vendorErr = firstError(packageVendorItemsSchema, vendorItems);
+    if (vendorErr) {
+      toast.error(vendorErr);
       setActiveTab("vendor");
       return;
     }
@@ -95,6 +102,8 @@ function PackageItemsBody({
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
     onClose();
+    // Note: in free mode the parent's onClose is a no-op that just shows a
+    // toast and stays on the tab. In linear mode it advances to the next step.
   };
 
   return (
@@ -124,7 +133,7 @@ function PackageItemsBody({
             disabled={saving}
             className={cn("rounded-xl", onPrevious ? "flex-1" : "w-full")}
           >
-            {saving ? "Menyimpan..." : "Continue"}
+            {saving ? "Menyimpan..." : saveLabel}
           </Button>
         </div>
       </div>
@@ -137,11 +146,13 @@ export function EditPackageItemsContent({
   bookingId,
   onClose,
   onPrevious,
+  saveLabel,
 }: {
   active: boolean;
   bookingId: string;
   onClose: () => void;
   onPrevious?: () => void;
+  saveLabel?: string;
 }): React.ReactElement {
   const { data: bookingDetail, isLoading } = useQuery<BookingDetail>({
     queryKey: ["booking-detail", bookingId],
@@ -184,6 +195,7 @@ export function EditPackageItemsContent({
       initialVendor={initialVendor}
       onClose={onClose}
       onPrevious={onPrevious}
+      saveLabel={saveLabel}
     />
   );
 }

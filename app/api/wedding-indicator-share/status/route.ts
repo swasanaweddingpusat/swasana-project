@@ -45,7 +45,7 @@ export async function GET(req: Request) {
     }
 
     // Only expose raw token+accessCode to the user who created the indicator
-    const isOwner = share.weddingIndicator.createdById === session.user.id;
+    const isOwner = share.weddingIndicator.createdById === session.user.profileId;
 
     return NextResponse.json({
       share: {

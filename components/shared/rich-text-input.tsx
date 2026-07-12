@@ -278,7 +278,6 @@ export const RichTextInput = forwardRef<RichTextInputHandle, Props>(function Ric
       el.focus();
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
-      const range = sel.getRangeAt(0);
       // delete the "@query" (queryLen chars + the "@")
       for (let k = 0; k < queryLen + 1; k++) {
         sel.modify("extend", "backward", "character");
@@ -303,6 +302,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, Props>(function Ric
       el.focus();
       setCaretOffset(el, el.textContent?.length ?? 0);
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [onChange, onCaret]);
 
   return (
