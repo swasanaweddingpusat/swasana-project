@@ -14,6 +14,7 @@ export async function fetchProcurementList(
   params: Partial<ProcurementFilterInput> = {}
 ): Promise<ProcurementListResult> {
   const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
   if (params.venueId) query.set("venueId", params.venueId);
   if (params.division) query.set("division", params.division);
   if (params.status) query.set("status", params.status);

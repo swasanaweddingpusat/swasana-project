@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Magnifer } from "@solar-icons/react";
 import type { ProcurementFilterInput } from "@/lib/validations/procurement";
 
 interface ProcurementFiltersProps {
@@ -32,6 +33,7 @@ export function ProcurementFilters({
 }: ProcurementFiltersProps) {
   const handleReset = () => {
     onFilterChange({
+      search: undefined,
       venueId: undefined,
       division: undefined,
       status: undefined,
@@ -41,6 +43,7 @@ export function ProcurementFilters({
   };
 
   const hasActiveFilters = !!(
+    filters.search ||
     filters.venueId ||
     filters.division ||
     filters.status ||
@@ -51,6 +54,24 @@ export function ProcurementFilters({
   return (
     <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
       <div className="flex flex-wrap gap-3 items-end">
+        <div className="min-w-48 flex-1 max-w-sm">
+          <p className="text-xs text-muted-foreground mb-1.5">Cari</p>
+          <div className="relative">
+            <Magnifer
+              weight="BoldDuotone"
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              placeholder="Nama barang atau PIC..."
+              value={filters.search ?? ""}
+              onChange={(e) =>
+                onFilterChange({ search: e.target.value || undefined })
+              }
+              className="rounded-xl h-9 pl-9"
+            />
+          </div>
+        </div>
+
         <div className="min-w-40">
           <p className="text-xs text-muted-foreground mb-1.5">Venue</p>
           <Select

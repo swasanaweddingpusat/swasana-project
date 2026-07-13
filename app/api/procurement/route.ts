@@ -22,6 +22,7 @@ export async function GET(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url);
 
   const rawFilter = {
+    search: searchParams.get("search") ?? undefined,
     venueId: searchParams.get("venueId") ?? undefined,
     division: searchParams.get("division") ?? undefined,
     status: searchParams.get("status") ?? undefined,

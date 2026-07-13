@@ -42,6 +42,7 @@ export const approveProcurementSchema = z
 // ─── Procurement Filters ──────────────────────────────────────────────────────
 
 export const procurementFilterSchema = z.object({
+  search: z.string().optional(),
   venueId: z.string().optional(),
   division: z.string().optional(),
   status: z.string().optional(),
