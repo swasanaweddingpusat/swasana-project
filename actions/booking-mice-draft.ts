@@ -364,18 +364,9 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/MICE/${dd}-${mm}-${year}`;
 
-    const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-
-    // Generate invoice numbers for terms
+    // FIX C Step 3: invoice numbers buat TOP sudah di-drop.
+    // Invoice number sekarang on-demand via Invoice entity (IssueInvoiceDrawer → actions/invoice.ts).
     const terms = draft.termOfPayments;
-    const invoiceNumbers: string[] = [];
-    if (terms.length > 0) {
-      const monthRoman = ROMAN[now.getMonth()];
-      for (const _ of terms) {
-        const seq = await getNextSequence(`invoice-${year}`);
-        invoiceNumbers.push(`${seq}/INV/${venue?.code ?? ""}/${monthRoman}/${year}`);
-      }
-    }
 
     // Resolve approval steps: conditional Sales + Manager → Finance.
     // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
@@ -446,16 +437,7 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     }
 
     // 4. Stamp invoice numbers on terms
-    if (terms.length > 0) {
-      ops.push(
-        ...terms.map((t, i) =>
-          db.termOfPayment.update({
-            where: { id: t.id },
-            data: { invoiceNumber: invoiceNumbers[i] ?? null },
-          })
-        )
-      );
-    }
+    // FIX C Step 3: TOP.invoiceNumber sudah di-drop, tidak perlu update.
 
     // 5. ApprovalRecord + steps (Sales → Manager → Finance)
     if (bookingApprovalSteps && bookingApprovalSteps.length > 0) {

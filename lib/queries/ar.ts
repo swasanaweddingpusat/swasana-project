@@ -51,7 +51,6 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
           name: true,
           amount: true,
           dueDate: true,
-          invoiceNumber: true,
           notes: true,
         },
       },
@@ -89,14 +88,8 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
 
       const remaining = Math.max(0, Number(t.amount) - derivedPaid);
 
-      const statusInvoice: ARInvoiceStatus = t.invoiceNumber
-        ? status === "paid"
-          ? "paid"
-          : status === "partial"
-            ? "partial"
-            : "unpaid"
-        : "unissued";
-
+      // statusInvoice + noInvoice sekarang derived dari Invoice ENTITY (FIX C Step 3).
+      // TermOfPayment.invoiceNumber sudah di-drop — jangan baca dari TOP lagi.
       const invoiceRow = invoiceMap.get(t.id);
       const invoice = invoiceRow
         ? {
@@ -108,6 +101,14 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
           }
         : null;
 
+      const statusInvoice: ARInvoiceStatus = invoiceRow
+        ? status === "paid"
+          ? "paid"
+          : status === "partial"
+            ? "partial"
+            : "unpaid"
+        : "unissued";
+
       return {
         id: t.id,
         name: t.name,
@@ -115,7 +116,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         amount: Number(t.amount),
         remaining,
         status,
-        noInvoice: t.invoiceNumber ?? "",
+        noInvoice: invoiceRow?.invoiceNumber ?? "",
         statusInvoice,
         agingDays,
         catatan: t.notes ?? "",

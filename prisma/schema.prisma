@@ -1147,26 +1147,25 @@ model SnapVendorItem {
 
 // ─── Booking Live Tables ─────────────────────────────────────────────────────
 
-// Fase 5: TOP = JADWAL termin murni (name/amount/dueDate + invoiceNumber). "Berapa
+// Fase 5: TOP = JADWAL termin murni (name/amount/dueDate). "Berapa
 // sudah terbayar" DERIVED dari Ledger cash-in via PaymentAllocation (lib/queries/ledger.ts).
 // Kolom pembayaran lama (paymentStatus/paymentEvidence/paymentMethodId/ackStatus/
 // acknowledged*) + tabel PartialPayment sudah di-drop — sumbernya sekarang Ledger.
+// FIX C Step 3: invoiceNumber kolom legacy juga sudah di-drop — invoice on-demand via Invoice entity.
 model TermOfPayment {
-  id              String              @id @default(uuid())
-  bookingId       String
-  name            String
-  amount          Int
-  dueDate         DateTime
-  invoiceNumber   String?
-  notes           String?
-  sortOrder       Int                 @default(0)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  allocations      PaymentAllocation[]
-  invoices         Invoice[]
+  id        String   @id @default(uuid())
+  bookingId String
+  name      String
+  amount    Int
+  dueDate   DateTime
+  notes     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  booking     Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  allocations PaymentAllocation[]
+  invoices    Invoice[]
 
-  @@unique([invoiceNumber])
   @@index([bookingId])
   @@map("term_of_payments")
 }

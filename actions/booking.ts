@@ -10,7 +10,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
-import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
+import { getNextSequence } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
 import { createBookingRevision, refreshCurrentRevisionSnapshot, patchSnapshotAdminFields } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
@@ -265,18 +265,8 @@ export async function createBooking(data: unknown) {
     const eventTypeCode = input.weddingType ?? "R";
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/${eventTypeCode}/${dd}-${mm}-${year}`;
 
-    const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
-
-    // Generate invoice numbers atomically before transaction. Use the batched
-    // counter (1 round-trip, guaranteed-contiguous ascending block) instead of N
-    // concurrent getNextSequence calls whose completion order is non-deterministic
-    // and could produce out-of-order invoice numbers.
-    let invoiceNumbers: string[] = [];
-    if (input.termOfPayments && input.termOfPayments.length > 0) {
-      const monthRoman = ROMAN[now.getMonth()];
-      const invoiceSeqs = await getNextSequenceBatch(`invoice-${year}`, input.termOfPayments.length);
-      invoiceNumbers = invoiceSeqs.map((seq) => `${seq}/INV/${venue.code}/${monthRoman}/${year}`);
-    }
+    // FIX C Step 3: invoice numbers buat TOP sudah di-drop.
+    // Invoice number sekarang on-demand via Invoice entity (IssueInvoiceDrawer → actions/invoice.ts).
 
     if (input.withMaterai) {
       emateraiResult = await generateEmaterai(poNumber, new Date(`${input.eventDate}T00:00:00.000Z`));
@@ -568,7 +558,7 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i] } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } })
         )
       );
     }

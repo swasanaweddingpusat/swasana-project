@@ -72,8 +72,8 @@ export interface ARTermin {
   viaRekening: string | null;
   /**
    * Invoice ENTITY aktif (status=issued) yang terbit buat termin ini (FIX C).
-   * Beda dari `noInvoice`/`statusInvoice` (legacy, baca `TermOfPayment.invoiceNumber`
-   * langsung) — field ini baca dari entity `Invoice` yang immutable & on-demand.
+   * `noInvoice`/`statusInvoice` sekarang derived dari entity `Invoice` ini juga
+   * (FIX C Step 3: TermOfPayment.invoiceNumber sudah di-drop dari schema).
    * null = belum ada invoice diterbitkan buat termin ini.
    */
   invoice: { id: string; number: string; type: string; status: string; issuedAt: string } | null;
