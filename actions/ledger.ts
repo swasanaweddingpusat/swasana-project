@@ -466,3 +466,60 @@ export async function voidCashIn(input: z.infer<typeof voidSchema>): Promise<Act
     return { success: false, error: "Gagal membatalkan transaksi." };
   }
 }
+
+/* ─── Toggle show-in-PO ──────────────────────────────────────────────────────── */
+
+const setShowInPoSchema = z.object({
+  ledgerId: z.string().min(1, "ID transaksi tidak valid"),
+  value: z.boolean(),
+});
+
+/**
+ * Set flag `showInPo` satu cash-in — nandain apakah pembayaran ini tampil di
+ * Summary Payment PO PDF. Single-table update; tetap logAudit + revalidate.
+ * Row void boleh di-toggle (harmless — render PO tetap exclude voidedAt != null).
+ */
+export async function setLedgerShowInPo(
+  input: z.infer<typeof setShowInPoSchema>,
+): Promise<ActionResult> {
+  const { session, error } = await requirePermission({ module: "finance-ar", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`ledger-showinpo:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const parsed = setShowInPoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid" };
+  }
+  const { ledgerId, value } = parsed.data;
+
+  try {
+    const ledger = await db.ledger.findUnique({
+      where: { id: ledgerId },
+      select: { id: true },
+    });
+    if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
+
+    await db.ledger.update({
+      where: { id: ledgerId },
+      data: { showInPo: value },
+    });
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "ledger.show_in_po_toggled",
+      entityType: "ledger",
+      entityId: ledgerId,
+      changes: { showInPo: value },
+      description: `Cash-in ${ledgerId} showInPo = ${value}`,
+    });
+
+    revalidateTag("ledger", "max");
+    revalidateTag("ar-bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[setLedgerShowInPo]", e);
+    return { success: false, error: "Gagal mengubah tampilan PO." };
+  }
+}
