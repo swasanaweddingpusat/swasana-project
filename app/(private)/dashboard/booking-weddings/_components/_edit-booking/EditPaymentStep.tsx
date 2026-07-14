@@ -303,69 +303,7 @@ export function EditPaymentStep({ bookingId }: Props) {
         </div>
       )}
 
-      {/* ── Section 1: Existing payments (read-only) ── */}
-      <div className="space-y-3">
-        <p className="text-sm font-semibold text-foreground">Riwayat Pembayaran</p>
-
-        {cashIns.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            Belum ada pembayaran tercatat untuk booking ini.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {cashIns.map((ci) => (
-              <div
-                key={ci.id}
-                className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(ci.occurredAt), "d MMMM yyyy", { locale: localeId })}
-                      {ci.linkedTermNames.length > 0 && (
-                        <>
-                          {" · "}
-                          <span className="font-medium text-foreground">
-                            Alokasi ke: {ci.linkedTermNames.join(", ")}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                    <p className="font-heading text-lg font-bold text-foreground tabular-nums">
-                      Rp{fmtRp(ci.amount)}
-                    </p>
-                    {ci.invoiceNumber && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        No. Kwitansi: {ci.invoiceNumber}
-                      </p>
-                    )}
-                    {ci.notes && (
-                      <p className="mt-1 text-xs text-muted-foreground">{ci.notes}</p>
-                    )}
-                  </div>
-                  <AckBadge status={ci.ackStatus} />
-                </div>
-                <div className="flex items-center justify-between border-t border-border pt-2">
-                  <span
-                    id={`po-label-${ci.id}`}
-                    className="text-xs text-muted-foreground"
-                  >
-                    Tampilkan di PO
-                  </span>
-                  <Switch
-                    checked={ci.showInPo}
-                    disabled={togglingPo === ci.id}
-                    onCheckedChange={(v) => { void handleTogglePo(ci.id, v); }}
-                    aria-labelledby={`po-label-${ci.id}`}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Section 2: Input pembayaran baru ── */}
+      {/* ── Section 1: Input pembayaran baru ── */}
       <PermissionGate
         module="booking"
         action="edit"
@@ -387,16 +325,16 @@ export function EditPaymentStep({ bookingId }: Props) {
               size="sm"
               className="gap-1.5 rounded-full border-dashed text-muted-foreground"
               onClick={() => setRows((prev) => [...prev, makeEmptyRow()])}
-              disabled={submitting !== null}
+              disabled={submitting !== null || rows.some((r) => !isRowFilled(r))}
             >
               <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-              Tambah Pembayaran
+              Tambah
             </Button>
           </div>
 
           {rows.length === 0 && (
             <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
-              Belum ada pembayaran baru. Klik &ldquo;Tambah Pembayaran&rdquo; untuk mencatat.
+              Belum ada pembayaran baru. Klik &ldquo;Tambah&rdquo; untuk mencatat.
             </p>
           )}
 
@@ -531,20 +469,26 @@ export function EditPaymentStep({ bookingId }: Props) {
                       {terms.map((t) => {
                         const selected = row.linkedTermIds.includes(t.id);
                         const sisa = Math.max(t.amount - t.effectivePaid, 0);
+                        const fullyLinked = sisa === 0 && t.amount > 0;
                         return (
                           <button
                             key={t.id}
                             type="button"
-                            onClick={() => toggleTermLink(row.uid, t.id)}
+                            onClick={() => { if (!fullyLinked) toggleTermLink(row.uid, t.id); }}
                             aria-pressed={selected}
+                            disabled={fullyLinked}
                             className={cn(
                               "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                              selected
+                              fullyLinked
+                                ? "cursor-not-allowed border-border bg-muted/20 opacity-60"
+                                : selected
                                 ? "border-primary bg-primary/5"
                                 : "border-border bg-muted/20 hover:border-primary/40 hover:bg-secondary/40",
                             )}
                           >
-                            {selected ? (
+                            {fullyLinked ? (
+                              <span className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/20 bg-muted" />
+                            ) : selected ? (
                               <CheckCircle weight="BoldDuotone" className="size-5 shrink-0 text-primary" />
                             ) : (
                               <span className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
@@ -555,14 +499,20 @@ export function EditPaymentStep({ bookingId }: Props) {
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 Tagihan: Rp{fmtRp(t.amount)}
-                                {t.effectivePaid > 0 && (
+                                {!fullyLinked && t.effectivePaid > 0 && (
                                   <> · Sisa: Rp{fmtRp(sisa)}</>
                                 )}
                               </p>
                             </div>
-                            <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
-                              Rp{fmtRp(t.amount)}
-                            </span>
+                            {fullyLinked ? (
+                              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                Lunas
+                              </span>
+                            ) : (
+                              <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                                Rp{fmtRp(t.amount)}
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -684,6 +634,68 @@ export function EditPaymentStep({ bookingId }: Props) {
 
         </div>
       </PermissionGate>
+
+      {/* ── Section 2: Riwayat pembayaran (read-only) ── */}
+      <div className="space-y-3">
+        <p className="text-sm font-semibold text-foreground">Riwayat Pembayaran</p>
+
+        {cashIns.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+            Belum ada pembayaran tercatat untuk booking ini.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {cashIns.map((ci) => (
+              <div
+                key={ci.id}
+                className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(ci.occurredAt), "d MMMM yyyy", { locale: localeId })}
+                      {ci.linkedTermNames.length > 0 && (
+                        <>
+                          {" · "}
+                          <span className="font-medium text-foreground">
+                            Alokasi ke: {ci.linkedTermNames.join(", ")}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    <p className="font-heading text-lg font-bold text-foreground tabular-nums">
+                      Rp{fmtRp(ci.amount)}
+                    </p>
+                    {ci.invoiceNumber && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        No. Kwitansi: {ci.invoiceNumber}
+                      </p>
+                    )}
+                    {ci.notes && (
+                      <p className="mt-1 text-xs text-muted-foreground">{ci.notes}</p>
+                    )}
+                  </div>
+                  <AckBadge status={ci.ackStatus} />
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-2">
+                  <span
+                    id={`po-label-${ci.id}`}
+                    className="text-xs text-muted-foreground"
+                  >
+                    Tampilkan di PO
+                  </span>
+                  <Switch
+                    checked={ci.showInPo}
+                    disabled={togglingPo === ci.id}
+                    onCheckedChange={(v) => { void handleTogglePo(ci.id, v); }}
+                    aria-labelledby={`po-label-${ci.id}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
