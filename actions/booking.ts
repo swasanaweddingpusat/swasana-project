@@ -17,7 +17,7 @@ import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
-import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { getTermAllocatedMap } from "@/lib/queries/ledger";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -1619,20 +1619,47 @@ export async function editBooking(data: unknown) {
 
     // Term of payments — re-write when structure OR sort-order changed. TOP kini
     // jadwal murni (name/amount/dueDate/sortOrder); status pembayaran DERIVED dari Ledger.
+    //
+    // NOTE (FIX A, confirmed dead path): editBooking() has exactly one caller —
+    // useEditBookingForm.ts:471 — and it always submits `termOfPayments: []` (TOP
+    // editing lives in updateTermOfPayments / edit-top-drawer.tsx instead), so this
+    // block is currently unreachable from the wedding drawer. Kept + upgraded
+    // defensively (same integrity guard as updateTermOfPayments) in case a future
+    // caller ever sends a non-empty schedule here.
     if (termsNeedWrite && rest.termOfPayments && rest.termOfPayments.length > 0) {
-      // Lock (§6.6): term dengan alokasi Ledger cash-in ter-ack tidak boleh dihapus.
-      const editPaidMap = await getTermPaidMapForBookings([id]);
-      const dbTerms = await db.termOfPayment.findMany({
-        where: { bookingId: id },
-        select: { id: true },
-      });
-
-      const lockedTermIds = new Set(
-        dbTerms.filter((t) => (editPaidMap.get(t.id) ?? 0) > 0).map((t) => t.id),
-      );
+      // Lock (§6.6, extended by FIX A): term dengan alokasi Ledger NON-VOID APAPUN
+      // (pending atau acknowledged) tidak boleh hilang dari save — cascade-delete
+      // PaymentAllocation bakal nyisain cash-in yatim di Ledger kalau dibiarkan.
+      const [editAllocatedMap, dbTerms] = await Promise.all([
+        getTermAllocatedMap([id]),
+        db.termOfPayment.findMany({
+          where: { bookingId: id },
+          select: { id: true, name: true },
+        }),
+      ]);
 
       // Client-sent term IDs that are still in DB (the rest are new terms).
-      const clientTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
+      const clientTermIds = new Set(rest.termOfPayments.filter((t) => t.id).map((t) => t.id!));
+
+      // Integrity guard: block outright (don't silently keep, don't silently delete)
+      // when the incoming save would drop a term that still has cash attached.
+      const removedWithCash = dbTerms.filter(
+        (t) => !clientTermIds.has(t.id) && (editAllocatedMap.get(t.id) ?? 0) > 0,
+      );
+      if (removedWithCash.length > 0) {
+        const fmt = new Intl.NumberFormat("id-ID");
+        const detail = removedWithCash
+          .map((t) => `"${t.name}" (Rp${fmt.format(editAllocatedMap.get(t.id) ?? 0)})`)
+          .join(", ");
+        return {
+          success: false,
+          error: `Termin ${detail} masih punya pembayaran (pending/lunas) yang nempel — tidak bisa dihapus. Void atau pindahkan pembayaran tersebut dulu di Cashbook.`,
+        };
+      }
+
+      const lockedTermIds = new Set(
+        dbTerms.filter((t) => (editAllocatedMap.get(t.id) ?? 0) > 0).map((t) => t.id),
+      );
 
       // Locked terms must always be preserved — include them in the "keep" set
       // even if the client somehow didn't include them in the payload.

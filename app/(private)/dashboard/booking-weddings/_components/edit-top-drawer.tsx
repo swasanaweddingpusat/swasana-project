@@ -18,6 +18,7 @@ import {
   AlignVerticalSpacing,
   AltArrowDown,
   CheckCircle,
+  DangerTriangle,
 } from "@solar-icons/react";
 import {
   DndContext,
@@ -106,6 +107,9 @@ function TopContent({
   const [discountAmount, setDiscountAmount] = useState(initialDiscountAmount);
   const [discountEditing, setDiscountEditing] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState<string | null>(null);
+  // Guard error dari server (integrity check FIX A) — ditampilkan sebagai banner
+  // persisten, bukan cuma toast, karena pesannya sebut nama termin + nominal.
+  const [guardError, setGuardError] = useState<string | null>(null);
   // Accordion collapse state — a term's id here = collapsed (body hidden).
   const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
 
@@ -206,10 +210,13 @@ function TopContent({
   };
 
   const handleDeleteTerm = (id: string): void => {
+    setGuardError(null);
     setTerms((prev) => prev.filter((t) => t.id !== id));
   };
 
   const handleUpdate = async (): Promise<void> => {
+    setGuardError(null);
+
     // Reconciliation guard: Σ termin HARUS sama dengan harga-setelah-diskon.
     if (difference !== 0) {
       const absDiff = fmtRp(Math.abs(difference));
@@ -263,6 +270,10 @@ function TopContent({
     setLoading(false);
 
     if (!result.success) {
+      // Guard errors (FIX A) name the specific term + cash amount attached — surface
+      // them as a persistent banner (not just a toast) so the instruction stays
+      // visible while the user goes to void/move the payment in Cashbook.
+      setGuardError(result.error ?? "Terjadi kesalahan.");
       toast.error(result.error);
       return;
     }
@@ -282,6 +293,14 @@ function TopContent({
           Ini jadwal termin (nama, nominal, jatuh tempo). Pencatatan pembayaran &amp;
           verifikasinya ada di <span className="font-medium text-foreground">Cashbook</span>.
         </p>
+
+        {/* ── Guard error (FIX A): termin ber-cash-in gagal dihapus/disimpan ── */}
+        {guardError && (
+          <div className="flex items-start gap-2.5 rounded-xl bg-destructive/10 p-3.5 text-sm text-destructive">
+            <DangerTriangle weight="BoldDuotone" className="mt-0.5 h-5 w-5 shrink-0" />
+            <span>{guardError}</span>
+          </div>
+        )}
 
         {/* ── Daftar termin ── */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

@@ -50,6 +50,38 @@ export async function getTermPaidMap(bookingId: string): Promise<Map<string, num
   return getTermPaidMapForBookings([bookingId]);
 }
 
+/**
+ * Bulk: total alokasi GROSS non-void (pending + acknowledged) per termin, untuk
+ * sekumpulan booking — dipakai buat GUARD "termin terkunci" (FIX A), BUKAN buat
+ * derivasi status termin (itu tetap acked-only, lihat getTermPaidMapForBookings).
+ *
+ * Beda dari getTermPaidMapForBookings: filter `ackStatus:"acknowledged"` DIBUANG,
+ * cukup `direction:"in", voidedAt:null`. Kenapa: hapus termin → PaymentAllocation
+ * cascade-delete tapi Ledger induknya tetap hidup → cash-in "yatim". Alokasi yang
+ * masih pending (belum di-ack Finance) TETAP harus ngunci termin-nya, biar gak ada
+ * cash-in yang kehilangan induk termin secara diam-diam.
+ *
+ * Return `Map<termId, allocatedGross>`. Termin tanpa alokasi non-void tidak muncul
+ * di map (caller anggap 0 / unlocked).
+ */
+export async function getTermAllocatedMap(bookingIds: string[]): Promise<Map<string, number>> {
+  if (bookingIds.length === 0) return new Map();
+
+  const rows = await db.paymentAllocation.groupBy({
+    by: ["termId"],
+    where: {
+      ledger: {
+        bookingId: { in: bookingIds },
+        direction: "in",
+        voidedAt: null,
+      },
+    },
+    _sum: { amount: true },
+  });
+
+  return new Map(rows.map((r) => [r.termId, r._sum.amount ?? 0]));
+}
+
 /** Satu cash-in yang beralokasi ke sebuah termin — buat riwayat pembayaran AR. */
 export interface TermAllocationDetail {
   /** PaymentAllocation id. */
@@ -155,6 +187,67 @@ export async function getBookingCashIns(bookingId: string): Promise<BookingCashI
     showInPo: r.showInPo,
     linkedTermNames: r.allocations.map((a) => a.term.name),
   }));
+}
+
+/** Satu cash-in yang alokasinya tidak menutup penuh nominal gross-nya sendiri. */
+export interface OrphanCashIn {
+  /** Ledger id. */
+  id: string;
+  bookingId: string;
+  clientName: string;
+  amount: number;
+  allocatedTotal: number;
+  /** amount - allocatedTotal (bagian gross yang tidak nempel ke termin manapun). */
+  unallocated: number;
+  occurredAt: string;
+  ackStatus: "pending" | "acknowledged" | "rejected";
+}
+
+/**
+ * Detektor read-only (FIX A §A.5) — cash-in `in` non-void yang alokasinya lebih kecil
+ * dari nominal gross-nya sendiri (Σallocations < amount). Ini gejala orphan: termin
+ * yang tadinya dialokasi udah dihapus (sebelum guard ini ada) sehingga sebagian/semua
+ * alokasinya cascade-delete, tapi Ledger induknya tetap hidup.
+ *
+ * MURNI SURFACE buat Finance review — TIDAK auto-fix apapun. Auto-heal adalah
+ * keputusan terpisah (lihat design doc, diluar scope FIX A).
+ */
+export async function findOrphanCashIns(bookingId?: string): Promise<OrphanCashIn[]> {
+  const rows = await db.ledger.findMany({
+    where: {
+      direction: "in",
+      voidedAt: null,
+      ...(bookingId ? { bookingId } : {}),
+    },
+    orderBy: { occurredAt: "desc" },
+    take: 500,
+    select: {
+      id: true,
+      bookingId: true,
+      amount: true,
+      occurredAt: true,
+      ackStatus: true,
+      booking: { select: { snapCustomer: { select: { name: true } } } },
+      allocations: { select: { amount: true } },
+    },
+  });
+
+  return rows
+    .map((r) => {
+      const amount = Number(r.amount);
+      const allocatedTotal = r.allocations.reduce((s, a) => s + Number(a.amount), 0);
+      return {
+        id: r.id,
+        bookingId: r.bookingId,
+        clientName: r.booking.snapCustomer?.name ?? "-",
+        amount,
+        allocatedTotal,
+        unallocated: amount - allocatedTotal,
+        occurredAt: r.occurredAt.toISOString(),
+        ackStatus: r.ackStatus,
+      };
+    })
+    .filter((r) => r.allocatedTotal < r.amount);
 }
 
 export type DerivedTermStatus = "paid" | "partial" | "overdue" | "not_due_yet";

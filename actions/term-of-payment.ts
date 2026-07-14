@@ -9,7 +9,7 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { getTermPaidMapForBookings, getTermAllocatedMap } from "@/lib/queries/ledger";
 
 interface TermUpdate {
   id: string;
@@ -89,21 +89,46 @@ export async function updateTermOfPayments(
     }
 
     // Fetch ALL terms for this booking so we can detect removed terms and apply the
-    // Ledger lock (§6.6). Sumber lock sekarang MURNI Ledger — kolom TOP.paymentStatus/
-    // ackStatus sudah di-drop (Fase 5).
-    const [allDbTerms, paidMap] = await Promise.all([
+    // Ledger lock (§6.6, extended by FIX A). Sumber lock sekarang MURNI Ledger — kolom
+    // TOP.paymentStatus/ackStatus sudah di-drop (Fase 5).
+    const [allDbTerms, paidMap, allocatedMap] = await Promise.all([
       db.termOfPayment.findMany({
         where: { bookingId },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
       getTermPaidMapForBookings([bookingId]),
+      getTermAllocatedMap([bookingId]),
     ]);
 
-    // Locked term = punya alokasi Ledger cash-in ter-ack. Selalu dipertahankan
-    // walau client menghilangkannya (tidak boleh terhapus/teredit).
+    const clientTermIds = new Set(terms.map((t) => t.id));
+
+    // ── Integrity guard (FIX A) ───────────────────────────────────────────────
+    // "Termin terkunci" diperluas: punya alokasi Ledger NON-VOID APAPUN (pending
+    // ATAU acknowledged) — bukan cuma acknowledged. Kalau incoming save mau
+    // ngilangin termin yang masih punya cash-in nempel, TOLAK eksplisit (bukan
+    // silent-keep, apalagi silent-delete) — cascade-delete PaymentAllocation
+    // bakal nyisain Ledger yatim (cash-in tanpa termin). User wajib void/pindahin
+    // pembayarannya dulu di Cashbook sebelum termin ini boleh dihapus.
+    const removedWithCash = allDbTerms.filter(
+      (t) => !clientTermIds.has(t.id) && (allocatedMap.get(t.id) ?? 0) > 0,
+    );
+    if (removedWithCash.length > 0) {
+      const fmt = new Intl.NumberFormat("id-ID");
+      const detail = removedWithCash
+        .map((t) => `"${t.name}" (Rp${fmt.format(allocatedMap.get(t.id) ?? 0)})`)
+        .join(", ");
+      return {
+        success: false,
+        error: `Termin ${detail} masih punya pembayaran (pending/lunas) yang nempel — tidak bisa dihapus. Void atau pindahkan pembayaran tersebut dulu di Cashbook sebelum mengubah jadwal ini.`,
+      };
+    }
+
+    // Locked term (editing) = punya alokasi Ledger cash-in ter-ack. Selalu
+    // dipertahankan walau client menghilangkannya (unreachable now that removal
+    // is blocked above whenever cash is attached, but kept as the safety net for
+    // the update-only path below where sortOrder-only edits still apply).
     const hasAckedLedger = (termId: string): boolean => (paidMap.get(termId) ?? 0) > 0;
     const lockedTermIds = new Set(allDbTerms.filter((t) => hasAckedLedger(t.id)).map((t) => t.id));
-    const clientTermIds = new Set(terms.map((t) => t.id));
     const keepIds = [...clientTermIds, ...lockedTermIds];
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
