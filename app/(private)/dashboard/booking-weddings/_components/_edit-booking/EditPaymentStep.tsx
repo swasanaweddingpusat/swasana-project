@@ -12,6 +12,7 @@ import {
   InfoCircle,
   MoneyBag,
 } from "@solar-icons/react";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +26,7 @@ import {
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import { useBookingFinanceDetail } from "@/hooks/use-booking-finance-detail";
-import { createCashIn } from "@/actions/ledger";
+import { createCashIn, setLedgerShowInPo } from "@/actions/ledger";
 import { safeRandomUUID } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -43,6 +44,8 @@ interface PaymentRow {
   /** Real termId from DB (NOT sortOrder). */
   linkedTermIds: string[];
   promoId: string;
+  /** Tampilkan pembayaran ini di Summary Payment PO PDF. Default false. */
+  showInPo: boolean;
 }
 
 interface PromoOption {
@@ -75,6 +78,7 @@ function makeEmptyRow(): PaymentRow {
     notes: "",
     linkedTermIds: [],
     promoId: "",
+    showInPo: false,
   };
 }
 
@@ -136,6 +140,7 @@ export function EditPaymentStep({ bookingId }: Props) {
 
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [submitting, setSubmitting] = useState<string | null>(null); // uid of row being submitted
+  const [togglingPo, setTogglingPo] = useState<string | null>(null); // ledger id being toggled
 
   // Promo options
   const { data: promosResult } = useQuery({
@@ -174,6 +179,24 @@ export function EditPaymentStep({ bookingId }: Props) {
         };
       }),
     );
+  }
+
+  // ── Toggle showInPo on existing cash-in ──
+  async function handleTogglePo(ledgerId: string, value: boolean) {
+    setTogglingPo(ledgerId);
+    try {
+      const res = await setLedgerShowInPo({ ledgerId, value });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      await qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
+    } catch (e) {
+      console.error("[EditPaymentStep] handleTogglePo", e);
+      toast.error("Gagal mengubah tampilan PO.");
+    } finally {
+      setTogglingPo(null);
+    }
   }
 
   // ── Submit a single row ──
@@ -235,7 +258,7 @@ export function EditPaymentStep({ bookingId }: Props) {
         evidence: evidenceKey,
         notes: row.notes.trim() || null,
         allocations,
-        showInPo: false,
+        showInPo: row.showInPo,
       });
 
       if (!result.success) {
@@ -321,6 +344,20 @@ export function EditPaymentStep({ bookingId }: Props) {
                     )}
                   </div>
                   <AckBadge status={ci.ackStatus} />
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-2">
+                  <span
+                    id={`po-label-${ci.id}`}
+                    className="text-xs text-muted-foreground"
+                  >
+                    Tampilkan di PO
+                  </span>
+                  <Switch
+                    checked={ci.showInPo}
+                    disabled={togglingPo === ci.id}
+                    onCheckedChange={(v) => { void handleTogglePo(ci.id, v); }}
+                    aria-labelledby={`po-label-${ci.id}`}
+                  />
                 </div>
               </div>
             ))}
@@ -588,6 +625,26 @@ export function EditPaymentStep({ bookingId }: Props) {
                     onChange={(e) => updateRow(row.uid, { notes: e.target.value })}
                     placeholder="Catatan pembayaran (opsional)"
                     maxLength={500}
+                  />
+                </div>
+
+                {/* Tampilkan di PO */}
+                <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+                  <div className="min-w-0 pr-3">
+                    <p
+                      id={`po-label-new-${row.uid}`}
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Tampilkan di PO
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Pembayaran ini muncul di Summary Payment pada dokumen PO.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={row.showInPo}
+                    onCheckedChange={(v) => updateRow(row.uid, { showInPo: v })}
+                    aria-labelledby={`po-label-new-${row.uid}`}
                   />
                 </div>
 
