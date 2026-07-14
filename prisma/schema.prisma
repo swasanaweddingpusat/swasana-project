@@ -1189,6 +1189,9 @@ model Ledger {
   evidence              String?             // storage path/key, BUKAN full URL (§7.1)
   invoiceNumber         String?             // no. kwitansi auto-gen server (§7.2)
   notes                 String?
+  // Tampilkan cash-in ini di section Summary Payment PO PDF. Default OFF —
+  // user sengaja menyalakan per pembayaran. Voided tetap di-exclude saat render.
+  showInPo              Boolean             @default(false)
   acknowledgedAt        DateTime?
   acknowledgedById      String?
   acknowledgedSignature String?             // ttd Finance (data URL PNG), nullable

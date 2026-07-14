@@ -167,6 +167,8 @@ interface PaymentReceiptRow {
   linkedTermUids: string[];
   /** DiscountProgram id, or "" when no promo applied. */
   promoId: string;
+  /** Tampilkan pembayaran ini di Summary Payment PO PDF. Default false. */
+  showInPo: boolean;
 }
 
 interface PromoOption {
@@ -186,6 +188,7 @@ function makeEmptyReceipt(): PaymentReceiptRow {
     notes: "",
     linkedTermUids: [],
     promoId: "",
+    showInPo: false,
   };
 }
 
@@ -1584,6 +1587,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             discountAmount,
             notes: r.notes.trim() || null,
             allocations,
+            showInPo: r.showInPo,
           };
         }),
       };
@@ -3001,6 +3005,20 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             value={r.notes}
                             onChange={(e) => updateReceipt(r.uid, { notes: e.target.value })}
                             placeholder="Catatan pembayaran (opsional)"
+                          />
+                        </div>
+
+                        {/* Tampilkan di PO */}
+                        <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+                          <div className="min-w-0 pr-3">
+                            <p className="text-sm font-medium text-foreground">Tampilkan di PO</p>
+                            <p className="text-xs text-muted-foreground">
+                              Pembayaran ini muncul di Summary Payment pada dokumen PO.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={r.showInPo}
+                            onCheckedChange={(v) => updateReceipt(r.uid, { showInPo: v })}
                           />
                         </div>
                       </div>

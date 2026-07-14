@@ -28,6 +28,8 @@ export interface POPdfBooking {
   createdAt?: Date;
   discountName?: string | null;
   discountAmount?: number;
+  /** Cash-in bertanda showInPo (live-fetch, non-void). Kosong = PO kontrak-only. */
+  poPayments?: { label: string; amount: number; occurredAt: string; invoiceNumber: string | null }[];
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -807,12 +809,31 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 </View>
               </>
             )}
-            {/* Sisa Bayar = total setelah diskon. Pembayaran yang sudah masuk dilacak
-                terpisah di Cashbook/AR (Fase 5), tidak lagi ditempel di PO. */}
-            <View style={{ flexDirection: "row" }}>
-              <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Sisa Bayar</Text>
-              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); return fmtRp(totalPrice); })()}</Text>
-            </View>
+            {/* Baris pembayaran ber-flag showInPo (live-fetch). Kosong → langsung Sisa Bayar = Total. */}
+            {(() => {
+              const pays = booking.poPayments ?? [];
+              const totalPrice = (booking.discountAmount ?? 0) > 0
+                ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0))
+                : (varSnap?.price ?? 0);
+              const paid = pays.reduce((sum, p) => sum + p.amount, 0);
+              const sisa = Math.max(0, totalPrice - paid);
+              return (
+                <>
+                  {pays.map((p, i) => (
+                    <View key={i} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
+                      <Text style={{ width: "70%", fontSize: 6, padding: 2, borderRightWidth: 1, borderColor: "#000" }}>
+                        {p.label}
+                      </Text>
+                      <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>- {fmtRp(p.amount)}</Text>
+                    </View>
+                  ))}
+                  <View style={{ flexDirection: "row" }}>
+                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Sisa Bayar</Text>
+                    <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{fmtRp(sisa)}</Text>
+                  </View>
+                </>
+              );
+            })()}
           </View>
 
           {/* Closing — teks ngalir natural nempel ke atas; signature di-jaga utuh sendiri */}

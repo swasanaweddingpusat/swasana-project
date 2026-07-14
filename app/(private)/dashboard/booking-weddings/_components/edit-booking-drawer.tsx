@@ -12,6 +12,7 @@ import { EditComplimentaryContent, type ComplimentaryHandle } from "./EditCompli
 import { useEditBookingForm, STEP_LABELS } from "./_edit-booking/useEditBookingForm";
 import { ClientInfoStep } from "./_edit-booking/ClientInfoStep";
 import { VenueEventStep } from "./_edit-booking/VenueEventStep";
+import { EditPaymentStep } from "./_edit-booking/EditPaymentStep";
 import type { BookingListItem } from "@/lib/queries/bookings";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -72,6 +73,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       step === 3 ? "package-items" :
       step === 4 ? "takeout" :
       step === 5 ? "top" :
+      step === 6 ? "payment" :
       "signature",
     );
   }
@@ -94,7 +96,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           className="shrink-0 border-b border-border pb-2 sm:w-16 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-1.5"
         >
           <ol className="flex flex-row gap-0.5 sm:flex-col">
-            {([1, 2, 3, 4, 5, 6] as number[]).map((step) => {
+            {([1, 2, 3, 4, 5, 6, 7] as number[]).map((step) => {
               const isActive = currentStep === step;
               return (
                 <li key={step} className="flex-1 sm:flex-none">
@@ -203,6 +205,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           )}
 
           {currentStep === 6 && booking && (
+            <EditPaymentStep bookingId={booking.id} />
+          )}
+
+          {currentStep === 7 && booking && (
             <SalesSignatureContent
               bookingId={booking.id}
               onDone={linearMode ? handleCloseAll : noOp}
@@ -216,7 +222,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           <div className="bg-background sticky bottom-0 z-10">
             {currentStep === 2 && hasVenueTabChange && (
               <p className="px-1 pb-1 text-xs text-muted-foreground">
-                Simpan untuk lanjut ke Item Paket → Takeout → TOP → Tanda Tangan.
+                Simpan untuk lanjut ke Item Paket → Takeout → TOP → Payment → Tanda Tangan.
               </p>
             )}
             <div className="flex py-4 gap-2">

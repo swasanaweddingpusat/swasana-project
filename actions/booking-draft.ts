@@ -1007,6 +1007,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
               evidence: null,
               invoiceNumber: kwitansiNumbers[pi] ?? null,
               notes: p.notes?.trim() || null,
+              showInPo: p.showInPo ?? false,
               createdById: session!.user.profileId!,
             },
           }),

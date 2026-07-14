@@ -134,6 +134,31 @@ export async function POST(req: Request) {
       termAndConditionHtml = booking.snapPackagePricing?.termAndCondition ?? null;
     }
 
+    // Payments di PO = event SETELAH snapshot freeze → SELALU live-fetch (tidak ikut
+    // revisi). Cuma yang di-flag showInPo & non-void. Pending pun tampil (keputusan
+    // spec: toggle ON cukup). Diurut kronologis.
+    const poLedgers = await db.ledger.findMany({
+      where: { bookingId, direction: "in", showInPo: true, voidedAt: null },
+      orderBy: { occurredAt: "asc" },
+      take: 500,
+      select: {
+        id: true, amount: true, occurredAt: true, invoiceNumber: true,
+        paymentMethod: { select: { bankName: true, bankAccountNumber: true } },
+        allocations: { select: { term: { select: { name: true } } }, take: 1 },
+      },
+    });
+    pdfBooking.poPayments = poLedgers.map((l) => {
+      const topName = l.allocations[0]?.term.name;
+      const bank = l.paymentMethod
+        ? `${l.paymentMethod.bankName} (${l.paymentMethod.bankAccountNumber})`
+        : "Tunai";
+      const tgl = new Date(l.occurredAt).toLocaleDateString("id-ID", {
+        day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta",
+      });
+      const label = topName ? `${topName} - ${tgl} (${bank})` : `Pembayaran ${tgl} (${bank})`;
+      return { label, amount: Number(l.amount), occurredAt: l.occurredAt.toISOString(), invoiceNumber: l.invoiceNumber ?? null };
+    });
+
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
     // Fetch signatures from ApprovalRecordStep, filtered by revision.

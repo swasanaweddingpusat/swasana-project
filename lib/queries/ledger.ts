@@ -103,6 +103,60 @@ export async function getTermAllocationsForBookings(
   return map;
 }
 
+/** Satu cash-in booking (semua status) — buat riwayat pembayaran di editor booking. */
+export interface BookingCashIn {
+  /** Ledger id. */
+  id: string;
+  amount: number;
+  /** ISO — tanggal uang masuk (Ledger.occurredAt). */
+  occurredAt: string;
+  ackStatus: "pending" | "acknowledged" | "rejected";
+  invoiceNumber: string | null;
+  notes: string | null;
+  /** Ditandai tampil di Summary Payment PO PDF. */
+  showInPo: boolean;
+  /** Nama termin yang di-cover cash-in ini (dari PaymentAllocation). */
+  linkedTermNames: string[];
+}
+
+/**
+ * Semua cash-in `in` (non-void) satu booking — TERMASUK yang masih `pending`
+ * (belum di-ack Finance). Beda dari getTermAllocationsForBookings yang acked-only:
+ * ini buat "Riwayat Pembayaran" di editor booking, biar pembayaran yang baru
+ * dicatat langsung kelihatan dengan badge status verifikasinya. TIDAK dipakai
+ * buat derivasi status termin (itu tetap acked-only, lihat getTermPaidMap).
+ *
+ * NOT "use cache" — butuh fresh tiap drawer edit dibuka.
+ */
+export async function getBookingCashIns(bookingId: string): Promise<BookingCashIn[]> {
+  const rows = await db.ledger.findMany({
+    where: { bookingId, direction: "in", voidedAt: null },
+    orderBy: { occurredAt: "desc" },
+    take: 200,
+    select: {
+      id: true,
+      amount: true,
+      occurredAt: true,
+      ackStatus: true,
+      invoiceNumber: true,
+      notes: true,
+      showInPo: true,
+      allocations: { select: { term: { select: { name: true } } } },
+    },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    amount: Number(r.amount),
+    occurredAt: r.occurredAt.toISOString(),
+    ackStatus: r.ackStatus,
+    invoiceNumber: r.invoiceNumber ?? null,
+    notes: r.notes ?? null,
+    showInPo: r.showInPo,
+    linkedTermNames: r.allocations.map((a) => a.term.name),
+  }));
+}
+
 export type DerivedTermStatus = "paid" | "partial" | "overdue" | "not_due_yet";
 
 /**

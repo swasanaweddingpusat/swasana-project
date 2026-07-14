@@ -211,6 +211,8 @@ export const finalizeDraftSchema = z.object({
             })
           )
           .default([]),
+        /** Tampilkan pembayaran ini di Summary Payment PO PDF. Default OFF. */
+        showInPo: z.boolean().default(false),
       })
     )
     .optional()
