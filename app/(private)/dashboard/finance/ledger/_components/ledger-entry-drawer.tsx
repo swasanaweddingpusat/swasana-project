@@ -512,6 +512,7 @@ export function LedgerEntryDrawer({
       evidence: data.paymentEvidenceName || null,
       notes: data.notes?.trim() || null,
       allocations,
+      showInPo: false,
     });
     setSubmitting(false);
 

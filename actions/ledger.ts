@@ -54,6 +54,8 @@ const createCashInSchema = z.object({
   notes: z.string().max(500, "Keterangan maksimal 500 karakter").nullable().optional(),
   /** Alokasi ke termin — boleh kosong (unallocated = titipan/overpayment, §6.5 #4). */
   allocations: z.array(allocationInputSchema).default([]),
+  /** Tampilkan cash-in ini di Summary Payment PO PDF. Default OFF. */
+  showInPo: z.boolean().default(false),
 });
 
 export type CreateCashInInput = z.infer<typeof createCashInSchema>;
@@ -186,6 +188,7 @@ export async function createCashIn(
           evidence: data.evidence ?? null,
           invoiceNumber,
           notes: data.notes ?? null,
+          showInPo: data.showInPo,
           createdById: profileId,
         },
       }),
