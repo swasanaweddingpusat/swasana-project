@@ -140,6 +140,7 @@ export async function POST(req: Request) {
     const poLedgers = await db.ledger.findMany({
       where: { bookingId, direction: "in", showInPo: true, voidedAt: null },
       orderBy: { occurredAt: "asc" },
+      take: 500,
       select: { id: true, amount: true, occurredAt: true, invoiceNumber: true },
     });
     pdfBooking.poPayments = poLedgers.map((l) => ({
