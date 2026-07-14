@@ -4,7 +4,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, requireAnyPermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
 import { logAudit } from "@/lib/audit";
@@ -146,7 +146,10 @@ async function validateAllocations(
 export async function createCashIn(
   input: CreateCashInInput,
 ): Promise<ActionResult<{ ledgerId: string; invoiceNumber: string }>> {
-  const { session, error } = await requirePermission({ module: "finance-ar", action: "create" });
+  const { session, error } = await requireAnyPermission([
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "create" },
+  ]);
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`ledger-create:${session!.user.id}`)) {
     return { success: false, ...rateLimitError() };

@@ -367,20 +367,32 @@ export function EditPaymentStep({ bookingId }: Props) {
 
       {/* ── Section 2: Input pembayaran baru ── */}
       <PermissionGate
-        module="finance-ar"
-        action="create"
+        module="booking"
+        action="edit"
         fallback={
           <div className="flex items-start gap-2 rounded-2xl border border-dashed border-border bg-muted/30 p-4">
             <InfoCircle weight="BoldDuotone" className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
-              Anda tidak memiliki izin <span className="font-medium text-foreground">finance-ar:create</span> untuk mencatat pembayaran baru.
-              Hubungi Finance untuk input pembayaran.
+              Anda tidak memiliki izin untuk mencatat pembayaran baru.
             </p>
           </div>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm font-semibold text-foreground">Input Pembayaran Baru</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">Input Pembayaran Baru</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-full border-dashed text-muted-foreground"
+              onClick={() => setRows((prev) => [...prev, makeEmptyRow()])}
+              disabled={submitting !== null}
+            >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+              Tambah Pembayaran
+            </Button>
+          </div>
 
           {rows.length === 0 && (
             <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
@@ -670,16 +682,6 @@ export function EditPaymentStep({ bookingId }: Props) {
             );
           })}
 
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full gap-1.5 border-dashed text-muted-foreground"
-            onClick={() => setRows((prev) => [...prev, makeEmptyRow()])}
-            disabled={submitting !== null}
-          >
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            Tambah Pembayaran
-          </Button>
         </div>
       </PermissionGate>
     </div>
