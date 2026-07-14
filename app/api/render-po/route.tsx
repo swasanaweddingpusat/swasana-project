@@ -134,6 +134,26 @@ export async function POST(req: Request) {
       termAndConditionHtml = booking.snapPackagePricing?.termAndCondition ?? null;
     }
 
+    // Payments di PO = event SETELAH snapshot freeze → SELALU live-fetch (tidak ikut
+    // revisi). Cuma yang di-flag showInPo & non-void. Pending pun tampil (keputusan
+    // spec: toggle ON cukup). Diurut kronologis.
+    const poLedgers = await db.ledger.findMany({
+      where: { bookingId, direction: "in", showInPo: true, voidedAt: null },
+      orderBy: { occurredAt: "asc" },
+      select: { id: true, amount: true, occurredAt: true, invoiceNumber: true },
+    });
+    pdfBooking.poPayments = poLedgers.map((l) => ({
+      label: `Pembayaran ${new Date(l.occurredAt).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Jakarta",
+      })}`,
+      amount: Number(l.amount),
+      occurredAt: l.occurredAt.toISOString(),
+      invoiceNumber: l.invoiceNumber ?? null,
+    }));
+
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
     // Fetch signatures from ApprovalRecordStep, filtered by revision.
