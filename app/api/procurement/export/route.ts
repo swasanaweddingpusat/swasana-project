@@ -99,8 +99,11 @@ export async function GET(req: Request): Promise<Response> {
       sheet.addRow(csvHeaders);
       rows.forEach((row) => sheet.addRow(row));
       const buffer = await workbook.xlsx.writeBuffer();
+      const arrayBuffer = buffer instanceof ArrayBuffer
+        ? buffer
+        : (buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
 
-      return new Response(buffer, {
+      return new Response(arrayBuffer as unknown as BodyInit, {
         headers: {
           "Content-Type":
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

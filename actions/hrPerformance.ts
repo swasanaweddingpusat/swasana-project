@@ -50,7 +50,7 @@ export async function createPerformanceReview(
       description: "Performance review created",
     });
 
-    revalidateTag("hr-performance");
+    revalidateTag("hr-performance", "max");
     return { success: true };
   } catch (err) {
     console.error("[createPerformanceReview]", err);
@@ -94,7 +94,7 @@ export async function updatePerformanceReview(
       description: "Performance review updated",
     });
 
-    revalidateTag("hr-performance");
+    revalidateTag("hr-performance", "max");
     return { success: true };
   } catch (err) {
     console.error("[updatePerformanceReview]", err);
@@ -124,7 +124,7 @@ export async function deletePerformanceReview(
       description: "Performance review deleted",
     });
 
-    revalidateTag("hr-performance");
+    revalidateTag("hr-performance", "max");
     return { success: true };
   } catch (err) {
     console.error("[deletePerformanceReview]", err);
@@ -172,7 +172,7 @@ export async function createKpi(
       description: `KPI "${parsed.data.name}" created`,
     });
 
-    revalidateTag("hr-performance");
+    revalidateTag("hr-performance", "max");
     return { success: true };
   } catch (err) {
     console.error("[createKpi]", err);
@@ -219,7 +219,7 @@ export async function updateKpi(
       description: "KPI updated",
     });
 
-    revalidateTag("hr-performance");
+    revalidateTag("hr-performance", "max");
     return { success: true };
   } catch (err) {
     console.error("[updateKpi]", err);
@@ -249,7 +249,7 @@ export async function deleteKpi(
       description: "KPI deleted",
     });
 
-    revalidateTag("hr-performance");
+    revalidateTag("hr-performance", "max");
     return { success: true };
   } catch (err) {
     console.error("[deleteKpi]", err);
