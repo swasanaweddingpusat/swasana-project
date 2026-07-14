@@ -168,7 +168,11 @@ model Profile {
   leadsCreated             Lead[]
   leadsAssigned            Lead[]          @relation("LeadAssignee")
   quotations               Quotation[]
-  termOfPaymentsAcknowledged TermOfPayment[] @relation("TOPAcknowledger")
+  ledgersCreated             Ledger[]        @relation("LedgerCreator")
+  ledgersAcknowledged        Ledger[]        @relation("LedgerAcknowledger")
+  ledgersVoided              Ledger[]        @relation("LedgerVoider")
+  paymentActivities          PaymentActivity[] @relation("PaymentActivityActor")
+  bookingsRecognized         Booking[]       @relation("BookingRecognizer")
   maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignee")
   maintenanceTicketsCreated  MaintenanceTicket[] @relation("MaintenanceCreator")
   bookingEditDrafts          BookingEditDraft[]
@@ -487,7 +491,7 @@ model PaymentMethod {
   settlements        BookingPaymentSettlement[]
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
-  termOfPayments     TermOfPayment[]
+  ledgers            Ledger[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -811,8 +815,6 @@ model Booking {
   withMaterai           Boolean              @default(false)
   discountName          String?
   discountAmount        Int                  @default(0)
-  promoId               String?
-  promoSnapshot         Json?                // snapshot of DiscountProgram at booking creation
   salesId               String
   managerId             String?
   customerId            String
@@ -835,6 +837,10 @@ model Booking {
   // internal items, pricing). After this, only vendor items stay editable (ops swap);
   // changing internal items / price / pax requires a new revision + re-approval.
   snapshotFrozenAt      DateTime?
+  // Revenue recognition (PSAK 72 / IFRS 15) — properti event/booking, BUKAN per-row Ledger.
+  // null = unearned; terisi = pendapatan diakui (event selesai + approval). Manual finance action.
+  recognizedAt          DateTime?
+  recognizedById        String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
@@ -847,7 +853,7 @@ model Booking {
   sourceOfInformation SourceOfInformation? @relation(fields: [sourceOfInformationId], references: [id], onDelete: SetNull)
   currentRevision     BookingRevision?     @relation("BookingCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   lead                Lead?                @relation("BookingFromLead", fields: [leadId], references: [id], onDelete: SetNull)
-  promo               DiscountProgram?     @relation(fields: [promoId], references: [id], onDelete: SetNull)
+  recognizedBy        Profile?             @relation("BookingRecognizer", fields: [recognizedById], references: [id], onDelete: SetNull)
 
   // Snapshot relations (1:1)
   snapCustomer       SnapCustomer?
@@ -865,6 +871,7 @@ model Booking {
 
   // Live relations
   termOfPayments    TermOfPayment[]
+  ledgers           Ledger[]
   bookingDocuments  BookingDocument[]
   bookingRefunds    BookingPaymentSettlement[] @relation("SourceSettlements")
   targetSettlements BookingPaymentSettlement[] @relation("TargetSettlements")
@@ -884,13 +891,13 @@ model Booking {
   @@index([paymentMethodId])
   @@index([sourceOfInformationId])
   @@index([leadId])
-  @@index([promoId])
   @@index([bookingStatus])
   @@index([recordStatus])
   @@index([category])
   @@index([eventDate])
   @@index([currentRevisionId])
   @@index([recordStatus, poYear, poSeq])
+  @@index([recognizedById])
   @@map("bookings")
 }
 
@@ -1140,49 +1147,115 @@ model SnapVendorItem {
 
 // ─── Booking Live Tables ─────────────────────────────────────────────────────
 
+// Fase 5: TOP = JADWAL termin murni (name/amount/dueDate + invoiceNumber). "Berapa
+// sudah terbayar" DERIVED dari Ledger cash-in via PaymentAllocation (lib/queries/ledger.ts).
+// Kolom pembayaran lama (paymentStatus/paymentEvidence/paymentMethodId/ackStatus/
+// acknowledged*) + tabel PartialPayment sudah di-drop — sumbernya sekarang Ledger.
 model TermOfPayment {
   id              String              @id @default(uuid())
   bookingId       String
   name            String
   amount          Int
   dueDate         DateTime
-  paymentStatus   TermOfPaymentStatus @default(unpaid)
-  paymentEvidence String?
-  paymentMethodId String?             // bank tujuan transfer per-term (nullable)
   invoiceNumber   String?
   notes           String?
   sortOrder       Int                 @default(0)
-  // Acknowledgment fields — set when Finance acks a paid TOP
-  ackStatus       String              @default("pending") // "pending" | "acknowledged" | "rejected"
-  acknowledgedAt  DateTime?
-  acknowledgedById String?            // FK to profiles.id
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  partialPayments  PartialPayment[]
-  acknowledgedBy   Profile?            @relation("TOPAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
-  paymentMethod    PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  allocations      PaymentAllocation[]
 
   @@unique([invoiceNumber])
   @@index([bookingId])
-  @@index([acknowledgedById])
-  @@index([paymentMethodId])
   @@map("term_of_payments")
 }
 
-model PartialPayment {
-  id        String        @id @default(uuid())
-  termId    String
-  amount    Int
-  paidAt    DateTime
-  evidence  String?
-  notes     String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  term      TermOfPayment @relation(fields: [termId], references: [id], onDelete: Cascade)
 
+// ─── Cashflow Ledger (Buku Besar / Cashbook) ─────────────────────────────────
+// Single-entry cashbook. Sekarang cuma direction=in (cash in). PartialPayment
+// digeneralisasi ke sini. Revenue recognition ada di Booking.recognizedAt (bukan row ini).
+
+model Ledger {
+  id                    String              @id @default(uuid())
+  bookingId             String
+  direction             LedgerDirection     @default(in)
+  // ackStatus = SUMBER KEBENARAN (verifikasi Finance). Gate AR & recognition.
+  ackStatus             LedgerAckStatus     @default(pending)
+  // paymentStatus = placeholder gateway. Manual transfer selalu "paid". Jangan dipakai logika.
+  paymentStatus         LedgerPaymentStatus @default(paid)
+  occurredAt            DateTime            // tanggal transaksi (uang bergerak)
+  amount                Int                 // GROSS — nominal yang meng-offset termin (§6.4)
+  discountProgramId     String?             // promo per-pembayaran (opsional)
+  discountAmount        Int                 @default(0) // contra-revenue snapshot
+  cashAmount            Int                 // uang riil masuk = amount - discountAmount
+  paymentMethodId       String?             // bank tujuan; null = Cash
+  evidence              String?             // storage path/key, BUKAN full URL (§7.1)
+  invoiceNumber         String?             // no. kwitansi auto-gen server (§7.2)
+  notes                 String?
+  acknowledgedAt        DateTime?
+  acknowledgedById      String?
+  acknowledgedSignature String?             // ttd Finance (data URL PNG), nullable
+  // Void tombstone — koreksi non-destruktif (§6.5). Row tetap ada (konten finansial immutable),
+  // cuma ditandai batal. Derived AR/query WAJIB exclude voidedAt != null.
+  voidedAt              DateTime?
+  voidedById            String?
+  createdById           String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  booking         Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  discountProgram DiscountProgram?    @relation(fields: [discountProgramId], references: [id], onDelete: SetNull)
+  paymentMethod   PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  acknowledgedBy  Profile?            @relation("LedgerAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  voidedBy        Profile?            @relation("LedgerVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+  createdBy       Profile?            @relation("LedgerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  allocations     PaymentAllocation[]
+  activities      PaymentActivity[]
+
+  @@unique([invoiceNumber])
+  @@index([bookingId, direction, ackStatus])
+  @@index([discountProgramId])
+  @@index([paymentMethodId])
+  @@index([acknowledgedById])
+  @@index([voidedById])
+  @@index([createdById])
+  @@map("ledgers")
+}
+
+// Join cash-in ↔ TermOfPayment + porsi GROSS yang meng-offset termin.
+model PaymentAllocation {
+  id        String   @id @default(uuid())
+  ledgerId  String
+  termId    String
+  amount    Int      // porsi GROSS cash-in yang offset termin ini (§6.4)
+  createdAt DateTime @default(now())
+
+  ledger Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  term   TermOfPayment @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([ledgerId, termId])
   @@index([termId])
-  @@map("partial_payments")
+  @@index([ledgerId])
+  @@map("payment_allocations")
+}
+
+// Log append-only per Ledger row (created → acknowledged/rejected → voided). Snapshot ttd.
+model PaymentActivity {
+  id                String                @id @default(uuid())
+  ledgerId          String
+  action            PaymentActivityAction
+  actorId           String?
+  actorNameSnapshot String                // nama pelaku (denormalized, tahan hapus profil)
+  signature         String?               // data URL ttd — cuma keisi saat acknowledged
+  note              String?
+  createdAt         DateTime              @default(now())
+
+  ledger Ledger   @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  actor  Profile? @relation("PaymentActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([ledgerId, createdAt])
+  @@index([actorId])
+  @@map("payment_activities")
 }
 
 model BookingDocument {
@@ -1310,11 +1383,28 @@ enum WeddingSession {
 
 
 
-enum TermOfPaymentStatus {
+
+enum LedgerDirection {
+  in
+  out
+}
+
+enum LedgerAckStatus {
+  pending
+  acknowledged
+  rejected
+}
+
+enum LedgerPaymentStatus {
   unpaid
   paid
-  partial
-  refund
+}
+
+enum PaymentActivityAction {
+  created
+  acknowledged
+  rejected
+  voided
 }
 
 enum SettlementType {
@@ -1359,7 +1449,6 @@ model ClientAgreement {
   sentAt     DateTime?
   viewedAt   DateTime?
   signedAt   DateTime?
-  expiresAt  DateTime
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -1407,7 +1496,6 @@ model ApprovalRecord {
   module      String
   entityId    String
   status      String               @default("pending")
-  signature   String?
   emateraiSn        String?
   emateraiQrBase64  String?
   createdById String
@@ -2483,8 +2571,7 @@ model DiscountProgram {
   description         String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
-
-  bookings Booking[]
+  ledgers             Ledger[]
 
   @@index([isActive])
   @@index([periodStart, periodEnd])

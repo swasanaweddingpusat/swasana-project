@@ -56,8 +56,14 @@ function ClientAgreementContent() {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "Gagal validasi"); return; }
       setBooking(data.booking);
-      if (data.alreadySigned) { setStep("done"); return; }
-      if (data.agreement?.status === "Signed") { setStep("done"); return; }
+      // Already signed → skip the signing form entirely. Go straight to the download
+      // step and pop the modal, fetching the signed PO copy for re-download.
+      if (data.alreadySigned || data.agreement?.status === "Signed") {
+        setStep("done");
+        setShowSuccessModal(true);
+        fetchSignedPdf();
+        return;
+      }
       setStep("sign");
       generatePdf();
     } catch {

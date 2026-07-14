@@ -80,7 +80,7 @@ export function AgreementModal({ bookingId, customerName, onClose }: AgreementMo
           <div className={cn('space-y-3', 'py-1')}>
             {agreement.status === "Pending" && (
               <div className="rounded-lg border border-border bg-muted/50 p-2.5">
-                <p className="text-xs text-muted-foreground font-medium">Link dan kode akses baru sudah otomatis di-generate. Silakan kirimkan ke client untuk menandatangani ulang PO terbaru.</p>
+                <p className="text-xs text-muted-foreground font-medium">Link dan kode akses sudah siap. Silakan kirimkan ke client untuk menandatangani PO.</p>
               </div>
             )}
             <div className="space-y-1">
@@ -105,7 +105,7 @@ export function AgreementModal({ bookingId, customerName, onClose }: AgreementMo
             {confirmRegen ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5">
                 <p className="text-xs text-foreground font-medium">Generate ulang link & kode akses?</p>
-                <p className="text-xs text-muted-foreground">Link dan kode lama akan langsung nonaktif. Jika client sudah tanda tangan, tanda tangannya direset dan booking kembali ke status Pending sampai client menandatangani PO terbaru.</p>
+                <p className="text-xs text-muted-foreground">Link dan kode lama akan langsung nonaktif dan diganti yang baru. Tanda tangan client dan status booking tidak berubah.</p>
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="destructive" className="rounded-full" onClick={generate} disabled={isPending}>
                     {isPending ? "Memproses..." : "Ya, Regenerate"}

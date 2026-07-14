@@ -36,10 +36,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Tidak valid" }, { status: 401 });
     }
 
-    if (agreement.expiresAt < new Date()) {
-      return NextResponse.json({ error: "Link expired" }, { status: 400 });
-    }
-
+    // Links never expire — no expiry gate. Signed agreements still render here so the
+    // client can re-download their signed PO copy on any later visit.
     const booking = await db.booking.findUnique({
       where: { id: agreement.bookingId },
       include: {

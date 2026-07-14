@@ -237,7 +237,6 @@ export async function updateDraftMiceStep2(
             amount: t.amount,
             dueDate: new Date(t.dueDate),
             sortOrder: t.sortOrder ?? i,
-            paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund",
           },
         })
       ),
@@ -497,7 +496,6 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
           bookingId: draftId,
           token: crypto.randomUUID(),
           accessCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       })
     );

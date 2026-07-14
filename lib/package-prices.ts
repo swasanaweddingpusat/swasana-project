@@ -14,19 +14,13 @@ export interface TermSnap {
   id: string;
   name: string;
   amount: number;
-  paymentStatus: string;
-  ackStatus?: string | null;
+  /** Σ alokasi Ledger cash-in ter-ack (pengganti paymentStatus/ackStatus — Fase 5). */
+  paid: number;
 }
 
 export interface AdjustedTerm {
   id: string;
   newAmount: number;
-}
-
-export interface RefundTerm {
-  name: string;
-  amount: number;
-  paymentStatus: "refund";
 }
 
 /**
@@ -103,29 +97,24 @@ function distributeTarget(termsList: TermSnap[], target: number): AdjustedTerm[]
  * always set to `newPrice - paidLockedTotal`, so toggling takeout on→off
  * restores the original amounts exactly.
  *
- * - Pool = unpaid/partial terms that are NOT acknowledged and NOT refund.
- *   Paid/acknowledged terms are immutable. Refund terms are ignored (the
- *   caller deletes & recreates them).
- * - DP protection: the term named "DP" is funded first (up to its original
- *   amount) so it never drops to 0 while there is still a target to cover.
- * - Overpayment (paidLockedTotal > newPrice) becomes a single refund term.
+ * - Pool = terms WITHOUT acked Ledger cash-in (`paid === 0`) → editable.
+ *   Terms with `paid > 0` are immutable (uang sudah masuk & terverifikasi).
+ * - DP protection: the term at index 1 ("DP") is funded first (up to its
+ *   original amount) so it never drops to 0 while there is still a target to cover.
+ * - Overpayment (paidLockedTotal > newPrice): pool di-set 0. Selisih TIDAK dibuat
+ *   sebagai "refund term" lagi (paymentStatus di-drop Fase 5) — refund riil = Ledger
+ *   arah `out` (Fase 6). Untuk sekarang overpayment tidak direpresentasikan di jadwal.
  */
 export function adjustTermsForPriceChange(
   terms: TermSnap[],
   newPrice: number,
-): { adjustedTerms: AdjustedTerm[]; refundTerm: RefundTerm | null } {
-  const considered = terms.filter((t) => t.paymentStatus !== "refund");
-
-  const pool = considered.filter(
-    (t) =>
-      (t.paymentStatus === "unpaid" || t.paymentStatus === "partial") &&
-      t.ackStatus !== "acknowledged",
-  );
-  const immutable = considered.filter((t) => !pool.includes(t));
+): { adjustedTerms: AdjustedTerm[] } {
+  // Locked = termin dengan cash-in ter-ack. Sisanya editable (pool).
+  const pool = terms.filter((t) => t.paid <= 0);
+  const immutable = terms.filter((t) => t.paid > 0);
   const paidLockedTotal = immutable.reduce((s, t) => s + t.amount, 0);
 
   const targetTotalForPool = Math.max(0, newPrice - paidLockedTotal);
-  const overpayment = Math.max(0, paidLockedTotal - newPrice);
 
   // Fund DP first so it stays > 0 while any target remains.
   // DP = index 1 of the input terms array (caller must pass terms sorted by sortOrder asc).
@@ -144,10 +133,5 @@ export function adjustTermsForPriceChange(
     adjustedTerms = distributeTarget(pool, targetTotalForPool);
   }
 
-  const refundTerm: RefundTerm | null =
-    overpayment > 0
-      ? { name: "Refund Takeout", amount: overpayment, paymentStatus: "refund" }
-      : null;
-
-  return { adjustedTerms, refundTerm };
+  return { adjustedTerms };
 }

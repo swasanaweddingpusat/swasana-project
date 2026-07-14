@@ -149,7 +149,6 @@ export async function createMiceBooking(
             amount: t.amount,
             dueDate: new Date(t.dueDate),
             sortOrder: t.sortOrder ?? i,
-            paymentStatus: t.paymentStatus ?? "unpaid",
           },
         })
       ),
@@ -245,7 +244,6 @@ export async function updateMiceBooking(
               amount: t.amount,
               dueDate: new Date(t.dueDate),
               sortOrder: t.sortOrder ?? i,
-              paymentStatus: t.paymentStatus ?? "unpaid",
             },
           })
         )

@@ -16,7 +16,8 @@ interface SessionUser {
  *
  * Note: module "package" does NOT use Peruri e-meterai — emateraiSn /
  * emateraiQrBase64 are intentionally left untouched (they remain null or
- * whatever was previously stored). Only status + signature are reset.
+ * whatever was previously stored). Only status is reset; per-approver
+ * signatures live on ApprovalRecordStep and are recreated below.
  */
 export async function buildResetApprovalOps(
   packageId: string,
@@ -53,7 +54,6 @@ export async function buildResetApprovalOps(
           where: { id: existing.id },
           data: {
             status: "pending",
-            signature: null,
             updatedById: session.profileId ?? null,
           },
         })
@@ -64,7 +64,6 @@ export async function buildResetApprovalOps(
             entityId: packageId,
             status: "pending",
             createdById: session.profileId!,
-            signature: null,
           },
         }),
 

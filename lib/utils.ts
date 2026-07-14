@@ -99,3 +99,42 @@ export function parseDateOnly(dateOnly: string): Date {
   const [y, mo, d] = dateOnly.split("-").map(Number);
   return new Date(y, (mo ?? 1) - 1, d ?? 1, 12, 0, 0, 0);
 }
+
+const TERBILANG_SATUAN = [
+  "",
+  "satu",
+  "dua",
+  "tiga",
+  "empat",
+  "lima",
+  "enam",
+  "tujuh",
+  "delapan",
+  "sembilan",
+  "sepuluh",
+  "sebelas",
+];
+
+/** Recursively spells a non-negative integer below 1 trillion in Indonesian. */
+function spell(n: number): string {
+  if (n < 12) return TERBILANG_SATUAN[n];
+  if (n < 20) return `${spell(n - 10)} belas`;
+  if (n < 100) return `${spell(Math.floor(n / 10))} puluh ${spell(n % 10)}`.trim();
+  if (n < 200) return `seratus ${spell(n - 100)}`.trim();
+  if (n < 1000) return `${spell(Math.floor(n / 100))} ratus ${spell(n % 100)}`.trim();
+  if (n < 2000) return `seribu ${spell(n - 1000)}`.trim();
+  if (n < 1_000_000) return `${spell(Math.floor(n / 1000))} ribu ${spell(n % 1000)}`.trim();
+  if (n < 1_000_000_000) return `${spell(Math.floor(n / 1_000_000))} juta ${spell(n % 1_000_000)}`.trim();
+  return `${spell(Math.floor(n / 1_000_000_000))} miliar ${spell(n % 1_000_000_000)}`.trim();
+}
+
+/**
+ * Spells a rupiah amount in Indonesian words, suffixed "rupiah" and capitalized.
+ * e.g. 1500000 → "Satu juta lima ratus ribu rupiah". Used on kwitansi/receipt.
+ */
+export function terbilang(amount: number | null | undefined): string {
+  if (amount == null || amount <= 0) return "Nol rupiah";
+  const words = spell(Math.floor(amount)).replace(/\s+/g, " ").trim();
+  const capitalized = words.charAt(0).toUpperCase() + words.slice(1);
+  return `${capitalized} rupiah`;
+}

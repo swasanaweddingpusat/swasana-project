@@ -11,6 +11,7 @@ import { createBookingRevision } from "@/lib/booking-revision";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import type { Prisma } from "@prisma/client";
 import { updateBookingCategoryPricesSchema } from "@/lib/validations/package";
+import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
 
 const updatePackagePricesSchema = z.object({
   bookingId: z.string().min(1),
@@ -49,7 +50,7 @@ export async function updatePackagePrices(
   const { bookingId, categoryToggles } = parsed.data;
 
   try {
-    const [snapVariant, allCategories, currentTerms] = await Promise.all([
+    const [snapVariant, allCategories, currentTerms, paidMap] = await Promise.all([
       db.snapPackagePricing.findUnique({
         where: { bookingId },
         select: { price: true, fullPrice: true, margin: true },
@@ -67,10 +68,12 @@ export async function updatePackagePrices(
         },
       }),
       db.termOfPayment.findMany({
-        where: { bookingId, paymentStatus: { not: "refund" } },
-        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true },
+        where: { bookingId },
+        select: { id: true, name: true, amount: true },
         orderBy: { sortOrder: "asc" },
       }),
+      // Pure-derived: "sudah dibayar" per termin dari Ledger cash-in ter-ack.
+      getTermPaidMapForBookings([bookingId]),
     ]);
 
     if (!snapVariant) {
@@ -111,17 +114,17 @@ export async function updatePackagePrices(
     const newPrice = calcFinalFromFullPrice(updatedCategories, fullPrice);
     // Set-to-target recompute: works both ways (takeout on → price down,
     // takeout off → price back up), so toggling restores original amounts.
-    const { adjustedTerms, refundTerm } = adjustTermsForPriceChange(
-      currentTerms.map((t) => ({ ...t, amount: Number(t.amount) })),
+    const { adjustedTerms } = adjustTermsForPriceChange(
+      currentTerms.map((t) => ({
+        id: t.id,
+        name: t.name,
+        amount: Number(t.amount),
+        paid: paidMap.get(t.id) ?? 0,
+      })),
       newPrice,
     );
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
-      // Drop any prior refund terms first — they are recreated below only when
-      // an overpayment still exists. Prevents stale/duplicate refund rows.
-      db.termOfPayment.deleteMany({
-        where: { bookingId, paymentStatus: "refund" },
-      }),
       // Update each visible category's isTakeout + takeoutNominal
       ...updatedCategories
         .filter((c) => toggleMap.has(c.id))
@@ -136,28 +139,13 @@ export async function updatePackagePrices(
         where: { bookingId },
         data: { price: newPrice, fullPrice },
       }),
-      // Recompute unpaid/partial terms toward the new price
+      // Recompute editable (unpaid) terms toward the new price
       ...adjustedTerms.map((t) =>
         db.termOfPayment.update({
           where: { id: t.id },
           data: { amount: t.newAmount },
         }),
       ),
-      // Insert refund term if overpayment occurred
-      ...(refundTerm
-        ? [
-            db.termOfPayment.create({
-              data: {
-                bookingId,
-                name: refundTerm.name,
-                amount: refundTerm.amount,
-                paymentStatus: "refund",
-                dueDate: new Date(),
-                sortOrder: 999,
-              },
-            }),
-          ]
-        : []),
     ];
 
     await db.$transaction(ops);
@@ -231,7 +219,7 @@ export async function updateTakeoutWithTerms(
   const { bookingId, categoryToggles, termOverrides } = parsed.data;
 
   try {
-    const [snapVariant, allCategories, currentTerms] = await Promise.all([
+    const [snapVariant, allCategories, currentTerms, takeoutPaidMap] = await Promise.all([
       db.snapPackagePricing.findUnique({
         where: { bookingId },
         select: { price: true, fullPrice: true, margin: true },
@@ -249,10 +237,12 @@ export async function updateTakeoutWithTerms(
         },
       }),
       db.termOfPayment.findMany({
-        where: { bookingId, paymentStatus: { not: "refund" } },
-        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true },
+        where: { bookingId },
+        select: { id: true, name: true, amount: true },
         orderBy: { sortOrder: "asc" },
       }),
+      // Pure-derived guard (§6.6): term dengan alokasi Ledger ter-ack = terkunci dari pool
+      getTermPaidMapForBookings([bookingId]),
     ]);
 
     if (!snapVariant) {
@@ -290,13 +280,9 @@ export async function updateTakeoutWithTerms(
     const newPrice = calcFinalFromFullPrice(updatedCategories, fullPrice);
 
     // ── Validate the user-adjusted TOP override ──
-    // Editable pool = unpaid/partial AND not acknowledged. Everything else
-    // (paid, acknowledged) is immutable and funds the price first.
-    const pool = currentTerms.filter(
-      (t) =>
-        (t.paymentStatus === "unpaid" || t.paymentStatus === "partial") &&
-        t.ackStatus !== "acknowledged",
-    );
+    // Editable pool = termin TANPA alokasi Ledger cash-in ter-ack. Term yang sudah
+    // ada uang masuk terverifikasi = immutable & mendanai harga lebih dulu.
+    const pool = currentTerms.filter((t) => (takeoutPaidMap.get(t.id) ?? 0) === 0);
     const poolIds = new Set(pool.map((t) => t.id));
     const lockedTotal = currentTerms
       .filter((t) => !poolIds.has(t.id))
@@ -308,7 +294,6 @@ export async function updateTakeoutWithTerms(
     );
 
     const targetForPool = Math.max(0, newPrice - lockedTotal);
-    const overpayment = Math.max(0, lockedTotal - newPrice);
 
     // Final pool amounts: use override when provided, else keep current.
     const finalPool = pool.map((t) => ({
@@ -325,8 +310,6 @@ export async function updateTakeoutWithTerms(
     }
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
-      // Drop prior refund terms; recreated below only if overpayment remains.
-      db.termOfPayment.deleteMany({ where: { bookingId, paymentStatus: "refund" } }),
       // Persist category takeout changes.
       ...updatedCategories
         .filter((c) => toggleMap.has(c.id))
@@ -345,21 +328,6 @@ export async function updateTakeoutWithTerms(
       ...finalPool.map((t) =>
         db.termOfPayment.update({ where: { id: t.id }, data: { amount: t.amount } }),
       ),
-      // Recreate a single refund term on overpayment.
-      ...(overpayment > 0
-        ? [
-            db.termOfPayment.create({
-              data: {
-                bookingId,
-                name: "Refund Takeout",
-                amount: overpayment,
-                paymentStatus: "refund",
-                dueDate: new Date(),
-                sortOrder: 999,
-              },
-            }),
-          ]
-        : []),
     ];
 
     await db.$transaction(ops);
@@ -485,7 +453,6 @@ export async function updateBookingCategoryPrices(
     // 10. Precompute clientAgreement invalidation values (before ops array)
     const newToken = crypto.randomUUID();
     const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     // 11. Build transaction ops array (array form — Neon HTTP compatible, NOT callback)
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -526,7 +493,6 @@ export async function updateBookingCategoryPrices(
           status: "Pending",
           token: newToken,
           accessCode: newAccessCode,
-          expiresAt: newExpiry,
           signedAt: null,
           viewedAt: null,
         },

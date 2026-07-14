@@ -1,26 +1,17 @@
-import { requirePermissionForRoute } from "@/lib/permissions";
+import { auth } from "@/lib/auth";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
-import { db } from "@/lib/db";
+import { getTermsForBooking } from "@/lib/queries/ledger";
 
-/** GET /api/bookings/[id]/terms
- *  Returns the stable { id, sortOrder } list for all terms of a booking (draft or saved).
- *  Used by the booking drawer to resolve termIds for evidence upload after a step-3 upsert.
- */
+/** Jadwal termin satu booking buat multi-select link di drawer catat-transaksi. */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const { session, response } = await requirePermissionForRoute({ module: "booking", action: "view" });
-  if (response) return response;
-  if (!apiLimiter.check(`booking-terms:${session.user.id}`)) return rateLimitResponse();
+  const session = await auth();
+  if (!session) return new Response("Unauthorized", { status: 401 });
+  if (!apiLimiter.check(`terms:${session.user.id}`)) return rateLimitResponse();
 
   const { id } = await params;
-
-  const terms = await db.termOfPayment.findMany({
-    where: { bookingId: id },
-    select: { id: true, sortOrder: true },
-    orderBy: { sortOrder: "asc" },
-  });
-
+  const terms = await getTermsForBooking(id);
   return Response.json(terms);
 }

@@ -9,29 +9,32 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
 
 interface TermUpdate {
   id: string;
   name: string;
   amount: number;
   dueDate: string;
-  paymentStatus: "unpaid" | "paid" | "partial";
   notes?: string | null;
-  /** Bank tujuan transfer per-term (nullable). Empty string / null clears it. */
-  paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
   sortOrder?: number;
+  /** @deprecated Fase 5: TOP = jadwal murni; status/bank dari Ledger. Diabaikan action. */
+  paymentStatus?: "unpaid" | "paid" | "partial";
+  /** @deprecated Fase 5 — diabaikan. */
+  paymentMethodId?: string | null;
 }
 
 interface NewTerm {
   name: string;
   amount: number;
   dueDate: string;
-  paymentStatus?: "unpaid" | "paid" | "partial";
-  /** Bank tujuan transfer per-term (nullable). */
-  paymentMethodId?: string | null;
   /** Display order after drag-drop. Index in the on-screen list. */
   sortOrder?: number;
+  /** @deprecated Fase 5 — diabaikan. */
+  paymentStatus?: "unpaid" | "paid" | "partial";
+  /** @deprecated Fase 5 — diabaikan. */
+  paymentMethodId?: string | null;
 }
 
 interface DiscountUpdate {
@@ -85,21 +88,21 @@ export async function updateTermOfPayments(
       };
     }
 
-    // Fetch ALL terms for this booking so we can detect removed terms and
-    // check ackStatus/paymentStatus for lock protection.
-    const allDbTerms = await db.termOfPayment.findMany({
-      where: { bookingId },
-      select: { id: true, ackStatus: true, paymentStatus: true },
-    });
-    const ackMap = new Map(allDbTerms.map((t) => [t.id, t.ackStatus]));
+    // Fetch ALL terms for this booking so we can detect removed terms and apply the
+    // Ledger lock (§6.6). Sumber lock sekarang MURNI Ledger — kolom TOP.paymentStatus/
+    // ackStatus sudah di-drop (Fase 5).
+    const [allDbTerms, paidMap] = await Promise.all([
+      db.termOfPayment.findMany({
+        where: { bookingId },
+        select: { id: true },
+      }),
+      getTermPaidMapForBookings([bookingId]),
+    ]);
 
-    // Delete terms removed by the user. Locked terms (paid/refund/acknowledged)
-    // are always preserved even if the client omitted them.
-    const isLockedTerm = (t: { paymentStatus: string; ackStatus: string }): boolean =>
-      t.paymentStatus === "paid" ||
-      t.paymentStatus === "refund" ||
-      t.ackStatus === "acknowledged";
-    const lockedTermIds = new Set(allDbTerms.filter(isLockedTerm).map((t) => t.id));
+    // Locked term = punya alokasi Ledger cash-in ter-ack. Selalu dipertahankan
+    // walau client menghilangkannya (tidak boleh terhapus/teredit).
+    const hasAckedLedger = (termId: string): boolean => (paidMap.get(termId) ?? 0) > 0;
+    const lockedTermIds = new Set(allDbTerms.filter((t) => hasAckedLedger(t.id)).map((t) => t.id));
     const clientTermIds = new Set(terms.map((t) => t.id));
     const keepIds = [...clientTermIds, ...lockedTermIds];
 
@@ -107,12 +110,10 @@ export async function updateTermOfPayments(
       db.termOfPayment.deleteMany({ where: { bookingId, id: { notIn: keepIds } } }),
     ];
 
-    // Reordering (sortOrder) is purely a display concern — it never touches
-    // amount/status, so it is allowed even for acknowledged terms. For
-    // acknowledged terms we therefore update ONLY sortOrder; for the rest we
-    // update the full editable payload (including sortOrder when provided).
+    // Reordering (sortOrder) is display-only — allowed even for Ledger-locked terms.
+    // Locked terms get ONLY sortOrder updated; the rest get the full editable payload.
     for (const t of terms) {
-      if (ackMap.get(t.id) === "acknowledged") {
+      if (hasAckedLedger(t.id)) {
         ops.push(db.termOfPayment.update({
           where: { id: t.id },
           data: t.sortOrder !== undefined ? { sortOrder: t.sortOrder } : {},
@@ -124,9 +125,7 @@ export async function updateTermOfPayments(
             name: t.name,
             amount: t.amount,
             dueDate: new Date(t.dueDate),
-            paymentStatus: t.paymentStatus,
             notes: t.notes ?? null,
-            ...(t.paymentMethodId !== undefined && { paymentMethodId: t.paymentMethodId || null }),
             ...(t.sortOrder !== undefined && { sortOrder: t.sortOrder }),
           },
         }));
@@ -146,9 +145,7 @@ export async function updateTermOfPayments(
               name: t.name,
               amount: t.amount,
               dueDate: new Date(t.dueDate),
-              paymentMethodId: t.paymentMethodId ?? null,
               sortOrder: t.sortOrder ?? nextSort++,
-              paymentStatus: t.paymentStatus ?? "unpaid",
             },
           })
         );

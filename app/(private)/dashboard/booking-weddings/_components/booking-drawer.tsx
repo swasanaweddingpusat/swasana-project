@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, FileText, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, AlignVerticalSpacing, Copy } from "@solar-icons/react";
+import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, AlignVerticalSpacing, Copy, CheckCircle, UploadMinimalistic, InfoCircle } from "@solar-icons/react";
 import {
   DndContext,
   closestCenter,
@@ -65,6 +65,7 @@ import {
 } from "@/components/shared/PackageItemsEditor";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
+import { validateBookingField, type BookingFieldKey } from "@/lib/validations/booking-form";
 import type { BookingPrefillLead } from "@/types/lead";
 import {
   getWeddingTimeRange,
@@ -135,6 +136,8 @@ interface PackageData {
 }
 interface BonusRow { vendorId: string; vendorCategoryId: string; vendorName: string; description: string; qty: number; nominal: number }
 interface ComplimentaryRow { id: string; complimentaryId: string | null; name: string; price: number; isShowPrice: boolean; description: string; qty: number }
+// Fase 5: TOP = jadwal murni. Status/bukti bayar dilacak di Cashbook (Ledger),
+// bukan lagi di termin. Step-5 hanya mengatur jadwal cicilan (nama/nominal/tanggal).
 interface TermRow {
   /** Stable client-side id for React keys + drag-drop. Never persisted. */
   uid: string;
@@ -142,15 +145,66 @@ interface TermRow {
   amount: number;
   dueDate: string;
   sortOrder: number;
-  paymentStatus: "unpaid" | "paid" | "partial" | "refund";
-  /** File = newly selected by user (not yet uploaded).
-   *  string = URL from DB (already uploaded). null = no evidence. */
-  paymentEvidence?: File | string | null;
-  /** DB term id — present once the draft term has been persisted. Used for upload. */
+  /** DB term id — present once the draft term has been persisted. */
   termId?: string | null;
 }
 
-const PAYMENT_STATUS = ["unpaid", "paid", "partial"] as const;
+/**
+ * Fase 0 (design prototype) — one entry in the new "Payment" step (step 6).
+ * Local React state only, NOT persisted. Links to `TermRow`s by `uid` (client-side
+ * id), the same resolution strategy the real implementation will use to map
+ * uid → DB termId at submit time (see docs/booking-top-payment-ledger-plan.md §7).
+ */
+interface PaymentReceiptRow {
+  /** Stable client-side id for React keys. Never persisted. */
+  uid: string;
+  occurredAt: string;
+  amount: number;
+  paymentMethodId: string;
+  evidence: File | null;
+  notes: string;
+  /** uids of the step-5 `TermRow`s this receipt is allocated to. */
+  linkedTermUids: string[];
+  /** DiscountProgram id, or "" when no promo applied. */
+  promoId: string;
+}
+
+interface PromoOption {
+  id: string;
+  name: string;
+  discountType: "PERCENTAGE" | "NOMINAL";
+  discountValue: number;
+}
+
+function makeEmptyReceipt(): PaymentReceiptRow {
+  return {
+    uid: safeRandomUUID(),
+    occurredAt: todayISODate(),
+    amount: 0,
+    paymentMethodId: "",
+    evidence: null,
+    notes: "",
+    linkedTermUids: [],
+    promoId: "",
+  };
+}
+
+/** A receipt row the user hasn't touched yet — never blocks the Payment step. */
+function isReceiptRowEmpty(r: PaymentReceiptRow): boolean {
+  return (
+    r.amount === 0 &&
+    !r.paymentMethodId &&
+    !r.evidence &&
+    r.linkedTermUids.length === 0 &&
+    !r.notes.trim() &&
+    !r.promoId
+  );
+}
+
+/** A receipt row with all required fields present — also never blocks. */
+function isReceiptRowFilled(r: PaymentReceiptRow): boolean {
+  return r.amount > 0 && !!r.paymentMethodId && !!r.evidence && r.linkedTermUids.length > 0;
+}
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -185,13 +239,6 @@ function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
   return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
 
-function UrlPreview({ url, onOpen }: { url: string; onOpen: () => void }) {
-  const isImage = /\.(webp|jpg|jpeg|png|gif)(\?|$)/i.test(url);
-  if (!isImage) return null;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
-}
-
 function getPackagePrice(p: PackageData) {
   if (p.sellingPrice > 0) return p.sellingPrice;
   const base = (p.categoryPrices ?? []).reduce((s, c) => s + Number(c.basePrice), 0);
@@ -206,6 +253,14 @@ function toLocalISO(date: Date): string {
   return `${y}-${m}-${d}T00:00:00.000Z`;
 }
 
+/** Today as `YYYY-MM-DD`, for the Payment step's native `<input type="date">` default. */
+function todayISODate(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 // Fixed defaults: Booking Fee Rp5jt, DP Rp10jt. The rest of the package price
 // (after these two) is split evenly across the remaining terms up to Final.
 const BOOKING_FEE_DEFAULT = 5_000_000;
@@ -213,13 +268,13 @@ const DP_DEFAULT = 10_000_000;
 
 function makeDefaultTerms(): TermRow[] {
   return [
-    { uid: safeRandomUUID(), name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0, paymentStatus: "paid" },
-    { uid: safeRandomUUID(), name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5, paymentStatus: "unpaid" },
-    { uid: safeRandomUUID(), name: "Final", amount: 0, dueDate: "", sortOrder: 6, paymentStatus: "unpaid" },
+    { uid: safeRandomUUID(), name: "Booking Fee", amount: BOOKING_FEE_DEFAULT, dueDate: toLocalISO(new Date()), sortOrder: 0 },
+    { uid: safeRandomUUID(), name: "DP", amount: DP_DEFAULT, dueDate: "", sortOrder: 1 },
+    { uid: safeRandomUUID(), name: "Angsuran 1", amount: 0, dueDate: "", sortOrder: 2 },
+    { uid: safeRandomUUID(), name: "Angsuran 2", amount: 0, dueDate: "", sortOrder: 3 },
+    { uid: safeRandomUUID(), name: "Pelunasan 1", amount: 0, dueDate: "", sortOrder: 4 },
+    { uid: safeRandomUUID(), name: "Pelunasan 2", amount: 0, dueDate: "", sortOrder: 5 },
+    { uid: safeRandomUUID(), name: "Final", amount: 0, dueDate: "", sortOrder: 6 },
   ];
 }
 
@@ -335,8 +390,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // so the button stays disabled even after the mutation's isPending flips back to false.
   // Prevents a double-click from creating two bookings.
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Tracks in-flight evidence uploads at step 4 → 5 transition.
-  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   // Holds the retry thunk for the last failed background save — calling it re-fires the save.
   const retryWriteRef = useRef<(() => Promise<void>) | null>(null);
   const { users: salesUsers } = useSalesUsers();
@@ -360,7 +413,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
@@ -381,6 +434,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [noteDateEvent, setNoteDateEvent] = useState("");
   const [time, setTime] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -419,6 +473,14 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const leadOptions = leadsResult?.items ?? [];
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
+  // Live promo source for the Payment step (step 6) — same list used in Finance/Ledger.
+  const { data: promosResult } = useQuery({
+    queryKey: ["promos", "active"],
+    queryFn: () => fetchJson<{ items: PromoOption[] }>("/api/promos?activeOnly=true"),
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const promoOptions = promosResult?.items ?? [];
 
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const { data: packages = [], isLoading: packagesLoading, isError: packagesError } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000, retry: 1 });
@@ -514,6 +576,30 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   // Track COLLAPSED terms by uid (stable across drag-reorder) — default empty = semua kebuka
   const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
+  // Step 6 "Payment" (Fase 0 design prototype) — local-only, NOT persisted yet.
+  // See docs/booking-top-payment-ledger-plan.md.
+  const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceiptRow[]>([]);
+
+  function updateReceipt(uid: string, patch: Partial<PaymentReceiptRow>) {
+    setPaymentReceipts((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
+  }
+  function removeReceipt(uid: string) {
+    setPaymentReceipts((prev) => prev.filter((r) => r.uid !== uid));
+  }
+  function toggleReceiptTermLink(receiptUid: string, termUid: string) {
+    setPaymentReceipts((prev) =>
+      prev.map((r) => {
+        if (r.uid !== receiptUid) return r;
+        const has = r.linkedTermUids.includes(termUid);
+        return {
+          ...r,
+          linkedTermUids: has
+            ? r.linkedTermUids.filter((u) => u !== termUid)
+            : [...r.linkedTermUids, termUid],
+        };
+      }),
+    );
+  }
   // Guard: user has manually edited term amounts in step 3.
   // When true, allocatePrice will NOT override amounts[0] and [1] with the
   // BOOKING_FEE_DEFAULT / DP_DEFAULT constants — it preserves whatever the user typed.
@@ -567,7 +653,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   function resetToClean() {
     form.reset();
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
-    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms());
+    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setPaymentReceipts([]);
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw("");
@@ -579,7 +665,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setPendingResumeDraftId(null);
     setHasPendingWriteError(false);
     setPendingWriteErrorMsg(null);
-    setIsUploadingEvidence(false);
     retryWriteRef.current = null;
     // Reset term customisation guard so a fresh allocation runs on the next package pick.
     setUserHasCustomizedTerms(false);
@@ -590,6 +675,57 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     clearWeddingDraftFromStorage();
     // Migrate any residual old-system localStorage artifacts
     clearLocalDraftArtifacts();
+    setErrors({});
+  }
+
+  function clearError(field: string) {
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateField(field: BookingFieldKey, value: string) {
+    const msg = validateBookingField(field, value);
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (msg) { next[field] = msg; } else { delete next[field]; }
+      return next;
+    });
+  }
+
+  function validateStep1(): boolean {
+    const next: Record<string, string> = {};
+    const cn_ = validateBookingField("customerName", customerName);
+    if (cn_) next.customerName = cn_;
+    const ec = validateBookingField("emailCpp", contactEmailCpp);
+    if (ec) next.emailCpp = ec;
+    const ew = validateBookingField("emailCpw", contactEmailCpw);
+    if (ew) next.emailCpw = ew;
+    const nc = validateBookingField("nikCpp", contactNikCpp);
+    if (nc) next.nikCpp = nc;
+    const nw = validateBookingField("nikCpw", contactNikCpw);
+    if (nw) next.nikCpw = nw;
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+  function validateStep2(): boolean {
+    const next: Record<string, string> = {};
+    const v = validateBookingField("venueId", form.getValues("venueId") ?? "");
+    if (v) next.venueId = v;
+    const p = validateBookingField("packageId", form.getValues("packageId") ?? "");
+    if (p) next.packageId = p;
+    const d = validateBookingField("eventDate", form.getValues("eventDate") ?? "");
+    if (d) next.eventDate = d;
+    const s = validateBookingField("weddingSession", form.getValues("weddingSession") ?? "");
+    if (s) next.weddingSession = s;
+    const t = validateBookingField("weddingType", form.getValues("weddingType") ?? "");
+    if (t) next.weddingType = t;
+    setErrors(next);
+    return Object.keys(next).length === 0;
   }
 
   useEffect(() => {
@@ -647,10 +783,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   ...updated[0],
                   amount: prefillLead.bookingFeeAmount!,
                   dueDate: prefillLead.bookingFeeDate ?? updated[0].dueDate,
-                  paymentStatus: "paid",
-                  ...(prefillLead.bookingFeeEvidenceUrl
-                    ? { paymentEvidence: prefillLead.bookingFeeEvidenceUrl }
-                    : {}),
                 };
               }
               return updated;
@@ -743,6 +875,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
   const getDifference = () => getTotalTerms() - getPriceAfterDiscount();
+  const getTotalPayments = () => paymentReceipts.reduce((s, r) => s + (r.amount || 0), 0);
+  const getPaymentDifference = () => getTotalPayments() - getPriceAfterDiscount();
 
   // Booking Fee (index 0) and DP (index 1) start at their defaults; the
   // leftover (total − fee − dp) is split evenly across the remaining terms, with
@@ -825,19 +959,22 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     visibleCategories.length === 0 ||
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
-  // Evidence is considered present when it's a File (newly picked) OR a string URL (already uploaded).
-  const allPaidTermsHaveEvidence = terms
-    .filter(t => (t.paymentStatus ?? "unpaid") === "paid")
-    .every(t => t.paymentEvidence instanceof File || typeof t.paymentEvidence === "string");
-  // Step 5 complete: term of payments
+  // Step 5 complete: term of payments — TOP is now schedule-only (see
+  // docs/booking-top-payment-ledger-plan.md), so completeness is judged purely
+  // on the balance/dueDate rules, not per-term payment status/evidence anymore.
   const isStep5Complete = !!wPaymentMethodId && (
     getBasePrice() === 0 || (
-      (terms[0]?.paymentStatus ?? "unpaid") === "paid" &&
-      allPaidTermsHaveEvidence
+      (terms[0]?.amount ?? 0) > 0 &&
+      getDifference() === 0 &&
+      terms.every((t) => !!t.dueDate)
     )
   );
-  // Step 6 complete: signing location (+ signature when user IS the sales)
-  const isStep6Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
+  // Step 6 complete: Payment (Fase 0 prototype, local-only) — OPTIONAL. Every
+  // receipt row must be either untouched (blank) or fully filled; a row that's
+  // partially filled blocks Continue until it's completed or removed.
+  const isStep6Complete = paymentReceipts.every((r) => isReceiptRowEmpty(r) || isReceiptRowFilled(r));
+  // Step 7 complete: signing location (+ signature when user IS the sales)
+  const isStep7Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
@@ -996,10 +1133,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         amount: t.amount,
         dueDate: t.dueDate,
         sortOrder: t.sortOrder,
-        paymentStatus: t.paymentStatus,
-        // Restore persisted evidence (URL string) so the uploader shows it on resume.
-        paymentEvidence: t.paymentEvidence ?? null,
-        // Track stable DB id for evidence upload at step 4→5.
         termId: t.id,
       })));
       // Mark terms as user-customized so future allocatePrice calls use preserveFixed
@@ -1158,6 +1291,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     }
 
     if (currentStep === 1) {
+      if (!validateStep1()) { toast.error("Perbaiki isian yang tidak valid."); return; }
       setCurrentStep(2);
       return;
     }
@@ -1173,6 +1307,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       toast.error("Lengkapi field venue & paket terlebih dahulu.");
       return;
     }
+
+    if (currentStep === 2 && !validateStep2()) { toast.error("Perbaiki isian yang tidak valid."); return; }
 
     if (currentStep === 2) {
       // Build the full payload combining client (step 1) + venue/package (step 2) data.
@@ -1288,20 +1424,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     }
 
     // ── Step 5 → 6: Term of Payments ──────────────────────────────────────────
-    // Flow:
-    //   1. Validate (first term, diff check).
-    //   2. Save step-3 data to draft (background, awaited before advancing).
-    //   3. Upload any File evidence to storage — refetch termIds from the freshly-saved
-    //      draft so IDs are stable. Set state to URL string on success.
-    //   4. Advance to step 6.
+    // Fase 5: TOP = jadwal murni. Step-5 hanya validasi jadwal + simpan draft
+    // (nama/nominal/tanggal). Status & bukti bayar dipindah ke Cashbook (step 6).
     if (currentStep === 5) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
         toast.error("Nominal term pertama (Booking Fee) wajib diisi dan harus lebih dari 0.");
-        return;
-      }
-      if ((firstTerm.paymentStatus ?? "unpaid") !== "paid") {
-        toast.error("Booking Fee harus berstatus Paid sebelum melanjutkan.");
         return;
       }
       const diff = getDifference();
@@ -1309,8 +1437,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         toast.error(`Total term (Rp${fmtRp(getTotalTerms())}) tidak sama dengan harga setelah discount (Rp${fmtRp(getPriceAfterDiscount())}). Selisih: Rp${fmtRp(Math.abs(diff))}`);
         return;
       }
-
-      const hasNewFiles = terms.some((t) => t.paymentEvidence instanceof File);
 
       if (draftId) {
         const step3Payload = {
@@ -1322,92 +1448,31 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             amount: t.amount,
             dueDate: t.dueDate,
             sortOrder: t.sortOrder,
-            paymentStatus: t.paymentStatus,
           })),
         };
         const capturedDraftId = draftId;
 
-        if (hasNewFiles) {
-          // Await step-3 save first so term IDs are stable, then upload evidence.
-          setIsUploadingEvidence(true);
-          try {
-            const prev = step3SaveInFlightRef.current;
-            const savePromise = backgroundSave(
-              async () => {
-                if (prev) await prev.catch(() => undefined);
-                return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
-              },
-              "Gagal menyimpan term of payment",
-            );
-            step3SaveInFlightRef.current = savePromise;
-            await savePromise;
-
-            if (hasPendingWriteError) {
-              // Step-3 save failed even after retry — block advance
-              setIsUploadingEvidence(false);
-              return;
-            }
-
-            // Fetch current term IDs from DB (stable after upsert)
-            const dbTermsRes = await fetch(`/api/bookings/${capturedDraftId}/terms`);
-            let termIdMap: Array<{ id: string; sortOrder: number }> = [];
-            if (dbTermsRes.ok) {
-              termIdMap = await dbTermsRes.json() as Array<{ id: string; sortOrder: number }>;
-            }
-
-            // Upload each new File in parallel
-            const uploads = await Promise.allSettled(
-              terms
-                .filter((t) => t.paymentEvidence instanceof File)
-                .map(async (t) => {
-                  const termId = termIdMap.find((r) => r.sortOrder === t.sortOrder)?.id ?? t.termId;
-                  if (!termId) return { sortOrder: t.sortOrder, url: null };
-                  const fd = new FormData();
-                  fd.append("termId", termId);
-                  fd.append("file", t.paymentEvidence as File);
-                  const res = await fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-                  if (!res.ok) throw new Error(`Upload failed for term sortOrder ${t.sortOrder}`);
-                  const json = await res.json() as { filePath: string };
-                  return { sortOrder: t.sortOrder, url: json.filePath };
-                })
-            );
-
-            // Update state: replace File with URL string on success
-            setTerms((prev) => prev.map((t) => {
-              if (!(t.paymentEvidence instanceof File)) return t;
-              const result = uploads.find(
-                (u) => u.status === "fulfilled" && u.value.sortOrder === t.sortOrder
-              );
-              if (result?.status === "fulfilled" && result.value.url) {
-                return { ...t, paymentEvidence: result.value.url };
-              }
-              return t;
-            }));
-
-            const failed = uploads.filter((u) => u.status === "rejected");
-            if (failed.length > 0) {
-              toast.error("Beberapa bukti bayar gagal di-upload. Silakan coba lagi.");
-              setIsUploadingEvidence(false);
-              return;
-            }
-          } finally {
-            setIsUploadingEvidence(false);
-          }
-        } else {
-          // No new files — just save step-3 in background as before
-          const prev = step3SaveInFlightRef.current;
-          const savePromise = backgroundSave(
-            async () => {
-              if (prev) await prev.catch(() => undefined);
-              return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
-            },
-            "Gagal menyimpan term of payment",
-          );
-          step3SaveInFlightRef.current = savePromise;
-        }
+        // Simpan step-3 di background — advance ke step-6 tak perlu menunggu.
+        const prev = step3SaveInFlightRef.current;
+        const savePromise = backgroundSave(
+          async () => {
+            if (prev) await prev.catch(() => undefined);
+            return updateStep3Mut.mutateAsync({ draftId: capturedDraftId, data: step3Payload });
+          },
+          "Gagal menyimpan term of payment",
+        );
+        step3SaveInFlightRef.current = savePromise;
       }
 
       setCurrentStep(6);
+      return;
+    }
+
+    // ── Step 6 → 7: Payment (Fase 0 prototype) — local state only, no DB write.
+    // The step is optional (isStep6Complete gates partially-filled rows, not
+    // "must have data"), so advancing here is a plain step bump. ──
+    if (currentStep === 6) {
+      setCurrentStep(7);
       return;
     }
 
@@ -1416,7 +1481,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 6) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
+      if (currentStep === 7) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -1486,26 +1551,45 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
           };
         }),
+        // Step 6 (Payment) → cash-in. Cuma baris yang terisi lengkap yang dikirim;
+        // alokasi nunjuk termin pakai sortOrder (server resolve ke termId). Potongan
+        // promo dihitung di sini (§6.4). Bukti bayar File belum diupload (menyusul).
+        payments: paymentReceipts.filter(isReceiptRowFilled).map((r) => {
+          const promo = promoOptions.find((p) => p.id === r.promoId) ?? null;
+          let discountAmount = 0;
+          if (promo) {
+            discountAmount =
+              promo.discountType === "PERCENTAGE"
+                ? Math.round((r.amount * promo.discountValue) / 100)
+                : promo.discountValue;
+            if (discountAmount > r.amount) discountAmount = r.amount;
+          }
+          // Greedy: alokasi gross ke tiap termin terpilih penuh sampai budget habis.
+          const linked = terms.filter((t) => r.linkedTermUids.includes(t.uid));
+          let budget = r.amount;
+          const allocations: { sortOrder: number; amount: number }[] = [];
+          for (const t of linked) {
+            if (budget <= 0) break;
+            const amt = Math.min(t.amount, budget);
+            if (amt > 0) {
+              allocations.push({ sortOrder: t.sortOrder, amount: amt });
+              budget -= amt;
+            }
+          }
+          return {
+            occurredAt: r.occurredAt,
+            amount: r.amount,
+            paymentMethodId: r.paymentMethodId || null,
+            discountProgramId: r.promoId || null,
+            discountAmount,
+            notes: r.notes.trim() || null,
+            allocations,
+          };
+        }),
       };
 
       const result = await finalizeMut.mutateAsync(finalizePayload);
       if (!result.success) { toast.error(result.error ?? "Gagal memfinalisasi booking."); return; }
-
-      // Upload payment evidence that is still a File (not yet uploaded at step 4→5).
-      // Evidence that was already uploaded (string URL) is already linked to the term — skip.
-      const termsWithNewFiles = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
-      if (termsWithNewFiles.length > 0 && result.termIds?.length) {
-        await Promise.allSettled(
-          termsWithNewFiles.map((t) => {
-            const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
-            if (!termId || !(t.paymentEvidence instanceof File)) return Promise.resolve();
-            const fd = new FormData();
-            fd.append("termId", termId);
-            fd.append("file", t.paymentEvidence);
-            return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-          })
-        );
-      }
 
       clearLocalDraftArtifacts();
       clearWeddingDraftFromStorage();
@@ -1535,7 +1619,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       leadId: selectedLeadId || null,
       bonuses: bonuses.map((b) => ({ vendorId: b.vendorId, vendorCategoryId: b.vendorCategoryId, vendorName: b.vendorName, description: b.description || null, qty: b.qty, nominal: b.nominal })),
       complimentaries: complimentaries.map((c, i) => ({ complimentaryId: c.complimentaryId ?? null, name: c.name, price: c.price, isShowPrice: c.isShowPrice, description: c.description || null, qty: c.qty, sortOrder: i })),
-      termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder, paymentStatus: t.paymentStatus })),
+      termOfPayments: terms.filter((t) => t.dueDate).map((t) => ({ name: t.name, amount: t.amount, dueDate: t.dueDate, sortOrder: t.sortOrder })),
       categoryToggles: allCategoryPrices.map((c) => {
         const isTakeout = c.isShow ? (categoryToggles[c.categoryName] ?? false) : false;
         return {
@@ -1550,20 +1634,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     };
     const result = await createMut.mutateAsync(payload);
     if (!result.success) { toast.error(result.error); return; }
-
-    const termsWithNewFiles = terms.filter((t) => t.dueDate && t.paymentEvidence instanceof File);
-    if (termsWithNewFiles.length > 0 && result.termIds?.length) {
-      await Promise.allSettled(
-        termsWithNewFiles.map((t) => {
-          const termId = result.termIds!.find((r) => r.sortOrder === t.sortOrder)?.id;
-          if (!termId || !(t.paymentEvidence instanceof File)) return Promise.resolve();
-          const fd = new FormData();
-          fd.append("termId", termId);
-          fd.append("file", t.paymentEvidence);
-          return fetch("/api/bookings/upload-evidence", { method: "POST", body: fd });
-        })
-      );
-    }
 
     clearLocalDraftArtifacts();
     clearWeddingDraftFromStorage();
@@ -1592,10 +1662,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 6 && !isStep6Complete) ||
+    (currentStep === 7 && !isStep7Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 5 && isUploadingEvidence) ||
-    (currentStep === 6 && isDraftMutating) ||
-    (currentStep === 6 && isSubmitting);
+    (currentStep === 7 && isDraftMutating) ||
+    (currentStep === 7 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -1658,25 +1728,26 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             <form
               className="space-y-4"
               onKeyDown={(e) => {
-                // Enter key navigation: advance step or submit on last step.
-                // Excluded: shift+Enter (multiline intent), and events inside textarea
-                // or select elements that use Enter for their own interaction.
+                // Enter must NOT advance the wizard or submit — the user moves on
+                // only by clicking Continue. We still block the browser's native
+                // form submission (buttons default to type="submit"), so Enter is a
+                // no-op here. Excluded: shift+Enter and Enter inside a textarea or a
+                // combobox/select (role="option"/"listbox"), which need it themselves.
                 if (e.key !== "Enter" || e.shiftKey) return;
                 const target = e.target as HTMLElement;
                 if (target.tagName === "TEXTAREA") return;
-                // Let Select / Combobox handle their own Enter (they use role="option")
                 if (target.closest("[role='listbox']") || target.closest("[role='option']")) return;
                 e.preventDefault();
-                if (currentStep < totalSteps) {
-                  void handleNext();
-                } else {
-                  void form.handleSubmit(onSubmit)();
-                }
               }}
             >
               {/* ─── Step 1: Data Booking ─── */}
               {currentStep === 1 && (
-                <div className="space-y-3">
+                <div className="space-y-4">
+
+                  {/* Card 1: Identitas Client */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Identitas Client</p>
+
                   {/* Customer / Lead selector */}
                   <div ref={customerDropdownRef}>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Customer Name <span className="text-destructive">*</span></FormLabel>
@@ -1692,7 +1763,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           form.setValue("customerId", "");
                           setSelectedLeadId("");
                           setCustomerDropdownOpen(true);
+                          clearError("customerName");
                         }}
+                        onBlur={() => validateField("customerName", customerName)}
                         onFocus={() => { if (customerName.trim()) setCustomerDropdownOpen(true); }}
                         placeholder="Cari lead atau customer terdaftar..."
                         className="w-full"
@@ -1773,6 +1846,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         </div>
                       )}
                     </div>
+                    {errors.customerName && <p className="mt-1 text-sm text-destructive">{errors.customerName}</p>}
                   </div>
 
                   {/* Contact Person */}
@@ -1819,6 +1893,11 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       </Popover>
                     </div>
                   </div>
+                  </div>
+
+                  {/* Card 2: Sales & Sumber */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Sales & Sumber</p>
 
                   {/* Sales PIC */}
                   {currentUserIsSales ? (
@@ -1884,29 +1963,24 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       <Input placeholder="e.g. 12345" value={contactBitrixId} onChange={(e) => setContactBitrixId(e.target.value)} className="mt-1" />
                     </div>
                   )}
+                  </div>
+
+                  {/* Card 3: Data CPP */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Data CPP</p>
 
                   {/* Email CPP */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Email CPP</FormLabel>
-                    <Input placeholder="e.g. cpp@email.com" value={contactEmailCpp} onChange={(e) => setContactEmailCpp(e.target.value)} className="mt-1" />
-                  </div>
-
-                  {/* Email CPW */}
-                  <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Email CPW</FormLabel>
-                    <Input placeholder="e.g. cpw@email.com" value={contactEmailCpw} onChange={(e) => setContactEmailCpw(e.target.value)} className="mt-1" />
+                    <Input placeholder="e.g. cpp@email.com" value={contactEmailCpp} onChange={(e) => { setContactEmailCpp(e.target.value); clearError("emailCpp"); }} onBlur={() => validateField("emailCpp", contactEmailCpp)} className="mt-1" />
+                    {errors.emailCpp && <p className="mt-1 text-sm text-destructive">{errors.emailCpp}</p>}
                   </div>
 
                   {/* NIK CPP */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPP</FormLabel>
-                    <Input placeholder="e.g. 3275010101010001" value={contactNikCpp} onChange={(e) => setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
-                  </div>
-
-                  {/* NIK CPW */}
-                  <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPW</FormLabel>
-                    <Input placeholder="e.g. 3275010101010002" value={contactNikCpw} onChange={(e) => setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16))} inputMode="numeric" maxLength={16} className="mt-1" />
+                    <Input placeholder="e.g. 3275010101010001" value={contactNikCpp} onChange={(e) => { setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpp"); }} onBlur={() => validateField("nikCpp", contactNikCpp)} inputMode="numeric" maxLength={16} className="mt-1" />
+                    {errors.nikCpp && <p className="mt-1 text-sm text-destructive">{errors.nikCpp}</p>}
                   </div>
 
                   {/* Alamat CPP */}
@@ -1914,11 +1988,31 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPP</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCppAddress} onChange={(e) => setContactCppAddress(e.target.value)} rows={3} className="mt-1" />
                   </div>
+                  </div>
+
+                  {/* Card 4: Data CPW */}
+                  <div className="rounded-2xl border bg-card p-5 space-y-3">
+                    <p className="text-sm font-semibold text-foreground mb-1">Data CPW</p>
+
+                  {/* Email CPW */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Email CPW</FormLabel>
+                    <Input placeholder="e.g. cpw@email.com" value={contactEmailCpw} onChange={(e) => { setContactEmailCpw(e.target.value); clearError("emailCpw"); }} onBlur={() => validateField("emailCpw", contactEmailCpw)} className="mt-1" />
+                    {errors.emailCpw && <p className="mt-1 text-sm text-destructive">{errors.emailCpw}</p>}
+                  </div>
+
+                  {/* NIK CPW */}
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPW</FormLabel>
+                    <Input placeholder="e.g. 3275010101010002" value={contactNikCpw} onChange={(e) => { setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpw"); }} onBlur={() => validateField("nikCpw", contactNikCpw)} inputMode="numeric" maxLength={16} className="mt-1" />
+                    {errors.nikCpw && <p className="mt-1 text-sm text-destructive">{errors.nikCpw}</p>}
+                  </div>
 
                   {/* Alamat CPW */}
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Alamat CPW</FormLabel>
                     <Textarea placeholder="e.g. Jl. Melati No. 10, Jakarta Selatan" value={contactCpwAddress} onChange={(e) => setContactCpwAddress(e.target.value)} rows={3} className="mt-1" />
+                  </div>
                   </div>
 
                 </div>
@@ -1930,8 +2024,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="venueId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Venue <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
+                      <SearchableSelect options={venues} value={field.value} onChange={(id) => { field.onChange(id); setSelectedVenueId(id); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setCategoryToggles({}); setTakeoutPrices({}); form.setValue("packageId", ""); form.setValue("paymentMethodId", null); clearError("venueId"); }} placeholder="Pilih venue..." searchPlaceholder="Cari venue..." emptyText="Tidak ada venue" />
                       <FormMessage />
+                      {errors.venueId && <p className="mt-1 text-sm text-destructive">{errors.venueId}</p>}
                     </FormItem>
                   )} />
 
@@ -1939,9 +2034,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   <FormField control={form.control} name="packageId" render={({ field }) => (
                     <FormItem>
                       <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pilih Paket <span className="text-destructive">*</span></FormLabel>
-                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
+                      <SearchableSelect options={packages.map((p) => ({ id: p.id, name: `${p.packageName}${p.pax ? ` — ${p.pax} pax` : ""} — ${formatRupiah(getPackagePrice(p))}` }))} value={field.value} onChange={(id) => { field.onChange(id); setSelectedPackageId(id); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0); setCategoryToggles({}); setTakeoutPrices({}); setUserHasCustomizedTerms(false); const pkg = packages.find((x: PackageData) => x.id === id); if (pkg) { const p = getPackagePrice(pkg); setSelectedPackagePrice(p); setOriginalPackagePrice(p); allocatePrice(p, specialBonusAmount); setLastAllocatedPrice(p); /* Re-prefill Item Paket from the newly chosen package template. */ packageItemsDirtyRef.current = false; setPackageInternalItems((pkg.internalItems ?? []).map((it) => ({ uid: safeRandomUUID(), itemName: it.itemName, itemDescription: it.itemDescription }))); setPackageVendorItems((pkg.vendorItems ?? []).map((it) => ({ uid: safeRandomUUID(), categoryId: it.categoryId ?? null, categoryName: it.categoryName, itemText: it.itemText }))); } clearError("packageId"); }} placeholder={!selectedVenueId ? "Pilih venue dulu" : packagesLoading ? "Memuat paket..." : packagesError ? "Gagal memuat paket" : "Pilih paket..."} disabled={!selectedVenueId || packagesLoading} searchPlaceholder="Cari paket..." emptyText="Tidak ada paket" />
                       {packagesError && <p className="text-xs text-destructive mt-1">Gagal memuat paket. Coba pilih venue ulang.</p>}
                       <FormMessage />
+                      {errors.packageId && <p className="mt-1 text-sm text-destructive">{errors.packageId}</p>}
                     </FormItem>
                   )} />
 
@@ -1963,6 +2059,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             // User explicitly changed event type → re-enable time auto-fill
                             isResumedDraftRef.current = false;
                             field.onChange(v || null);
+                            clearError("weddingType");
                           }}
                           placeholder="Pilih type"
                           searchPlaceholder="Cari event type..."
@@ -1970,6 +2067,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         />
                       </FormControl>
                       <FormMessage />
+                      {errors.weddingType && <p className="mt-1 text-sm text-destructive">{errors.weddingType}</p>}
                     </FormItem>
                   )} />
 
@@ -1995,7 +2093,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             mode="single"
                             captionLayout="dropdown"
                             selected={field.value ? parseDateOnly(field.value) : undefined}
-                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); form.setValue("weddingSession", null); }}
+                            onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); form.setValue("weddingSession", null); clearError("eventDate"); }}
                             disabled={(d) => getDateStatus(d) === "unavailable"}
                             fromYear={new Date().getFullYear() - 10}
                             toYear={new Date().getFullYear() + 10}
@@ -2016,6 +2114,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                       </Popover>
                       {availLoading && <p className={cn('text-xs', 'text-muted-foreground', 'mt-1')}>Mengecek ketersediaan...</p>}
                       <FormMessage />
+                      {errors.eventDate && <p className="mt-1 text-sm text-destructive">{errors.eventDate}</p>}
                     </FormItem>
                   )} />
 
@@ -2036,6 +2135,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                               // User explicitly changed session → re-enable time auto-fill
                               isResumedDraftRef.current = false;
                               field.onChange(v || null);
+                              clearError("weddingSession");
                             }}
                             placeholder={!wBookingDate ? "Pilih tanggal dulu" : "Pilih session"}
                             searchPlaceholder="Cari session..."
@@ -2044,6 +2144,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                           />
                         </FormControl>
                         <FormMessage />
+                        {errors.weddingSession && <p className="mt-1 text-sm text-destructive">{errors.weddingSession}</p>}
                       </FormItem>
                     );
                   }} />
@@ -2462,8 +2563,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         const isFirstTerm = idx === 0;
                         const isFirstInvalid = isFirstTerm && (!t.amount || t.amount <= 0);
                         const isOpen = !collapsedTerms.has(t.uid);
-                        const payStatus = t.paymentStatus ?? "unpaid";
-                        const statusLabel = payStatus.charAt(0).toUpperCase() + payStatus.slice(1);
                         return (
                           <SortableTermWrapper key={t.uid} uid={t.uid}>
                           {({ attributes, listeners }) => (
@@ -2502,10 +2601,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                   </p>
                                   {!isOpen && (
                                     <p className="text-xs text-muted-foreground tabular-nums">
-                                      <span className={cn(payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                        {statusLabel}
-                                      </span>
-                                      {t.amount ? ` · Rp${fmtRp(t.amount)}` : ""}
+                                      {t.amount ? `Rp${fmtRp(t.amount)}` : "Rp0"}
                                       {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
                                     </p>
                                   )}
@@ -2544,33 +2640,15 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             {/* ── Collapsible body ── */}
                             <CollapsibleContent>
                               <div className="px-3 pb-3 space-y-3 border-t border-border/60">
-                                {/* Term name + Status pembayaran — satu row dua kolom */}
-                                <div className="pt-2 flex items-center gap-2">
-                                  <div className="flex flex-1 min-w-0 items-center gap-1">
-                                    <Input
-                                      value={t.name}
-                                      onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                                      placeholder="Nama term (mis. Booking Fee)"
-                                      className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                                    />
-                                    {isFirstTerm && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
-                                  </div>
-
-                                  <Select
-                                    value={payStatus}
-                                    onValueChange={(v) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentStatus: v as TermRow["paymentStatus"] } : x))}
-                                  >
-                                    <SelectTrigger className="w-32 h-8 bg-background shrink-0">
-                                      <span className={cn("text-xs font-semibold", payStatus === "paid" ? "text-foreground" : "text-muted-foreground")}>
-                                        {statusLabel}
-                                      </span>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {PAYMENT_STATUS.filter((s) => s !== "partial").map((s) => (
-                                        <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                {/* Term name */}
+                                <div className="pt-2 flex items-center gap-1">
+                                  <Input
+                                    value={t.name}
+                                    onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                                    placeholder="Nama term (mis. Booking Fee)"
+                                    className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
+                                  />
+                                  {isFirstTerm && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
                                 </div>
 
                                 {/* Amount + Date row */}
@@ -2613,44 +2691,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                   </div>
                                 </div>
 
-                                {/* Upload bukti pembayaran — hanya kalau paid */}
-                                {payStatus === "paid" && (
-                                  <div>
-                                    <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted/50 text-xs">
-                                      {/* Preview: File (object URL) or string URL from DB */}
-                                      {t.paymentEvidence instanceof File ? (
-                                        <FilePreview file={t.paymentEvidence} onOpen={() => { const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }} />
-                                      ) : typeof t.paymentEvidence === "string" ? (
-                                        <UrlPreview url={t.paymentEvidence} onOpen={() => { window.open(t.paymentEvidence as string, "_blank"); }} />
-                                      ) : (
-                                        <FileText weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-                                      )}
-                                      {t.paymentEvidence instanceof File ? (
-                                        <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); const objUrl = URL.createObjectURL(t.paymentEvidence as File); window.open(objUrl, "_blank"); setTimeout(() => URL.revokeObjectURL(objUrl), 10000); }}>
-                                          {(t.paymentEvidence as File).name}
-                                        </button>
-                                      ) : typeof t.paymentEvidence === "string" ? (
-                                        <button type="button" className="relative z-10 flex-1 truncate text-left hover:underline" onClick={(e) => { e.stopPropagation(); window.open(t.paymentEvidence as string, "_blank"); }}>
-                                          {(t.paymentEvidence as string).split("/").pop()}
-                                        </button>
-                                      ) : (
-                                        <span className="flex-1 truncate">Upload bukti pembayaran</span>
-                                      )}
-                                      {t.paymentEvidence && (
-                                        <button type="button" className="shrink-0 hover:text-destructive z-10 relative" onClick={(e) => { e.stopPropagation(); setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: null } : x)); }}>
-                                          <CloseCircle weight="BoldDuotone" className="h-3 w-3" />
-                                        </button>
-                                      )}
-                                      <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (f) setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, paymentEvidence: f } : x)); e.target.value = ""; }} />
-                                    </div>
-                                    {!t.paymentEvidence && (
-                                      <p className="mt-1 text-xs text-destructive">
-                                        Bukti pembayaran wajib diupload untuk melanjutkan ke langkah berikutnya.
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-
                                 {isFirstInvalid && (
                                   <p className="text-xs text-destructive">Nominal Booking Fee wajib diisi</p>
                                 )}
@@ -2672,7 +2712,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                         variant="outline"
                         className="flex-1 border-dashed gap-1.5 text-muted-foreground"
                         onClick={() => {
-                          setTerms((prev) => recalcTermDates([...prev, { uid: safeRandomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length, paymentStatus: "unpaid" }], wBookingDate));
+                          setTerms((prev) => recalcTermDates([...prev, { uid: safeRandomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length }], wBookingDate));
                           // term baru otomatis kebuka (default open)
                         }}
                       >
@@ -2709,8 +2749,277 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 6: Signature ─── */}
+              {/* ─── Step 6: Payment (Fase 0 — design prototype, local state only) ───
+                  See docs/booking-top-payment-ledger-plan.md. Links to step-5 `terms`
+                  by `uid`; nothing here is sent to the backend yet. ─── */}
               {currentStep === 6 && (
+                <div className="space-y-4">
+                  <div className="flex items-start gap-2 rounded-2xl border border-dashed border-border bg-muted/30 p-4">
+                    <InfoCircle weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      Prototype desain — pencatatan pembayaran di step ini{" "}
+                      <span className="font-medium text-foreground">belum tersimpan ke database</span>.
+                      Layer Payment Receipt akan dibangun di fase berikutnya (lihat rencana AR ledger).
+                    </p>
+                  </div>
+
+                  {/* Reference card — harga paket (ringkasan read-only) */}
+                  <div className="rounded-2xl bg-muted p-4 shadow-sm space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-muted-foreground">Harga Paket</span>
+                      <span className="text-sm font-semibold text-foreground">Rp{fmtRp(getBasePrice())}</span>
+                    </div>
+                    {specialBonusAmount > 0 && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-destructive">{specialBonusName || "Discount"}</span>
+                          <span className="text-sm font-medium text-destructive">- Rp{fmtRp(specialBonusAmount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-border pt-1.5">
+                          <span className="text-sm font-medium text-foreground">Harga Setelah Discount</span>
+                          <span className="text-sm font-semibold text-foreground">Rp{fmtRp(getPriceAfterDiscount())}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {paymentReceipts.length === 0 && (
+                    <p className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                      Belum ada pembayaran dicatat. Step ini opsional — bisa dilewati, atau diisi kalau sudah
+                      ada uang masuk (mis. Booking Fee) saat penandatanganan.
+                    </p>
+                  )}
+
+                  {paymentReceipts.map((r, idx) => {
+                    const linkedTotal = terms
+                      .filter((t) => r.linkedTermUids.includes(t.uid))
+                      .reduce((sum, t) => sum + t.amount, 0);
+                    const promo = promoOptions.find((p) => p.id === r.promoId) ?? null;
+                    let potongan = 0;
+                    if (promo) {
+                      potongan = promo.discountType === "PERCENTAGE"
+                        ? Math.round((r.amount * promo.discountValue) / 100)
+                        : promo.discountValue;
+                      if (potongan > r.amount) potongan = r.amount;
+                    }
+                    const realCash = r.amount - potongan;
+
+                    return (
+                      <div key={r.uid} className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-foreground">Pembayaran #{idx + 1}</p>
+                          <button
+                            type="button"
+                            onClick={() => removeReceipt(r.uid)}
+                            aria-label="Hapus pembayaran"
+                            className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <FormLabel className="text-sm font-medium text-foreground">
+                              Tanggal <span className="text-destructive">*</span>
+                            </FormLabel>
+                            <Input
+                              type="date"
+                              value={r.occurredAt}
+                              onChange={(e) => updateReceipt(r.uid, { occurredAt: e.target.value })}
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <FormLabel className="text-sm font-medium text-foreground">
+                              Nominal (Rp) <span className="text-destructive">*</span>
+                            </FormLabel>
+                            <Input
+                              value={r.amount ? fmtRp(r.amount) : ""}
+                              onChange={(e) => {
+                                const num = parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
+                                updateReceipt(r.uid, { amount: num });
+                              }}
+                              placeholder="0"
+                              inputMode="numeric"
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">
+                            Via Rekening <span className="text-destructive">*</span>
+                          </FormLabel>
+                          <BankAccountSelect
+                            value={r.paymentMethodId}
+                            onChange={(v) => updateReceipt(r.uid, { paymentMethodId: v })}
+                            placeholder="Pilih rekening"
+                            crossVenue
+                            disableAdd
+                          />
+                        </div>
+
+                        {/* Bukti Bayar */}
+                        <div>
+                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">
+                            Bukti Bayar <span className="text-destructive">*</span>
+                          </FormLabel>
+                          {r.evidence ? (
+                            <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-xs">
+                              <FilePreview
+                                file={r.evidence}
+                                onOpen={() => {
+                                  const objUrl = URL.createObjectURL(r.evidence as File);
+                                  window.open(objUrl, "_blank");
+                                  setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+                                }}
+                              />
+                              <span className="flex-1 truncate text-foreground">{r.evidence.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => updateReceipt(r.uid, { evidence: null })}
+                                className="shrink-0 text-muted-foreground hover:text-destructive"
+                                aria-label="Hapus bukti bayar"
+                              >
+                                <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="flex items-center gap-2 px-3 py-2.5 border-2 border-dashed rounded-xl text-muted-foreground hover:bg-muted/40 cursor-pointer text-xs transition-colors">
+                              <UploadMinimalistic weight="BoldDuotone" className="h-4 w-4 shrink-0" />
+                              <span>Upload bukti transfer / kwitansi</span>
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) updateReceipt(r.uid, { evidence: f });
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+
+                        {/* Link ke TOP */}
+                        <div>
+                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">
+                            Link ke Termin (TOP) <span className="text-destructive">*</span>
+                          </FormLabel>
+                          {terms.length === 0 ? (
+                            <p className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+                              Belum ada termin di step Term of Payments.
+                            </p>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex flex-col gap-2">
+                                {terms.map((t) => {
+                                  const selected = r.linkedTermUids.includes(t.uid);
+                                  return (
+                                    <button
+                                      key={t.uid}
+                                      type="button"
+                                      onClick={() => toggleReceiptTermLink(r.uid, t.uid)}
+                                      aria-pressed={selected}
+                                      className={cn(
+                                        "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                                        selected
+                                          ? "border-primary bg-primary/5"
+                                          : "border-border bg-muted/20 hover:border-primary/40 hover:bg-secondary/40",
+                                      )}
+                                    >
+                                      {selected ? (
+                                        <CheckCircle weight="BoldDuotone" className="size-5 shrink-0 text-primary" />
+                                      ) : (
+                                        <span className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-foreground">
+                                          {t.name || "Term tanpa nama"}
+                                        </p>
+                                      </div>
+                                      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                                        Rp{fmtRp(t.amount)}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {r.linkedTermUids.length > 0 && (
+                                <div className="flex items-center justify-between rounded-xl bg-secondary/40 px-3 py-2 text-xs">
+                                  <span className="text-muted-foreground">{r.linkedTermUids.length} termin dipilih</span>
+                                  <span className="font-semibold tabular-nums text-foreground">Rp{fmtRp(linkedTotal)}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Promo */}
+                        <div>
+                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">Promo</FormLabel>
+                          <Select
+                            value={r.promoId || "__none__"}
+                            onValueChange={(v) => updateReceipt(r.uid, { promoId: v === "__none__" ? "" : v })}
+                          >
+                            <SelectTrigger className="w-full bg-background">
+                              <span className="text-sm">{promo ? promo.name : "Tanpa promo"}</span>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Tanpa promo</SelectItem>
+                              {promoOptions.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp${fmtRp(p.discountValue)}`})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {promo && r.amount > 0 && (
+                            <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3 space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">Dibayar client</span>
+                                <span className="font-medium text-foreground">Rp{fmtRp(r.amount)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">Potongan promo</span>
+                                <span className="font-medium text-destructive">-Rp{fmtRp(potongan)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs border-t border-border pt-1 mt-1">
+                                <span className="font-semibold text-foreground">Uang riil masuk</span>
+                                <span className="font-semibold text-foreground">Rp{fmtRp(realCash)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Keterangan */}
+                        <div>
+                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">Keterangan</FormLabel>
+                          <Textarea
+                            value={r.notes}
+                            onChange={(e) => updateReceipt(r.uid, { notes: e.target.value })}
+                            placeholder="Catatan pembayaran (opsional)"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed gap-1.5 text-muted-foreground"
+                    onClick={() => setPaymentReceipts((prev) => [...prev, makeEmptyReceipt()])}
+                  >
+                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                    Tambah Pembayaran
+                  </Button>
+                </div>
+              )}
+              {/* ─── Step 7: Signature ─── */}
+              {currentStep === 7 && (
                 <div className="space-y-6">
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan <span className="text-destructive">*</span></FormLabel>
@@ -2819,6 +3128,38 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
               </div>
             </div>
           )}
+          {/* Mini price summary — visible only on the Payment step */}
+          {currentStep === 6 && (
+            <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Harga Paket</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Total Bayar</span>
+                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getTotalPayments())}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[10px] text-muted-foreground">Selisih</span>
+                <span
+                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getPaymentDifference() < 0 ? "text-destructive cursor-pointer" : getPaymentDifference() > 0 ? "text-green-600 cursor-pointer" : "text-foreground")}
+                  onClick={() => {
+                    if (getPaymentDifference() !== 0) {
+                      navigator.clipboard.writeText(fmtRp(Math.abs(getPaymentDifference())));
+                      toast.success("Selisih disalin");
+                    }
+                  }}
+                >
+                  {getPaymentDifference() === 0 ? "Lunas" : (
+                    <>
+                      {`${getPaymentDifference() < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(getPaymentDifference()))}`}
+                      <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
           {/* Background-save error banner — shown when a step save failed after retry */}
           {hasPendingWriteError && pendingWriteErrorMsg && (
             <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
@@ -2842,11 +3183,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             >
               {hasPendingWriteError
                 ? "Coba Lagi"
-                : isUploadingEvidence
-                  ? "Mengupload bukti..."
-                  : currentStep < totalSteps
-                    ? (isDraftMutating ? "Menyimpan..." : "Continue")
-                    : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
+                : currentStep < totalSteps
+                  ? (isDraftMutating ? "Menyimpan..." : "Continue")
+                  : (isDraftMutating ? "Membuat Booking..." : "Create New Booking")}
             </Button>
           </div>
         </div>

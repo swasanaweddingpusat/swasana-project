@@ -17,16 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ...doc,
       fileUrl: getPublicUrl(doc.filePath),
     })),
-    termOfPayments: data.termOfPayments.map((t) => ({
-      ...t,
-      paymentEvidence: t.paymentEvidence ? getPublicUrl(t.paymentEvidence) : null,
-      partialPayments: "partialPayments" in t && Array.isArray(t.partialPayments)
-        ? t.partialPayments.map((p: { evidence?: string | null;[key: string]: unknown }) => ({
-            ...p,
-            evidence: p.evidence ? getPublicUrl(p.evidence) : null,
-          }))
-        : [],
-    })),
+    // TOP kini jadwal murni — bukti bayar/riwayat pindah ke Ledger cashbook (Fase 5).
+    termOfPayments: data.termOfPayments,
   };
 
   return new Response(JSON.stringify(resolved, (_k, v) => (typeof v === "bigint" ? Number(v) : v)), {
