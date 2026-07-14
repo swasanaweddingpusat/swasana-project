@@ -13,6 +13,8 @@ import {
   History,
   Forbidden,
   MinusCircle,
+  TrashBinTrash,
+  Refresh,
 } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -38,6 +40,10 @@ interface LedgerTableProps {
   onReject: (e: LedgerRow) => void;
   /** Batalkan cash-in yang sudah ter-ack (void tombstone). */
   onVoid: (e: LedgerRow) => void;
+  /** Hapus cash-in pending secara permanen. */
+  onDelete: (e: LedgerRow) => void;
+  /** Batalkan verifikasi — kembalikan ke pending (Finance only). */
+  onUnack: (e: LedgerRow) => void;
   /** Buka preview + download kwitansi PDF untuk baris ini. */
   onKwitansi: (e: LedgerRow) => void;
   /** Buka riwayat/activity log transaksi ini. */
@@ -385,16 +391,21 @@ function AksiCell({
   onAck,
   onReject,
   onVoid,
+  onDelete,
+  onUnack,
   onKwitansi,
 }: {
   entry: LedgerRow;
   onAck: (e: LedgerRow) => void;
   onReject: (e: LedgerRow) => void;
   onVoid: (e: LedgerRow) => void;
+  onDelete: (e: LedgerRow) => void;
+  onUnack: (e: LedgerRow) => void;
   onKwitansi: (e: LedgerRow) => void;
 }): React.ReactElement {
   const isPending = entry.ackStatus === "pending" && !entry.voided;
   const isAcked = entry.ackStatus === "acknowledged" && !entry.voided;
+  const isRejected = entry.ackStatus === "rejected" && !entry.voided;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -419,16 +430,40 @@ function AksiCell({
             icon={Forbidden}
             danger
           />
+          <IconAction
+            onClick={() => onDelete(entry)}
+            label={`Hapus pembayaran ${entry.clientName}`}
+            tooltip="Hapus permanen"
+            icon={TrashBinTrash}
+            danger
+          />
         </>
       )}
-      {isAcked && (
+      {isRejected && (
         <IconAction
-          onClick={() => onVoid(entry)}
-          label={`Batalkan transaksi ${entry.clientName}`}
-          tooltip="Batalkan (void)"
-          icon={MinusCircle}
+          onClick={() => onDelete(entry)}
+          label={`Hapus pembayaran ditolak ${entry.clientName}`}
+          tooltip="Hapus permanen"
+          icon={TrashBinTrash}
           danger
         />
+      )}
+      {isAcked && (
+        <>
+          <IconAction
+            onClick={() => onUnack(entry)}
+            label={`Batalkan verifikasi ${entry.clientName}`}
+            tooltip="Batalkan verifikasi"
+            icon={Refresh}
+          />
+          <IconAction
+            onClick={() => onVoid(entry)}
+            label={`Batalkan transaksi ${entry.clientName}`}
+            tooltip="Batalkan (void)"
+            icon={MinusCircle}
+            danger
+          />
+        </>
       )}
       {entry.invoiceNumber && (
         <IconAction
@@ -449,6 +484,8 @@ function DesktopRow({
   onAck,
   onReject,
   onVoid,
+  onDelete,
+  onUnack,
   onKwitansi,
   onActivity,
 }: {
@@ -456,6 +493,8 @@ function DesktopRow({
   onAck: (e: LedgerRow) => void;
   onReject: (e: LedgerRow) => void;
   onVoid: (e: LedgerRow) => void;
+  onDelete: (e: LedgerRow) => void;
+  onUnack: (e: LedgerRow) => void;
   onKwitansi: (e: LedgerRow) => void;
   onActivity: (e: LedgerRow) => void;
 }): React.ReactElement {
@@ -499,6 +538,8 @@ function DesktopRow({
           onAck={onAck}
           onReject={onReject}
           onVoid={onVoid}
+          onDelete={onDelete}
+          onUnack={onUnack}
           onKwitansi={onKwitansi}
         />
       </TableCell>
@@ -513,6 +554,8 @@ function MobileRecord({
   onAck,
   onReject,
   onVoid,
+  onDelete,
+  onUnack,
   onKwitansi,
   onActivity,
 }: {
@@ -520,6 +563,8 @@ function MobileRecord({
   onAck: (e: LedgerRow) => void;
   onReject: (e: LedgerRow) => void;
   onVoid: (e: LedgerRow) => void;
+  onDelete: (e: LedgerRow) => void;
+  onUnack: (e: LedgerRow) => void;
   onKwitansi: (e: LedgerRow) => void;
   onActivity: (e: LedgerRow) => void;
 }): React.ReactElement {
@@ -548,6 +593,8 @@ function MobileRecord({
               onAck={onAck}
               onReject={onReject}
               onVoid={onVoid}
+              onDelete={onDelete}
+              onUnack={onUnack}
               onKwitansi={onKwitansi}
             />
           </div>
@@ -571,6 +618,8 @@ export function LedgerTable({
   onAck,
   onReject,
   onVoid,
+  onDelete,
+  onUnack,
   onKwitansi,
   onActivity,
   currentPage,
@@ -647,6 +696,8 @@ export function LedgerTable({
                   onAck={onAck}
                   onReject={onReject}
                   onVoid={onVoid}
+                  onDelete={onDelete}
+                  onUnack={onUnack}
                   onKwitansi={onKwitansi}
                   onActivity={onActivity}
                 />
@@ -664,6 +715,8 @@ export function LedgerTable({
               onAck={onAck}
               onReject={onReject}
               onVoid={onVoid}
+              onDelete={onDelete}
+              onUnack={onUnack}
               onKwitansi={onKwitansi}
               onActivity={onActivity}
             />

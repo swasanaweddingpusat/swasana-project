@@ -1452,6 +1452,8 @@ enum PaymentActivityAction {
   acknowledged
   rejected
   voided
+  updated
+  unacknowledged
 }
 
 enum InvoiceType {

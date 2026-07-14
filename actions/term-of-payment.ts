@@ -8,7 +8,6 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
 import { getTermPaidMapForBookings, getTermAllocatedMap } from "@/lib/queries/ledger";
 
 interface TermUpdate {
@@ -210,49 +209,6 @@ export async function updateTermOfPayments(
     return { success: true };
   } catch (e) {
     console.error("[updateTermOfPayments]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-export async function addTermOfPayment(bookingId: string, data: { name: string; amount: number; dueDate: string }) {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`top-add:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const scope = await getProfileDataScope(session!.user.profileId);
-  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
-    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
-  }
-
-  try {
-    // Atomic sortOrder: compute MAX(sortOrder)+1 via a scalar subquery inside the
-    // INSERT so two concurrent adds can't read the same max and collide. The VALUES
-    // form always inserts exactly one row (the subquery yields 0 when no terms exist).
-    // id/createdAt/updatedAt are Prisma-level defaults, so we set them explicitly here.
-    const id = randomUUID();
-    await db.$executeRaw(
-      Prisma.sql`
-        INSERT INTO term_of_payments ("id", "bookingId", "name", "amount", "dueDate", "sortOrder", "paymentStatus", "ackStatus", "createdAt", "updatedAt")
-        VALUES (
-          ${id}, ${bookingId}, ${data.name}, ${data.amount}, ${new Date(data.dueDate)},
-          (SELECT COALESCE(MAX("sortOrder"), -1) + 1 FROM term_of_payments WHERE "bookingId" = ${bookingId}),
-          'unpaid'::"TermOfPaymentStatus", 'pending', NOW(), NOW()
-        )
-      `,
-    );
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "created",
-      entityType: "term_of_payment",
-      entityId: bookingId,
-      description: `Added term: ${data.name}`,
-    });
-
-    revalidateTag("bookings", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[addTermOfPayment]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

@@ -149,6 +149,12 @@ export interface BookingCashIn {
   showInPo: boolean;
   /** Nama termin yang di-cover cash-in ini (dari PaymentAllocation). */
   linkedTermNames: string[];
+  paymentMethodId: string | null;
+  discountProgramId: string | null;
+  discountAmount: number;
+  evidence: string | null;
+  /** Alokasi ke termin — termId + jumlah GROSS. */
+  allocations: { termId: string; amount: number }[];
 }
 
 /**
@@ -173,7 +179,17 @@ export async function getBookingCashIns(bookingId: string): Promise<BookingCashI
       invoiceNumber: true,
       notes: true,
       showInPo: true,
-      allocations: { select: { term: { select: { name: true } } } },
+      paymentMethodId: true,
+      discountProgramId: true,
+      discountAmount: true,
+      evidence: true,
+      allocations: {
+        select: {
+          termId: true,
+          amount: true,
+          term: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -185,7 +201,15 @@ export async function getBookingCashIns(bookingId: string): Promise<BookingCashI
     invoiceNumber: r.invoiceNumber ?? null,
     notes: r.notes ?? null,
     showInPo: r.showInPo,
+    paymentMethodId: r.paymentMethodId ?? null,
+    discountProgramId: r.discountProgramId ?? null,
+    discountAmount: Number(r.discountAmount),
+    evidence: r.evidence ?? null,
     linkedTermNames: r.allocations.map((a) => a.term.name),
+    allocations: r.allocations.map((a) => ({
+      termId: a.termId,
+      amount: Number(a.amount),
+    })),
   }));
 }
 
@@ -458,7 +482,13 @@ export async function getBookingsForLedgerPicker(): Promise<BookingPickerItem[]>
  * modal Riwayat — di-fetch on-demand pas modal dibuka (bukan embed di LedgerRow).
  */
 
-export type LedgerActivityAction = "created" | "acknowledged" | "rejected" | "voided" | "edited";
+export type LedgerActivityAction =
+  | "created"
+  | "acknowledged"
+  | "rejected"
+  | "voided"
+  | "updated"
+  | "unacknowledged";
 
 export interface LedgerActivity {
   id: string;

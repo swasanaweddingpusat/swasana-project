@@ -511,11 +511,16 @@ const setShowInPoSchema = z.object({
  * Set flag `showInPo` satu cash-in — nandain apakah pembayaran ini tampil di
  * Summary Payment PO PDF. Single-table update; tetap logAudit + revalidate.
  * Row void boleh di-toggle (harmless — render PO tetap exclude voidedAt != null).
+ * Berlaku untuk semua status (pending/acknowledged) — dipakai di editor booking
+ * (Sales, `booking:edit`) maupun Finance AR (`finance-ar:edit`).
  */
 export async function setLedgerShowInPo(
   input: z.infer<typeof setShowInPoSchema>,
 ): Promise<ActionResult> {
-  const { session, error } = await requirePermission({ module: "finance-ar", action: "edit" });
+  const { session, error } = await requireAnyPermission([
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "edit" },
+  ]);
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`ledger-showinpo:${session!.user.id}`)) {
     return { success: false, ...rateLimitError() };
@@ -556,3 +561,242 @@ export async function setLedgerShowInPo(
     return { success: false, error: "Gagal mengubah tampilan PO." };
   }
 }
+
+/* ─── Delete cash-in ────────────────────────────────────────────────────────── */
+
+/**
+ * Hapus cash-in yang masih pending (belum di-ack).
+ * Aman dihapus karena belum ter-ack = belum menutup termin manapun.
+ */
+export async function deleteCashIn(ledgerId: string): Promise<ActionResult> {
+  const { session, error } = await requireAnyPermission([
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "delete" },
+  ]);
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`ledger-delete:${session!.user.id}`))
+    return { success: false, ...rateLimitError() };
+
+  try {
+    const ledger = await db.ledger.findUnique({
+      where: { id: ledgerId },
+      select: { id: true, ackStatus: true, voidedAt: true },
+    });
+    if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
+    if (ledger.ackStatus === "acknowledged")
+      return { success: false, error: "Verifikasi transaksi dulu sebelum menghapus." };
+    if (ledger.voidedAt)
+      return { success: false, error: "Transaksi sudah dibatalkan." };
+
+    await db.$transaction([
+      db.paymentAllocation.deleteMany({ where: { ledgerId } }),
+      db.paymentActivity.deleteMany({ where: { ledgerId } }),
+      db.ledger.delete({ where: { id: ledgerId } }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "ledger.deleted",
+      entityType: "ledger",
+      entityId: ledgerId,
+      description: `Cash-in ${ledgerId} dihapus`,
+    });
+
+    revalidateTag("ledger", "max");
+    revalidateTag("ar-bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[deleteCashIn]", e);
+    return { success: false, error: "Gagal menghapus transaksi." };
+  }
+}
+
+/* ─── Update cash-in ────────────────────────────────────────────────────────── */
+
+const updateCashInSchema = z.object({
+  ledgerId: z.string().min(1),
+  occurredAt: z.string().min(1),
+  amount: z.number().int().positive(),
+  paymentMethodId: z.string().min(1).nullable().optional(),
+  discountProgramId: z.string().min(1).nullable().optional(),
+  discountAmount: z.number().int().min(0).default(0),
+  evidence: z.string().min(1).nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+  showInPo: z.boolean().default(false),
+  allocations: z
+    .array(z.object({ termId: z.string().min(1), amount: z.number().int().positive() }))
+    .default([]),
+});
+
+export type UpdateCashInInput = z.infer<typeof updateCashInSchema>;
+
+/**
+ * Edit cash-in yang masih pending. Re-validasi alokasi terhadap constraint
+ * #1 (exclude ledger ini sendiri) dan hitung ulang cashAmount.
+ */
+export async function updateCashIn(input: UpdateCashInInput): Promise<ActionResult> {
+  const { session, error } = await requireAnyPermission([
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "edit" },
+  ]);
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`ledger-update:${session!.user.id}`))
+    return { success: false, ...rateLimitError() };
+
+  const parsed = updateCashInSchema.safeParse(input);
+  if (!parsed.success)
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid" };
+
+  const data = parsed.data;
+
+  try {
+    const ledger = await db.ledger.findUnique({
+      where: { id: data.ledgerId },
+      select: { id: true, bookingId: true, ackStatus: true, voidedAt: true },
+    });
+    if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
+    if (ledger.ackStatus !== "pending")
+      return { success: false, error: "Hanya pembayaran berstatus pending yang bisa diedit." };
+    if (ledger.voidedAt) return { success: false, error: "Transaksi sudah dibatalkan." };
+
+    const discountAmount = data.discountAmount ?? 0;
+    const cashAmount = data.amount - discountAmount;
+    if (cashAmount < 0)
+      return { success: false, error: "Potongan promo melebihi jumlah pembayaran." };
+
+    const allocResult = await validateAllocations(
+      ledger.bookingId,
+      data.amount,
+      data.allocations,
+      data.ledgerId,
+    );
+    if (allocResult.error) return { success: false, error: allocResult.error };
+
+    const profileId = session!.user.profileId!;
+
+    await db.$transaction([
+      db.paymentAllocation.deleteMany({ where: { ledgerId: data.ledgerId } }),
+      ...data.allocations.map((a) =>
+        db.paymentAllocation.create({
+          data: { ledgerId: data.ledgerId, termId: a.termId, amount: a.amount },
+        }),
+      ),
+      db.ledger.update({
+        where: { id: data.ledgerId },
+        data: {
+          occurredAt: new Date(data.occurredAt),
+          amount: data.amount,
+          discountProgramId: data.discountProgramId ?? null,
+          discountAmount,
+          cashAmount,
+          paymentMethodId: data.paymentMethodId ?? null,
+          evidence: data.evidence ?? null,
+          notes: data.notes ?? null,
+          showInPo: data.showInPo,
+        },
+      }),
+      db.paymentActivity.create({
+        data: {
+          ledgerId: data.ledgerId,
+          action: "updated",
+          actorId: profileId,
+          actorNameSnapshot: session!.user.name ?? "Sales",
+          note: null,
+        },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "ledger.updated",
+      entityType: "ledger",
+      entityId: data.ledgerId,
+      description: `Cash-in ${data.ledgerId} diupdate`,
+    });
+
+    revalidateTag("ledger", "max");
+    revalidateTag("ar-bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[updateCashIn]", e);
+    return { success: false, error: "Gagal mengupdate transaksi." };
+  }
+}
+
+/* ─── Unacknowledge cash-in ─────────────────────────────────────────────────── */
+
+const unackSchema = z.object({
+  ledgerId: z.string().min(1),
+  note: z.string().min(1, "Alasan wajib diisi").max(500),
+});
+
+/**
+ * Batalkan verifikasi Finance — kembalikan ackStatus ke pending.
+ * Alokasi TETAP ada; status termin otomatis kembali ke partial/not_due_yet
+ * karena derivasi cuma baca ledger ter-ack.
+ * Hanya Finance (finance-ar:edit) yang boleh melakukan ini.
+ */
+export async function unacknowledgeCashIn(
+  input: z.infer<typeof unackSchema>,
+): Promise<ActionResult> {
+  const { session, error } = await requirePermission({ module: "finance-ar", action: "edit" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`ledger-unack:${session!.user.id}`))
+    return { success: false, ...rateLimitError() };
+
+  const parsed = unackSchema.safeParse(input);
+  if (!parsed.success)
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid" };
+
+  const { ledgerId, note } = parsed.data;
+
+  try {
+    const ledger = await db.ledger.findUnique({
+      where: { id: ledgerId },
+      select: { id: true, ackStatus: true, voidedAt: true },
+    });
+    if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
+    if (ledger.ackStatus !== "acknowledged")
+      return { success: false, error: "Hanya pembayaran terverifikasi yang bisa di-unack." };
+    if (ledger.voidedAt) return { success: false, error: "Transaksi sudah dibatalkan." };
+
+    const profileId = session!.user.profileId!;
+
+    await db.$transaction([
+      db.ledger.update({
+        where: { id: ledgerId },
+        data: {
+          ackStatus: "pending",
+          acknowledgedAt: null,
+          acknowledgedById: null,
+          acknowledgedSignature: null,
+        },
+      }),
+      db.paymentActivity.create({
+        data: {
+          ledgerId,
+          action: "unacknowledged",
+          actorId: profileId,
+          actorNameSnapshot: session!.user.name ?? "Finance",
+          note,
+        },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "ledger.unacknowledged",
+      entityType: "ledger",
+      entityId: ledgerId,
+      description: `Cash-in ${ledgerId} verifikasi dibatalkan: ${note}`,
+    });
+
+    revalidateTag("ledger", "max");
+    revalidateTag("ar-bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[unacknowledgeCashIn]", e);
+    return { success: false, error: "Gagal membatalkan verifikasi." };
+  }
+}
+
