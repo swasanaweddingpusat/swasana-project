@@ -57,6 +57,7 @@ import {
   CheckCircle,
 } from "@solar-icons/react";
 import type { WorkAssignmentItem } from "@/lib/queries/workAssignments";
+import { WEEKDAY_OPTIONS, formatOffdayDays } from "@/lib/attendance-offdays";
 
 // ─── Form State ──────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ interface AssignmentFormState {
   isDefault: boolean;
   effectiveDate: string;
   endDate: string;
+  offdayDays: number[];
 }
 
 const EMPTY_FORM: AssignmentFormState = {
@@ -76,6 +78,7 @@ const EMPTY_FORM: AssignmentFormState = {
   isDefault: true,
   effectiveDate: new Date().toISOString().slice(0, 10),
   endDate: "",
+  offdayDays: [],
 };
 
 interface BulkFormState {
@@ -85,6 +88,7 @@ interface BulkFormState {
   isDefault: boolean;
   effectiveDate: string;
   endDate: string;
+  offdayDays: number[];
 }
 
 const EMPTY_BULK: BulkFormState = {
@@ -94,6 +98,7 @@ const EMPTY_BULK: BulkFormState = {
   isDefault: true,
   effectiveDate: new Date().toISOString().slice(0, 10),
   endDate: "",
+  offdayDays: [],
 };
 
 function formatDateShort(date: string | Date | null): string {
@@ -167,6 +172,7 @@ export function WorkAssignmentManager() {
       endDate: item.endDate
         ? new Date(item.endDate).toISOString().slice(0, 10)
         : "",
+      offdayDays: (item.offdayDays as number[]) ?? [],
     });
     setEmpLabel(item.profile.fullName ?? "");
     setEmpSearch("");
@@ -194,6 +200,7 @@ export function WorkAssignmentManager() {
       isDefault: form.isDefault,
       effectiveDate: form.effectiveDate || undefined,
       endDate: form.endDate || undefined,
+      offdayDays: form.offdayDays,
     };
 
     if (editingItem) {
@@ -270,6 +277,7 @@ export function WorkAssignmentManager() {
         isDefault: bulkForm.isDefault,
         effectiveDate: bulkForm.effectiveDate || undefined,
         endDate: bulkForm.endDate || undefined,
+        offdayDays: bulkForm.offdayDays,
       },
       {
         onSuccess: (result) => {
@@ -392,6 +400,7 @@ export function WorkAssignmentManager() {
                     <TableHead>Lokasi</TableHead>
                     <TableHead>Shift</TableHead>
                     <TableHead>Default</TableHead>
+                    <TableHead>Hari Libur</TableHead>
                     <TableHead>Berlaku Mulai</TableHead>
                     <TableHead>Berlaku Sampai</TableHead>
                     <TableHead className="w-20">Aksi</TableHead>
@@ -427,6 +436,7 @@ export function WorkAssignmentManager() {
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
+                      <TableCell className="text-sm">{formatOffdayDays(asgn.offdayDays)}</TableCell>
                       <TableCell className="text-sm">{formatDateShort(asgn.effectiveDate)}</TableCell>
                       <TableCell className="text-sm">{formatDateShort(asgn.endDate)}</TableCell>
                       <TableCell>
@@ -565,6 +575,37 @@ export function WorkAssignmentManager() {
               <Label htmlFor="assign-default">Assignment Default</Label>
             </div>
 
+            <div className="grid gap-2">
+              <Label>Hari Libur (Off Day)</Label>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAY_OPTIONS.map((day) => (
+                  <label
+                    key={day.value}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm cursor-pointer transition-colors",
+                      form.offdayDays.includes(day.value)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:bg-accent/50"
+                    )}
+                  >
+                    <Checkbox
+                      checked={form.offdayDays.includes(day.value)}
+                      onCheckedChange={(checked) => {
+                        setForm((f) => ({
+                          ...f,
+                          offdayDays: checked
+                            ? [...f.offdayDays, day.value].sort((a, b) => a - b)
+                            : f.offdayDays.filter((d) => d !== day.value),
+                        }));
+                      }}
+                      className="h-3.5 w-3.5"
+                    />
+                    {day.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="assign-start">Berlaku Mulai</Label>
@@ -685,6 +726,37 @@ export function WorkAssignmentManager() {
                 onCheckedChange={(checked) => setBulkForm((f) => ({ ...f, isDefault: checked === true }))}
               />
               <Label htmlFor="bulk-default">Assignment Default</Label>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Hari Libur (Off Day)</Label>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAY_OPTIONS.map((day) => (
+                  <label
+                    key={day.value}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm cursor-pointer transition-colors",
+                      bulkForm.offdayDays.includes(day.value)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:bg-accent/50"
+                    )}
+                  >
+                    <Checkbox
+                      checked={bulkForm.offdayDays.includes(day.value)}
+                      onCheckedChange={(checked) => {
+                        setBulkForm((f) => ({
+                          ...f,
+                          offdayDays: checked
+                            ? [...f.offdayDays, day.value].sort((a, b) => a - b)
+                            : f.offdayDays.filter((d) => d !== day.value),
+                        }));
+                      }}
+                      className="h-3.5 w-3.5"
+                    />
+                    {day.label}
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

@@ -14,7 +14,7 @@ export async function getWorkAssignments(params?: {
     where,
     select: {
       id: true, profileId: true, workLocationId: true, workShiftId: true,
-      isDefault: true, effectiveDate: true, endDate: true,
+      isDefault: true, offdayDays: true, effectiveDate: true, endDate: true,
       profile: { select: { id: true, fullName: true, avatarUrl: true, employeeNumber: true } },
       workLocation: { select: { id: true, name: true } },
       workShift: { select: { id: true, name: true, startTime: true, endTime: true } },

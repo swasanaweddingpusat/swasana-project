@@ -145,12 +145,13 @@ export const navItems: NavItem[] = [
         href: "/dashboard/vendor-specialist/analytics",
         icon: ChartSquare,
       },
-      {
-        name: "Indikator Pernikahan",
-        href: "/dashboard/vendor-specialist/wedding-indicators",
-        icon: Heart,
-      },
     ],
+  },
+  {
+    name: "Indikator Pernikahan",
+    href: "/dashboard/vendor-specialist/wedding-indicators",
+    icon: Heart,
+    permission: { module: "vendor-specialist", action: "view" },
   },
   {
     name: "Package",

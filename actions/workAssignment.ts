@@ -106,13 +106,13 @@ export async function bulkCreateWorkAssignment(data: unknown): Promise<{ success
   const parsed = bulkCreateWorkAssignmentSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { profileIds, workLocationId, workShiftId, isDefault, effectiveDate, endDate } = parsed.data;
+  const { profileIds, workLocationId, workShiftId, isDefault, offdayDays, effectiveDate, endDate } = parsed.data;
 
   try {
     await db.$transaction(
       profileIds.map((profileId) =>
         db.employeeWorkAssignment.create({
-          data: { profileId, workLocationId, workShiftId, isDefault, effectiveDate, endDate },
+          data: { profileId, workLocationId, workShiftId, isDefault, offdayDays, effectiveDate, endDate },
         })
       )
     );
