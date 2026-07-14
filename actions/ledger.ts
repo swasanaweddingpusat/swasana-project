@@ -62,35 +62,50 @@ export type CreateCashInInput = z.infer<typeof createCashInSchema>;
 
 /* ─── Allocation guard (§6.5) ───────────────────────────────────────────────── */
 
+/** Termin yang tervalidasi lolos alokasi — dioper balik ke caller biar gak query dobel. */
+interface AllocationTerm {
+  id: string;
+  name: string;
+  amount: number;
+  sortOrder: number;
+}
+
+interface AllocationValidation {
+  error: string | null;
+  /** Termin yang dialokasikan di request ini (kosong kalau alokasi kosong atau error). */
+  terms: AllocationTerm[];
+}
+
 /**
  * Validasi alokasi cash-in terhadap constraint §6.5:
  *  #1 per-termId: Σ alokasi (dari ledger in ter-ack + row baru) ≤ TermOfPayment.amount
  *  #2 per-ledger: Σ alokasi row ini ≤ amount cash-in
  * Row void di-exclude dari perhitungan existing (voidedAt != null tidak menghitung).
- * Return null kalau lolos, atau string error kalau melanggar.
+ * Return `terms` (dgn sortOrder) biar caller (createCashIn) bisa resolve snapTopName
+ * tanpa query TermOfPayment lagi (FIX B).
  */
 async function validateAllocations(
   bookingId: string,
   cashInAmount: number,
   allocations: { termId: string; amount: number }[],
   excludeLedgerId?: string,
-): Promise<string | null> {
-  if (allocations.length === 0) return null;
+): Promise<AllocationValidation> {
+  if (allocations.length === 0) return { error: null, terms: [] };
 
   // #2 — total alokasi tidak boleh melebihi nominal cash-in
   const totalAlloc = allocations.reduce((s, a) => s + a.amount, 0);
   if (totalAlloc > cashInAmount) {
-    return "Total alokasi melebihi jumlah yang dibayar.";
+    return { error: "Total alokasi melebihi jumlah yang dibayar.", terms: [] };
   }
 
   // Termin harus milik booking yang sama
   const termIds = allocations.map((a) => a.termId);
   const terms = await db.termOfPayment.findMany({
     where: { id: { in: termIds }, bookingId },
-    select: { id: true, amount: true, name: true },
+    select: { id: true, amount: true, name: true, sortOrder: true },
   });
   if (terms.length !== new Set(termIds).size) {
-    return "Ada termin yang tidak valid untuk booking ini.";
+    return { error: "Ada termin yang tidak valid untuk booking ini.", terms: [] };
   }
 
   // #1 — existing alokasi (dari ledger ter-ack, non-void) per termin
@@ -114,11 +129,11 @@ async function validateAllocations(
     if (!term) continue;
     const already = existingByTerm.get(alloc.termId) ?? 0;
     if (already + alloc.amount > term.amount) {
-      return `Alokasi ke termin "${term.name}" melebihi sisa tagihan.`;
+      return { error: `Alokasi ke termin "${term.name}" melebihi sisa tagihan.`, terms: [] };
     }
   }
 
-  return null;
+  return { error: null, terms };
 }
 
 /* ─── Create cash-in ────────────────────────────────────────────────────────── */
@@ -150,16 +165,28 @@ export async function createCashIn(
   }
 
   try {
-    // Booking + venue/brand code (buat nomor kwitansi)
+    // Booking + venue/brand code (buat nomor kwitansi) + snap package/venue (freeze label, FIX B)
     const booking = await db.booking.findUnique({
       where: { id: data.bookingId },
-      select: { id: true, venue: { select: { code: true, brand: { select: { code: true } } } } },
+      select: {
+        id: true,
+        venue: { select: { code: true, brand: { select: { code: true } } } },
+        snapPackagePricing: { select: { packageName: true } },
+        snapVenue: { select: { venueName: true } },
+      },
     });
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
 
-    // Constraint §6.5
-    const allocErr = await validateAllocations(data.bookingId, data.amount, data.allocations);
-    if (allocErr) return { success: false, error: allocErr };
+    // Constraint §6.5 — terms dioper balik buat resolve snapTopName (FIX B), no query dobel.
+    const allocResult = await validateAllocations(data.bookingId, data.amount, data.allocations);
+    if (allocResult.error) return { success: false, error: allocResult.error };
+
+    // Freeze konteks pembayaran (FIX B): nama termin ber-sortOrder terkecil di antara
+    // termin yang dialokasikan. Alokasi kosong -> null (titipan/overpayment belum ke termin).
+    const snapTopName =
+      allocResult.terms.length > 0
+        ? [...allocResult.terms].sort((a, b) => a.sortOrder - b.sortOrder)[0].name
+        : null;
 
     const occurredAt = new Date(data.occurredAt);
     const invoiceNumber = await generateKwitansiNumber(
@@ -189,6 +216,9 @@ export async function createCashIn(
           invoiceNumber,
           notes: data.notes ?? null,
           showInPo: data.showInPo,
+          snapTopName,
+          snapPackageName: booking.snapPackagePricing?.packageName ?? null,
+          snapVenueName: booking.snapVenue?.venueName ?? null,
           createdById: profileId,
         },
       }),
@@ -278,13 +308,13 @@ export async function acknowledgeCashIn(
     }
 
     // Re-validasi alokasi — exclude row ini sendiri (belum ter-ack jadi belum kehitung, tapi aman).
-    const allocErr = await validateAllocations(
+    const allocResult = await validateAllocations(
       ledger.bookingId,
       ledger.amount,
       ledger.allocations,
       ledgerId,
     );
-    if (allocErr) return { success: false, error: allocErr };
+    if (allocResult.error) return { success: false, error: allocResult.error };
 
     const now = new Date();
     const profileId = session!.user.profileId!;

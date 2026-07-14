@@ -1192,6 +1192,12 @@ model Ledger {
   // Tampilkan cash-in ini di section Summary Payment PO PDF. Default OFF —
   // user sengaja menyalakan per pembayaran. Voided tetap di-exclude saat render.
   showInPo              Boolean             @default(false)
+  // Freeze konteks pembayaran (FIX B) — beku nama termin/package/venue SAAT
+  // cash-in dibuat. Label PO/Invoice pakai ini FIRST, fallback live-join kalau
+  // null (data lama pre-migrasi). Diisi sekali saat create, immutable setelahnya.
+  snapTopName           String?
+  snapPackageName       String?
+  snapVenueName         String?
   acknowledgedAt        DateTime?
   acknowledgedById      String?
   acknowledgedSignature String?             // ttd Finance (data URL PNG), nullable
