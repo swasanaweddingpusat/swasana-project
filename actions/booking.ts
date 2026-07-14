@@ -1609,13 +1609,9 @@ export async function editBooking(data: unknown) {
 
     // Term of payments — re-write when structure OR sort-order changed. TOP kini
     // jadwal murni (name/amount/dueDate/sortOrder); status pembayaran DERIVED dari Ledger.
-    //
-    // NOTE (FIX A, confirmed dead path): editBooking() has exactly one caller —
-    // useEditBookingForm.ts:471 — and it always submits `termOfPayments: []` (TOP
-    // editing lives in updateTermOfPayments / edit-top-drawer.tsx instead), so this
-    // block is currently unreachable from the wedding drawer. Kept + upgraded
-    // defensively (same integrity guard as updateTermOfPayments) in case a future
-    // caller ever sends a non-empty schedule here.
+    // Defensive guard: current callers send `termOfPayments: []` (TOP editing
+    // lives in updateTermOfPayments / edit-top-drawer.tsx), but this block
+    // enforces the same integrity as updateTermOfPayments for any future caller.
     if (termsNeedWrite && rest.termOfPayments && rest.termOfPayments.length > 0) {
       // Lock (§6.6, extended by FIX A): term dengan alokasi Ledger NON-VOID APAPUN
       // (pending atau acknowledged) tidak boleh hilang dari save — cascade-delete
