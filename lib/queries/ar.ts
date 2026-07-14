@@ -100,6 +100,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
       const invoiceRow = invoiceMap.get(t.id);
       const invoice = invoiceRow
         ? {
+            id: invoiceRow.id,
             number: invoiceRow.invoiceNumber,
             type: invoiceRow.invoiceType,
             status: invoiceRow.status,

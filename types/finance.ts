@@ -76,7 +76,7 @@ export interface ARTermin {
    * langsung) — field ini baca dari entity `Invoice` yang immutable & on-demand.
    * null = belum ada invoice diterbitkan buat termin ini.
    */
-  invoice: { number: string; type: string; status: string; issuedAt: string } | null;
+  invoice: { id: string; number: string; type: string; status: string; issuedAt: string } | null;
 }
 
 export type ARBookingStatus = "Pending" | "Uploaded" | "Confirmed" | "Rejected" | "Canceled" | "Lost";
