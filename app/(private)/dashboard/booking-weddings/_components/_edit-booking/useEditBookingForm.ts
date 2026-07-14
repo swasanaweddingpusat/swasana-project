@@ -26,7 +26,8 @@ export const STEP_LABELS: Record<number, string> = {
   3: "Item Paket",
   4: "Takeout",
   5: "TOP",
-  6: "TTD",
+  6: "Payment",
+  7: "TTD",
 };
 export const LBL = "text-sm font-medium text-foreground";
 
@@ -47,9 +48,9 @@ export interface EditBookingForm {
   // step navigation
   currentStep: number;
   setCurrentStep: (s: number) => void;
-  /** Legacy alias for backward compat — maps to currentStep 3-6 names. */
-  continueFlowStep: null | "package-items" | "takeout" | "top" | "signature";
-  setContinueFlowStep: (s: null | "package-items" | "takeout" | "top" | "signature") => void;
+  /** Legacy alias for backward compat — maps to currentStep 3-7 names. */
+  continueFlowStep: null | "package-items" | "takeout" | "top" | "payment" | "signature";
+  setContinueFlowStep: (s: null | "package-items" | "takeout" | "top" | "payment" | "signature") => void;
   /** When true, tab clicks are disabled and continue buttons advance linearly. */
   linearMode: boolean;
 
@@ -170,17 +171,18 @@ export function useEditBookingForm(
   // ── Legacy continueFlowStep: derived view of currentStep for back-compat ──
   // We still expose this so the render block in edit-booking-drawer can read it.
   // It is purely derived — setting it is a no-op alias that sets currentStep.
-  const continueFlowStepMap: Record<number, null | "package-items" | "takeout" | "top" | "signature"> = {
-    1: null, 2: null, 3: "package-items", 4: "takeout", 5: "top", 6: "signature",
+  const continueFlowStepMap: Record<number, null | "package-items" | "takeout" | "top" | "payment" | "signature"> = {
+    1: null, 2: null, 3: "package-items", 4: "takeout", 5: "top", 6: "payment", 7: "signature",
   };
   const continueFlowStep = continueFlowStepMap[currentStep] ?? null;
 
-  function setContinueFlowStep(s: null | "package-items" | "takeout" | "top" | "signature") {
+  function setContinueFlowStep(s: null | "package-items" | "takeout" | "top" | "payment" | "signature") {
     if (s === null) { setCurrentStep(2); return; }
     if (s === "package-items") { setCurrentStep(3); return; }
     if (s === "takeout") { setCurrentStep(4); return; }
     if (s === "top") { setCurrentStep(5); return; }
-    if (s === "signature") { setCurrentStep(6); return; }
+    if (s === "payment") { setCurrentStep(6); return; }
+    if (s === "signature") { setCurrentStep(7); return; }
   }
 
   // ── Step 1: Client info ──
@@ -412,7 +414,7 @@ export function useEditBookingForm(
     salesUsers.find((s) => s.id === salesId)?.fullName ??
     (isSalesPIC ? (currentUser?.name ?? "—") : "—");
 
-  const TOTAL_FLOW_STEPS = 6;
+  const TOTAL_FLOW_STEPS = 7;
   const flowStepNumber = currentStep;
 
   const STEP_TITLES: Record<number, string> = {
@@ -421,7 +423,8 @@ export function useEditBookingForm(
     3: "Item Paket",
     4: "Edit Takeout",
     5: "Term of Payment",
-    6: "Tanda Tangan Sales",
+    6: "Payment",
+    7: "Tanda Tangan Sales",
   };
   const drawerTitle = STEP_TITLES[currentStep] ?? "Edit Booking";
   const stepHeader = `Step ${flowStepNumber} / ${TOTAL_FLOW_STEPS}`;
@@ -511,7 +514,7 @@ export function useEditBookingForm(
   function handleGoToStep(step: number): void {
     // In linear mode, tab navigation is disabled — user must follow Continue buttons.
     if (linearMode) return;
-    if (step >= 1 && step <= 6) setCurrentStep(step);
+    if (step >= 1 && step <= 7) setCurrentStep(step);
   }
 
   function handleCloseAll(): void {

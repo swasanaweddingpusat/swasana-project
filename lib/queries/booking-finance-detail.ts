@@ -2,7 +2,9 @@ import { db } from "@/lib/db";
 import {
   getTermPaidMap,
   getTermAllocationsForBookings,
+  getBookingCashIns,
   deriveTermStatus,
+  type BookingCashIn,
 } from "@/lib/queries/ledger";
 
 export interface BookingFinanceDetail {
@@ -35,6 +37,13 @@ export interface BookingFinanceDetail {
       notes: string | null;
     }[];
   }[];
+  /**
+   * Semua cash-in booking (pending + acknowledged, non-void) — buat "Riwayat
+   * Pembayaran" di editor. Beda dari terms[].partialPayments yang acked-only
+   * (dipakai derivasi status termin). Pembayaran baru langsung tampil di sini
+   * walau belum diverifikasi Finance.
+   */
+  cashIns: BookingCashIn[];
   categories: {
     id: string;
     categoryName: string;
@@ -91,9 +100,10 @@ export async function getBookingFinanceDetail(
 
   // Pure-derived (Fase 5): terbayar = Σ alokasi Ledger cash-in ter-ack.
   // paidMap = jumlah; allocMap = detail riwayat (ganti PartialPayment).
-  const [paidMap, allocMap] = await Promise.all([
+  const [paidMap, allocMap, cashIns] = await Promise.all([
     getTermPaidMap(bookingId),
     getTermAllocationsForBookings([bookingId]),
+    getBookingCashIns(bookingId),
   ]);
   const now = new Date();
 
@@ -137,6 +147,7 @@ export async function getBookingFinanceDetail(
         })),
       };
     }),
+    cashIns,
     categories:
       booking.snapPackageCategoryPrices.length > 0
         ? booking.snapPackageCategoryPrices.map((c) => ({
