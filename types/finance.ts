@@ -70,6 +70,13 @@ export interface ARTermin {
   acknowledgedByName: string | null;
   /** Bank tujuan transfer, e.g. "BCA 149" (bankName + 3 digit akhir rekening). Null = belum di-set. */
   viaRekening: string | null;
+  /**
+   * Invoice ENTITY aktif (status=issued) yang terbit buat termin ini (FIX C).
+   * Beda dari `noInvoice`/`statusInvoice` (legacy, baca `TermOfPayment.invoiceNumber`
+   * langsung) — field ini baca dari entity `Invoice` yang immutable & on-demand.
+   * null = belum ada invoice diterbitkan buat termin ini.
+   */
+  invoice: { number: string; type: string; status: string; issuedAt: string } | null;
 }
 
 export type ARBookingStatus = "Pending" | "Uploaded" | "Confirmed" | "Rejected" | "Canceled" | "Lost";

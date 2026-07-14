@@ -171,6 +171,8 @@ model Profile {
   ledgersCreated             Ledger[]        @relation("LedgerCreator")
   ledgersAcknowledged        Ledger[]        @relation("LedgerAcknowledger")
   ledgersVoided              Ledger[]        @relation("LedgerVoider")
+  invoicesIssued             Invoice[]       @relation("InvoiceIssuer")
+  invoicesVoided             Invoice[]       @relation("InvoiceVoider")
   paymentActivities          PaymentActivity[] @relation("PaymentActivityActor")
   bookingsRecognized         Booking[]       @relation("BookingRecognizer")
   maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignee")
@@ -869,6 +871,7 @@ model Booking {
   // Live relations
   termOfPayments    TermOfPayment[]
   ledgers           Ledger[]
+  invoices          Invoice[]
   bookingDocuments  BookingDocument[]
   bookingRefunds    BookingPaymentSettlement[] @relation("SourceSettlements")
   targetSettlements BookingPaymentSettlement[] @relation("TargetSettlements")
@@ -1161,6 +1164,7 @@ model TermOfPayment {
   updatedAt       DateTime            @updatedAt
   booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   allocations      PaymentAllocation[]
+  invoices         Invoice[]
 
   @@unique([invoiceNumber])
   @@index([bookingId])
@@ -1262,6 +1266,44 @@ model PaymentActivity {
   @@index([ledgerId, createdAt])
   @@index([actorId])
   @@map("payment_activities")
+}
+
+// ─── Invoice (Tagihan Terbit) — FIX C ───────────────────────────────────────
+// Cermin dari Ledger/kwitansi: TAGIHAN TERBIT immutable, terpisah dari
+// TermOfPayment (jadwal, live/mutable). On-demand (finance trigger "Terbitkan
+// Invoice"), 1 invoice = 1 termin. `amount` BEKU saat terbit (= termin.amount
+// net saat itu — TIDAK dibaca live dari termin lagi). Void via tombstone,
+// row tidak pernah dihapus; nomor void TIDAK dipakai ulang.
+// termId nullable: termin boleh di-rebuild/dihapus (switch venue) tanpa
+// merusak invoice yang sudah terbit — invoice jadi yatim tapi utuh sbg
+// dokumen historis (docs/superpowers/specs/2026-07-14-booking-money-model.md §6.3).
+model Invoice {
+  id            String        @id @default(uuid())
+  bookingId     String
+  termId        String?
+  invoiceNumber String
+  invoiceType   InvoiceType   @default(progress)
+  amount        Int           // BEKU (net) saat terbit = snapshot termin.amount
+  dueDate       DateTime?
+  notes         String?
+  status        InvoiceStatus @default(issued)
+  issuedAt      DateTime      @default(now())
+  issuedById    String?
+  voidedAt      DateTime?
+  voidedById    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  booking  Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  term     TermOfPayment? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  issuedBy Profile?       @relation("InvoiceIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  voidedBy Profile?       @relation("InvoiceVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceNumber])
+  @@index([bookingId])
+  @@index([termId])
+  @@index([status])
+  @@map("invoices")
 }
 
 model BookingDocument {
@@ -1411,6 +1453,18 @@ enum PaymentActivityAction {
   acknowledged
   rejected
   voided
+}
+
+enum InvoiceType {
+  dp
+  progress
+  pelunasan
+  lainnya
+}
+
+enum InvoiceStatus {
+  issued
+  void
 }
 
 enum SettlementType {

@@ -5,6 +5,7 @@ import {
   getTermAllocationsForBookings,
   deriveTermStatus,
 } from "@/lib/queries/ledger";
+import { getActiveInvoiceMapForBookings } from "@/lib/queries/invoices";
 import type { ARBooking, ARInvoiceStatus, ARPartialPayment, ARTermin, ARTerminStatus } from "@/types/finance";
 
 function deriveBookingStatus(termins: ARTermin[]): ARTerminStatus {
@@ -59,10 +60,12 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
 
   // Pure-derived (Fase 5): "terbayar" per termin = Σ alokasi Ledger cash-in ter-ack.
   // paidMap = jumlah gross; allocMap = detail riwayat (ganti tabel PartialPayment).
+  // invoiceMap (FIX C) = invoice ENTITY aktif per termin — satu bulk query, bukan N+1.
   const bookingIds = bookings.map((b) => b.id);
-  const [paidMap, allocMap] = await Promise.all([
+  const [paidMap, allocMap, invoiceMap] = await Promise.all([
     getTermPaidMapForBookings(bookingIds),
     getTermAllocationsForBookings(bookingIds),
+    getActiveInvoiceMapForBookings(bookingIds),
   ]);
 
   const mapped = bookings.map((b) => {
@@ -94,6 +97,16 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
             : "unpaid"
         : "unissued";
 
+      const invoiceRow = invoiceMap.get(t.id);
+      const invoice = invoiceRow
+        ? {
+            number: invoiceRow.invoiceNumber,
+            type: invoiceRow.invoiceType,
+            status: invoiceRow.status,
+            issuedAt: invoiceRow.issuedAt,
+          }
+        : null;
+
       return {
         id: t.id,
         name: t.name,
@@ -113,6 +126,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         acknowledgedAt: null,
         acknowledgedByName: null,
         viaRekening: null,
+        invoice,
       };
     });
 
