@@ -63,19 +63,31 @@ export function CertificationDrawer({
     createCertificationMutation.isPending || updateCertificationMutation.isPending;
 
   useEffect(() => {
+    let t: number | undefined;
     if (isOpen && editItem) {
-      setForm({
-        profileId: editItem.profileId,
-        certificationName: editItem.certificationName,
-        issueDate: toIsoDateString(editItem.issueDate),
-        expiryDate: toIsoDateString(editItem.expiryDate),
-        status: editItem.status,
-        notes: editItem.notes ?? "",
-      });
+      t = window.setTimeout(() => {
+        setForm({
+          profileId: editItem.profileId,
+          certificationName: editItem.certificationName,
+          issueDate: toIsoDateString(editItem.issueDate),
+          expiryDate: toIsoDateString(editItem.expiryDate),
+          status: editItem.status,
+          notes: editItem.notes ?? "",
+        });
+        setErrors({});
+      }, 0);
     } else if (isOpen && !editItem) {
-      setForm(EMPTY_FORM);
+      t = window.setTimeout(() => {
+        setForm(EMPTY_FORM);
+        setErrors({});
+      }, 0);
+    } else {
+      t = window.setTimeout(() => setErrors({}), 0);
     }
-    setErrors({});
+
+    return () => {
+      if (t) clearTimeout(t);
+    };
   }, [isOpen, editItem]);
 
   function handleChange(

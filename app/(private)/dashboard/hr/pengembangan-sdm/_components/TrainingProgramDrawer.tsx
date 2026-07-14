@@ -62,21 +62,28 @@ export function TrainingProgramDrawer({
   const updateTrainingMutation = useUpdateTrainingProgram();
 
   useEffect(() => {
+    let t: number | undefined;
     if (isOpen) {
       if (editItem) {
-        setForm({
-          name: editItem.name,
-          description: editItem.description ?? "",
-          startDate: toIsoDateString(editItem.startDate),
-          endDate: toIsoDateString(editItem.endDate),
-          status: editItem.status,
-          participantsCount: String(editItem.participantsCount ?? 0),
-          completionPercentage: String(editItem.completionPercentage ?? 0),
-        });
+        t = window.setTimeout(() => {
+          setForm({
+            name: editItem.name,
+            description: editItem.description ?? "",
+            startDate: toIsoDateString(editItem.startDate),
+            endDate: toIsoDateString(editItem.endDate),
+            status: editItem.status,
+            participantsCount: String(editItem.participantsCount ?? 0),
+            completionPercentage: String(editItem.completionPercentage ?? 0),
+          });
+        }, 0);
       } else {
-        setForm(EMPTY_FORM);
+        t = window.setTimeout(() => setForm(EMPTY_FORM), 0);
       }
     }
+
+    return () => {
+      if (t) clearTimeout(t);
+    };
   }, [isOpen, editItem]);
 
   async function handleSubmit() {

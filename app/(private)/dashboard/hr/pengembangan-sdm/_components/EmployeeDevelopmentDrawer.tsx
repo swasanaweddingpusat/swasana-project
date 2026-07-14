@@ -79,20 +79,27 @@ export function EmployeeDevelopmentDrawer({
   // Populate or reset the form whenever the drawer opens or the edit target changes
   useEffect(() => {
     if (!isOpen) return;
+    let t: number | undefined;
 
     if (editItem) {
-      setForm({
-        profileId: editItem.profileId,
-        skill: editItem.skill,
-        level: editItem.level,
-        startDate: toIsoDateString(editItem.startDate),
-        targetCompletionDate: toIsoDateString(editItem.targetCompletionDate),
-        progressPercentage: String(editItem.progressPercentage),
-        notes: editItem.notes ?? "",
-      });
+      t = window.setTimeout(() => {
+        setForm({
+          profileId: editItem.profileId,
+          skill: editItem.skill,
+          level: editItem.level,
+          startDate: toIsoDateString(editItem.startDate),
+          targetCompletionDate: toIsoDateString(editItem.targetCompletionDate),
+          progressPercentage: String(editItem.progressPercentage),
+          notes: editItem.notes ?? "",
+        });
+      }, 0);
     } else {
-      setForm(EMPTY_FORM);
+      t = window.setTimeout(() => setForm(EMPTY_FORM), 0);
     }
+
+    return () => {
+      if (t) clearTimeout(t);
+    };
   }, [isOpen, editItem]);
 
   async function handleSubmit() {
