@@ -141,19 +141,21 @@ export async function POST(req: Request) {
       where: { bookingId, direction: "in", showInPo: true, voidedAt: null },
       orderBy: { occurredAt: "asc" },
       take: 500,
-      select: { id: true, amount: true, occurredAt: true, invoiceNumber: true },
+      select: {
+        id: true, amount: true, occurredAt: true, invoiceNumber: true,
+        paymentMethod: { select: { bankName: true } },
+        allocations: { select: { term: { select: { name: true } } }, take: 1 },
+      },
     });
-    pdfBooking.poPayments = poLedgers.map((l) => ({
-      label: `Pembayaran ${new Date(l.occurredAt).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        timeZone: "Asia/Jakarta",
-      })}`,
-      amount: Number(l.amount),
-      occurredAt: l.occurredAt.toISOString(),
-      invoiceNumber: l.invoiceNumber ?? null,
-    }));
+    pdfBooking.poPayments = poLedgers.map((l) => {
+      const topName = l.allocations[0]?.term.name;
+      const bank = l.paymentMethod?.bankName ?? "Tunai";
+      const tgl = new Date(l.occurredAt).toLocaleDateString("id-ID", {
+        day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta",
+      });
+      const label = topName ? `${topName} — ${tgl} (${bank})` : `Pembayaran ${tgl} (${bank})`;
+      return { label, amount: Number(l.amount), occurredAt: l.occurredAt.toISOString(), invoiceNumber: l.invoiceNumber ?? null };
+    });
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 
