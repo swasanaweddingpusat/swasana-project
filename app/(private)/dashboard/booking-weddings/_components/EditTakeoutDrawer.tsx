@@ -79,6 +79,9 @@ function TakeoutContent({ bookingId, onClose, onPrevious, initialRows, fullPrice
     toast.success("Takeout berhasil diupdate");
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+    // Takeout now recomputes the stored price server-side — refresh the finance detail
+    // so the TOP tab reads the new price (and its "Selisih") instead of a stale cache.
+    qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
     onClose();
   };
 

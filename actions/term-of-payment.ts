@@ -9,6 +9,7 @@ import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
 import { getTermPaidMapForBookings, getTermAllocatedMap } from "@/lib/queries/ledger";
+import { upsertCreditBalanceOp } from "@/lib/credit-balance";
 
 interface TermUpdate {
   id: string;
@@ -57,6 +58,18 @@ export async function updateTermOfPayments(
   }
 
   try {
+    // Fetch ALL terms for this booking so we can detect removed terms and apply the
+    // Ledger lock (§6.6, extended by FIX A). Sumber lock sekarang MURNI Ledger — kolom
+    // TOP.paymentStatus/ackStatus sudah di-drop (Fase 5).
+    const [allDbTerms, paidMap, allocatedMap] = await Promise.all([
+      db.termOfPayment.findMany({
+        where: { bookingId },
+        select: { id: true, name: true },
+      }),
+      getTermPaidMapForBookings([bookingId]),
+      getTermAllocatedMap([bookingId]),
+    ]);
+
     // ── Guard: the payment schedule must reconcile to the package price ──────────
     // Total of all billable (non-refund) terms MUST equal price-after-discount.
     // Refund terms are a separate reconciliation and are never part of the payload,
@@ -78,26 +91,28 @@ export async function updateTermOfPayments(
     const totalTerms =
       terms.reduce((s, t) => s + (Number(t.amount) || 0), 0) +
       (newTerms?.reduce((s, t) => s + (Number(t.amount) || 0), 0) ?? 0);
-    if (totalTerms !== priceAfterDiscount) {
-      const diff = totalTerms - priceAfterDiscount;
+
+    // Locked floor = money already received, per term, capped at that term's nominal.
+    // The schedule may never sum below this. When locked cash exceeds net price
+    // (heavy takeout after payment), the schedule legitimately sits at the floor and
+    // the excess is overpayment (materialized as CreditBalance elsewhere).
+    const lockedFloorTotal =
+      terms.reduce(
+        (s, t) => s + Math.min(paidMap.get(t.id) ?? 0, Number(t.amount) || 0),
+        0,
+      );
+    const expectedTotal = Math.max(priceAfterDiscount, lockedFloorTotal);
+    if (totalTerms !== expectedTotal) {
+      const diff = totalTerms - expectedTotal;
       const fmt = new Intl.NumberFormat("id-ID").format(Math.abs(diff));
+      const overpaid = lockedFloorTotal > priceAfterDiscount;
       return {
         success: false,
-        error: `Total cicilan tidak sesuai harga paket. ${diff < 0 ? "Kurang" : "Lebih"} Rp${fmt}. Sesuaikan dulu sebelum menyimpan.`,
+        error: overpaid
+          ? `Total cicilan harus Rp${new Intl.NumberFormat("id-ID").format(expectedTotal)} (mengikuti pembayaran yang sudah masuk — ada kelebihan bayar Rp${new Intl.NumberFormat("id-ID").format(lockedFloorTotal - priceAfterDiscount)}). ${diff < 0 ? "Kurang" : "Lebih"} Rp${fmt}.`
+          : `Total cicilan tidak sesuai harga paket. ${diff < 0 ? "Kurang" : "Lebih"} Rp${fmt}. Sesuaikan dulu sebelum menyimpan.`,
       };
     }
-
-    // Fetch ALL terms for this booking so we can detect removed terms and apply the
-    // Ledger lock (§6.6, extended by FIX A). Sumber lock sekarang MURNI Ledger — kolom
-    // TOP.paymentStatus/ackStatus sudah di-drop (Fase 5).
-    const [allDbTerms, paidMap, allocatedMap] = await Promise.all([
-      db.termOfPayment.findMany({
-        where: { bookingId },
-        select: { id: true, name: true },
-      }),
-      getTermPaidMapForBookings([bookingId]),
-      getTermAllocatedMap([bookingId]),
-    ]);
 
     const clientTermIds = new Set(terms.map((t) => t.id));
 
@@ -185,6 +200,10 @@ export async function updateTermOfPayments(
         })
       );
     }
+
+    ops.push(
+      upsertCreditBalanceOp(bookingId, Math.max(0, lockedFloorTotal - priceAfterDiscount)),
+    );
 
     await db.$transaction(ops);
 

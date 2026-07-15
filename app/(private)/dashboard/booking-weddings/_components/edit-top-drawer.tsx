@@ -142,7 +142,8 @@ function TopContent({
 
   const defaultInlinePayment = (): InlinePayment => ({
     existingLedgerId: null,
-    enabled: false,
+    // Default TERBUKA — accordion pembayaran auto-expand di tiap kartu termin.
+    enabled: true,
     occurredAt: todayStr,
     paymentMethodId: "",
     evidenceFile: null,
@@ -207,6 +208,7 @@ function TopContent({
         if (existing) {
           prefilledMap.set(term.id, {
             existingLedgerId: existing.id,
+            // Default TERBUKA — pembayaran tercatat langsung kelihatan (auto-expand).
             enabled: true,
             occurredAt: existing.occurredAt.slice(0, 10),
             paymentMethodId: existing.paymentMethodId ?? "",
@@ -708,6 +710,7 @@ function TopContent({
                             {/* ── Catat Pembayaran Sekaligus (semua term belum locked) ── */}
                             {!locked && (() => {
                               const ip = inlinePayments.get(term.id) ?? defaultInlinePayment();
+                              const hasRecorded = Boolean(ip.existingLedgerId);
                               return (
                                 <div className="mt-1 rounded-xl border border-dashed border-border/70 bg-muted/20">
                                   <button
@@ -715,8 +718,19 @@ function TopContent({
                                     onClick={() => updateInlinePayment(term.id, { enabled: !ip.enabled })}
                                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                                   >
-                                    <MoneyBag weight="BoldDuotone" className="size-3.5 shrink-0" />
-                                    <span className="flex-1">Catat Pembayaran Sekaligus</span>
+                                    <MoneyBag
+                                      weight="BoldDuotone"
+                                      className={cn("size-3.5 shrink-0", hasRecorded && "text-primary")}
+                                    />
+                                    <span className="flex-1">
+                                      {hasRecorded ? "Pembayaran Tercatat" : "Catat Pembayaran Sekaligus"}
+                                    </span>
+                                    {hasRecorded && !ip.enabled && (
+                                      <Badge variant="secondary" className="shrink-0 gap-1 rounded-full">
+                                        <CheckCircle weight="BoldDuotone" className="size-3 text-primary" />
+                                        Tercatat
+                                      </Badge>
+                                    )}
                                     <AltArrowDown
                                       weight="BoldDuotone"
                                       className={cn("size-3.5 shrink-0 transition-transform", ip.enabled && "rotate-180")}

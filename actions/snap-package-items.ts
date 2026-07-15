@@ -15,6 +15,9 @@ import {
   saveSnapComplimentariesSchema,
   saveSnapTakeoutSchema,
 } from "@/lib/validations/snap-package-items";
+import { calcFinalFromFullPrice } from "@/lib/package-prices";
+import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { upsertCreditBalanceOp } from "@/lib/credit-balance";
 
 // ─── Save snap_package_internal_items ────────────────────────────────────────
 
@@ -290,7 +293,15 @@ export async function saveSnapTakeout(
       getProfileDataScope(session!.user.profileId),
       db.snapPackageCategoryPrice.findMany({
         where: { bookingId },
-        select: { id: true, categoryName: true, categoryId: true, isShow: true },
+        select: {
+          id: true,
+          categoryName: true,
+          categoryId: true,
+          isShow: true,
+          basePrice: true,
+          isTakeout: true,
+          takeoutNominal: true,
+        },
       }),
     ]);
 
@@ -306,10 +317,23 @@ export async function saveSnapTakeout(
     // the vendor item's category label can differ from the price category label
     // (canonical editBooking logic matches by categoryId and calls categoryName "fragile").
     // We keep a categoryName fallback for legacy rows whose categoryId is null.
-    const vendorItemRows = await db.snapPackageVendorItem.findMany({
-      where: { bookingId },
-      select: { id: true, categoryId: true, categoryName: true },
-    });
+    // Takeout is a price-reducing deduction (net = fullPrice − Σ takeout), so a takeout
+    // edit MUST recompute snapPackagePricing.price — otherwise the TOP tab (which reads
+    // that stored price) keeps a stale value. The TOP schedule is deliberately NOT
+    // auto-rebalanced here; the user reconciles the termin manually. Fetch what the
+    // price recompute needs alongside the vendor-item rows.
+    const [vendorItemRows, pricing, paidMap, bookingRow] = await Promise.all([
+      db.snapPackageVendorItem.findMany({
+        where: { bookingId },
+        select: { id: true, categoryId: true, categoryName: true },
+      }),
+      db.snapPackagePricing.findUnique({
+        where: { bookingId },
+        select: { price: true, fullPrice: true },
+      }),
+      getTermPaidMapForBookings([bookingId]),
+      db.booking.findUnique({ where: { id: bookingId }, select: { discountAmount: true } }),
+    ]);
 
     const rowById = new Map(existingRows.map((r) => [r.categoryName, r.id]));
 
@@ -354,6 +378,54 @@ export async function saveSnapTakeout(
           where: { id: vi.id },
           data: { isTakeout },
         }),
+      );
+    }
+
+    // ── Recompute net price + rebalance TOP (takeout = deduction) ────────────────
+    // Mirror the create→finalize path (calcFinalFromFullPrice + adjustTermsForPriceChange)
+    // so price and schedule always reflect the takeout state just saved. Per product
+    // decision, takeout recomputes price even on a signed (frozen) booking, but never
+    // resets approval or re-triggers the client signature.
+    if (pricing) {
+      const incomingByName = new Map(items.map((i) => [i.categoryName, i]));
+      const updatedCategories = existingRows.map((c) => {
+        const incoming = incomingByName.get(c.categoryName);
+        const isTakeout = c.isShow && (incoming ? incoming.isTakeout : c.isTakeout);
+        const takeoutNominal = isTakeout
+          ? incoming
+            ? incoming.takeoutNominal
+            : Number(c.takeoutNominal ?? 0)
+          : 0;
+        return { isShow: c.isShow, isTakeout, basePrice: Number(c.basePrice), takeoutNominal };
+      });
+
+      // fullPrice anchor: stored value; reconstruct for legacy rows (fullPrice = 0) from
+      // current price + already-deducted takeout — matches updatePackagePrices.
+      const fullPrice =
+        pricing.fullPrice > 0
+          ? pricing.fullPrice
+          : Number(pricing.price) +
+            existingRows
+              .filter((c) => c.isShow && c.isTakeout)
+              .reduce((s, c) => s + (Number(c.takeoutNominal ?? 0) || Number(c.basePrice)), 0);
+
+      const newPrice = calcFinalFromFullPrice(updatedCategories, fullPrice);
+
+      // Store the new net price so the TOP tab reads it — but do NOT touch the term
+      // schedule. Σtermin stays as the user set it; the TOP tab surfaces the gap vs the
+      // new price as "Selisih" and the user reconciles the termin manually. Overpay is
+      // still recomputed because it tracks cash-vs-net (price − discount), not the schedule.
+      const discountAmount = Number(bookingRow?.discountAmount ?? 0);
+      const netAfter = Math.max(0, newPrice - discountAmount);
+      const totalPaid = Array.from(paidMap.values()).reduce((s, v) => s + v, 0);
+      const overpayAfter = Math.max(0, totalPaid - netAfter);
+
+      ops.push(
+        db.snapPackagePricing.update({
+          where: { bookingId },
+          data: { price: newPrice, fullPrice },
+        }),
+        upsertCreditBalanceOp(bookingId, overpayAfter),
       );
     }
 

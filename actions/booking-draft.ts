@@ -949,8 +949,8 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
     // Termin sudah persist di step-3 → resolve alokasi lewat sortOrder→termId di sini.
     // Alokasi di-clamp defensif (drop sortOrder tak dikenal, cap Σ ≤ gross & ≤ nominal
     // termin) supaya isu alokasi TIDAK pernah menggagalkan finalisasi booking.
-    // Catatan: bukti bayar (File) step-6 BELUM diupload di sini — Ledger lahir tanpa
-    // evidence; lampiran menyusul (gap yang sama dengan cashbook drawer Fase 4).
+    // Bukti bayar (opsional) sudah di-upload di client (storage key di `p.evidence`)
+    // sebelum finalize — konsisten dengan inline payment di edit-top-drawer.
     if (input.payments.length > 0) {
       const termBySortOrder = new Map(
         terms.map((t) => [t.sortOrder, { id: t.id, amount: Number(t.amount) }]),
@@ -989,7 +989,7 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
               discountAmount,
               cashAmount,
               paymentMethodId: p.paymentMethodId ?? null,
-              evidence: null,
+              evidence: p.evidence ?? null,
               invoiceNumber: kwitansiNumbers[pi] ?? null,
               notes: p.notes?.trim() || null,
               showInPo: p.showInPo ?? false,

@@ -12,6 +12,7 @@ import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import type { Prisma } from "@prisma/client";
 import { updateBookingCategoryPricesSchema } from "@/lib/validations/package";
 import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { upsertCreditBalanceOp } from "@/lib/credit-balance";
 
 const updatePackagePricesSchema = z.object({
   bookingId: z.string().min(1),
@@ -50,7 +51,7 @@ export async function updatePackagePrices(
   const { bookingId, categoryToggles } = parsed.data;
 
   try {
-    const [snapVariant, allCategories, currentTerms, paidMap] = await Promise.all([
+    const [snapVariant, allCategories, currentTerms, paidMap, bookingRow] = await Promise.all([
       db.snapPackagePricing.findUnique({
         where: { bookingId },
         select: { price: true, fullPrice: true, margin: true },
@@ -74,6 +75,7 @@ export async function updatePackagePrices(
       }),
       // Pure-derived: "sudah dibayar" per termin dari Ledger cash-in ter-ack.
       getTermPaidMapForBookings([bookingId]),
+      db.booking.findUnique({ where: { id: bookingId }, select: { discountAmount: true } }),
     ]);
 
     if (!snapVariant) {
@@ -124,6 +126,13 @@ export async function updatePackagePrices(
       newPrice,
     );
 
+    // Overpay against the NEW net, matching computeOverpay's basis exactly:
+    // net = newPrice − discountAmount (floored at 0). newPrice is the post-takeout
+    // package price; the booking discount is applied on top.
+    const totalPaid = Array.from(paidMap.values()).reduce((s, v) => s + v, 0);
+    const netAfter = Math.max(0, newPrice - (bookingRow?.discountAmount ?? 0));
+    const overpayAfter = Math.max(0, totalPaid - netAfter);
+
     const ops: Prisma.PrismaPromise<unknown>[] = [
       // Update each visible category's isTakeout + takeoutNominal
       ...updatedCategories
@@ -146,6 +155,7 @@ export async function updatePackagePrices(
           data: { amount: t.newAmount },
         }),
       ),
+      upsertCreditBalanceOp(bookingId, overpayAfter),
     ];
 
     await db.$transaction(ops);
