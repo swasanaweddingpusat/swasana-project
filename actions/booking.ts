@@ -10,14 +10,14 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { isSlotConflictError, SLOT_TAKEN_MESSAGE } from "@/lib/booking-slot-error";
 import { bookingSchema, updateBookingSchema, editBookingSchema, updateBookingClientInfoSchema, updateBookingSignatureSchema } from "@/lib/validations/booking";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
-import { getNextSequence, getNextSequenceBatch } from "@/lib/counter";
+import { getNextSequence } from "@/lib/counter";
 import { generateAccessCode } from "@/lib/access-code";
 import { createBookingRevision, refreshCurrentRevisionSnapshot, patchSnapshotAdminFields } from "@/lib/booking-revision";
 import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
-import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { getTermAllocatedMap } from "@/lib/queries/ledger";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -265,18 +265,8 @@ export async function createBooking(data: unknown) {
     const eventTypeCode = input.weddingType ?? "R";
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue.brand?.code ?? ""}/${venue.code}/${eventTypeCode}/${dd}-${mm}-${year}`;
 
-    const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
-
-    // Generate invoice numbers atomically before transaction. Use the batched
-    // counter (1 round-trip, guaranteed-contiguous ascending block) instead of N
-    // concurrent getNextSequence calls whose completion order is non-deterministic
-    // and could produce out-of-order invoice numbers.
-    let invoiceNumbers: string[] = [];
-    if (input.termOfPayments && input.termOfPayments.length > 0) {
-      const monthRoman = ROMAN[now.getMonth()];
-      const invoiceSeqs = await getNextSequenceBatch(`invoice-${year}`, input.termOfPayments.length);
-      invoiceNumbers = invoiceSeqs.map((seq) => `${seq}/INV/${venue.code}/${monthRoman}/${year}`);
-    }
+    // FIX C Step 3: invoice numbers buat TOP sudah di-drop.
+    // Invoice number sekarang on-demand via Invoice entity (IssueInvoiceDrawer → actions/invoice.ts).
 
     if (input.withMaterai) {
       emateraiResult = await generateEmaterai(poNumber, new Date(`${input.eventDate}T00:00:00.000Z`));
@@ -568,7 +558,7 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i] } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } })
         )
       );
     }
@@ -1619,20 +1609,43 @@ export async function editBooking(data: unknown) {
 
     // Term of payments — re-write when structure OR sort-order changed. TOP kini
     // jadwal murni (name/amount/dueDate/sortOrder); status pembayaran DERIVED dari Ledger.
+    // Defensive guard: current callers send `termOfPayments: []` (TOP editing
+    // lives in updateTermOfPayments / edit-top-drawer.tsx), but this block
+    // enforces the same integrity as updateTermOfPayments for any future caller.
     if (termsNeedWrite && rest.termOfPayments && rest.termOfPayments.length > 0) {
-      // Lock (§6.6): term dengan alokasi Ledger cash-in ter-ack tidak boleh dihapus.
-      const editPaidMap = await getTermPaidMapForBookings([id]);
-      const dbTerms = await db.termOfPayment.findMany({
-        where: { bookingId: id },
-        select: { id: true },
-      });
-
-      const lockedTermIds = new Set(
-        dbTerms.filter((t) => (editPaidMap.get(t.id) ?? 0) > 0).map((t) => t.id),
-      );
+      // Lock (§6.6, extended by FIX A): term dengan alokasi Ledger NON-VOID APAPUN
+      // (pending atau acknowledged) tidak boleh hilang dari save — cascade-delete
+      // PaymentAllocation bakal nyisain cash-in yatim di Ledger kalau dibiarkan.
+      const [editAllocatedMap, dbTerms] = await Promise.all([
+        getTermAllocatedMap([id]),
+        db.termOfPayment.findMany({
+          where: { bookingId: id },
+          select: { id: true, name: true },
+        }),
+      ]);
 
       // Client-sent term IDs that are still in DB (the rest are new terms).
-      const clientTermIds = rest.termOfPayments.filter((t) => t.id).map((t) => t.id!);
+      const clientTermIds = new Set(rest.termOfPayments.filter((t) => t.id).map((t) => t.id!));
+
+      // Integrity guard: block outright (don't silently keep, don't silently delete)
+      // when the incoming save would drop a term that still has cash attached.
+      const removedWithCash = dbTerms.filter(
+        (t) => !clientTermIds.has(t.id) && (editAllocatedMap.get(t.id) ?? 0) > 0,
+      );
+      if (removedWithCash.length > 0) {
+        const fmt = new Intl.NumberFormat("id-ID");
+        const detail = removedWithCash
+          .map((t) => `"${t.name}" (Rp${fmt.format(editAllocatedMap.get(t.id) ?? 0)})`)
+          .join(", ");
+        return {
+          success: false,
+          error: `Termin ${detail} masih punya pembayaran (pending/lunas) yang nempel — tidak bisa dihapus. Void atau pindahkan pembayaran tersebut dulu di Cashbook.`,
+        };
+      }
+
+      const lockedTermIds = new Set(
+        dbTerms.filter((t) => (editAllocatedMap.get(t.id) ?? 0) > 0).map((t) => t.id),
+      );
 
       // Locked terms must always be preserved — include them in the "keep" set
       // even if the client somehow didn't include them in the payload.

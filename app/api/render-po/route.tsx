@@ -6,6 +6,7 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
 import { humanizeRoleName } from "@/lib/approval-flows";
+import { getPoPayments } from "@/lib/queries/getPoPayments";
 import path from "path";
 import fs from "fs/promises";
 
@@ -135,29 +136,9 @@ export async function POST(req: Request) {
     }
 
     // Payments di PO = event SETELAH snapshot freeze → SELALU live-fetch (tidak ikut
-    // revisi). Cuma yang di-flag showInPo & non-void. Pending pun tampil (keputusan
-    // spec: toggle ON cukup). Diurut kronologis.
-    const poLedgers = await db.ledger.findMany({
-      where: { bookingId, direction: "in", showInPo: true, voidedAt: null },
-      orderBy: { occurredAt: "asc" },
-      take: 500,
-      select: {
-        id: true, amount: true, occurredAt: true, invoiceNumber: true,
-        paymentMethod: { select: { bankName: true, bankAccountNumber: true } },
-        allocations: { select: { term: { select: { name: true } } }, take: 1 },
-      },
-    });
-    pdfBooking.poPayments = poLedgers.map((l) => {
-      const topName = l.allocations[0]?.term.name;
-      const bank = l.paymentMethod
-        ? `${l.paymentMethod.bankName} (${l.paymentMethod.bankAccountNumber})`
-        : "Tunai";
-      const tgl = new Date(l.occurredAt).toLocaleDateString("id-ID", {
-        day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta",
-      });
-      const label = topName ? `${topName} - ${tgl} (${bank})` : `Pembayaran ${tgl} (${bank})`;
-      return { label, amount: Number(l.amount), occurredAt: l.occurredAt.toISOString(), invoiceNumber: l.invoiceNumber ?? null };
-    });
+    // revisi). Service layer (lib/queries/getPoPayments.ts) bekuin label ke konteks
+    // Ledger saat cash-in dibuat (FIX B) — tahan switch venue/paket yang nge-rebuild TOP.
+    pdfBooking.poPayments = await getPoPayments(bookingId);
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 

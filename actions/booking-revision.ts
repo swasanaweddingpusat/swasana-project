@@ -12,7 +12,7 @@ import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { generateAccessCode } from "@/lib/access-code";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { restoreBookingRevisionSchema, syncBookingPackageSchema } from "@/lib/validations/booking";
-import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { getTermAllocatedMap } from "@/lib/queries/ledger";
 
 // ─── Shapes read out of BookingRevision.snapshotData (see lib/booking-revision.ts
 //     buildSnapshotData). Narrow interfaces so we never touch `any`. ────────────
@@ -162,14 +162,16 @@ export async function restoreBookingRevision(
       return { success: false, error: "Versi ini sudah menjadi versi aktif." };
     }
 
-    // Money guard — block restore when payments are already recorded (§6.6).
-    // Pure-derived: cek alokasi Ledger cash-in ter-ack (kolom TOP legacy sudah di-drop).
-    const revisionPaidMap = await getTermPaidMapForBookings([bookingId]);
-    const hasRecordedPayment = terms.some((t) => (revisionPaidMap.get(t.id) ?? 0) > 0);
+    // Money guard — block restore when payments are already recorded (§6.6, extended
+    // by FIX A). Pure-derived: cek alokasi Ledger NON-VOID APAPUN (pending ATAU
+    // acknowledged), bukan cuma ter-ack — konsisten dengan guard hapus termin di
+    // updateTermOfPayments/editBooking (kolom TOP legacy sudah di-drop).
+    const revisionAllocatedMap = await getTermAllocatedMap([bookingId]);
+    const hasRecordedPayment = terms.some((t) => (revisionAllocatedMap.get(t.id) ?? 0) > 0);
     if (hasRecordedPayment) {
       return {
         success: false,
-        error: "Ada pembayaran cash-in terverifikasi — versi tidak bisa di-restore. Batalkan pembayaran (void) dulu.",
+        error: "Ada pembayaran cash-in (pending/terverifikasi) yang masih nempel — versi tidak bisa di-restore. Void atau pindahkan pembayaran itu dulu.",
       };
     }
 

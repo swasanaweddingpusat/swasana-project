@@ -8,8 +8,7 @@ import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
-import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
+import { getTermPaidMapForBookings, getTermAllocatedMap } from "@/lib/queries/ledger";
 
 interface TermUpdate {
   id: string;
@@ -89,21 +88,46 @@ export async function updateTermOfPayments(
     }
 
     // Fetch ALL terms for this booking so we can detect removed terms and apply the
-    // Ledger lock (§6.6). Sumber lock sekarang MURNI Ledger — kolom TOP.paymentStatus/
-    // ackStatus sudah di-drop (Fase 5).
-    const [allDbTerms, paidMap] = await Promise.all([
+    // Ledger lock (§6.6, extended by FIX A). Sumber lock sekarang MURNI Ledger — kolom
+    // TOP.paymentStatus/ackStatus sudah di-drop (Fase 5).
+    const [allDbTerms, paidMap, allocatedMap] = await Promise.all([
       db.termOfPayment.findMany({
         where: { bookingId },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
       getTermPaidMapForBookings([bookingId]),
+      getTermAllocatedMap([bookingId]),
     ]);
 
-    // Locked term = punya alokasi Ledger cash-in ter-ack. Selalu dipertahankan
-    // walau client menghilangkannya (tidak boleh terhapus/teredit).
+    const clientTermIds = new Set(terms.map((t) => t.id));
+
+    // ── Integrity guard (FIX A) ───────────────────────────────────────────────
+    // "Termin terkunci" diperluas: punya alokasi Ledger NON-VOID APAPUN (pending
+    // ATAU acknowledged) — bukan cuma acknowledged. Kalau incoming save mau
+    // ngilangin termin yang masih punya cash-in nempel, TOLAK eksplisit (bukan
+    // silent-keep, apalagi silent-delete) — cascade-delete PaymentAllocation
+    // bakal nyisain Ledger yatim (cash-in tanpa termin). User wajib void/pindahin
+    // pembayarannya dulu di Cashbook sebelum termin ini boleh dihapus.
+    const removedWithCash = allDbTerms.filter(
+      (t) => !clientTermIds.has(t.id) && (allocatedMap.get(t.id) ?? 0) > 0,
+    );
+    if (removedWithCash.length > 0) {
+      const fmt = new Intl.NumberFormat("id-ID");
+      const detail = removedWithCash
+        .map((t) => `"${t.name}" (Rp${fmt.format(allocatedMap.get(t.id) ?? 0)})`)
+        .join(", ");
+      return {
+        success: false,
+        error: `Termin ${detail} masih punya pembayaran (pending/lunas) yang nempel — tidak bisa dihapus. Void atau pindahkan pembayaran tersebut dulu di Cashbook sebelum mengubah jadwal ini.`,
+      };
+    }
+
+    // Locked term (editing) = punya alokasi Ledger cash-in ter-ack. Selalu
+    // dipertahankan walau client menghilangkannya (unreachable now that removal
+    // is blocked above whenever cash is attached, but kept as the safety net for
+    // the update-only path below where sortOrder-only edits still apply).
     const hasAckedLedger = (termId: string): boolean => (paidMap.get(termId) ?? 0) > 0;
     const lockedTermIds = new Set(allDbTerms.filter((t) => hasAckedLedger(t.id)).map((t) => t.id));
-    const clientTermIds = new Set(terms.map((t) => t.id));
     const keepIds = [...clientTermIds, ...lockedTermIds];
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -185,49 +209,6 @@ export async function updateTermOfPayments(
     return { success: true };
   } catch (e) {
     console.error("[updateTermOfPayments]", e);
-    return { success: false, error: "Terjadi kesalahan." };
-  }
-}
-
-export async function addTermOfPayment(bookingId: string, data: { name: string; amount: number; dueDate: string }) {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
-  if (error) return { success: false, error };
-  if (!mutationLimiter.check(`top-add:${session!.user.id}`)) return { success: false, ...rateLimitError() };
-
-  const scope = await getProfileDataScope(session!.user.profileId);
-  if (!(await canAccessBooking(session!.user.profileId, scope, bookingId))) {
-    return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
-  }
-
-  try {
-    // Atomic sortOrder: compute MAX(sortOrder)+1 via a scalar subquery inside the
-    // INSERT so two concurrent adds can't read the same max and collide. The VALUES
-    // form always inserts exactly one row (the subquery yields 0 when no terms exist).
-    // id/createdAt/updatedAt are Prisma-level defaults, so we set them explicitly here.
-    const id = randomUUID();
-    await db.$executeRaw(
-      Prisma.sql`
-        INSERT INTO term_of_payments ("id", "bookingId", "name", "amount", "dueDate", "sortOrder", "paymentStatus", "ackStatus", "createdAt", "updatedAt")
-        VALUES (
-          ${id}, ${bookingId}, ${data.name}, ${data.amount}, ${new Date(data.dueDate)},
-          (SELECT COALESCE(MAX("sortOrder"), -1) + 1 FROM term_of_payments WHERE "bookingId" = ${bookingId}),
-          'unpaid'::"TermOfPaymentStatus", 'pending', NOW(), NOW()
-        )
-      `,
-    );
-
-    await logAudit({
-      userId: session!.user.id,
-      action: "created",
-      entityType: "term_of_payment",
-      entityId: bookingId,
-      description: `Added term: ${data.name}`,
-    });
-
-    revalidateTag("bookings", "max");
-    return { success: true };
-  } catch (e) {
-    console.error("[addTermOfPayment]", e);
     return { success: false, error: "Terjadi kesalahan." };
   }
 }

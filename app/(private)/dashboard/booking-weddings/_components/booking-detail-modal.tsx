@@ -703,10 +703,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                 <p className={lbl}>Jatuh Tempo</p>
                                 <p className={val}>{fmtDate(t.dueDate, "long")}</p>
                               </div>
-                              <div>
-                                <p className={lbl}>No. Invoice</p>
-                                <p className={val}>{t.invoiceNumber ?? "-"}</p>
-                              </div>
                             </div>
                           </div>
                         ))}
@@ -720,7 +716,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Termin</th>
                               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nominal</th>
                               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Jatuh Tempo</th>
-                              <th className="text-left px-4 py-3 font-medium text-muted-foreground">No. Invoice</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -729,7 +724,6 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                                 <td className="px-4 py-3 font-medium text-foreground">{t.name || `Termin ${i + 1}`}</td>
                                 <td className="px-4 py-3 text-foreground">{fmtPrice(t.amount)}</td>
                                 <td className="px-4 py-3 text-foreground">{fmtDate(t.dueDate, "long")}</td>
-                                <td className="px-4 py-3 text-foreground">{t.invoiceNumber ?? "-"}</td>
                               </tr>
                             ))}
                           </tbody>

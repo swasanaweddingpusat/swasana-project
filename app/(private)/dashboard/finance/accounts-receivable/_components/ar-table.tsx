@@ -11,13 +11,17 @@ import {
   Card,
   Bell,
   DownloadMinimalistic,
-  FileSend,
   Wallet,
   Copy,
   Copy as CopyIcon,
   ChatRoundLine,
   VerifiedCheck,
   UndoLeft,
+  AddSquare,
+  Document,
+  Restart,
+  MenuDots,
+  TrashBinTrash,
 } from "@solar-icons/react";
 import {
   Table,
@@ -41,7 +45,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Drawer } from "@/components/shared/drawer";
+import { IssueInvoiceDrawer } from "./IssueInvoiceDrawer";
+import { useVoidInvoice } from "@/hooks/use-invoices";
 import {
   fmtRp,
   fmtDate,
@@ -125,6 +138,15 @@ export function ARTable({
   const [invoiceTarget, setInvoiceTarget] = useState<DocTarget | null>(null);
   const [rekapBooking, setRekapBooking] = useState<ARBooking | null>(null);
 
+  // Issue-invoice drawer state
+  const [issueDrawerTarget, setIssueDrawerTarget] = useState<{
+    termId: string;
+    termName: string;
+    termAmount: number;
+    termDueDate: string | null;
+    bookingId: string;
+  } | null>(null);
+
   if (loading) {
     return (
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -198,6 +220,15 @@ export function ARTable({
                   onRekap={() => setRekapBooking(booking)}
                   onOpenInvoice={(termin) => setInvoiceTarget({ booking, termin })}
                   onOpenKwitansi={(termin) => setKwitansiTarget({ booking, termin })}
+                  onIssueInvoice={(termin) =>
+                    setIssueDrawerTarget({
+                      termId: termin.id,
+                      termName: termin.name,
+                      termAmount: termin.amount,
+                      termDueDate: termin.dueDate,
+                      bookingId: booking.id,
+                    })
+                  }
                   onRecognize={onRecognize ? () => onRecognize(booking) : undefined}
                   onUndoRecognize={onUndoRecognize ? () => onUndoRecognize(booking) : undefined}
                   isRecognized={recognizedIds?.has(booking.id) ?? false}
@@ -273,6 +304,15 @@ export function ARTable({
         booking={kwitansiTarget?.booking ?? null}
         termin={kwitansiTarget?.termin ?? null}
       />
+      <IssueInvoiceDrawer
+        open={!!issueDrawerTarget}
+        onOpenChange={(open) => { if (!open) setIssueDrawerTarget(null); }}
+        termId={issueDrawerTarget?.termId ?? ""}
+        termName={issueDrawerTarget?.termName ?? ""}
+        termAmount={issueDrawerTarget?.termAmount ?? 0}
+        termDueDate={issueDrawerTarget?.termDueDate ?? null}
+        bookingId={issueDrawerTarget?.bookingId ?? ""}
+      />
       <RekapKwitansiDrawer
         isOpen={!!rekapBooking}
         onClose={() => setRekapBooking(null)}
@@ -298,6 +338,7 @@ function BookingRow({
   onRekap,
   onOpenInvoice,
   onOpenKwitansi,
+  onIssueInvoice,
   onRecognize,
   onUndoRecognize,
   isRecognized = false,
@@ -311,6 +352,7 @@ function BookingRow({
   onRekap: () => void;
   onOpenInvoice: (termin: ARTermin) => void;
   onOpenKwitansi: (termin: ARTermin) => void;
+  onIssueInvoice: (termin: ARTermin) => void;
   onRecognize?: () => void;
   onUndoRecognize?: () => void;
   isRecognized?: boolean;
@@ -453,6 +495,7 @@ function BookingRow({
                         termin={termin}
                         onOpenInvoice={() => onOpenInvoice(termin)}
                         onOpenKwitansi={() => onOpenKwitansi(termin)}
+                        onIssueInvoice={() => onIssueInvoice(termin)}
                       />
                     ))}
                   </TableBody>
@@ -472,10 +515,12 @@ function TerminRow({
   termin,
   onOpenInvoice,
   onOpenKwitansi,
+  onIssueInvoice,
 }: {
   termin: ARTermin;
   onOpenInvoice: () => void;
   onOpenKwitansi: () => void;
+  onIssueInvoice: () => void;
 }) {
   const terminBadge = getTerminBadge(termin.status);
   const invoiceBadge = getInvoiceBadge(termin.statusInvoice);
@@ -518,8 +563,32 @@ function TerminRow({
       <TableCell className="truncate px-4 py-3 align-middle text-sm text-foreground">
         {termin.catatan || "-"}
       </TableCell>
+      {/* Invoice entity badge (FIX C) */}
       <TableCell className="px-4 py-3 align-middle">
-        <TerminActions termin={termin} onOpenInvoice={onOpenInvoice} onOpenKwitansi={onOpenKwitansi} />
+        {termin.invoice === null ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+            <Document weight="BoldDuotone" className="size-3 shrink-0" />
+            Belum Ditagih
+          </span>
+        ) : termin.invoice.status === "issued" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs text-primary">
+            <Document weight="BoldDuotone" className="size-3 shrink-0" />
+            {termin.invoice.number}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground line-through">
+            <Document weight="BoldDuotone" className="size-3 shrink-0" />
+            {termin.invoice.number}
+          </span>
+        )}
+      </TableCell>
+      <TableCell className="px-4 py-3 align-middle">
+        <TerminActions
+          termin={termin}
+          onOpenInvoice={onOpenInvoice}
+          onOpenKwitansi={onOpenKwitansi}
+          onIssueInvoice={onIssueInvoice}
+        />
       </TableCell>
     </TableRow>
   );
@@ -573,41 +642,117 @@ function TerminActions({
   termin,
   onOpenInvoice,
   onOpenKwitansi,
+  onIssueInvoice,
 }: {
   termin: ARTermin;
   onOpenInvoice: () => void;
   onOpenKwitansi: () => void;
+  onIssueInvoice: () => void;
 }) {
-  // Termin actions: preview invoice + preview kwitansi.
-  // Kwitansi (receipt) only makes sense once the termin is paid.
+  const { mutate: voidMutate, isPending: isVoiding } = useVoidInvoice();
+  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
   const canKwitansi = termin.status === "paid";
+  const hasActiveInvoice = termin.invoice?.status === "issued";
+  const hasVoidInvoice = termin.invoice?.status === "void";
+
+  function handleVoid(): void {
+    if (!termin.invoice) return;
+    voidMutate(termin.invoice.id, {
+      onSuccess: () => {
+        toast.success("Invoice berhasil dibatalkan");
+        setVoidConfirmOpen(false);
+      },
+      onError: (err) => {
+        toast.error(err.message ?? "Gagal membatalkan invoice");
+      },
+    });
+  }
+
   return (
-    <div className="flex items-center justify-end gap-0.5">
-      <button
-        className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        onClick={onOpenInvoice}
-        title="Preview invoice"
-      >
-        <FileSend weight="BoldDuotone" className="size-4" />
-      </button>
-      {canKwitansi ? (
-        <button
-          className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={onOpenKwitansi}
-          title="Preview kwitansi"
-        >
-          <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
-        </button>
-      ) : (
-        <button
-          disabled
-          className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
-          title="Kwitansi tersedia setelah lunas"
-        >
-          <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
-        </button>
-      )}
-    </div>
+    <>
+      <div className="flex items-center justify-end gap-0.5">
+        {/* Kwitansi */}
+        {canKwitansi ? (
+          <button
+            className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={onOpenKwitansi}
+            title="Preview kwitansi"
+          >
+            <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
+          </button>
+        ) : (
+          <button
+            disabled
+            className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
+            title="Kwitansi tersedia setelah lunas"
+          >
+            <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
+          </button>
+        )}
+
+        {/* Invoice dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Aksi invoice"
+            >
+              <MenuDots weight="BoldDuotone" className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={onOpenInvoice}>
+              <Eye weight="BoldDuotone" className="mr-2 size-4" />
+              Preview Invoice Lama
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            {!hasActiveInvoice && (
+              <DropdownMenuItem onClick={onIssueInvoice}>
+                {hasVoidInvoice ? (
+                  <Restart weight="BoldDuotone" className="mr-2 size-4" />
+                ) : (
+                  <AddSquare weight="BoldDuotone" className="mr-2 size-4" />
+                )}
+                {hasVoidInvoice ? "Terbitkan Ulang" : "Terbitkan Invoice"}
+              </DropdownMenuItem>
+            )}
+            {hasActiveInvoice && (
+              <DropdownMenuItem
+                onSelect={(e) => { e.preventDefault(); setVoidConfirmOpen(true); }}
+                className="text-destructive focus:text-destructive"
+              >
+                <TrashBinTrash weight="BoldDuotone" className="mr-2 size-4" />
+                Batalkan Invoice
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Void confirm dialog — outside dropdown to avoid nesting issues */}
+      <AlertDialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Batalkan Invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Invoice {termin.invoice?.number} akan dibatalkan (void). Tindakan ini tidak bisa diurungkan. Invoice baru bisa diterbitkan ulang setelahnya.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isVoiding}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleVoid}
+              disabled={isVoiding}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isVoiding ? "Membatalkan..." : "Ya, Batalkan"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

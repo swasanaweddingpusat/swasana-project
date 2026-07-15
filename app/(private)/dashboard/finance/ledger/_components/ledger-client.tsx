@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AddCircle } from "@solar-icons/react";
+import { AddCircle, Refresh } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LedgerSummaryCards, type LedgerSummaryData } from "./ledger-summary-cards";
@@ -13,6 +13,8 @@ import { KwitansiPreviewModal } from "./kwitansi-preview-modal";
 import { LedgerAckModal } from "./ledger-ack-modal";
 import { LedgerRejectModal } from "./LedgerRejectModal";
 import { LedgerVoidModal } from "./LedgerVoidModal";
+import { LedgerDeleteModal } from "./LedgerDeleteModal";
+import { LedgerUnackModal } from "./LedgerUnackModal";
 import { LedgerActivityModal } from "./ledger-activity-modal";
 import type { BookingPickerItem, LedgerRow } from "@/lib/queries/ledger";
 import type { PaymentMethodPickerItem } from "@/lib/queries/payment-methods";
@@ -69,6 +71,10 @@ export function LedgerClient({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [voidEntry, setVoidEntry] = useState<LedgerRow | null>(null);
   const [voidOpen, setVoidOpen] = useState(false);
+  const [deleteEntry, setDeleteEntry] = useState<LedgerRow | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [unackEntry, setUnackEntry] = useState<LedgerRow | null>(null);
+  const [unackOpen, setUnackOpen] = useState(false);
   const [activityEntry, setActivityEntry] = useState<LedgerRow | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
 
@@ -153,6 +159,16 @@ export function LedgerClient({
     setVoidOpen(true);
   }
 
+  function handleDelete(e: LedgerRow): void {
+    setDeleteEntry(e);
+    setDeleteOpen(true);
+  }
+
+  function handleUnack(e: LedgerRow): void {
+    setUnackEntry(e);
+    setUnackOpen(true);
+  }
+
   function handleKwitansi(e: LedgerRow): void {
     setKwitansiEntry(e);
     setKwitansiOpen(true);
@@ -218,8 +234,19 @@ export function LedgerClient({
         </div>
 
         {/* Toolbar */}
-        <div className="border-t border-border/60 px-4 py-3 sm:px-5">
-          <LedgerFilterBar filters={filters} onFiltersChange={handleFiltersChange} />
+        <div className="flex items-center gap-2 border-t border-border/60 px-4 py-3 sm:px-5">
+          <div className="flex-1">
+            <LedgerFilterBar filters={filters} onFiltersChange={handleFiltersChange} />
+          </div>
+          <button
+            type="button"
+            onClick={refresh}
+            aria-label="Refresh data"
+            title="Refresh data"
+            className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Refresh weight="BoldDuotone" className="size-4" />
+          </button>
         </div>
 
         {/* List */}
@@ -229,6 +256,8 @@ export function LedgerClient({
             onAck={handleAck}
             onReject={handleReject}
             onVoid={handleVoid}
+            onDelete={handleDelete}
+            onUnack={handleUnack}
             onKwitansi={handleKwitansi}
             onActivity={handleActivity}
             currentPage={safePage}
@@ -260,6 +289,12 @@ export function LedgerClient({
 
       {/* Void */}
       <LedgerVoidModal open={voidOpen} onOpenChange={setVoidOpen} entry={voidEntry} onSuccess={refresh} />
+
+      {/* Delete */}
+      <LedgerDeleteModal open={deleteOpen} onOpenChange={setDeleteOpen} entry={deleteEntry} onSuccess={refresh} />
+
+      {/* Unack */}
+      <LedgerUnackModal open={unackOpen} onOpenChange={setUnackOpen} entry={unackEntry} onSuccess={refresh} />
 
       {/* Riwayat */}
       <LedgerActivityModal open={activityOpen} onOpenChange={setActivityOpen} entry={activityEntry} />

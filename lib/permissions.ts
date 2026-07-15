@@ -59,6 +59,32 @@ export async function requirePermission(
   return { session, error: null };
 }
 
+/**
+ * Server-action guard: passes when user satisfies ANY of the given checks.
+ * Use for actions reachable from multiple feature contexts (e.g. createCashIn
+ * callable dari booking drawer ATAU AR finance).
+ */
+export async function requireAnyPermission(
+  checks: PermissionCheck[]
+): Promise<
+  | { session: Session; error: null }
+  | { session: null; error: string }
+> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { session: null, error: "Sesi tidak ditemukan. Silakan login kembali." };
+  }
+  if (await isSuperAdmin(session.user.roleId)) {
+    return { session, error: null };
+  }
+  for (const check of checks) {
+    if (await hasPermission(session.user.roleId, check.module, check.action)) {
+      return { session, error: null };
+    }
+  }
+  return { session: null, error: "Anda tidak memiliki izin untuk melakukan tindakan ini." };
+}
+
 // ─── For route handlers — returns Response or session ────────────────────────
 
 export async function requirePermissionForRoute(
