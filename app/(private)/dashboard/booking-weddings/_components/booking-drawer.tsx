@@ -1,26 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, TrashBinTrash, CloseCircle, AddCircle, AltArrowDown, AlignVerticalSpacing, Copy, CheckCircle, UploadMinimalistic, InfoCircle } from "@solar-icons/react";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Calendar as CalendarIcon, CloseCircle, AltArrowDown } from "@solar-icons/react";
+import { CreatePaymentStep, makeCreateInlinePayment, type CreateInlinePayment } from "@/app/(private)/dashboard/booking-weddings/_components/_create-booking/CreatePaymentStep";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -30,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
@@ -149,66 +134,6 @@ interface TermRow {
   termId?: string | null;
 }
 
-/**
- * Fase 0 (design prototype) — one entry in the new "Payment" step (step 6).
- * Local React state only, NOT persisted. Links to `TermRow`s by `uid` (client-side
- * id), the same resolution strategy the real implementation will use to map
- * uid → DB termId at submit time (see docs/booking-top-payment-ledger-plan.md §7).
- */
-interface PaymentReceiptRow {
-  /** Stable client-side id for React keys. Never persisted. */
-  uid: string;
-  occurredAt: string;
-  amount: number;
-  paymentMethodId: string;
-  evidence: File | null;
-  notes: string;
-  /** uids of the step-5 `TermRow`s this receipt is allocated to. */
-  linkedTermUids: string[];
-  /** DiscountProgram id, or "" when no promo applied. */
-  promoId: string;
-  /** Tampilkan pembayaran ini di Summary Payment PO PDF. Default false. */
-  showInPo: boolean;
-}
-
-interface PromoOption {
-  id: string;
-  name: string;
-  discountType: "PERCENTAGE" | "NOMINAL";
-  discountValue: number;
-}
-
-function makeEmptyReceipt(): PaymentReceiptRow {
-  return {
-    uid: safeRandomUUID(),
-    occurredAt: todayISODate(),
-    amount: 0,
-    paymentMethodId: "",
-    evidence: null,
-    notes: "",
-    linkedTermUids: [],
-    promoId: "",
-    showInPo: false,
-  };
-}
-
-/** A receipt row the user hasn't touched yet — never blocks the Payment step. */
-function isReceiptRowEmpty(r: PaymentReceiptRow): boolean {
-  return (
-    r.amount === 0 &&
-    !r.paymentMethodId &&
-    !r.evidence &&
-    r.linkedTermUids.length === 0 &&
-    !r.notes.trim() &&
-    !r.promoId
-  );
-}
-
-/** A receipt row with all required fields present — also never blocks. */
-function isReceiptRowFilled(r: PaymentReceiptRow): boolean {
-  return r.amount > 0 && !!r.paymentMethodId && !!r.evidence && r.linkedTermUids.length > 0;
-}
-
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   // Throw on error so React Query treats it as a real error (retried, NOT cached
@@ -219,27 +144,6 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
-}
-
-function FilePreview({ file, onOpen }: { file: File; onOpen: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  // Create the object URL inside the effect (not during render) so the create
-  // and revoke stay balanced — React StrictMode double-invokes effects, and a
-  // render-phase URL would get revoked without being recreated, blanking the
-  // preview.
-  /* eslint-disable react-hooks/set-state-in-effect -- syncing object-URL preview from the file prop */
-  useEffect(() => {
-    if (!file.type.startsWith("image/")) { setUrl(null); return; }
-    const objectUrl = URL.createObjectURL(file);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  if (!url) return null;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" className="relative z-10 h-10 w-10 object-cover rounded border shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(); }} />;
 }
 
 function getPackagePrice(p: PackageData) {
@@ -254,14 +158,6 @@ function toLocalISO(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}T00:00:00.000Z`;
-}
-
-/** Today as `YYYY-MM-DD`, for the Payment step's native `<input type="date">` default. */
-function todayISODate(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 // Fixed defaults: Booking Fee Rp5jt, DP Rp10jt. The rest of the package price
@@ -310,34 +206,6 @@ function clearLocalDraftArtifacts() {
   try { localStorage.removeItem("booking_draft"); } catch { /* noop */ }
   // Fire-and-forget — IndexedDB cleanup is async but non-critical.
   void idbClearAllEvidence();
-}
-
-/* ─── Sortable Term wrapper ───────────────────────────────────────────────────
- * Wraps one TOP Collapsible with drag-drop. The row body stays inline in the
- * main component (render-prop) so it keeps access to all the local closures.
- * The drag handle props are passed through to the caller.
- * ─────────────────────────────────────────────────────────────────────────── */
-function SortableTermWrapper({
-  uid,
-  children,
-}: {
-  uid: string;
-  children: (drag: {
-    attributes: ReturnType<typeof useSortable>["attributes"];
-    listeners: ReturnType<typeof useSortable>["listeners"];
-  }) => ReactNode;
-}) {
-  const { setNodeRef, transform, transition, isDragging, attributes, listeners } =
-    useSortable({ id: uid });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && "opacity-50 relative z-10")}
-    >
-      {children({ attributes, listeners })}
-    </div>
-  );
 }
 
 /** Map a lead's wedding eventType.name back to the drawer's weddingType code. */
@@ -416,7 +284,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 7;
+  const totalSteps = 6;
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
@@ -476,15 +344,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const leadOptions = leadsResult?.items ?? [];
   const { data: venues = [] } = useQuery({ queryKey: ["venues"], queryFn: () => fetchJson<Option[]>("/api/venues"), staleTime: 5 * 60_000 });
   const { data: sourceOptions = [] } = useQuery({ queryKey: ["source-of-informations"], queryFn: () => fetchJson<Option[]>("/api/source-of-informations"), staleTime: 5 * 60_000 });
-  // Live promo source for the Payment step (step 6) — same list used in Finance/Ledger.
-  const { data: promosResult } = useQuery({
-    queryKey: ["promos", "active"],
-    queryFn: () => fetchJson<{ items: PromoOption[] }>("/api/promos?activeOnly=true"),
-    staleTime: 5 * 60_000,
-    retry: 1,
-  });
-  const promoOptions = promosResult?.items ?? [];
-
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const { data: packages = [], isLoading: packagesLoading, isError: packagesError } = useQuery({ queryKey: ["packages", selectedVenueId, "booking"], queryFn: () => fetchJson<PackageData[]>(`/api/packages?venueId=${selectedVenueId}&forBooking=true`), enabled: !!selectedVenueId, staleTime: 5 * 60_000, retry: 1 });
 
@@ -579,30 +438,16 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   // Track COLLAPSED terms by uid (stable across drag-reorder) — default empty = semua kebuka
   const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
-  // Step 6 "Payment" (Fase 0 design prototype) — local-only, NOT persisted yet.
-  // See docs/booking-top-payment-ledger-plan.md.
-  const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceiptRow[]>([]);
-
-  function updateReceipt(uid: string, patch: Partial<PaymentReceiptRow>) {
-    setPaymentReceipts((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
-  }
-  function removeReceipt(uid: string) {
-    setPaymentReceipts((prev) => prev.filter((r) => r.uid !== uid));
-  }
-  function toggleReceiptTermLink(receiptUid: string, termUid: string) {
-    setPaymentReceipts((prev) =>
-      prev.map((r) => {
-        if (r.uid !== receiptUid) return r;
-        const has = r.linkedTermUids.includes(termUid);
-        return {
-          ...r,
-          linkedTermUids: has
-            ? r.linkedTermUids.filter((u) => u !== termUid)
-            : [...r.linkedTermUids, termUid],
-        };
-      }),
-    );
-  }
+  // Inline payment per-termin (opsional, keyed by term uid). Dikumpulin lokal — booking
+  // belum punya DB id — lalu disimpan sebagai cash-in saat finalize (finalize.payments).
+  const [inlinePayments, setInlinePayments] = useState<Map<string, CreateInlinePayment>>(new Map());
+  const updateInlinePayment = (uid: string, patch: Partial<CreateInlinePayment>) => {
+    setInlinePayments((prev) => {
+      const next = new Map(prev);
+      next.set(uid, { ...(next.get(uid) ?? makeCreateInlinePayment()), ...patch });
+      return next;
+    });
+  };
   // Guard: user has manually edited term amounts in step 3.
   // When true, allocatePrice will NOT override amounts[0] and [1] with the
   // BOOKING_FEE_DEFAULT / DP_DEFAULT constants — it preserves whatever the user typed.
@@ -617,28 +462,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   // the deleteMany+create race that causes duplicate termOfPayment rows).
   const step3SaveInFlightRef = useRef<Promise<void> | null>(null);
 
-  function toggleTerm(uid: string) {
-    setCollapsedTerms((prev) => {
-      const next = new Set(prev);
-      if (next.has(uid)) { next.delete(uid); } else { next.add(uid); }
-      return next;
-    });
-  }
 
-  const termSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  function handleTermDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setTerms((prev) => {
-      const oldIdx = prev.findIndex((t) => t.uid === active.id);
-      const newIdx = prev.findIndex((t) => t.uid === over.id);
-      if (oldIdx === -1 || newIdx === -1) return prev;
-      // Renumber sortOrder to match the new visual order — the save/upload flow
-      // matches terms to DB rows by sortOrder, so it must equal the array index.
-      return arrayMove(prev, oldIdx, newIdx).map((t, i) => ({ ...t, sortOrder: i }));
-    });
-  }
 
   const form = useForm<BookingInput>({
     defaultValues: {
@@ -656,7 +480,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   function resetToClean() {
     form.reset();
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
-    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setPaymentReceipts([]);
+    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setInlinePayments(new Map());
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw("");
@@ -878,8 +702,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const getPriceAfterDiscount = () => Math.max(0, getBasePrice() - specialBonusAmount);
   const getTotalTerms = () => terms.reduce((s, t) => s + (t.amount || 0), 0);
   const getDifference = () => getTotalTerms() - getPriceAfterDiscount();
-  const getTotalPayments = () => paymentReceipts.reduce((s, r) => s + (r.amount || 0), 0);
-  const getPaymentDifference = () => getTotalPayments() - getPriceAfterDiscount();
 
   // Booking Fee (index 0) and DP (index 1) start at their defaults; the
   // leftover (total − fee − dp) is split evenly across the remaining terms, with
@@ -972,12 +794,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       terms.every((t) => !!t.dueDate)
     )
   );
-  // Step 6 complete: Payment (Fase 0 prototype, local-only) — OPTIONAL. Every
-  // receipt row must be either untouched (blank) or fully filled; a row that's
-  // partially filled blocks Continue until it's completed or removed.
-  const isStep6Complete = paymentReceipts.every((r) => isReceiptRowEmpty(r) || isReceiptRowFilled(r));
-  // Step 7 complete: signing location (+ signature when user IS the sales)
-  const isStep7Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
+  // Step 6 complete: signing location (+ signature when user IS the sales)
+  const isStep6Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
@@ -1428,7 +1246,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
     // ── Step 5 → 6: Term of Payments ──────────────────────────────────────────
     // Fase 5: TOP = jadwal murni. Step-5 hanya validasi jadwal + simpan draft
-    // (nama/nominal/tanggal). Status & bukti bayar dipindah ke Cashbook (step 6).
+    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan setelah
+    // booking tersimpan lewat Finance AR / edit booking — bukan di create flow.
     if (currentStep === 5) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
@@ -1455,7 +1274,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         };
         const capturedDraftId = draftId;
 
-        // Simpan step-3 di background — advance ke step-6 tak perlu menunggu.
+        // Simpan step-3 di background — advance ke step-6 (TTD) tak perlu menunggu.
         const prev = step3SaveInFlightRef.current;
         const savePromise = backgroundSave(
           async () => {
@@ -1471,20 +1290,12 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 6 → 7: Payment (Fase 0 prototype) — local state only, no DB write.
-    // The step is optional (isStep6Complete gates partially-filled rows, not
-    // "must have data"), so advancing here is a plain step bump. ──
-    if (currentStep === 6) {
-      setCurrentStep(7);
-      return;
-    }
-
     if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
   };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 7) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
+      if (currentStep === 6) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -1520,12 +1331,56 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
+      // Inline payments (opsional) → cash-in yang tercatat saat booking dibuat.
+      // Hanya termin yang di-enable + punya rekening + nominal > 0 yang dikirim;
+      // tiap pembayaran bayar penuh ke termin-nya (alokasi by sortOrder). Bukti
+      // di-upload dulu (kalau ada) — gagal upload non-fatal (lanjut tanpa bukti).
+      const payments: {
+        occurredAt: string;
+        amount: number;
+        paymentMethodId: string | null;
+        discountAmount: number;
+        notes: string | null;
+        allocations: { sortOrder: number; amount: number }[];
+        showInPo: boolean;
+        evidence: string | null;
+      }[] = [];
+      for (const t of terms) {
+        const ip = inlinePayments.get(t.uid);
+        if (!ip?.enabled || !ip.paymentMethodId || t.amount <= 0) continue;
+        let evidence: string | null = null;
+        if (ip.evidenceFile) {
+          const fd = new FormData();
+          fd.append("file", ip.evidenceFile);
+          try {
+            const up = await fetch("/api/upload/booking-fee-evidence", { method: "POST", body: fd });
+            if (up.ok) {
+              const d = (await up.json()) as { key?: string };
+              evidence = d.key ?? null;
+            }
+          } catch {
+            // non-fatal: lanjut tanpa bukti bayar
+          }
+        }
+        payments.push({
+          occurredAt: ip.occurredAt,
+          amount: t.amount,
+          paymentMethodId: ip.paymentMethodId || null,
+          discountAmount: 0,
+          notes: ip.notes.trim() || null,
+          allocations: [{ sortOrder: t.sortOrder, amount: t.amount }],
+          showInPo: ip.showInPo,
+          evidence,
+        });
+      }
+
       const finalizePayload = {
         draftId,
         signingLocation: signingLocation || null,
         signatureSales: signatureSales || null,
         withMaterai: values.withMaterai ?? false,
         leadId: selectedLeadId || null,
+        payments,
         bonuses: bonuses.map((b) => ({
           vendorId: b.vendorId,
           vendorCategoryId: b.vendorCategoryId,
@@ -1552,42 +1407,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             isShow: c.isShow,
             isTakeout,
             takeoutNominal: isTakeout ? (takeoutPrices[c.categoryName] ?? c.basePrice) : 0,
-          };
-        }),
-        // Step 6 (Payment) → cash-in. Cuma baris yang terisi lengkap yang dikirim;
-        // alokasi nunjuk termin pakai sortOrder (server resolve ke termId). Potongan
-        // promo dihitung di sini (§6.4). Bukti bayar File belum diupload (menyusul).
-        payments: paymentReceipts.filter(isReceiptRowFilled).map((r) => {
-          const promo = promoOptions.find((p) => p.id === r.promoId) ?? null;
-          let discountAmount = 0;
-          if (promo) {
-            discountAmount =
-              promo.discountType === "PERCENTAGE"
-                ? Math.round((r.amount * promo.discountValue) / 100)
-                : promo.discountValue;
-            if (discountAmount > r.amount) discountAmount = r.amount;
-          }
-          // Greedy: alokasi gross ke tiap termin terpilih penuh sampai budget habis.
-          const linked = terms.filter((t) => r.linkedTermUids.includes(t.uid));
-          let budget = r.amount;
-          const allocations: { sortOrder: number; amount: number }[] = [];
-          for (const t of linked) {
-            if (budget <= 0) break;
-            const amt = Math.min(t.amount, budget);
-            if (amt > 0) {
-              allocations.push({ sortOrder: t.sortOrder, amount: amt });
-              budget -= amt;
-            }
-          }
-          return {
-            occurredAt: r.occurredAt,
-            amount: r.amount,
-            paymentMethodId: r.paymentMethodId || null,
-            discountProgramId: r.promoId || null,
-            discountAmount,
-            notes: r.notes.trim() || null,
-            allocations,
-            showInPo: r.showInPo,
           };
         }),
       };
@@ -1666,10 +1485,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 6 && !isStep6Complete) ||
-    (currentStep === 7 && !isStep7Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 7 && isDraftMutating) ||
-    (currentStep === 7 && isSubmitting);
+    (currentStep === 6 && isDraftMutating) ||
+    (currentStep === 6 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -2523,521 +2341,59 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
               )}
               {/* ─── Step 5: Term of Payments ─── */}
               {currentStep === 5 && (
-                <div className="space-y-4">
-                  {/* Package price */}
-                  <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Total Harga Package</FormLabel>
-                    <Input disabled value={`Rp${fmtRp(getPriceAfterDiscount())}`} className="mt-1" />
-                  </div>
-
-                  {/* Discount / Special Bonus */}
-                  <div className={cn('flex', 'flex-col', 'gap-2', 'border-y', 'py-4')}>
-                    <Input
-                      placeholder="Nama bonus (e.g. Discount)"
-                      value={specialBonusName}
-                      onChange={(e) => setSpecialBonusName(e.target.value)}
-                      className={cn('border-0', 'p-0', 'text-sm', 'font-medium', 'text-foreground', 'bg-transparent', 'shadow-none', 'focus-visible:ring-0', 'h-auto')}
-                    />
-                    <Input
-                      placeholder="IDR. 0"
-                      value={specialBonusAmount ? fmtRp(specialBonusAmount) : ""}
-                      onChange={(e) => { const num = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSpecialBonusAmount(num); }}
-                      inputMode="numeric"
-                      className="rounded-none"
-                    />
-                    <p className={cn('text-xs', 'text-muted-foreground')}>Input ini akan ditampilkan di dokumen PO. Nilai termin yang sudah diinput tidak akan berubah saat discount diubah.</p>
-                  </div>
-
-                  {/* Payment Method */}
+                <>
+                  {/* Payment Method (tetap di sini — bagian form RHF) */}
                   <FormField control={form.control} name="paymentMethodId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Pembayaran Melalui <span className="text-destructive">*</span></FormLabel>
+                    <FormItem className="mb-4">
+                      <FormLabel className="text-sm font-medium text-foreground">Pembayaran Melalui <span className="text-destructive">*</span></FormLabel>
                       <BankAccountSelect value={field.value ?? ""} onChange={field.onChange} placeholder="Pilih metode pembayaran" crossVenue disableAdd />
                       <FormMessage />
                     </FormItem>
                   )} />
 
-                  {/* Term of Payments */}
-                  <div>
-                    <FormLabel className="text-sm font-medium text-foreground mb-2 block">Term of Payments</FormLabel>
-                    <DndContext sensors={termSensors} collisionDetection={closestCenter} onDragEnd={handleTermDragEnd}>
-                    <SortableContext items={terms.map((t) => t.uid)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2">
-                      {terms.map((t, idx) => {
-                        const isFirstTerm = idx === 0;
-                        const isFirstInvalid = isFirstTerm && (!t.amount || t.amount <= 0);
-                        const isOpen = !collapsedTerms.has(t.uid);
-                        return (
-                          <SortableTermWrapper key={t.uid} uid={t.uid}>
-                          {({ attributes, listeners }) => (
-                          <Collapsible
-                            open={isOpen}
-                            onOpenChange={() => toggleTerm(t.uid)}
-                            className="rounded-xl border border-border bg-muted/30 overflow-hidden"
-                          >
-                            {/* ── Collapsible header — drag handle + trigger area + hapus sebagai sibling ── */}
-                            <div className="flex items-center gap-1 px-3 py-2.5">
-                              <button
-                                type="button"
-                                {...attributes}
-                                {...listeners}
-                                aria-label="Drag untuk mengurutkan"
-                                tabIndex={-1}
-                                className="shrink-0 p-1.5 -ml-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-grab active:cursor-grabbing touch-none"
-                              >
-                                <AlignVerticalSpacing weight="BoldDuotone" className="h-4 w-4" />
-                              </button>
-                              <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 cursor-pointer text-left">
-                                <AltArrowDown
-                                  weight="BoldDuotone"
-                                  className={cn(
-                                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                                    isOpen && "rotate-180",
-                                  )}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className={cn(
-                                    "text-sm font-medium truncate",
-                                    t.name ? "text-foreground" : "text-muted-foreground italic",
-                                  )}>
-                                    {t.name || "Term tanpa nama"}
-                                    {isFirstTerm && <span className="text-destructive ml-1">*</span>}
-                                  </p>
-                                  {!isOpen && (
-                                    <p className="text-xs text-muted-foreground tabular-nums">
-                                      {t.amount ? `Rp${fmtRp(t.amount)}` : "Rp0"}
-                                      {t.dueDate ? ` · ${format(new Date(t.dueDate), "dd MMM yyyy")}` : ""}
-                                    </p>
-                                  )}
-                                </div>
-                              </CollapsibleTrigger>
-                              {/* Tombol hapus — SIBLING dari trigger, bukan child-nya */}
-                              {terms.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Drop this term, renumber sortOrder to the new positions
-                                    // (save/upload matches DB rows by sortOrder = index).
-                                    setTerms((prev) =>
-                                      recalcTermDates(
-                                        prev
-                                          .filter((x) => x.uid !== t.uid)
-                                          .map((x, i) => ({ ...x, sortOrder: i })),
-                                        wBookingDate,
-                                      ),
-                                    );
-                                    setCollapsedTerms((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(t.uid);
-                                      return next;
-                                    });
-                                  }}
-                                  aria-label="Hapus term"
-                                  className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                                >
-                                  <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                            </div>
-
-                            {/* ── Collapsible body ── */}
-                            <CollapsibleContent>
-                              <div className="px-3 pb-3 space-y-3 border-t border-border/60">
-                                {/* Term name */}
-                                <div className="pt-2 flex items-center gap-1">
-                                  <Input
-                                    value={t.name}
-                                    onChange={(e) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                                    placeholder="Nama term (mis. Booking Fee)"
-                                    className="border-0 p-0 text-sm font-medium text-foreground bg-transparent shadow-none focus-visible:ring-0 h-auto"
-                                  />
-                                  {isFirstTerm && <span className="text-destructive text-xs font-medium shrink-0">*</span>}
-                                </div>
-
-                                {/* Amount + Date row */}
-                                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                                  <div className="sm:flex-[2]">
-                                    <Input
-                                      value={t.amount ? fmtRp(t.amount) : ""}
-                                      onChange={(e) => {
-                                        const num = parseInt(e.target.value.replace(/\D/g, "")) || 0;
-                                        setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, amount: num } : x));
-                                        // Mark that the user has manually set term amounts so
-                                        // allocatePrice won't override them on discount changes or
-                                        // step-2→3 re-entry.
-                                        setUserHasCustomizedTerms(true);
-                                      }}
-                                      placeholder="Amount"
-                                      inputMode="numeric"
-                                      className="bg-background"
-                                    />
-                                  </div>
-                                  <div className="sm:flex-1">
-                                    <Popover>
-                                      <PopoverTrigger render={
-                                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-background", !t.dueDate && "text-muted-foreground")}>
-                                          <CalendarIcon weight="BoldDuotone" className="mr-2 h-4 w-4" />
-                                          {t.dueDate ? format(new Date(t.dueDate), "dd MMM yyyy") : "Select Date"}
-                                        </Button>
-                                      } />
-                                      <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                          mode="single"
-                                          captionLayout="dropdown"
-                                          selected={t.dueDate ? new Date(t.dueDate) : undefined}
-                                          onSelect={(date) => setTerms((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: date ? toLocalISO(date) : "" } : x))}
-                                          fromYear={new Date().getFullYear() - 10}
-                                          toYear={new Date().getFullYear() + 10}
-                                        />
-                                      </PopoverContent>
-                                    </Popover>
-                                  </div>
-                                </div>
-
-                                {isFirstInvalid && (
-                                  <p className="text-xs text-destructive">Nominal Booking Fee wajib diisi</p>
-                                )}
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                          )}
-                          </SortableTermWrapper>
-                        );
-                      })}
-                    </div>
-                    </SortableContext>
-                    </DndContext>
-
-                    {/* Add button */}
-                    <div className="flex gap-2 mt-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="flex-1 border-dashed gap-1.5 text-muted-foreground"
-                        onClick={() => {
-                          setTerms((prev) => recalcTermDates([...prev, { uid: safeRandomUUID(), name: "", amount: 0, dueDate: "", sortOrder: prev.length }], wBookingDate));
-                          // term baru otomatis kebuka (default open)
-                        }}
-                      >
-                        <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                        Tambah Payment
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Summary */}
-                  <div className={cn('p-3', 'bg-muted', 'rounded-lg')}>
-                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2')}>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Harga Paket:</span>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Rp{fmtRp(getBasePrice())}</span>
-                    </div>
-                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2')}>
-                      <span className={cn('text-sm', 'font-medium', 'text-destructive')}>{specialBonusName || "Discount"}:</span>
-                      <span className={cn('text-sm', 'font-medium', 'text-destructive')}>- Rp{fmtRp(specialBonusAmount)}</span>
-                    </div>
-                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2', 'border-t', 'pt-2')}>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Harga Setelah Discount:</span>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Rp{fmtRp(getPriceAfterDiscount())}</span>
-                    </div>
-                    <div className={cn('flex', 'justify-between', 'items-center', 'mb-2')}>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Total Input User:</span>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Rp{fmtRp(getTotalTerms())}</span>
-                    </div>
-                    <div className={cn('flex', 'justify-between', 'items-center')}>
-                      <span className={cn('text-sm', 'font-medium', 'text-foreground')}>Selisih:</span>
-                      <span className={cn("text-sm font-medium", getDifference() < 0 ? "text-destructive" : getDifference() > 0 ? "text-green-600" : "text-foreground")}>
-                        Rp{fmtRp(Math.abs(getDifference()))}{getDifference() < 0 ? " (Kurang)" : getDifference() > 0 ? " (Lebih)" : " (Sesuai)"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  {/* TOP builder — parity dengan edit flow */}
+                  <CreatePaymentStep
+                    terms={terms}
+                    setTerms={(updater) => {
+                      setTerms((prev) => {
+                        const next = typeof updater === "function" ? updater(prev) : updater;
+                        // Mark that the user has manually edited terms so allocatePrice
+                        // won't override amounts on discount changes.
+                        setUserHasCustomizedTerms(true);
+                        return next;
+                      });
+                    }}
+                    collapsedTerms={collapsedTerms}
+                    setCollapsedTerms={setCollapsedTerms}
+                    specialBonusName={specialBonusName}
+                    setSpecialBonusName={setSpecialBonusName}
+                    specialBonusAmount={specialBonusAmount}
+                    setSpecialBonusAmount={setSpecialBonusAmount}
+                    onAddTerm={() => {
+                      setTerms((prev) =>
+                        recalcTermDates(
+                          [
+                            ...prev,
+                            {
+                              uid: safeRandomUUID(),
+                              name: "",
+                              amount: 0,
+                              dueDate: "",
+                              sortOrder: prev.length,
+                            },
+                          ],
+                          wBookingDate,
+                        ),
+                      );
+                    }}
+                    packagePrice={getBasePrice()}
+                    inlinePayments={inlinePayments}
+                    updateInlinePayment={updateInlinePayment}
+                  />
+                </>
               )}
-              {/* ─── Step 6: Payment (Fase 0 — design prototype, local state only) ───
-                  See docs/booking-top-payment-ledger-plan.md. Links to step-5 `terms`
-                  by `uid`; nothing here is sent to the backend yet. ─── */}
+              {/* ─── Step 6: Signature ─── */}
               {currentStep === 6 && (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-2 rounded-2xl border border-dashed border-border bg-muted/30 p-4">
-                    <InfoCircle weight="BoldDuotone" className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
-                    <p className="text-xs text-muted-foreground">
-                      Prototype desain — pencatatan pembayaran di step ini{" "}
-                      <span className="font-medium text-foreground">belum tersimpan ke database</span>.
-                      Layer Payment Receipt akan dibangun di fase berikutnya (lihat rencana AR ledger).
-                    </p>
-                  </div>
-
-                  {/* Reference card — harga paket (ringkasan read-only) */}
-                  <div className="rounded-2xl bg-muted p-4 shadow-sm space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-muted-foreground">Harga Paket</span>
-                      <span className="text-sm font-semibold text-foreground">Rp{fmtRp(getBasePrice())}</span>
-                    </div>
-                    {specialBonusAmount > 0 && (
-                      <>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-destructive">{specialBonusName || "Discount"}</span>
-                          <span className="text-sm font-medium text-destructive">- Rp{fmtRp(specialBonusAmount)}</span>
-                        </div>
-                        <div className="flex justify-between items-center border-t border-border pt-1.5">
-                          <span className="text-sm font-medium text-foreground">Harga Setelah Discount</span>
-                          <span className="text-sm font-semibold text-foreground">Rp{fmtRp(getPriceAfterDiscount())}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {paymentReceipts.length === 0 && (
-                    <p className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                      Belum ada pembayaran dicatat. Step ini opsional — bisa dilewati, atau diisi kalau sudah
-                      ada uang masuk (mis. Booking Fee) saat penandatanganan.
-                    </p>
-                  )}
-
-                  {paymentReceipts.map((r, idx) => {
-                    const linkedTotal = terms
-                      .filter((t) => r.linkedTermUids.includes(t.uid))
-                      .reduce((sum, t) => sum + t.amount, 0);
-                    const promo = promoOptions.find((p) => p.id === r.promoId) ?? null;
-                    let potongan = 0;
-                    if (promo) {
-                      potongan = promo.discountType === "PERCENTAGE"
-                        ? Math.round((r.amount * promo.discountValue) / 100)
-                        : promo.discountValue;
-                      if (potongan > r.amount) potongan = r.amount;
-                    }
-                    const realCash = r.amount - potongan;
-
-                    return (
-                      <div key={r.uid} className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-sm">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-foreground">Pembayaran #{idx + 1}</p>
-                          <button
-                            type="button"
-                            onClick={() => removeReceipt(r.uid)}
-                            aria-label="Hapus pembayaran"
-                            className="shrink-0 p-1 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                          >
-                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <FormLabel className="text-sm font-medium text-foreground">
-                              Tanggal <span className="text-destructive">*</span>
-                            </FormLabel>
-                            <Input
-                              type="date"
-                              value={r.occurredAt}
-                              onChange={(e) => updateReceipt(r.uid, { occurredAt: e.target.value })}
-                              className="mt-1"
-                            />
-                          </div>
-                          <div>
-                            <FormLabel className="text-sm font-medium text-foreground">
-                              Nominal (Rp) <span className="text-destructive">*</span>
-                            </FormLabel>
-                            <Input
-                              value={r.amount ? fmtRp(r.amount) : ""}
-                              onChange={(e) => {
-                                const num = parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
-                                updateReceipt(r.uid, { amount: num });
-                              }}
-                              placeholder="0"
-                              inputMode="numeric"
-                              className="mt-1"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">
-                            Via Rekening <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <BankAccountSelect
-                            value={r.paymentMethodId}
-                            onChange={(v) => updateReceipt(r.uid, { paymentMethodId: v })}
-                            placeholder="Pilih rekening"
-                            crossVenue
-                            disableAdd
-                          />
-                        </div>
-
-                        {/* Bukti Bayar */}
-                        <div>
-                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">
-                            Bukti Bayar <span className="text-destructive">*</span>
-                          </FormLabel>
-                          {r.evidence ? (
-                            <div className="relative flex items-center gap-2 px-3 py-2 border rounded-xl bg-muted/30 text-xs">
-                              <FilePreview
-                                file={r.evidence}
-                                onOpen={() => {
-                                  const objUrl = URL.createObjectURL(r.evidence as File);
-                                  window.open(objUrl, "_blank");
-                                  setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
-                                }}
-                              />
-                              <span className="flex-1 truncate text-foreground">{r.evidence.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => updateReceipt(r.uid, { evidence: null })}
-                                className="shrink-0 text-muted-foreground hover:text-destructive"
-                                aria-label="Hapus bukti bayar"
-                              >
-                                <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <label className="flex items-center gap-2 px-3 py-2.5 border-2 border-dashed rounded-xl text-muted-foreground hover:bg-muted/40 cursor-pointer text-xs transition-colors">
-                              <UploadMinimalistic weight="BoldDuotone" className="h-4 w-4 shrink-0" />
-                              <span>Upload bukti transfer / kwitansi</span>
-                              <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) updateReceipt(r.uid, { evidence: f });
-                                  e.target.value = "";
-                                }}
-                              />
-                            </label>
-                          )}
-                        </div>
-
-                        {/* Link ke TOP */}
-                        <div>
-                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">
-                            Link ke Termin (TOP) <span className="text-destructive">*</span>
-                          </FormLabel>
-                          {terms.length === 0 ? (
-                            <p className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
-                              Belum ada termin di step Term of Payments.
-                            </p>
-                          ) : (
-                            <div className="flex flex-col gap-2">
-                              <div className="flex flex-col gap-2">
-                                {terms.map((t) => {
-                                  const selected = r.linkedTermUids.includes(t.uid);
-                                  return (
-                                    <button
-                                      key={t.uid}
-                                      type="button"
-                                      onClick={() => toggleReceiptTermLink(r.uid, t.uid)}
-                                      aria-pressed={selected}
-                                      className={cn(
-                                        "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                                        selected
-                                          ? "border-primary bg-primary/5"
-                                          : "border-border bg-muted/20 hover:border-primary/40 hover:bg-secondary/40",
-                                      )}
-                                    >
-                                      {selected ? (
-                                        <CheckCircle weight="BoldDuotone" className="size-5 shrink-0 text-primary" />
-                                      ) : (
-                                        <span className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
-                                      )}
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium text-foreground">
-                                          {t.name || "Term tanpa nama"}
-                                        </p>
-                                      </div>
-                                      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
-                                        Rp{fmtRp(t.amount)}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              {r.linkedTermUids.length > 0 && (
-                                <div className="flex items-center justify-between rounded-xl bg-secondary/40 px-3 py-2 text-xs">
-                                  <span className="text-muted-foreground">{r.linkedTermUids.length} termin dipilih</span>
-                                  <span className="font-semibold tabular-nums text-foreground">Rp{fmtRp(linkedTotal)}</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Promo */}
-                        <div>
-                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">Promo</FormLabel>
-                          <Select
-                            value={r.promoId || "__none__"}
-                            onValueChange={(v) => updateReceipt(r.uid, { promoId: v === "__none__" ? "" : v })}
-                          >
-                            <SelectTrigger className="w-full bg-background">
-                              <span className="text-sm">{promo ? promo.name : "Tanpa promo"}</span>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Tanpa promo</SelectItem>
-                              {promoOptions.map((p) => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : `Rp${fmtRp(p.discountValue)}`})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {promo && r.amount > 0 && (
-                            <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3 space-y-1">
-                              <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Dibayar client</span>
-                                <span className="font-medium text-foreground">Rp{fmtRp(r.amount)}</span>
-                              </div>
-                              <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Potongan promo</span>
-                                <span className="font-medium text-destructive">-Rp{fmtRp(potongan)}</span>
-                              </div>
-                              <div className="flex justify-between text-xs border-t border-border pt-1 mt-1">
-                                <span className="font-semibold text-foreground">Uang riil masuk</span>
-                                <span className="font-semibold text-foreground">Rp{fmtRp(realCash)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Keterangan */}
-                        <div>
-                          <FormLabel className="text-sm font-medium text-foreground mb-1 block">Keterangan</FormLabel>
-                          <Textarea
-                            value={r.notes}
-                            onChange={(e) => updateReceipt(r.uid, { notes: e.target.value })}
-                            placeholder="Catatan pembayaran (opsional)"
-                          />
-                        </div>
-
-                        {/* Tampilkan di PO */}
-                        <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-                          <div className="min-w-0 pr-3">
-                            <p className="text-sm font-medium text-foreground">Tampilkan di PO</p>
-                            <p className="text-xs text-muted-foreground">
-                              Pembayaran ini muncul di Summary Payment pada dokumen PO.
-                            </p>
-                          </div>
-                          <Switch
-                            checked={r.showInPo}
-                            onCheckedChange={(v) => updateReceipt(r.uid, { showInPo: v })}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full border-dashed gap-1.5 text-muted-foreground"
-                    onClick={() => setPaymentReceipts((prev) => [...prev, makeEmptyReceipt()])}
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                    Tambah Pembayaran
-                  </Button>
-                </div>
-              )}
-              {/* ─── Step 7: Signature ─── */}
-              {currentStep === 7 && (
                 <div className="space-y-6">
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan <span className="text-destructive">*</span></FormLabel>
@@ -3114,70 +2470,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         </div>
         {/* Footer — hidden when showing resume prompt */}
         <div className={cn('bg-background', 'sticky', 'bottom-0', 'z-10', showResumePrompt ? 'hidden' : '')}>
-          {/* Mini price summary — visible only on the Term of Payments step */}
-          {currentStep === 5 && (
-            <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] text-muted-foreground">Harga Paket</span>
-                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] text-muted-foreground">Input User</span>
-                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getTotalTerms())}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] text-muted-foreground">Selisih</span>
-                <span
-                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getDifference() < 0 ? "text-destructive cursor-pointer" : getDifference() > 0 ? "text-green-600 cursor-pointer" : "text-foreground")}
-                  onClick={() => {
-                    if (getDifference() !== 0) {
-                      navigator.clipboard.writeText(fmtRp(Math.abs(getDifference())));
-                      toast.success("Selisih disalin");
-                    }
-                  }}
-                >
-                  {getDifference() === 0 ? "Sesuai" : (
-                    <>
-                      {`${getDifference() < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(getDifference()))}`}
-                      <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-                    </>
-                  )}
-                </span>
-              </div>
-            </div>
-          )}
-          {/* Mini price summary — visible only on the Payment step */}
-          {currentStep === 6 && (
-            <div className="rounded-xl bg-muted px-3 py-2 mb-2 grid grid-cols-3 gap-x-2">
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] text-muted-foreground">Harga Paket</span>
-                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getBasePrice())}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] text-muted-foreground">Total Bayar</span>
-                <span className="text-xs font-semibold text-foreground truncate">Rp{fmtRp(getTotalPayments())}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] text-muted-foreground">Selisih</span>
-                <span
-                  className={cn("flex items-center gap-1 text-xs font-semibold truncate", getPaymentDifference() < 0 ? "text-destructive cursor-pointer" : getPaymentDifference() > 0 ? "text-green-600 cursor-pointer" : "text-foreground")}
-                  onClick={() => {
-                    if (getPaymentDifference() !== 0) {
-                      navigator.clipboard.writeText(fmtRp(Math.abs(getPaymentDifference())));
-                      toast.success("Selisih disalin");
-                    }
-                  }}
-                >
-                  {getPaymentDifference() === 0 ? "Lunas" : (
-                    <>
-                      {`${getPaymentDifference() < 0 ? "-" : "+"} Rp${fmtRp(Math.abs(getPaymentDifference()))}`}
-                      <Copy weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-                    </>
-                  )}
-                </span>
-              </div>
-            </div>
-          )}
+          {/* Mini price summary (step 5) lives inside CreatePaymentStep — no duplicate here. */}
           {/* Background-save error banner — shown when a step save failed after retry */}
           {hasPendingWriteError && pendingWriteErrorMsg && (
             <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
