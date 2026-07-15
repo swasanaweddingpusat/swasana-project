@@ -35,6 +35,10 @@ const geistMono = Geist_Mono({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Lock pinch-zoom so the app reads like a native shell on phones/tablets.
+  // (Desktop Ctrl +/- zoom is intentionally not blockable by the browser.)
+  maximumScale: 1,
+  userScalable: false,
   themeColor: "#0F4159",
 };
 
