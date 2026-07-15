@@ -203,6 +203,8 @@ export const finalizeDraftSchema = z.object({
         discountProgramId: z.string().optional().nullable(),
         discountAmount: z.coerce.number().int().min(0).default(0),
         notes: z.string().max(500).optional().nullable(),
+        /** Storage key bukti bayar (opsional) — sudah di-upload di client sebelum finalize. */
+        evidence: z.string().optional().nullable(),
         allocations: z
           .array(
             z.object({
@@ -211,6 +213,8 @@ export const finalizeDraftSchema = z.object({
             })
           )
           .default([]),
+        /** Tampilkan pembayaran ini di Summary Payment PO PDF. Default OFF. */
+        showInPo: z.boolean().default(false),
       })
     )
     .optional()

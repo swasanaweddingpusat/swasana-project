@@ -29,7 +29,9 @@
     "db:truncate:bookings": "tsx prisma/seeders/truncate-bookings.ts",
     "db:seed:roles": "tsx prisma/seeders/roles-permissions.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -110,6 +112,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
+    "vitest": "^3.2.7",
     "ws": "^8.20.0"
   }
 }

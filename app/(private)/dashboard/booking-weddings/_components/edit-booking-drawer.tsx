@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ import { ClientInfoStep } from "./_edit-booking/ClientInfoStep";
 import { VenueEventStep } from "./_edit-booking/VenueEventStep";
 import type { BookingListItem } from "@/lib/queries/bookings";
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Props â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface Props {
   booking: BookingListItem | null;
@@ -22,7 +22,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-// ─── EditBookingDrawer ────────────────────────────────────────────────────────
+// â”€â”€â”€ EditBookingDrawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   const form = useEditBookingForm(booking, open, onOpenChange);
@@ -48,7 +48,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
   // Ref to the embedded complimentary editor in step 2
   const complimentaryRef = useRef<ComplimentaryHandle>(null);
 
-  // ─── Step 2 save: editBooking first, then complimentary if dirty ──────────
+  // â”€â”€â”€ Step 2 save: editBooking first, then complimentary if dirty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleStep2Save() {
     // Run the existing editBooking handler (sets linearMode + advances to step 3
     // if venue changed, or stays on step 2 with updated originals if unchanged).
@@ -61,12 +61,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     }
   }
 
-  // ─── Free-mode per-tab save handlers for steps 3–5 ───────────────────────
-  // In free mode, onClose is a no-op — the content already called toast.success
+  // â”€â”€â”€ Free-mode per-tab save handlers for steps 3â€“5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // In free mode, onClose is a no-op â€” the content already called toast.success
   // and invalidated queries inside handleSave. We stay on the same tab.
   function noOp() { /* stay on tab */ }
 
-  // ─── Linear mode advance handlers ────────────────────────────────────────
+  // â”€â”€â”€ Linear mode advance handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function advanceTo(step: number) {
     setContinueFlowStep(
       step === 3 ? "package-items" :
@@ -88,7 +88,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     >
       <div className={cn("flex flex-col sm:flex-row", "h-full", "gap-2", "sm:gap-3")}>
 
-        {/* ─── Step Rail: horizontal strip on mobile, vertical on desktop ─── */}
+        {/* â”€â”€â”€ Step Rail: horizontal strip on mobile, vertical on desktop â”€â”€â”€ */}
         <nav
           aria-label="Langkah edit booking"
           className="shrink-0 border-b border-border pb-2 sm:w-16 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-1.5"
@@ -136,10 +136,10 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           </ol>
         </nav>
 
-        {/* ─── Right column: body + footer ─── */}
+        {/* â”€â”€â”€ Right column: body + footer â”€â”€â”€ */}
         <div className="flex flex-1 flex-col min-w-0">
 
-        {/* ─── Step Body ─── */}
+        {/* â”€â”€â”€ Step Body â”€â”€â”€ */}
         <div
           className={cn("flex-1", "overflow-y-auto", "px-1")}
           onKeyDown={(e) => {
@@ -211,12 +211,12 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           )}
         </div>
 
-        {/* ─── Footer (only for steps 1 & 2) ─── */}
+        {/* â”€â”€â”€ Footer (only for steps 1 & 2) â”€â”€â”€ */}
         {(currentStep === 1 || currentStep === 2) && (
           <div className="bg-background sticky bottom-0 z-10">
             {currentStep === 2 && hasVenueTabChange && (
               <p className="px-1 pb-1 text-xs text-muted-foreground">
-                Simpan untuk lanjut ke Item Paket → Takeout → TOP → Tanda Tangan.
+                Simpan untuk lanjut ke Item Paket â†’ Takeout â†’ TOP â†’ Payment â†’ Tanda Tangan.
               </p>
             )}
             <div className="flex py-4 gap-2">
@@ -248,3 +248,4 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
     </Drawer>
   );
 }
+

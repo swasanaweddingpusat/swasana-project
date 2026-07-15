@@ -672,16 +672,17 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
     const dd = now.getDate().toString().padStart(2, "0");
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
     const eventTypeCode = draft.weddingType ?? (draft.category === "WEDDINGS" ? "WDG" : "MICE");
-    const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
     const terms = draft.termOfPayments;
 
-    // These three reads are mutually independent — run them in ONE parallel batch
-    // instead of sequential awaits. Invoice numbers use a single batched counter
-    // increment (1 round-trip for N terms, not N). Over Neon HTTP every round-trip
-    // is a network hop, so this collapses ~N+2 hops into effectively one.
-    const [poSeq, invoiceSeqs, bookingApprovalSteps, kwitansiSeqs] = await Promise.all([
+    // These reads are mutually independent — run them in ONE parallel batch instead
+    // of sequential awaits. Over Neon HTTP every round-trip is a network hop, so
+    // this collapses several hops into effectively one.
+    // NOTE (FIX C): invoiceNumber TIDAK di-mint borongan di sini lagi — Invoice
+    // sekarang entity terpisah, diterbitkan on-demand via `issueInvoice`
+    // (actions/invoice.ts, finance trigger "Terbitkan Invoice"). TermOfPayment
+    // cuma jadwal.
+    const [poSeq, bookingApprovalSteps, kwitansiSeqs] = await Promise.all([
       getNextSequence(`po-${year}`),
-      getNextSequenceBatch(`invoice-${year}`, terms.length),
       // Resolve approval steps: conditional Sales + Manager → Finance.
       // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
       buildBookingApprovalSteps({
@@ -698,10 +699,6 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
     ]);
 
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/${eventTypeCode}/${dd}-${mm}-${year}`;
-    const monthRoman = ROMAN[now.getMonth()];
-    const invoiceNumbers: string[] = invoiceSeqs.map(
-      (seq) => `${seq}/INV/${venue?.code ?? ""}/${monthRoman}/${year}`,
-    );
     // KWITANSI pakai bulan ANGKA (beda dari INVOICE Romawi §7.2) — dua dokumen berbeda.
     const kwitansiNumbers: string[] = kwitansiSeqs.map(
       (seq) =>
@@ -948,24 +945,12 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
       );
     }
 
-    // 6. Stamp invoice numbers on existing draft terms
-    if (terms.length > 0) {
-      ops.push(
-        ...terms.map((t, i) =>
-          db.termOfPayment.update({
-            where: { id: t.id },
-            data: { invoiceNumber: invoiceNumbers[i] ?? null },
-          })
-        )
-      );
-    }
-
     // 6b. Step-6 payments → Ledger(`in`) + PaymentAllocation + activity (§8).
     // Termin sudah persist di step-3 → resolve alokasi lewat sortOrder→termId di sini.
     // Alokasi di-clamp defensif (drop sortOrder tak dikenal, cap Σ ≤ gross & ≤ nominal
     // termin) supaya isu alokasi TIDAK pernah menggagalkan finalisasi booking.
-    // Catatan: bukti bayar (File) step-6 BELUM diupload di sini — Ledger lahir tanpa
-    // evidence; lampiran menyusul (gap yang sama dengan cashbook drawer Fase 4).
+    // Bukti bayar (opsional) sudah di-upload di client (storage key di `p.evidence`)
+    // sebelum finalize — konsisten dengan inline payment di edit-top-drawer.
     if (input.payments.length > 0) {
       const termBySortOrder = new Map(
         terms.map((t) => [t.sortOrder, { id: t.id, amount: Number(t.amount) }]),
@@ -1004,9 +989,10 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
               discountAmount,
               cashAmount,
               paymentMethodId: p.paymentMethodId ?? null,
-              evidence: null,
+              evidence: p.evidence ?? null,
               invoiceNumber: kwitansiNumbers[pi] ?? null,
               notes: p.notes?.trim() || null,
+              showInPo: p.showInPo ?? false,
               createdById: session!.user.profileId!,
             },
           }),

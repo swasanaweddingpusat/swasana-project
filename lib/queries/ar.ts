@@ -5,6 +5,7 @@ import {
   getTermAllocationsForBookings,
   deriveTermStatus,
 } from "@/lib/queries/ledger";
+import { getActiveInvoiceMapForBookings } from "@/lib/queries/invoices";
 import type { ARBooking, ARInvoiceStatus, ARPartialPayment, ARTermin, ARTerminStatus } from "@/types/finance";
 
 function deriveBookingStatus(termins: ARTermin[]): ARTerminStatus {
@@ -50,7 +51,6 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
           name: true,
           amount: true,
           dueDate: true,
-          invoiceNumber: true,
           notes: true,
         },
       },
@@ -59,10 +59,12 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
 
   // Pure-derived (Fase 5): "terbayar" per termin = Σ alokasi Ledger cash-in ter-ack.
   // paidMap = jumlah gross; allocMap = detail riwayat (ganti tabel PartialPayment).
+  // invoiceMap (FIX C) = invoice ENTITY aktif per termin — satu bulk query, bukan N+1.
   const bookingIds = bookings.map((b) => b.id);
-  const [paidMap, allocMap] = await Promise.all([
+  const [paidMap, allocMap, invoiceMap] = await Promise.all([
     getTermPaidMapForBookings(bookingIds),
     getTermAllocationsForBookings(bookingIds),
+    getActiveInvoiceMapForBookings(bookingIds),
   ]);
 
   const mapped = bookings.map((b) => {
@@ -86,7 +88,20 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
 
       const remaining = Math.max(0, Number(t.amount) - derivedPaid);
 
-      const statusInvoice: ARInvoiceStatus = t.invoiceNumber
+      // statusInvoice + noInvoice sekarang derived dari Invoice ENTITY (FIX C Step 3).
+      // TermOfPayment.invoiceNumber sudah di-drop — jangan baca dari TOP lagi.
+      const invoiceRow = invoiceMap.get(t.id);
+      const invoice = invoiceRow
+        ? {
+            id: invoiceRow.id,
+            number: invoiceRow.invoiceNumber,
+            type: invoiceRow.invoiceType,
+            status: invoiceRow.status,
+            issuedAt: invoiceRow.issuedAt,
+          }
+        : null;
+
+      const statusInvoice: ARInvoiceStatus = invoiceRow
         ? status === "paid"
           ? "paid"
           : status === "partial"
@@ -101,7 +116,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         amount: Number(t.amount),
         remaining,
         status,
-        noInvoice: t.invoiceNumber ?? "",
+        noInvoice: invoiceRow?.invoiceNumber ?? "",
         statusInvoice,
         agingDays,
         catatan: t.notes ?? "",
@@ -113,6 +128,7 @@ export async function getARBookings(): Promise<{ data: ARBooking[]; total: numbe
         acknowledgedAt: null,
         acknowledgedByName: null,
         viaRekening: null,
+        invoice,
       };
     });
 

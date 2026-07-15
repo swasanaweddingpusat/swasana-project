@@ -60,78 +60,83 @@ export function calcFinalFromFullPrice(
 }
 
 /**
- * Distribute a target total across a list of terms, proportional to their
- * current amount. Falls back to even distribution when the current total is 0
- * (e.g. all terms were previously zeroed out by an overpayment). The rounding
- * remainder is absorbed into the last term so the sum stays exact.
- */
-function distributeTarget(termsList: TermSnap[], target: number): AdjustedTerm[] {
-  if (termsList.length === 0) return [];
-  const totalCurrent = termsList.reduce((s, t) => s + t.amount, 0);
-
-  let result: AdjustedTerm[];
-  if (totalCurrent > 0) {
-    result = termsList.map((t) => ({
-      id: t.id,
-      newAmount: Math.round((target * t.amount) / totalCurrent),
-    }));
-  } else {
-    const each = Math.floor(target / termsList.length);
-    result = termsList.map((t) => ({ id: t.id, newAmount: each }));
-  }
-
-  const assigned = result.reduce((s, t) => s + t.newAmount, 0);
-  const remainder = target - assigned;
-  if (remainder !== 0 && result.length > 0) {
-    const last = result[result.length - 1];
-    last.newAmount = Math.max(0, last.newAmount + remainder);
-  }
-  return result;
-}
-
-/**
- * Recompute term of payments so the editable pool sums to the new price.
+ * Recompute term amounts so the schedule reconciles to a new price, honouring a
+ * per-term *floor*: money already received into a term can never be un-scheduled.
  *
- * Set-to-target approach (idempotent + two-way). Works for both price
- * decreases (takeout enabled) AND increases (takeout disabled) — the pool is
- * always set to `newPrice - paidLockedTotal`, so toggling takeout on→off
- * restores the original amounts exactly.
+ * - floor(t) = min(max(paid, 0), amount) — cash locked into that term, capped at
+ *   its nominal (excess over the nominal is overpayment, not schedule money).
+ * - scheduleTotal = max(newPrice, Σfloor). The schedule never sinks below the
+ *   floor; when the new price does, the difference is `overpay` (→ CreditBalance).
+ * - Headroom above the floors is distributed proportional to each term's
+ *   adjustable weight (amount − floor). Rounding drift lands on the DP (index 1),
+ *   never below its floor. Fully-paid terms (weight 0) stay put.
  *
- * - Pool = terms WITHOUT acked Ledger cash-in (`paid === 0`) → editable.
- *   Terms with `paid > 0` are immutable (uang sudah masuk & terverifikasi).
- * - DP protection: the term at index 1 ("DP") is funded first (up to its
- *   original amount) so it never drops to 0 while there is still a target to cover.
- * - Overpayment (paidLockedTotal > newPrice): pool di-set 0. Selisih TIDAK dibuat
- *   sebagai "refund term" lagi (paymentStatus di-drop Fase 5) — refund riil = Ledger
- *   arah `out` (Fase 6). Untuk sekarang overpayment tidak direpresentasikan di jadwal.
+ * Two-way: removing takeout raises newPrice, headroom grows, unpaid terms scale
+ * back up — toggling takeout on→off restores the original schedule.
  */
 export function adjustTermsForPriceChange(
   terms: TermSnap[],
   newPrice: number,
-): { adjustedTerms: AdjustedTerm[] } {
-  // Locked = termin dengan cash-in ter-ack. Sisanya editable (pool).
-  const pool = terms.filter((t) => t.paid <= 0);
-  const immutable = terms.filter((t) => t.paid > 0);
-  const paidLockedTotal = immutable.reduce((s, t) => s + t.amount, 0);
+): { adjustedTerms: AdjustedTerm[]; scheduleTotal: number; overpay: number } {
+  const floorOf = (t: TermSnap): number => Math.min(Math.max(t.paid, 0), t.amount);
+  const floorTotal = terms.reduce((s, t) => s + floorOf(t), 0);
 
-  const targetTotalForPool = Math.max(0, newPrice - paidLockedTotal);
+  const scheduleTotal = Math.max(newPrice, floorTotal);
+  const overpay = Math.max(0, floorTotal - newPrice);
+  const headroom = scheduleTotal - floorTotal; // === max(0, newPrice − floorTotal)
 
-  // Fund DP first so it stays > 0 while any target remains.
-  // DP = index 1 of the input terms array (caller must pass terms sorted by sortOrder asc).
-  // Index 0 = Booking Fee, Index 1 = DP. Guard: if fewer than 2 terms, no DP identified.
-  const dpById = terms.length >= 2 ? terms[1].id : null;
-  const dpTerm = dpById ? pool.find((t) => t.id === dpById) : null;
-  let adjustedTerms: AdjustedTerm[];
-  if (dpTerm) {
-    const dpTarget = Math.min(dpTerm.amount, targetTotalForPool);
-    const nonDpPool = pool.filter((t) => t !== dpTerm);
-    adjustedTerms = [
-      { id: dpTerm.id, newAmount: dpTarget },
-      ...distributeTarget(nonDpPool, targetTotalForPool - dpTarget),
-    ];
-  } else {
-    adjustedTerms = distributeTarget(pool, targetTotalForPool);
+  if (terms.length === 0) return { adjustedTerms: [], scheduleTotal, overpay };
+
+  // Start every term at its floor, then hand out headroom by adjustable weight.
+  const result = new Map<string, number>(terms.map((t) => [t.id, floorOf(t)]));
+  const weightOf = (t: TermSnap): number => Math.max(0, t.amount - floorOf(t));
+  const weightTotal = terms.reduce((s, t) => s + weightOf(t), 0);
+  const termById = new Map<string, TermSnap>(terms.map((t) => [t.id, t]));
+
+  // DP = index 1 (0 = Booking Fee). It absorbs the rounding remainder.
+  const dpId = terms.length >= 2 ? terms[1].id : null;
+  const order = dpId
+    ? [dpId, ...terms.filter((t) => t.id !== dpId).map((t) => t.id)]
+    : terms.map((t) => t.id);
+
+  if (headroom > 0) {
+    if (weightTotal > 0) {
+      const weightById = new Map<string, number>(terms.map((t) => [t.id, weightOf(t)]));
+      let assigned = 0;
+      for (const id of order) {
+        const give = Math.round((headroom * (weightById.get(id) ?? 0)) / weightTotal);
+        result.set(id, (result.get(id) ?? 0) + give);
+        assigned += give;
+      }
+      // Spread the rounding remainder DP-first, but only where a term can absorb
+      // it without breaking its floor: positive drift lands on an adjustable term
+      // (weight > 0), negative drift only comes off a term above its floor. This
+      // keeps Σ newAmount === scheduleTotal even when DP is fully paid. |drift| < n.
+      let drift = headroom - assigned;
+      if (drift !== 0) {
+        const step = drift > 0 ? 1 : -1;
+        const canAbsorb = (id: string): boolean => {
+          const t = termById.get(id);
+          if (!t) return false;
+          return step > 0 ? weightOf(t) > 0 : (result.get(id) ?? 0) > floorOf(t);
+        };
+        for (const id of order) {
+          if (drift === 0) break;
+          while (drift !== 0 && canAbsorb(id)) {
+            result.set(id, (result.get(id) ?? 0) + step);
+            drift -= step;
+          }
+        }
+      }
+    } else {
+      // No adjustable weight (all terms fully paid). Park the headroom on the DP/first.
+      result.set(order[0], (result.get(order[0]) ?? 0) + headroom);
+    }
   }
 
-  return { adjustedTerms };
+  return {
+    adjustedTerms: terms.map((t) => ({ id: t.id, newAmount: result.get(t.id) ?? floorOf(t) })),
+    scheduleTotal,
+    overpay,
+  };
 }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
 import { validateBookingField, type BookingFieldKey } from "@/lib/validations/booking-form";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface VenueOption { id: string; name: string }
 export interface CategoryPriceEntry { id: string; categoryName: string; basePrice: number; sortOrder: number; isShow: boolean }
@@ -36,7 +36,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ─── Return type ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Return type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface EditBookingForm {
   // query client / user info
@@ -47,7 +47,7 @@ export interface EditBookingForm {
   // step navigation
   currentStep: number;
   setCurrentStep: (s: number) => void;
-  /** Legacy alias for backward compat — maps to currentStep 3-6 names. */
+  /** Legacy alias for backward compat â€” maps to currentStep 3-7 names. */
   continueFlowStep: null | "package-items" | "takeout" | "top" | "signature";
   setContinueFlowStep: (s: null | "package-items" | "takeout" | "top" | "signature") => void;
   /** When true, tab clicks are disabled and continue buttons advance linearly. */
@@ -146,7 +146,7 @@ export interface EditBookingForm {
   handleCloseAll: () => void;
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function useEditBookingForm(
   booking: BookingListItem | null,
@@ -162,14 +162,14 @@ export function useEditBookingForm(
 
   const [currentStep, setCurrentStep] = useState(1);
 
-  // ── Linear mode: forced walk-through when venue/package changes. ──
+  // â”€â”€ Linear mode: forced walk-through when venue/package changes. â”€â”€
   // When true the tab header is click-disabled, sub-step save buttons say
   // "Continue" and advance automatically. Cleared on drawer close/open.
   const [linearMode, setLinearMode] = useState(false);
 
-  // ── Legacy continueFlowStep: derived view of currentStep for back-compat ──
+  // â”€â”€ Legacy continueFlowStep: derived view of currentStep for back-compat â”€â”€
   // We still expose this so the render block in edit-booking-drawer can read it.
-  // It is purely derived — setting it is a no-op alias that sets currentStep.
+  // It is purely derived â€” setting it is a no-op alias that sets currentStep.
   const continueFlowStepMap: Record<number, null | "package-items" | "takeout" | "top" | "signature"> = {
     1: null, 2: null, 3: "package-items", 4: "takeout", 5: "top", 6: "signature",
   };
@@ -183,7 +183,7 @@ export function useEditBookingForm(
     if (s === "signature") { setCurrentStep(6); return; }
   }
 
-  // ── Step 1: Client info ──
+  // â”€â”€ Step 1: Client info â”€â”€
   const [customerName, setCustomerName] = useState("");
   const [contactNumbers, setContactNumbers] = useState<MobileNumberEntry[]>([]);
   const [contactInput, setContactInput] = useState({ name: "", phone: "" });
@@ -198,7 +198,7 @@ export function useEditBookingForm(
   const [sourceOfInformationId, setSourceOfInformationId] = useState("");
   const [salesId, setSalesId] = useState<string | null>(null);
 
-  // ── Step 2: Venue / Package / Event ──
+  // â”€â”€ Step 2: Venue / Package / Event â”€â”€
   const [venueId, setVenueId] = useState("");
   const [packageId, setPackageId] = useState("");
   const [bookingDate, setBookingDate] = useState("");
@@ -209,7 +209,7 @@ export function useEditBookingForm(
   const [signingLocation, setSigningLocation] = useState("");
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
 
-  // ── Validation errors ──
+  // â”€â”€ Validation errors â”€â”€
   const [errors, setErrors] = useState<Record<string, string>>({});
   function clearError(field: string) {
     setErrors((prev) => { if (!prev[field]) return prev; const n = { ...prev }; delete n[field]; return n; });
@@ -241,19 +241,19 @@ export function useEditBookingForm(
     return Object.keys(next).length === 0;
   }
 
-  // ── Change detection ──
+  // â”€â”€ Change detection â”€â”€
   const [originalVenueId, setOriginalVenueId] = useState("");
   const [originalPackageId, setOriginalPackageId] = useState("");
   const [originalBookingDate, setOriginalBookingDate] = useState("");
 
-  // ── Venue availability ──
+  // â”€â”€ Venue availability â”€â”€
   const [availability, setAvailability] = useState<Record<string, DayAvail>>({});
 
-  // ── Submit state ──
+  // â”€â”€ Submit state â”€â”€
   const [isSavingClientInfo, setIsSavingClientInfo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ── Data queries ──
+  // â”€â”€ Data queries â”€â”€
   const { data: detail } = useQuery({
     queryKey: ["booking-detail", booking?.id],
     queryFn: async () => {
@@ -287,7 +287,7 @@ export function useEditBookingForm(
   const isBitrixSource =
     sources.find((o) => o.id === sourceOfInformationId)?.name.toLowerCase().includes("bitrix") ?? false;
 
-  // ── Init state on open ──
+  // â”€â”€ Init state on open â”€â”€
   useEffect(() => {
     if (!open || !booking) return;
     setIsSubmitting(false);
@@ -328,7 +328,7 @@ export function useEditBookingForm(
     setOriginalBookingDate(eventDateStr);
   }, [open, booking]);
 
-  // ── Init detail fields ──
+  // â”€â”€ Init detail fields â”€â”€
   useEffect(() => {
     if (!detail) return;
     const detailName =
@@ -360,7 +360,7 @@ export function useEditBookingForm(
     if (detail.salesId && !salesId) setSalesId(detail.salesId as string);
   }, [detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Venue availability ──
+  // â”€â”€ Venue availability â”€â”€
   useEffect(() => {
     if (!venueId) { setAvailability({}); return; }
     const month = format(startOfMonth(visibleMonth), "yyyy-MM");
@@ -372,7 +372,7 @@ export function useEditBookingForm(
       .catch(() => setAvailability({}));
   }, [venueId, visibleMonth, booking?.id]);
 
-  // ── Helpers ──
+  // â”€â”€ Helpers â”€â”€
   function getDateStatus(d: Date): "available" | "partial" | "unavailable" | "unknown" {
     const key = toDateOnly(d);
     const a = availability[key];
@@ -392,7 +392,7 @@ export function useEditBookingForm(
     return sessions;
   }
 
-  // ── Derived ──
+  // â”€â”€ Derived â”€â”€
   const hasVenueTabChange =
     venueId !== originalVenueId || packageId !== originalPackageId;
 
@@ -410,7 +410,7 @@ export function useEditBookingForm(
 
   const lockedSalesName =
     salesUsers.find((s) => s.id === salesId)?.fullName ??
-    (isSalesPIC ? (currentUser?.name ?? "—") : "—");
+    (isSalesPIC ? (currentUser?.name ?? "â€”") : "â€”");
 
   const TOTAL_FLOW_STEPS = 6;
   const flowStepNumber = currentStep;
@@ -430,7 +430,7 @@ export function useEditBookingForm(
   // step 2 has venue changes that haven't been saved yet (pre-save state).
   const hideCloseButton = linearMode || (currentStep === 2 && hasVenueTabChange);
 
-  // ── Handlers ──
+  // â”€â”€ Handlers â”€â”€
   async function handleSaveClientInfo(): Promise<void> {
     if (!booking) return;
     if (!validateStep1()) { toast.error("Perbaiki isian yang tidak valid."); return; }
@@ -495,7 +495,7 @@ export function useEditBookingForm(
       qc.invalidateQueries({ queryKey: ["booking-detail", booking.id] });
       toast.success("Booking berhasil diupdate");
       if (hasVenueTabChange) {
-        // Enter linear mode: force user to walk steps 3→4→5→6.
+        // Enter linear mode: force user to walk steps 3â†’4â†’5â†’6.
         setLinearMode(true);
         setCurrentStep(3);
       } else {
@@ -509,7 +509,7 @@ export function useEditBookingForm(
   }
 
   function handleGoToStep(step: number): void {
-    // In linear mode, tab navigation is disabled — user must follow Continue buttons.
+    // In linear mode, tab navigation is disabled â€” user must follow Continue buttons.
     if (linearMode) return;
     if (step >= 1 && step <= 6) setCurrentStep(step);
   }
@@ -605,3 +605,4 @@ export function useEditBookingForm(
     handleCloseAll,
   };
 }
+

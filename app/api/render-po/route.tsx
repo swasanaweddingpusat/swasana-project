@@ -6,6 +6,7 @@ import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import type { POPdfBooking } from "@/components/pdf/POPdfDocument";
 import { humanizeRoleName } from "@/lib/approval-flows";
+import { getPoPayments } from "@/lib/queries/getPoPayments";
 import path from "path";
 import fs from "fs/promises";
 
@@ -133,6 +134,11 @@ export async function POST(req: Request) {
       eventDate = booking.eventDate!.toISOString().split("T")[0];
       termAndConditionHtml = booking.snapPackagePricing?.termAndCondition ?? null;
     }
+
+    // Payments di PO = event SETELAH snapshot freeze → SELALU live-fetch (tidak ikut
+    // revisi). Service layer (lib/queries/getPoPayments.ts) bekuin label ke konteks
+    // Ledger saat cash-in dibuat (FIX B) — tahan switch venue/paket yang nge-rebuild TOP.
+    pdfBooking.poPayments = await getPoPayments(bookingId);
 
     const fileName = `PO_${customerName}_${venueName}_${eventDate}.pdf`;
 

@@ -2,8 +2,11 @@ import { db } from "@/lib/db";
 import {
   getTermPaidMap,
   getTermAllocationsForBookings,
+  getBookingCashIns,
   deriveTermStatus,
+  type BookingCashIn,
 } from "@/lib/queries/ledger";
+import { getActiveInvoiceMapForBookings } from "@/lib/queries/invoices";
 
 export interface BookingFinanceDetail {
   id: string;
@@ -34,7 +37,19 @@ export interface BookingFinanceDetail {
       evidence: string | null;
       notes: string | null;
     }[];
+    /**
+     * Invoice ENTITY aktif (status=issued) buat termin ini (FIX C). null = belum
+     * ada invoice diterbitkan. Beda dari legacy `TermOfPayment.invoiceNumber`.
+     */
+    invoice: { number: string; type: string; status: string; issuedAt: string } | null;
   }[];
+  /**
+   * Semua cash-in booking (pending + acknowledged, non-void) — buat "Riwayat
+   * Pembayaran" di editor. Beda dari terms[].partialPayments yang acked-only
+   * (dipakai derivasi status termin). Pembayaran baru langsung tampil di sini
+   * walau belum diverifikasi Finance.
+   */
+  cashIns: BookingCashIn[];
   categories: {
     id: string;
     categoryName: string;
@@ -91,9 +106,12 @@ export async function getBookingFinanceDetail(
 
   // Pure-derived (Fase 5): terbayar = Σ alokasi Ledger cash-in ter-ack.
   // paidMap = jumlah; allocMap = detail riwayat (ganti PartialPayment).
-  const [paidMap, allocMap] = await Promise.all([
+  // invoiceMap (FIX C) = invoice ENTITY aktif per termin, bulk (bukan N+1).
+  const [paidMap, allocMap, cashIns, invoiceMap] = await Promise.all([
     getTermPaidMap(bookingId),
     getTermAllocationsForBookings([bookingId]),
+    getBookingCashIns(bookingId),
+    getActiveInvoiceMapForBookings([bookingId]),
   ]);
   const now = new Date();
 
@@ -113,6 +131,16 @@ export async function getBookingFinanceDetail(
       // biar konsumen (drawer TOP) tetap kompatibel tanpa refactor besar.
       const paymentStatus: "unpaid" | "paid" | "partial" | "refund" =
         effectiveStatus === "paid" ? "paid" : effectiveStatus === "partial" ? "partial" : "unpaid";
+
+      const invoiceRow = invoiceMap.get(t.id);
+      const invoice = invoiceRow
+        ? {
+            number: invoiceRow.invoiceNumber,
+            type: invoiceRow.invoiceType,
+            status: invoiceRow.status,
+            issuedAt: invoiceRow.issuedAt,
+          }
+        : null;
 
       return {
         id: t.id,
@@ -135,8 +163,10 @@ export async function getBookingFinanceDetail(
           evidence: null,
           notes: a.notes,
         })),
+        invoice,
       };
     }),
+    cashIns,
     categories:
       booking.snapPackageCategoryPrices.length > 0
         ? booking.snapPackageCategoryPrices.map((c) => ({

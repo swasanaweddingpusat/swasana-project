@@ -50,6 +50,38 @@ export async function getTermPaidMap(bookingId: string): Promise<Map<string, num
   return getTermPaidMapForBookings([bookingId]);
 }
 
+/**
+ * Bulk: total alokasi GROSS non-void (pending + acknowledged) per termin, untuk
+ * sekumpulan booking — dipakai buat GUARD "termin terkunci" (FIX A), BUKAN buat
+ * derivasi status termin (itu tetap acked-only, lihat getTermPaidMapForBookings).
+ *
+ * Beda dari getTermPaidMapForBookings: filter `ackStatus:"acknowledged"` DIBUANG,
+ * cukup `direction:"in", voidedAt:null`. Kenapa: hapus termin → PaymentAllocation
+ * cascade-delete tapi Ledger induknya tetap hidup → cash-in "yatim". Alokasi yang
+ * masih pending (belum di-ack Finance) TETAP harus ngunci termin-nya, biar gak ada
+ * cash-in yang kehilangan induk termin secara diam-diam.
+ *
+ * Return `Map<termId, allocatedGross>`. Termin tanpa alokasi non-void tidak muncul
+ * di map (caller anggap 0 / unlocked).
+ */
+export async function getTermAllocatedMap(bookingIds: string[]): Promise<Map<string, number>> {
+  if (bookingIds.length === 0) return new Map();
+
+  const rows = await db.paymentAllocation.groupBy({
+    by: ["termId"],
+    where: {
+      ledger: {
+        bookingId: { in: bookingIds },
+        direction: "in",
+        voidedAt: null,
+      },
+    },
+    _sum: { amount: true },
+  });
+
+  return new Map(rows.map((r) => [r.termId, r._sum.amount ?? 0]));
+}
+
 /** Satu cash-in yang beralokasi ke sebuah termin — buat riwayat pembayaran AR. */
 export interface TermAllocationDetail {
   /** PaymentAllocation id. */
@@ -101,6 +133,145 @@ export async function getTermAllocationsForBookings(
     map.set(r.termId, arr);
   }
   return map;
+}
+
+/** Satu cash-in booking (semua status) — buat riwayat pembayaran di editor booking. */
+export interface BookingCashIn {
+  /** Ledger id. */
+  id: string;
+  amount: number;
+  /** ISO — tanggal uang masuk (Ledger.occurredAt). */
+  occurredAt: string;
+  ackStatus: "pending" | "acknowledged" | "rejected";
+  invoiceNumber: string | null;
+  notes: string | null;
+  /** Ditandai tampil di Summary Payment PO PDF. */
+  showInPo: boolean;
+  /** Nama termin yang di-cover cash-in ini (dari PaymentAllocation). */
+  linkedTermNames: string[];
+  paymentMethodId: string | null;
+  discountProgramId: string | null;
+  discountAmount: number;
+  evidence: string | null;
+  /** Alokasi ke termin — termId + jumlah GROSS. */
+  allocations: { termId: string; amount: number }[];
+}
+
+/**
+ * Semua cash-in `in` (non-void) satu booking — TERMASUK yang masih `pending`
+ * (belum di-ack Finance). Beda dari getTermAllocationsForBookings yang acked-only:
+ * ini buat "Riwayat Pembayaran" di editor booking, biar pembayaran yang baru
+ * dicatat langsung kelihatan dengan badge status verifikasinya. TIDAK dipakai
+ * buat derivasi status termin (itu tetap acked-only, lihat getTermPaidMap).
+ *
+ * NOT "use cache" — butuh fresh tiap drawer edit dibuka.
+ */
+export async function getBookingCashIns(bookingId: string): Promise<BookingCashIn[]> {
+  const rows = await db.ledger.findMany({
+    where: { bookingId, direction: "in", voidedAt: null },
+    orderBy: { occurredAt: "desc" },
+    take: 200,
+    select: {
+      id: true,
+      amount: true,
+      occurredAt: true,
+      ackStatus: true,
+      invoiceNumber: true,
+      notes: true,
+      showInPo: true,
+      paymentMethodId: true,
+      discountProgramId: true,
+      discountAmount: true,
+      evidence: true,
+      allocations: {
+        select: {
+          termId: true,
+          amount: true,
+          term: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    amount: Number(r.amount),
+    occurredAt: r.occurredAt.toISOString(),
+    ackStatus: r.ackStatus,
+    invoiceNumber: r.invoiceNumber ?? null,
+    notes: r.notes ?? null,
+    showInPo: r.showInPo,
+    paymentMethodId: r.paymentMethodId ?? null,
+    discountProgramId: r.discountProgramId ?? null,
+    discountAmount: Number(r.discountAmount),
+    evidence: r.evidence ?? null,
+    linkedTermNames: r.allocations.map((a) => a.term.name),
+    allocations: r.allocations.map((a) => ({
+      termId: a.termId,
+      amount: Number(a.amount),
+    })),
+  }));
+}
+
+/** Satu cash-in yang alokasinya tidak menutup penuh nominal gross-nya sendiri. */
+export interface OrphanCashIn {
+  /** Ledger id. */
+  id: string;
+  bookingId: string;
+  clientName: string;
+  amount: number;
+  allocatedTotal: number;
+  /** amount - allocatedTotal (bagian gross yang tidak nempel ke termin manapun). */
+  unallocated: number;
+  occurredAt: string;
+  ackStatus: "pending" | "acknowledged" | "rejected";
+}
+
+/**
+ * Detektor read-only (FIX A §A.5) — cash-in `in` non-void yang alokasinya lebih kecil
+ * dari nominal gross-nya sendiri (Σallocations < amount). Ini gejala orphan: termin
+ * yang tadinya dialokasi udah dihapus (sebelum guard ini ada) sehingga sebagian/semua
+ * alokasinya cascade-delete, tapi Ledger induknya tetap hidup.
+ *
+ * MURNI SURFACE buat Finance review — TIDAK auto-fix apapun. Auto-heal adalah
+ * keputusan terpisah (lihat design doc, diluar scope FIX A).
+ */
+export async function findOrphanCashIns(bookingId?: string): Promise<OrphanCashIn[]> {
+  const rows = await db.ledger.findMany({
+    where: {
+      direction: "in",
+      voidedAt: null,
+      ...(bookingId ? { bookingId } : {}),
+    },
+    orderBy: { occurredAt: "desc" },
+    take: 500,
+    select: {
+      id: true,
+      bookingId: true,
+      amount: true,
+      occurredAt: true,
+      ackStatus: true,
+      booking: { select: { snapCustomer: { select: { name: true } } } },
+      allocations: { select: { amount: true } },
+    },
+  });
+
+  return rows
+    .map((r) => {
+      const amount = Number(r.amount);
+      const allocatedTotal = r.allocations.reduce((s, a) => s + Number(a.amount), 0);
+      return {
+        id: r.id,
+        bookingId: r.bookingId,
+        clientName: r.booking.snapCustomer?.name ?? "-",
+        amount,
+        allocatedTotal,
+        unallocated: amount - allocatedTotal,
+        occurredAt: r.occurredAt.toISOString(),
+        ackStatus: r.ackStatus,
+      };
+    })
+    .filter((r) => r.allocatedTotal < r.amount);
 }
 
 export type DerivedTermStatus = "paid" | "partial" | "overdue" | "not_due_yet";
@@ -311,7 +482,13 @@ export async function getBookingsForLedgerPicker(): Promise<BookingPickerItem[]>
  * modal Riwayat — di-fetch on-demand pas modal dibuka (bukan embed di LedgerRow).
  */
 
-export type LedgerActivityAction = "created" | "acknowledged" | "rejected" | "voided" | "edited";
+export type LedgerActivityAction =
+  | "created"
+  | "acknowledged"
+  | "rejected"
+  | "voided"
+  | "updated"
+  | "unacknowledged";
 
 export interface LedgerActivity {
   id: string;
