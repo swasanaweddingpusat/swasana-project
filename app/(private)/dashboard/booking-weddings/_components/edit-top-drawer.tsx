@@ -142,7 +142,8 @@ function TopContent({
 
   const defaultInlinePayment = (): InlinePayment => ({
     existingLedgerId: null,
-    enabled: false,
+    // Default TERBUKA — accordion pembayaran auto-expand di tiap kartu termin.
+    enabled: true,
     occurredAt: todayStr,
     paymentMethodId: "",
     evidenceFile: null,
@@ -207,8 +208,8 @@ function TopContent({
         if (existing) {
           prefilledMap.set(term.id, {
             existingLedgerId: existing.id,
-            // Default COLLAPSED — data tetap pre-loaded, user klik header buat lihat/edit.
-            enabled: false,
+            // Default TERBUKA — pembayaran tercatat langsung kelihatan (auto-expand).
+            enabled: true,
             occurredAt: existing.occurredAt.slice(0, 10),
             paymentMethodId: existing.paymentMethodId ?? "",
             evidenceFile: null,
