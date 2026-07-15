@@ -882,6 +882,7 @@ model Booking {
   convertedFromLeads Lead[]                    @relation("LeadConvertedBooking")
   editDraft         BookingEditDraft?
   eventEvaluations  EventEvaluation[]
+  creditBalance     CreditBalance?
 
   @@index([salesId])
   @@index([managerId])
@@ -1170,6 +1171,21 @@ model TermOfPayment {
   @@map("term_of_payments")
 }
 
+/// Materialized overpayment (kelebihan bayar) per booking, in integer IDR.
+/// amount = max(0, Σ acked cash-in (gross) − net price owed). Always >= 0.
+/// Recomputed transactionally on cash-in ack and on any price/schedule change.
+/// A positive balance is later resolved by a refund (Ledger direction=out) or
+/// re-allocation — that resolution is out of scope for this plan.
+model CreditBalance {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_balances")
+}
 
 // ─── Cashflow Ledger (Buku Besar / Cashbook) ─────────────────────────────────
 // Single-entry cashbook. Sekarang cuma direction=in (cash in). PartialPayment

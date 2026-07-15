@@ -9,6 +9,7 @@ import { getProfileDataScope, canAccessBooking } from "@/lib/access-control";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { getNextSequence } from "@/lib/counter";
 import { logAudit } from "@/lib/audit";
+import { computeOverpay } from "@/lib/credit-balance";
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -368,6 +369,14 @@ export async function acknowledgeCashIn(
       description: `Cash-in ${ledgerId} diverifikasi`,
     });
 
+    // Overpay may appear the moment cash is acknowledged. Recompute post-commit.
+    const overpay = await computeOverpay(ledger.bookingId);
+    await db.creditBalance.upsert({
+      where: { bookingId: ledger.bookingId },
+      create: { bookingId: ledger.bookingId, amount: overpay },
+      update: { amount: overpay },
+    });
+
     revalidateTag("ledger", "max");
     revalidateTag("ar-bookings", "max");
     return { success: true };
@@ -476,7 +485,7 @@ export async function voidCashIn(input: z.infer<typeof voidSchema>): Promise<Act
   try {
     const ledger = await db.ledger.findUnique({
       where: { id: ledgerId },
-      select: { id: true, ackStatus: true, voidedAt: true },
+      select: { id: true, ackStatus: true, voidedAt: true, bookingId: true },
     });
     if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
     if (ledger.voidedAt) return { success: false, error: "Transaksi sudah dibatalkan." };
@@ -506,6 +515,14 @@ export async function voidCashIn(input: z.infer<typeof voidSchema>): Promise<Act
       entityType: "ledger",
       entityId: ledgerId,
       description: `Cash-in ${ledgerId} dibatalkan: ${note}`,
+    });
+
+    // Voided cash-in leaves the acked pool — recompute overpay post-commit.
+    const overpay = await computeOverpay(ledger.bookingId);
+    await db.creditBalance.upsert({
+      where: { bookingId: ledger.bookingId },
+      create: { bookingId: ledger.bookingId, amount: overpay },
+      update: { amount: overpay },
     });
 
     revalidateTag("ledger", "max");
@@ -779,7 +796,7 @@ export async function unacknowledgeCashIn(
   try {
     const ledger = await db.ledger.findUnique({
       where: { id: ledgerId },
-      select: { id: true, ackStatus: true, voidedAt: true },
+      select: { id: true, ackStatus: true, voidedAt: true, bookingId: true },
     });
     if (!ledger) return { success: false, error: "Transaksi tidak ditemukan." };
     if (ledger.ackStatus !== "acknowledged")
@@ -815,6 +832,14 @@ export async function unacknowledgeCashIn(
       entityType: "ledger",
       entityId: ledgerId,
       description: `Cash-in ${ledgerId} verifikasi dibatalkan: ${note}`,
+    });
+
+    // Acked total dropped — recompute overpay post-commit.
+    const overpay = await computeOverpay(ledger.bookingId);
+    await db.creditBalance.upsert({
+      where: { bookingId: ledger.bookingId },
+      create: { bookingId: ledger.bookingId, amount: overpay },
+      update: { amount: overpay },
     });
 
     revalidateTag("ledger", "max");

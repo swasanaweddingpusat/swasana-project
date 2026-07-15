@@ -19,6 +19,15 @@ import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { getTermAllocatedMap } from "@/lib/queries/ledger";
 
+/**
+ * Financial delta (IDR) at or below which a change to an ALREADY-SIGNED booking is a
+ * minor amendment: persisted + audited, but no approval reset and no client re-sign.
+ * Above it, the change is material and re-triggers the full approval + re-sign flow.
+ * Structural changes (venue / package / event date / base-price) are always material,
+ * regardless of amount.
+ */
+const MINOR_AMENDMENT_THRESHOLD_RP = 500_000;
+
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
   if (error) return { success: false, error };
@@ -557,7 +566,7 @@ export async function createBooking(data: unknown) {
 
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
-        ...input.termOfPayments.map((t, i) =>
+        ...input.termOfPayments.map((t) =>
           db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder } })
         )
       );
@@ -1158,22 +1167,32 @@ export async function editBooking(data: unknown) {
       (newDiscountName !== booking.discountName ||
         newDiscountAmount !== (booking.discountAmount ?? 0));
 
-    // Compare takeout toggles against current snapPackageCategoryPrices
+    // Compare takeout toggles against current snapPackageCategoryPrices.
+    // takeoutDelta = |Σnew takeout − Σold takeout| (each visible category), i.e. the
+    // IDR by which net price moves from takeout, without recomputing the price here.
     let takeoutChanged = false;
+    let takeoutDelta = 0;
     if (parsed.data.categoryToggles && parsed.data.categoryToggles.length > 0) {
       const currentSnaps = await db.snapPackageCategoryPrice.findMany({
         where: { bookingId: id },
-        select: { categoryName: true, isTakeout: true, takeoutNominal: true, isShow: true },
+        select: { categoryName: true, basePrice: true, isTakeout: true, takeoutNominal: true, isShow: true },
       });
       const currentTakeoutMap = new Map(
-        currentSnaps.filter((c) => c.isShow).map((c) => [c.categoryName, { isTakeout: c.isTakeout, takeoutNominal: c.takeoutNominal ?? 0 }])
+        currentSnaps
+          .filter((c) => c.isShow)
+          .map((c) => [c.categoryName, { basePrice: c.basePrice, isTakeout: c.isTakeout, takeoutNominal: c.takeoutNominal ?? 0 }]),
       );
+      const takeoutAmt = (isTakeout: boolean, nominal: number, basePrice: number): number =>
+        isTakeout ? (nominal > 0 ? nominal : basePrice) : 0;
       for (const t of parsed.data.categoryToggles) {
         if (!t.isShow) continue;
         const cur = currentTakeoutMap.get(t.categoryName);
-        if (!cur) { takeoutChanged = true; break; }
-        if (cur.isTakeout !== t.isTakeout) { takeoutChanged = true; break; }
-        if (t.isTakeout && cur.takeoutNominal !== (t.takeoutNominal ?? 0)) { takeoutChanged = true; break; }
+        const oldAmt = cur ? takeoutAmt(cur.isTakeout, cur.takeoutNominal, cur.basePrice) : 0;
+        const newAmt = takeoutAmt(t.isTakeout, t.takeoutNominal ?? 0, cur?.basePrice ?? 0);
+        takeoutDelta += Math.abs(newAmt - oldAmt);
+        if (!cur) { takeoutChanged = true; continue; }
+        if (cur.isTakeout !== t.isTakeout) { takeoutChanged = true; continue; }
+        if (t.isTakeout && cur.takeoutNominal !== (t.takeoutNominal ?? 0)) { takeoutChanged = true; }
       }
     }
 
@@ -1240,6 +1259,17 @@ export async function editBooking(data: unknown) {
 
     }
 
+    // Schedule total delta: a reschedule that keeps the same total is non-material;
+    // a total change (rare — usually driven by price) is measured for the threshold.
+    let topTotalDelta = 0;
+    if (rest.termOfPayments && rest.termOfPayments.length > 0) {
+      const oldTotal = (
+        await db.termOfPayment.findMany({ where: { bookingId: id }, select: { amount: true } })
+      ).reduce((s, t) => s + Number(t.amount), 0);
+      const newTotal = rest.termOfPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+      topTotalDelta = Math.abs(newTotal - oldTotal);
+    }
+
     // refreshPackagePrice (re-select same package): detect whether the master price
     // ACTUALLY changed compared to the current snapshot. If harga sama → no-op (no
     // material change, no revision). Only a real price delta counts as material.
@@ -1278,20 +1308,36 @@ export async function editBooking(data: unknown) {
     // freely change package/venue/price/terms without spinning a new revision or resetting
     // approval. Snap tables (venue/package/pricing) still update so the PO reflects the latest
     // data, but no revision is created and approval is not reset.
-    const hasMaterialChange =
+    // Discount delta (IDR). discountProvided guards absent fields (see :1152).
+    const discountDelta = discountProvided
+      ? Math.abs(newDiscountAmount - (booking.discountAmount ?? 0))
+      : 0;
+
+    // Total financial movement this edit makes to the signed deal.
+    const financialDelta = discountDelta + takeoutDelta + topTotalDelta;
+
+    // Structural changes redefine the deal (what / where / when / base price) and
+    // always require re-approval + client re-sign, whatever the amount.
+    const structuralChange = venueChanged || packageChanged || eventDateChanged || priceRefreshed;
+
+    // A financial edit above the threshold is material; at/below it is a minor amendment.
+    const financialMaterial = financialDelta > MINOR_AMENDMENT_THRESHOLD_RP;
+
+    const hasMaterialChange = isFrozen && (structuralChange || financialMaterial);
+
+    // Minor amendment = frozen booking, some financial tweak fired, but under threshold.
+    // Persisted + audited (revision spun for the trail), signature kept, freeze intact.
+    const isMinorAmendment =
       isFrozen &&
-      (venueChanged ||
-        packageChanged ||
-        priceRefreshed ||
-        eventDateChanged ||
-        discountChanged ||
-        takeoutChanged ||
-        topChanged);
+      !hasMaterialChange &&
+      (discountChanged || takeoutChanged || topChanged);
     // Terms must be re-written whenever structure or sort-order changed.
     // sortOrder-only change (drag reorder) is non-material but still needs a write
     // so the new display order is persisted correctly.
     const termsNeedWrite = topChanged || topSortOrderChanged;
 
+    // Minor amendments (finance-only) also skip the SnapCustomer rewrite — the signed
+    // client identity is never touched by a discount/takeout/schedule tweak.
     const skipSnapCustomerWrite = isFrozen && !hasMaterialChange;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
@@ -1754,7 +1800,19 @@ export async function editBooking(data: unknown) {
           ]);
         }
       }
-    } // end if hasMaterialChange
+    } else if (isMinorAmendment) {
+      // Persist the finance tweak for the audit trail WITHOUT touching the signature.
+      // A revision records what changed; approval, booking status, and the client
+      // agreement are deliberately left intact (freeze stays on).
+      await createBookingRevision(id, session!.user.profileId!, "Amandemen minor (finansial)");
+      await logAudit({
+        userId: session!.user.id,
+        action: "updated",
+        entityType: "booking",
+        entityId: id,
+        description: `Minor amendment (financial delta Rp${new Intl.NumberFormat("id-ID").format(financialDelta)}) — no re-approval`,
+      });
+    } // end if hasMaterialChange / else if isMinorAmendment
 
     // If signatureSales was provided without a material change (signature-only save
     // from SalesSignatureContent in the continue flow), update the current sales step.
@@ -1793,75 +1851,80 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    await logAudit({
-      userId: session!.user.id,
-      action: "updated",
-      entityType: "booking",
-      entityId: id,
-      changes: await (async () => {
-        const diff: Record<string, unknown> = {};
-        const fmtNum = (n: number) => `Rp${new Intl.NumberFormat("id-ID").format(n)}`;
+    // A minor amendment already wrote its own focused audit row (financial delta) in the
+    // else-if above. Skip the general "updated" log for that path so a minor amendment
+    // leaves exactly one audit row instead of two.
+    if (!isMinorAmendment) {
+      await logAudit({
+        userId: session!.user.id,
+        action: "updated",
+        entityType: "booking",
+        entityId: id,
+        changes: await (async () => {
+          const diff: Record<string, unknown> = {};
+          const fmtNum = (n: number) => `Rp${new Intl.NumberFormat("id-ID").format(n)}`;
 
-        if (customerName !== (booking.snapCustomer?.name ?? "")) diff.customerName = customerName;
-        const oldContact = booking.snapCustomer?.mobileNumber ?? "";
-        const newContact = contactNumbers ? serializeContactNumbersToDisplay(contactNumbers) : "";
-        if (newContact !== oldContact) diff.contactNumbers = newContact;
-        if (contactEmailCpp !== (booking.snapCustomer?.emailCpp ?? "")) diff.emailCpp = contactEmailCpp;
-        if (contactEmailCpw !== (booking.snapCustomer?.emailCpw ?? "")) diff.emailCpw = contactEmailCpw;
-        if (rest.eventDate !== booking.eventDate!.toISOString().split("T")[0]) diff.eventDate = rest.eventDate;
-        if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
-        if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
-        // Non-material fields a plain Save (no venue/package change) commonly edits.
-        // These were previously omitted from the diff, so the log row rendered empty
-        // and looked like nothing was recorded. Only emit when the caller sent the
-        // field (undefined = not provided → leave untouched) AND it actually changed.
-        if (rest.eventTime !== undefined && (rest.eventTime || "") !== (booking.eventTime ?? "")) {
-          diff.eventTime = `${booking.eventTime ?? "—"} → ${rest.eventTime || "—"}`;
-        }
-        if (rest.notes !== undefined && (rest.notes || "") !== (booking.notes ?? "")) {
-          diff.notes = `${booking.notes ?? "—"} → ${rest.notes || "—"}`;
-        }
-        if (rest.paymentMethodId !== undefined && (rest.paymentMethodId ?? "") !== (booking.paymentMethodId ?? "")) {
-          diff.paymentMethodId = { from: booking.paymentMethodId ?? "", to: rest.paymentMethodId ?? "" };
-        }
-        if (rest.sourceOfInformationId !== undefined && (rest.sourceOfInformationId ?? "") !== (booking.sourceOfInformationId ?? "")) {
-          diff.sourceOfInformationId = { from: booking.sourceOfInformationId ?? "", to: rest.sourceOfInformationId ?? "" };
-        }
+          if (customerName !== (booking.snapCustomer?.name ?? "")) diff.customerName = customerName;
+          const oldContact = booking.snapCustomer?.mobileNumber ?? "";
+          const newContact = contactNumbers ? serializeContactNumbersToDisplay(contactNumbers) : "";
+          if (newContact !== oldContact) diff.contactNumbers = newContact;
+          if (contactEmailCpp !== (booking.snapCustomer?.emailCpp ?? "")) diff.emailCpp = contactEmailCpp;
+          if (contactEmailCpw !== (booking.snapCustomer?.emailCpw ?? "")) diff.emailCpw = contactEmailCpw;
+          if (rest.eventDate !== booking.eventDate!.toISOString().split("T")[0]) diff.eventDate = rest.eventDate;
+          if ((rest.weddingSession ?? "") !== (booking.weddingSession ?? "")) diff.weddingSession = rest.weddingSession;
+          if ((rest.weddingType ?? "") !== (booking.weddingType ?? "")) diff.weddingType = rest.weddingType;
+          // Non-material fields a plain Save (no venue/package change) commonly edits.
+          // These were previously omitted from the diff, so the log row rendered empty
+          // and looked like nothing was recorded. Only emit when the caller sent the
+          // field (undefined = not provided → leave untouched) AND it actually changed.
+          if (rest.eventTime !== undefined && (rest.eventTime || "") !== (booking.eventTime ?? "")) {
+            diff.eventTime = `${booking.eventTime ?? "—"} → ${rest.eventTime || "—"}`;
+          }
+          if (rest.notes !== undefined && (rest.notes || "") !== (booking.notes ?? "")) {
+            diff.notes = `${booking.notes ?? "—"} → ${rest.notes || "—"}`;
+          }
+          if (rest.paymentMethodId !== undefined && (rest.paymentMethodId ?? "") !== (booking.paymentMethodId ?? "")) {
+            diff.paymentMethodId = { from: booking.paymentMethodId ?? "", to: rest.paymentMethodId ?? "" };
+          }
+          if (rest.sourceOfInformationId !== undefined && (rest.sourceOfInformationId ?? "") !== (booking.sourceOfInformationId ?? "")) {
+            diff.sourceOfInformationId = { from: booking.sourceOfInformationId ?? "", to: rest.sourceOfInformationId ?? "" };
+          }
 
-        if (hasMaterialChange) {
-          // New snap values (already updated by transaction)
-          const [newSnapV, newSnapP, newSnapPV] = await Promise.all([
-            db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
-            db.snapPackage.findUnique({ where: { bookingId: id }, select: { packageName: true } }),
-            db.snapPackagePricing.findUnique({ where: { bookingId: id }, select: { packageName: true, pax: true, price: true } }),
-          ]);
-          if (venueChanged) diff.venue = `${oldSnapVenue?.venueName ?? "—"} → ${newSnapV?.venueName ?? rest.venueId}`;
-          if (packageChanged) {
-            const oldP = oldSnapPackage?.packageName ?? "—";
-            const newP = newSnapP?.packageName ?? rest.packageId;
-            diff.package = `${oldP} → ${newP}`;
-            if (newSnapPV) {
-              const oldPV = oldSnapVariant ? `${oldSnapVariant.pax} PAX · ${fmtNum(oldSnapVariant.price)}` : "—";
-              const newPV = `${newSnapPV.pax} PAX · ${fmtNum(newSnapPV.price)}`;
-              diff.packagePricing = `${oldPV} → ${newPV}`;
+          if (hasMaterialChange) {
+            // New snap values (already updated by transaction)
+            const [newSnapV, newSnapP, newSnapPV] = await Promise.all([
+              db.snapVenue.findUnique({ where: { bookingId: id }, select: { venueName: true } }),
+              db.snapPackage.findUnique({ where: { bookingId: id }, select: { packageName: true } }),
+              db.snapPackagePricing.findUnique({ where: { bookingId: id }, select: { packageName: true, pax: true, price: true } }),
+            ]);
+            if (venueChanged) diff.venue = `${oldSnapVenue?.venueName ?? "—"} → ${newSnapV?.venueName ?? rest.venueId}`;
+            if (packageChanged) {
+              const oldP = oldSnapPackage?.packageName ?? "—";
+              const newP = newSnapP?.packageName ?? rest.packageId;
+              diff.package = `${oldP} → ${newP}`;
+              if (newSnapPV) {
+                const oldPV = oldSnapVariant ? `${oldSnapVariant.pax} PAX · ${fmtNum(oldSnapVariant.price)}` : "—";
+                const newPV = `${newSnapPV.pax} PAX · ${fmtNum(newSnapPV.price)}`;
+                diff.packagePricing = `${oldPV} → ${newPV}`;
+              }
             }
+            if (eventDateChanged) diff.eventDate = `${oldEventDate} → ${newEventDate}`;
+            if (discountChanged) {
+              const discount = newDiscountAmount;
+              const oldDiscount = booking.discountAmount ?? 0;
+              diff.discount = `${fmtNum(oldDiscount)} → ${newDiscountName ?? "Discount"}: -${fmtNum(discount)}`;
+              const newPrice = newSnapPV?.price ?? 0;
+              diff.priceAfterDiscount = fmtNum(Math.max(0, newPrice - discount));
+            }
+            if (takeoutChanged) diff.takeout = "Takeout categories updated";
+            if (topChanged) diff.termOfPayments = "Terms of payment updated";
           }
-          if (eventDateChanged) diff.eventDate = `${oldEventDate} → ${newEventDate}`;
-          if (discountChanged) {
-            const discount = newDiscountAmount;
-            const oldDiscount = booking.discountAmount ?? 0;
-            diff.discount = `${fmtNum(oldDiscount)} → ${newDiscountName ?? "Discount"}: -${fmtNum(discount)}`;
-            const newPrice = newSnapPV?.price ?? 0;
-            diff.priceAfterDiscount = fmtNum(Math.max(0, newPrice - discount));
-          }
-          if (takeoutChanged) diff.takeout = "Takeout categories updated";
-          if (topChanged) diff.termOfPayments = "Terms of payment updated";
-        }
 
-        return diff;
-      })(),
-      description: `Edited booking for ${customerName}`,
-    });
+          return diff;
+        })(),
+        description: `Edited booking for ${customerName}`,
+      });
+    }
 
     revalidateTag("bookings", "max");
     revalidateTag("customers", "max");
