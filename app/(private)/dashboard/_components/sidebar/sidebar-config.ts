@@ -34,6 +34,9 @@ import {
   PieChart,
   Notebook,
   MoneyBag,
+  CardReceive,
+  CardSend,
+  CalendarMark,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
