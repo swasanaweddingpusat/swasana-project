@@ -213,6 +213,7 @@ export const navItems: NavItem[] = [
         submenu: [
           { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
           { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },
+          { name: "Customer Payout", href: "/dashboard/finance/accounts-payable/customer", icon: CardSend },
         ],
       },
     ],

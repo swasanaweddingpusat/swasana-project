@@ -138,6 +138,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola hutang dan pembayaran keluar",
     parent: "/dashboard/finance",
   },
+  "/dashboard/finance/accounts-payable/customer": {
+    title: "Customer Payout",
+    subtitle: "Kewajiban uang keluar ke customer — cashback & refund overpay",
+    parent: "/dashboard/finance/accounts-payable",
+  },
   "/dashboard/finance/accounts-payable/rekening-vendor": {
     title: "Rekening Vendor",
     subtitle: "Daftar rekening pembayaran vendor",
