@@ -19,14 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { VoucherProgramSelect } from "@/components/shared/voucher-program-select";
 import {
   AddCircle,
   CardReceive,
@@ -41,6 +35,7 @@ import {
 import { cn } from "@/lib/utils";
 import { safeRandomUUID } from "@/lib/uuid";
 import { useActivePromos, computePromoDiscount } from "@/hooks/use-active-promos";
+import { computeAllocationPreview } from "@/lib/payment-allocation";
 import type { CreateTermRow } from "./CreatePaymentStep";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -130,9 +125,16 @@ export function CreatePaymentRecordStep({
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
 
   const promoSelected = promos.find((p) => p.id === programId) ?? null;
-  const potongan = computePromoDiscount(amountNum, promoSelected);
-  const realCash = amountNum - potongan;
-  const showPromoPreview = promoSelected !== null && amountNum > 0;
+
+  // Preview alokasi greedy — urut sesuai pilihan user (sama dengan finalize).
+  const remainingOf = (uid: string): number => {
+    const t = terms.find((x) => x.uid === uid);
+    if (!t) return 0;
+    return Math.max(0, t.amount - coveredByOthers(uid, payments, terms));
+  };
+  const orderedSelected = selectedTermUids
+    .map((uid) => ({ id: uid, remaining: remainingOf(uid) }));
+  const alloc = computeAllocationPreview(orderedSelected, amountNum);
 
   function resetForm(): void {
     setOccurredAt(todayISO());
@@ -249,42 +251,6 @@ export function CreatePaymentRecordStep({
               </div>
             </div>
 
-            {/* Program (promo potong tagihan) */}
-            {promos.length > 0 && (
-              <div className="space-y-1">
-                <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <TagPrice weight="BoldDuotone" className="size-3.5" />
-                  Program
-                </Label>
-                <Select
-                  value={programId ?? "__none__"}
-                  onValueChange={(val) => setProgramId(val === "__none__" ? null : val)}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-xl text-sm">
-                    <SelectValue placeholder="Tanpa promo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Tanpa promo</SelectItem>
-                    {promos.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                        <span className="ml-1.5 text-muted-foreground">
-                          ({p.discountType === "PERCENTAGE"
-                            ? `${p.discountValue}%`
-                            : `Rp${p.discountValue.toLocaleString("id-ID")}`})
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {showPromoPreview && (
-                  <p className="text-xs text-muted-foreground">
-                    Potongan −Rp{potongan.toLocaleString("id-ID")} · Kas riil Rp{realCash.toLocaleString("id-ID")}
-                  </p>
-                )}
-              </div>
-            )}
-
             {/* Via Rekening */}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Via Rekening</Label>
@@ -294,6 +260,23 @@ export function CreatePaymentRecordStep({
                 placeholder="Pilih rekening penerima..."
                 crossVenue
               />
+            </div>
+
+            {/* Program (voucher potong tagihan) — selalu tampil */}
+            <div className="space-y-1">
+              <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <TagPrice weight="BoldDuotone" className="size-3.5" />
+                Program <span className="text-muted-foreground/70">(opsional)</span>
+              </Label>
+              <VoucherProgramSelect
+                programs={promos}
+                value={programId}
+                onChange={setProgramId}
+                amount={amountNum}
+              />
+              {promos.length === 0 && (
+                <p className="text-xs text-muted-foreground">Belum ada program aktif.</p>
+              )}
             </div>
 
             {/* Pilih Termin */}
@@ -308,6 +291,9 @@ export function CreatePaymentRecordStep({
                   const covered = coveredByOthers(t.uid, payments, terms);
                   const remaining = Math.max(0, t.amount - covered);
                   const lunas = remaining <= 0;
+                  const allocated = selected ? (alloc.perTerm.get(t.uid) ?? 0) : 0;
+                  const partial = selected && allocated > 0 && allocated < remaining;
+                  const unfunded = selected && allocated <= 0;
                   return (
                     <button
                       key={t.uid}
@@ -329,9 +315,19 @@ export function CreatePaymentRecordStep({
                       ) : (
                         <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
                       )}
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                        {t.name || "Termin"}
+                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                        <span className="truncate">{t.name || "Termin"}</span>
                         {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Tercatat</span>}
+                        {partial && (
+                          <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
+                            Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
+                          </span>
+                        )}
+                        {unfunded && (
+                          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                            Belum teralokasi
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                         Rp{fmtRp(remaining)}
@@ -392,6 +388,55 @@ export function CreatePaymentRecordStep({
                 Tampilkan di PO
               </Label>
             </div>
+
+            {/* Ringkasan alokasi — Client Bayar / Total Termin / Selisih */}
+            {selectedTermUids.length > 0 && amountNum > 0 && (
+              <div className="grid grid-cols-3 gap-x-2 rounded-xl bg-muted px-3 py-2">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">Client Bayar</span>
+                  <span className="truncate text-xs font-semibold tabular-nums text-foreground">
+                    Rp{fmtRp(amountNum)}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">Total Termin</span>
+                  <span className="truncate text-xs font-semibold tabular-nums text-foreground">
+                    Rp{fmtRp(alloc.totalRemaining)}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">Selisih</span>
+                  <span
+                    className={cn(
+                      "truncate text-xs font-semibold tabular-nums",
+                      alloc.kurang > 0 && "text-destructive",
+                      alloc.lebih > 0 && "text-[var(--brand-gold)]",
+                      alloc.kurang === 0 && alloc.lebih === 0 && "text-primary",
+                    )}
+                  >
+                    {alloc.kurang > 0 && `− Rp${fmtRp(alloc.kurang)} (Kurang)`}
+                    {alloc.lebih > 0 && `+ Rp${fmtRp(alloc.lebih)} (Lebih)`}
+                    {alloc.kurang === 0 && alloc.lebih === 0 && "Sesuai"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Feedback selisih — kurang (parsial) / lebih (saldo) */}
+            {selectedTermUids.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
+              <div className="flex items-start gap-2 rounded-xl bg-[var(--brand-gold)]/10 p-2.5 text-xs text-foreground">
+                <DangerTriangle weight="BoldDuotone" className="mt-0.5 size-4 shrink-0 text-[var(--brand-gold)]" />
+                {alloc.kurang > 0 ? (
+                  <span>
+                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — pembayaran belum menutup seluruh termin terpilih. Termin terakhir dicatat sebagian (pembayaran parsial), sisanya bisa dibayar nanti.
+                  </span>
+                ) : (
+                  <span>
+                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Form actions */}
             <div className="flex items-center gap-2 pt-1">

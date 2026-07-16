@@ -6,16 +6,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
+import { VoucherProgramSelect } from "@/components/shared/voucher-program-select";
 import {
   AddCircle,
   CheckCircle,
@@ -25,10 +19,22 @@ import {
   CardReceive,
   Link as LinkIcon,
   TagPrice,
+  TrashBinTrash,
 } from "@solar-icons/react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useActivePromos, computePromoDiscount } from "@/hooks/use-active-promos";
+import { computeAllocationPreview } from "@/lib/payment-allocation";
 import { cn } from "@/lib/utils";
-import { createCashIn } from "@/actions/ledger";
+import { createCashIn, deleteCashIn } from "@/actions/ledger";
 import { useQueryClient } from "@tanstack/react-query";
 import { getBookingFinanceDetailClient } from "@/services/booking-finance-service";
 import { useBookingFinanceDetail } from "@/hooks/use-booking-finance-detail";
@@ -107,13 +113,18 @@ function PaymentContent({
   const [showInPo, setShowInPo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [programId, setProgramId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BookingCashIn | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
 
   const promoSelected = promos.find((p) => p.id === programId) ?? null;
-  const potongan = computePromoDiscount(amountNum, promoSelected);
-  const realCash = amountNum - potongan;
-  const showPromoPreview = promoSelected !== null && amountNum > 0;
+
+  // Preview alokasi greedy — urut sortOrder (sama dengan buildAllocations submit).
+  const orderedSelected = terms
+    .filter((t) => selectedTermIds.includes(t.id))
+    .map((t) => ({ id: t.id, remaining: Math.max(0, t.amount - t.paid) }));
+  const alloc = computeAllocationPreview(orderedSelected, amountNum);
 
   // Booking fee = termin pertama; tertutup kalau paid > 0 atau ada cash-in ke situ.
   const firstTerm = terms[0];
@@ -182,6 +193,19 @@ function PaymentContent({
     toast.success("Pembayaran berhasil dicatat");
     resetForm();
     setFormOpen(false);
+    void qc.invalidateQueries({ queryKey: ["bookings"] });
+    void qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+    void qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
+  }
+
+  async function confirmDeleteCashIn(): Promise<void> {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const result = await deleteCashIn(deleteTarget.id);
+    setDeleting(false);
+    if (!result.success) { toast.error(result.error); return; }
+    toast.success("Pembayaran dihapus");
+    setDeleteTarget(null);
     void qc.invalidateQueries({ queryKey: ["bookings"] });
     void qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
     void qc.invalidateQueries({ queryKey: ["booking-finance-detail", bookingId] });
@@ -280,42 +304,6 @@ function PaymentContent({
               </div>
             </div>
 
-            {/* Program (promo potong tagihan) */}
-            {promos.length > 0 && (
-              <div className="space-y-1">
-                <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <TagPrice weight="BoldDuotone" className="size-3.5" />
-                  Program
-                </Label>
-                <Select
-                  value={programId ?? "__none__"}
-                  onValueChange={(val) => setProgramId(val === "__none__" ? null : val)}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-xl text-sm">
-                    <SelectValue placeholder="Tanpa promo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Tanpa promo</SelectItem>
-                    {promos.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                        <span className="ml-1.5 text-muted-foreground">
-                          ({p.discountType === "PERCENTAGE"
-                            ? `${p.discountValue}%`
-                            : `Rp${p.discountValue.toLocaleString("id-ID")}`})
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {showPromoPreview && (
-                  <p className="text-xs text-muted-foreground">
-                    Potongan −Rp{potongan.toLocaleString("id-ID")} · Kas riil Rp{realCash.toLocaleString("id-ID")}
-                  </p>
-                )}
-              </div>
-            )}
-
             {/* Via Rekening */}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Via Rekening</Label>
@@ -325,6 +313,23 @@ function PaymentContent({
                 placeholder="Pilih rekening penerima..."
                 crossVenue
               />
+            </div>
+
+            {/* Program (voucher potong tagihan) — selalu tampil */}
+            <div className="space-y-1">
+              <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <TagPrice weight="BoldDuotone" className="size-3.5" />
+                Program <span className="text-muted-foreground/70">(opsional)</span>
+              </Label>
+              <VoucherProgramSelect
+                programs={promos}
+                value={programId}
+                onChange={setProgramId}
+                amount={amountNum}
+              />
+              {promos.length === 0 && (
+                <p className="text-xs text-muted-foreground">Belum ada program aktif.</p>
+              )}
             </div>
 
             {/* Pilih Termin */}
@@ -338,6 +343,9 @@ function PaymentContent({
                   const selected = selectedTermIds.includes(t.id);
                   const remaining = Math.max(0, t.amount - t.paid);
                   const lunas = remaining <= 0;
+                  const allocated = selected ? (alloc.perTerm.get(t.id) ?? 0) : 0;
+                  const partial = selected && allocated > 0 && allocated < remaining;
+                  const unfunded = selected && allocated <= 0;
                   return (
                     <button
                       key={t.id}
@@ -359,9 +367,19 @@ function PaymentContent({
                       ) : (
                         <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
                       )}
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                        {t.name}
+                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                        <span className="truncate">{t.name}</span>
                         {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Lunas</span>}
+                        {partial && (
+                          <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
+                            Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
+                          </span>
+                        )}
+                        {unfunded && (
+                          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                            Belum teralokasi
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                         Rp{fmtRp(remaining)}
@@ -423,6 +441,55 @@ function PaymentContent({
               </Label>
             </div>
 
+            {/* Ringkasan alokasi — Client Bayar / Total Termin / Selisih */}
+            {selectedTermIds.length > 0 && amountNum > 0 && (
+              <div className="grid grid-cols-3 gap-x-2 rounded-xl bg-muted px-3 py-2">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">Client Bayar</span>
+                  <span className="truncate text-xs font-semibold tabular-nums text-foreground">
+                    Rp{fmtRp(amountNum)}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">Total Termin</span>
+                  <span className="truncate text-xs font-semibold tabular-nums text-foreground">
+                    Rp{fmtRp(alloc.totalRemaining)}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">Selisih</span>
+                  <span
+                    className={cn(
+                      "truncate text-xs font-semibold tabular-nums",
+                      alloc.kurang > 0 && "text-destructive",
+                      alloc.lebih > 0 && "text-[var(--brand-gold)]",
+                      alloc.kurang === 0 && alloc.lebih === 0 && "text-primary",
+                    )}
+                  >
+                    {alloc.kurang > 0 && `− Rp${fmtRp(alloc.kurang)} (Kurang)`}
+                    {alloc.lebih > 0 && `+ Rp${fmtRp(alloc.lebih)} (Lebih)`}
+                    {alloc.kurang === 0 && alloc.lebih === 0 && "Sesuai"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Feedback selisih — kurang (parsial) / lebih (saldo) */}
+            {selectedTermIds.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
+              <div className="flex items-start gap-2 rounded-xl bg-[var(--brand-gold)]/10 p-2.5 text-xs text-foreground">
+                <DangerTriangle weight="BoldDuotone" className="mt-0.5 size-4 shrink-0 text-[var(--brand-gold)]" />
+                {alloc.kurang > 0 ? (
+                  <span>
+                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — pembayaran belum menutup seluruh termin terpilih. Termin terakhir dicatat sebagian (pembayaran parsial), sisanya bisa dibayar nanti.
+                  </span>
+                ) : (
+                  <span>
+                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Form actions */}
             <div className="flex items-center gap-2 pt-1">
               <Button
@@ -464,16 +531,28 @@ function PaymentContent({
                       {new Date(ci.occurredAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
                   </div>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                      ci.ackStatus === "acknowledged"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-muted-foreground",
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                        ci.ackStatus === "acknowledged"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-muted-foreground",
+                      )}
+                    >
+                      {ci.ackStatus === "acknowledged" ? "Terverifikasi" : "Menunggu"}
+                    </span>
+                    {ci.ackStatus !== "acknowledged" && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(ci)}
+                        className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
+                        aria-label="Hapus pembayaran"
+                      >
+                        <TrashBinTrash weight="BoldDuotone" className="size-4" />
+                      </button>
                     )}
-                  >
-                    {ci.ackStatus === "acknowledged" ? "Terverifikasi" : "Menunggu"}
-                  </span>
+                  </div>
                 </div>
 
                 {/* Termin yang ditutup */}
@@ -542,6 +621,34 @@ function PaymentContent({
           </Button>
         </div>
       </div>
+
+      {/* Konfirmasi hapus pembayaran (pending only) */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus pembayaran?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (
+                <>
+                  Pembayaran <span className="font-semibold tabular-nums">Rp{fmtRp(deleteTarget.amount)}</span>{" "}
+                  ({new Date(deleteTarget.occurredAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
+                  akan dihapus permanen. Hanya pembayaran yang belum diverifikasi yang bisa dihapus.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => { e.preventDefault(); void confirmDeleteCashIn(); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

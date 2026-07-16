@@ -9,6 +9,8 @@ export interface ActivePromoOption {
   name: string;
   discountType: "PERCENTAGE" | "NOMINAL";
   discountValue: number;
+  /** Tanggal akhir masa berlaku program (ISO string) — null kalau tak ada. */
+  periodEnd: string | null;
 }
 
 // ─── Helper ────────────────────────────────────────────────────────────────────
@@ -56,6 +58,7 @@ async function fetchActivePromos(): Promise<ActivePromoOption[]> {
       name: String(item.name ?? ""),
       discountType: item.discountType === "NOMINAL" ? ("NOMINAL" as const) : ("PERCENTAGE" as const),
       discountValue: typeof item.discountValue === "number" ? item.discountValue : 0,
+      periodEnd: typeof item.periodEnd === "string" ? item.periodEnd : null,
     }))
     .filter((item) => item.id !== "");
 }
@@ -68,11 +71,13 @@ async function fetchActivePromos(): Promise<ActivePromoOption[]> {
  * staleTime 5 menit: daftar promo jarang berubah di sesi kerja.
  */
 export function useActivePromos(): ActivePromoOption[] {
+  // JANGAN pakai initialData: [] — React Query menganggapnya data fresh, jadi
+  // fetcher tak pernah jalan selama staleTime. Biarkan status awal `pending`
+  // supaya queryFn dieksekusi; default kosong via `data ?? []`.
   const { data } = useQuery<ActivePromoOption[]>({
     queryKey: ["active-promos"],
     queryFn: fetchActivePromos,
     staleTime: 5 * 60 * 1000,
-    initialData: [],
   });
   return data ?? [];
 }
