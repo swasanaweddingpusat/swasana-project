@@ -10,6 +10,14 @@ import { Printer } from "@solar-icons/react";
 const ORG_NAME = "SAMISARA";
 const ORG_SUB = "Wedding & Event";
 
+// Label jenis invoice (entity Invoice.type) → tampilan.
+const INVOICE_TYPE_LABEL: Record<string, string> = {
+  dp: "DP",
+  progress: "Progress",
+  pelunasan: "Pelunasan",
+  lainnya: "Lainnya",
+};
+
 // ─── Local helpers ────────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
@@ -81,14 +89,20 @@ export function InvoicePreviewDrawer({
               id="invoice-print-area"
               className="relative rounded-2xl border border-border bg-card p-6 shadow-sm"
             >
-              {/* LUNAS stamp — only when paid */}
-              {termin.status === "paid" && (
+              {/* Stamp — VOID (invoice dibatalkan) menang atas LUNAS */}
+              {termin.invoice?.status === "void" ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span className="-rotate-12 rounded-lg border-2 border-destructive/50 px-4 py-1 font-heading text-lg uppercase tracking-widest text-destructive/70 opacity-70">
+                    VOID
+                  </span>
+                </div>
+              ) : termin.status === "paid" ? (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <span className="-rotate-12 rounded-lg border-2 border-primary/40 px-4 py-1 font-heading text-lg uppercase tracking-widest text-primary/60 opacity-60">
                     LUNAS
                   </span>
                 </div>
-              )}
+              ) : null}
 
               {/* Header */}
               <div className="flex items-start justify-between gap-4 mb-4">
@@ -103,18 +117,27 @@ export function InvoicePreviewDrawer({
                 {/* Document label + PREVIEW pill */}
                 <div className="flex flex-col items-end gap-1.5">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-                      PREVIEW
-                    </span>
+                    {/* Belum terbit = PREVIEW; sudah terbit = badge jenis invoice (beku) */}
+                    {termin.invoice ? (
+                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-foreground">
+                        {INVOICE_TYPE_LABEL[termin.invoice.type] ?? termin.invoice.type}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
+                        PREVIEW
+                      </span>
+                    )}
                     <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                       INVOICE / TAGIHAN
                     </p>
                   </div>
-                  {/* No. Invoice & dates */}
+                  {/* No. Invoice & dates — beku dari entity Invoice saat terbit */}
                   <p className="text-sm font-medium text-foreground">
-                    {termin.noInvoice || "—"}
+                    {termin.invoice?.number || termin.noInvoice || "—"}
                   </p>
-                  <p className="text-xs text-muted-foreground">Tanggal: {today}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Tanggal: {termin.invoice ? fmtDate(termin.invoice.issuedAt) : today}
+                  </p>
                   <p className="text-xs font-semibold text-foreground">
                     Jatuh Tempo: {fmtDate(termin.dueDate)}
                   </p>

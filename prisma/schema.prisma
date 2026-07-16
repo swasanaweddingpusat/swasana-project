@@ -171,6 +171,8 @@ model Profile {
   ledgersCreated             Ledger[]        @relation("LedgerCreator")
   ledgersAcknowledged        Ledger[]        @relation("LedgerAcknowledger")
   ledgersVoided              Ledger[]        @relation("LedgerVoider")
+  invoicesIssued             Invoice[]       @relation("InvoiceIssuer")
+  invoicesVoided             Invoice[]       @relation("InvoiceVoider")
   paymentActivities          PaymentActivity[] @relation("PaymentActivityActor")
   bookingsRecognized         Booking[]       @relation("BookingRecognizer")
   maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignee")
@@ -872,6 +874,7 @@ model Booking {
   // Live relations
   termOfPayments    TermOfPayment[]
   ledgers           Ledger[]
+  invoices          Invoice[]
   bookingDocuments  BookingDocument[]
   bookingRefunds    BookingPaymentSettlement[] @relation("SourceSettlements")
   targetSettlements BookingPaymentSettlement[] @relation("TargetSettlements")
@@ -882,6 +885,7 @@ model Booking {
   convertedFromLeads Lead[]                    @relation("LeadConvertedBooking")
   editDraft         BookingEditDraft?
   eventEvaluations  EventEvaluation[]
+  creditBalance     CreditBalance?
 
   @@index([salesId])
   @@index([managerId])
@@ -1147,29 +1151,44 @@ model SnapVendorItem {
 
 // ─── Booking Live Tables ─────────────────────────────────────────────────────
 
-// Fase 5: TOP = JADWAL termin murni (name/amount/dueDate + invoiceNumber). "Berapa
+// Fase 5: TOP = JADWAL termin murni (name/amount/dueDate). "Berapa
 // sudah terbayar" DERIVED dari Ledger cash-in via PaymentAllocation (lib/queries/ledger.ts).
 // Kolom pembayaran lama (paymentStatus/paymentEvidence/paymentMethodId/ackStatus/
 // acknowledged*) + tabel PartialPayment sudah di-drop — sumbernya sekarang Ledger.
+// FIX C Step 3: invoiceNumber kolom legacy juga sudah di-drop — invoice on-demand via Invoice entity.
 model TermOfPayment {
-  id              String              @id @default(uuid())
-  bookingId       String
-  name            String
-  amount          Int
-  dueDate         DateTime
-  invoiceNumber   String?
-  notes           String?
-  sortOrder       Int                 @default(0)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  booking          Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  allocations      PaymentAllocation[]
+  id        String   @id @default(uuid())
+  bookingId String
+  name      String
+  amount    Int
+  dueDate   DateTime
+  notes     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  booking     Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  allocations PaymentAllocation[]
+  invoices    Invoice[]
 
-  @@unique([invoiceNumber])
   @@index([bookingId])
   @@map("term_of_payments")
 }
 
+/// Materialized overpayment (kelebihan bayar) per booking, in integer IDR.
+/// amount = max(0, Σ acked cash-in (gross) − net price owed). Always >= 0.
+/// Recomputed transactionally on cash-in ack and on any price/schedule change.
+/// A positive balance is later resolved by a refund (Ledger direction=out) or
+/// re-allocation — that resolution is out of scope for this plan.
+model CreditBalance {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_balances")
+}
 
 // ─── Cashflow Ledger (Buku Besar / Cashbook) ─────────────────────────────────
 // Single-entry cashbook. Sekarang cuma direction=in (cash in). PartialPayment
@@ -1192,6 +1211,15 @@ model Ledger {
   evidence              String?             // storage path/key, BUKAN full URL (§7.1)
   invoiceNumber         String?             // no. kwitansi auto-gen server (§7.2)
   notes                 String?
+  // Tampilkan cash-in ini di section Summary Payment PO PDF. Default OFF —
+  // user sengaja menyalakan per pembayaran. Voided tetap di-exclude saat render.
+  showInPo              Boolean             @default(false)
+  // Freeze konteks pembayaran (FIX B) — beku nama termin/package/venue SAAT
+  // cash-in dibuat. Label PO/Invoice pakai ini FIRST, fallback live-join kalau
+  // null (data lama pre-migrasi). Diisi sekali saat create, immutable setelahnya.
+  snapTopName           String?
+  snapPackageName       String?
+  snapVenueName         String?
   acknowledgedAt        DateTime?
   acknowledgedById      String?
   acknowledgedSignature String?             // ttd Finance (data URL PNG), nullable
@@ -1256,6 +1284,44 @@ model PaymentActivity {
   @@index([ledgerId, createdAt])
   @@index([actorId])
   @@map("payment_activities")
+}
+
+// ─── Invoice (Tagihan Terbit) — FIX C ───────────────────────────────────────
+// Cermin dari Ledger/kwitansi: TAGIHAN TERBIT immutable, terpisah dari
+// TermOfPayment (jadwal, live/mutable). On-demand (finance trigger "Terbitkan
+// Invoice"), 1 invoice = 1 termin. `amount` BEKU saat terbit (= termin.amount
+// net saat itu — TIDAK dibaca live dari termin lagi). Void via tombstone,
+// row tidak pernah dihapus; nomor void TIDAK dipakai ulang.
+// termId nullable: termin boleh di-rebuild/dihapus (switch venue) tanpa
+// merusak invoice yang sudah terbit — invoice jadi yatim tapi utuh sbg
+// dokumen historis (docs/superpowers/specs/2026-07-14-booking-money-model.md §6.3).
+model Invoice {
+  id            String        @id @default(uuid())
+  bookingId     String
+  termId        String?
+  invoiceNumber String
+  invoiceType   InvoiceType   @default(progress)
+  amount        Int           // BEKU (net) saat terbit = snapshot termin.amount
+  dueDate       DateTime?
+  notes         String?
+  status        InvoiceStatus @default(issued)
+  issuedAt      DateTime      @default(now())
+  issuedById    String?
+  voidedAt      DateTime?
+  voidedById    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  booking  Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  term     TermOfPayment? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  issuedBy Profile?       @relation("InvoiceIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  voidedBy Profile?       @relation("InvoiceVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceNumber])
+  @@index([bookingId])
+  @@index([termId])
+  @@index([status])
+  @@map("invoices")
 }
 
 model BookingDocument {
@@ -1405,6 +1471,20 @@ enum PaymentActivityAction {
   acknowledged
   rejected
   voided
+  updated
+  unacknowledged
+}
+
+enum InvoiceType {
+  dp
+  progress
+  pelunasan
+  lainnya
+}
+
+enum InvoiceStatus {
+  issued
+  void
 }
 
 enum SettlementType {
