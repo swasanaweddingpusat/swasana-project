@@ -1337,6 +1337,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         occurredAt: string;
         amount: number;
         paymentMethodId: string | null;
+        discountProgramId: string | null;
         discountAmount: number;
         notes: string | null;
         allocations: { sortOrder: number; amount: number }[];
@@ -1377,7 +1378,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           occurredAt: p.occurredAt,
           amount: p.amount,
           paymentMethodId: p.paymentMethodId || null,
-          discountAmount: 0,
+          discountProgramId: p.programId ?? null,
+          discountAmount: p.discountAmount,
           notes: p.notes.trim() || null,
           allocations,
           showInPo: p.showInPo,

@@ -2688,12 +2688,18 @@ enum DiscountType {
   NOMINAL
 }
 
+enum VoucherType {
+  payment_discount
+  cashback
+}
+
 model DiscountProgram {
   id                  String       @id @default(uuid())
   name                String
   isActive            Boolean      @default(true)
   discountType        DiscountType
   discountValue       Int
+  type                VoucherType  @default(payment_discount)
   minTransaction      Int?
   periodStart         DateTime
   periodEnd           DateTime

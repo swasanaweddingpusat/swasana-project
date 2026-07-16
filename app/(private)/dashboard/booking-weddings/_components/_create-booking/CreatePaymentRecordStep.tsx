@@ -19,6 +19,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import {
   AddCircle,
@@ -27,11 +34,13 @@ import {
   CloseCircle,
   DangerTriangle,
   Link as LinkIcon,
+  TagPrice,
   TrashBinTrash,
   UploadMinimalistic,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { safeRandomUUID } from "@/lib/uuid";
+import { useActivePromos, computePromoDiscount } from "@/hooks/use-active-promos";
 import type { CreateTermRow } from "./CreatePaymentStep";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,6 +56,10 @@ export interface CreatePaymentEntry {
   evidenceFile: File | null;
   notes: string;
   showInPo: boolean;
+  /** ID program promo yang dipilih (null = tanpa promo). */
+  programId: string | null;
+  /** Nominal potongan promo (0 = tanpa promo). Dikirim ke server as discountAmount. */
+  discountAmount: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -102,6 +115,8 @@ export function CreatePaymentRecordStep({
   defaultPaymentMethodId,
   bookingFeeRecorded,
 }: CreatePaymentRecordStepProps): React.ReactElement {
+  const promos = useActivePromos();
+
   const [formOpen, setFormOpen] = useState(false);
   const [occurredAt, setOccurredAt] = useState(todayISO());
   const [amount, setAmount] = useState("");
@@ -110,8 +125,14 @@ export function CreatePaymentRecordStep({
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [showInPo, setShowInPo] = useState(false);
+  const [programId, setProgramId] = useState<string | null>(null);
 
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
+
+  const promoSelected = promos.find((p) => p.id === programId) ?? null;
+  const potongan = computePromoDiscount(amountNum, promoSelected);
+  const realCash = amountNum - potongan;
+  const showPromoPreview = promoSelected !== null && amountNum > 0;
 
   function resetForm(): void {
     setOccurredAt(todayISO());
@@ -121,6 +142,7 @@ export function CreatePaymentRecordStep({
     setEvidenceFile(null);
     setNotes("");
     setShowInPo(false);
+    setProgramId(null);
   }
 
   function toggleTermSelection(uid: string): void {
@@ -130,6 +152,7 @@ export function CreatePaymentRecordStep({
   }
 
   function handleAddPayment(): void {
+    const discountAmount = computePromoDiscount(amountNum, promoSelected);
     setPayments((prev) => [
       ...prev,
       {
@@ -141,6 +164,8 @@ export function CreatePaymentRecordStep({
         evidenceFile,
         notes: notes.trim(),
         showInPo,
+        programId,
+        discountAmount,
       },
     ]);
     resetForm();
@@ -223,6 +248,42 @@ export function CreatePaymentRecordStep({
                 />
               </div>
             </div>
+
+            {/* Program (promo potong tagihan) */}
+            {promos.length > 0 && (
+              <div className="space-y-1">
+                <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <TagPrice weight="BoldDuotone" className="size-3.5" />
+                  Program
+                </Label>
+                <Select
+                  value={programId ?? "__none__"}
+                  onValueChange={(val) => setProgramId(val === "__none__" ? null : val)}
+                >
+                  <SelectTrigger className="h-9 w-full rounded-xl text-sm">
+                    <SelectValue placeholder="Tanpa promo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Tanpa promo</SelectItem>
+                    {promos.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                        <span className="ml-1.5 text-muted-foreground">
+                          ({p.discountType === "PERCENTAGE"
+                            ? `${p.discountValue}%`
+                            : `Rp${p.discountValue.toLocaleString("id-ID")}`})
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {showPromoPreview && (
+                  <p className="text-xs text-muted-foreground">
+                    Potongan −Rp{potongan.toLocaleString("id-ID")} · Kas riil Rp{realCash.toLocaleString("id-ID")}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Via Rekening */}
             <div className="space-y-1">
@@ -391,6 +452,17 @@ export function CreatePaymentRecordStep({
                         {termName(uid)}
                       </span>
                     ))}
+                  </div>
+                )}
+                {p.programId && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--brand-gold)] px-2 py-0.5 text-[11px] font-medium text-[var(--brand-gold)]">
+                      <TagPrice weight="BoldDuotone" className="size-3" />
+                      {promos.find((pr) => pr.id === p.programId)?.name ?? "Promo"}
+                      {p.discountAmount > 0 && (
+                        <> · −Rp{p.discountAmount.toLocaleString("id-ID")}</>
+                      )}
+                    </span>
                   </div>
                 )}
                 {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}

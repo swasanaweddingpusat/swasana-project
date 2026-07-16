@@ -158,9 +158,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Buku besar cashflow — piutang, uang masuk, sampai pendapatan diakui.",
     parent: "/dashboard/finance",
   },
-  "/dashboard/discount-promo": {
-    title: "Discount / Promo",
-    subtitle: "Program promo & discount aktif",
+  "/dashboard/voucher": {
+    title: "Voucher / Program",
+    subtitle: "Program voucher & discount aktif",
   },
 
   // ─── Notifications ─────────────────────────────────────────────────────────

@@ -125,8 +125,8 @@ export const navItems: NavItem[] = [
     permission: { module: "booking-mice", action: "view" },
   },
   {
-    name: "Discount / Promo",
-    href: "/dashboard/discount-promo",
+    name: "Voucher / Program",
+    href: "/dashboard/voucher",
     icon: TagPrice,
     permission: { module: "promo", action: "view" },
   },

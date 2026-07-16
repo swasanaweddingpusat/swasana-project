@@ -13,6 +13,7 @@ export async function getPromoPrograms() {
       isActive: true,
       discountType: true,
       discountValue: true,
+      type: true,
       minTransaction: true,
       periodStart: true,
       periodEnd: true,

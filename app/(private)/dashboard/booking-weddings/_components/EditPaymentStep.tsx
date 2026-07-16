@@ -6,6 +6,13 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
 import { BankAccountSelect } from "@/components/shared/bank-account-select";
@@ -17,7 +24,9 @@ import {
   UploadMinimalistic,
   CardReceive,
   Link as LinkIcon,
+  TagPrice,
 } from "@solar-icons/react";
+import { useActivePromos, computePromoDiscount } from "@/hooks/use-active-promos";
 import { cn } from "@/lib/utils";
 import { createCashIn } from "@/actions/ledger";
 import { useQueryClient } from "@tanstack/react-query";
@@ -85,6 +94,7 @@ function PaymentContent({
 }: PaymentContentProps): React.ReactElement {
   const qc = useQueryClient();
   const toggleShowInPoMutation = useToggleCashInShowInPo(bookingId);
+  const promos = useActivePromos();
 
   // ── Add-payment form state ────────────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
@@ -96,8 +106,14 @@ function PaymentContent({
   const [notes, setNotes] = useState("");
   const [showInPo, setShowInPo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [programId, setProgramId] = useState<string | null>(null);
 
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
+
+  const promoSelected = promos.find((p) => p.id === programId) ?? null;
+  const potongan = computePromoDiscount(amountNum, promoSelected);
+  const realCash = amountNum - potongan;
+  const showPromoPreview = promoSelected !== null && amountNum > 0;
 
   // Booking fee = termin pertama; tertutup kalau paid > 0 atau ada cash-in ke situ.
   const firstTerm = terms[0];
@@ -114,6 +130,7 @@ function PaymentContent({
     setEvidenceFile(null);
     setNotes("");
     setShowInPo(false);
+    setProgramId(null);
   }
 
   function toggleTermSelection(id: string): void {
@@ -146,12 +163,14 @@ function PaymentContent({
     }
 
     const allocations = buildAllocations(amountNum, selectedTermIds, terms);
+    const discountAmount = computePromoDiscount(amountNum, promoSelected);
     const result = await createCashIn({
       bookingId,
       occurredAt: new Date(occurredAt).toISOString(),
       amount: amountNum,
       paymentMethodId: paymentMethodId || null,
-      discountAmount: 0,
+      discountProgramId: programId,
+      discountAmount,
       evidence: evidenceKey,
       notes: notes.trim() || null,
       showInPo,
@@ -260,6 +279,42 @@ function PaymentContent({
                 />
               </div>
             </div>
+
+            {/* Program (promo potong tagihan) */}
+            {promos.length > 0 && (
+              <div className="space-y-1">
+                <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <TagPrice weight="BoldDuotone" className="size-3.5" />
+                  Program
+                </Label>
+                <Select
+                  value={programId ?? "__none__"}
+                  onValueChange={(val) => setProgramId(val === "__none__" ? null : val)}
+                >
+                  <SelectTrigger className="h-9 w-full rounded-xl text-sm">
+                    <SelectValue placeholder="Tanpa promo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Tanpa promo</SelectItem>
+                    {promos.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                        <span className="ml-1.5 text-muted-foreground">
+                          ({p.discountType === "PERCENTAGE"
+                            ? `${p.discountValue}%`
+                            : `Rp${p.discountValue.toLocaleString("id-ID")}`})
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {showPromoPreview && (
+                  <p className="text-xs text-muted-foreground">
+                    Potongan −Rp{potongan.toLocaleString("id-ID")} · Kas riil Rp{realCash.toLocaleString("id-ID")}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Via Rekening */}
             <div className="space-y-1">
