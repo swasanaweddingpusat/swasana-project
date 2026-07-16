@@ -1,11 +1,5 @@
--- Change pettyCash from boolean to numeric (decimal)
--- Convert existing boolean values to 0/1 numeric and set default 0
-
-BEGIN;
--- Drop existing default (boolean) so the type can be changed cleanly
-ALTER TABLE "procurement_items" ALTER COLUMN "pettyCash" DROP DEFAULT;
--- Convert boolean values to numeric (1 for true, 0 for false)
-ALTER TABLE "procurement_items" ALTER COLUMN "pettyCash" TYPE numeric USING (CASE WHEN "pettyCash" = true THEN 1 ELSE 0 END);
--- Set a numeric default
-ALTER TABLE "procurement_items" ALTER COLUMN "pettyCash" SET DEFAULT 0;
-COMMIT;
+-- No-op: pettyCash was already created as DECIMAL(65,30) in
+-- 20260711010001_add_petty_cash_to_procurement_item.
+-- This migration previously attempted a boolean→numeric cast that
+-- is no longer applicable.
+SELECT 1;
