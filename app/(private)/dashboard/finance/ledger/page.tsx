@@ -16,7 +16,8 @@ import type { LedgerPromoOption } from "./_components/ledger-entry-drawer";
 export default async function LedgerPage(): Promise<React.ReactElement> {
   // Guard + bikin route dynamic (auth() akses cookies) — cegah Next static-prerender
   // yang bakal nembak Prisma pas build.
-  await requirePagePermission("finance-ar");
+  // Cashflow (cashbook) dibagi antara AR & AP — cukup salah satu.
+  await requirePagePermission(["finance-ar", "finance-ap"]);
 
   const [entriesResult, bookings, promoPrograms, paymentMethodRows] = await Promise.all([
     getLedgerEntries(),

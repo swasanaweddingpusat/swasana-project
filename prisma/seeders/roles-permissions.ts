@@ -7,7 +7,9 @@ const roleData = [
   { name: "manager", description: "Full access to all features and user management", sortOrder: 3 },
   { name: "direktur-operational", description: "All Access", sortOrder: 4 },
   { name: "operational", description: "All Access", sortOrder: 5 },
-  { name: "finance", description: "Access to financial data and reports", sortOrder: 6 },
+  { name: "finance", description: "Full finance access (AR + AP + cashflow + overview)", sortOrder: 6 },
+  { name: "finance-ar", description: "Accounts Receivable + cashflow only", sortOrder: 13 },
+  { name: "finance-ap", description: "Accounts Payable + expense + cashflow only", sortOrder: 14 },
   { name: "sales", description: "Access to sales data and customer management", sortOrder: 7 },
   { name: "vendor-specialist", description: "Manage Data Vendor Specialist", sortOrder: 8 },
   { name: "human-resource", description: "Access to human resource", sortOrder: 9 },
@@ -150,6 +152,21 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     "vendor-specialist": ["view", "create", "edit", "delete"],
     vendor: ["view", "create", "edit", "delete"],
     promo: ["view"],
+  },
+  // Finance AR only — Accounts Receivable + Cashflow (+ Overview). Can record/ack
+  // cash-in and edit termin (updateTermOfPayments accepts finance-ar:edit). No AP access.
+  "finance-ar": {
+    "finance-ar": ["view", "create", "edit", "delete"],
+    // read-only booking context so AR rows show customer/event/package labels
+    booking: ["view"],
+    customers: ["view"],
+  },
+  // Finance AP only — Expense + Accounts Payable + Customer Payout + Cashflow (+ Overview).
+  // No AR access (can't ack cash-in or edit termin).
+  "finance-ap": {
+    "finance-ap": ["view", "create", "edit", "delete"],
+    booking: ["view"],
+    customers: ["view"],
   },
   sales: {
     booking: ["view", "create", "edit", "comment", "client-agreement", "print"],
