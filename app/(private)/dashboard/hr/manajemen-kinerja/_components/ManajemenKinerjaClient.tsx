@@ -26,7 +26,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { useEmployees } from "@/hooks/use-employees";
 import {
@@ -480,20 +479,18 @@ export function ManajemenKinerjaClient() {
         {/* ── Tab: Review Kinerja ─────────────────────────────────────────────── */}
         <TabsContent value="review" className="mt-4 space-y-4">
           <div className="flex justify-end">
+            <Button
+              className="rounded-full gap-2"
+              onClick={() => {
+                setEditingReviewId(null);
+                setReviewForm(EMPTY_REVIEW_FORM);
+                setReviewDrawerOpen(true);
+              }}
+            >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+              Tambah Review
+            </Button>
             <Sheet open={reviewDrawerOpen} onOpenChange={setReviewDrawerOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  className="rounded-full gap-2"
-                  onClick={() => {
-                    setEditingReviewId(null);
-                    setReviewForm(EMPTY_REVIEW_FORM);
-                    setReviewDrawerOpen(true);
-                  }}
-                >
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                  Tambah Review
-                </Button>
-              </SheetTrigger>
               <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
                 <SheetHeader className="space-y-2 px-1 pt-2">
                   <SheetTitle className="text-xl font-heading">
@@ -755,20 +752,18 @@ export function ManajemenKinerjaClient() {
         {/* ── Tab: KPI ────────────────────────────────────────────────────────── */}
         <TabsContent value="kpi" className="mt-4 space-y-4">
           <div className="flex justify-end">
+            <Button
+              className="rounded-full gap-2"
+              onClick={() => {
+                setEditingKpiId(null);
+                setKpiForm(EMPTY_KPI_FORM);
+                setKpiDrawerOpen(true);
+              }}
+            >
+              <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+              Tambah KPI
+            </Button>
             <Sheet open={kpiDrawerOpen} onOpenChange={setKpiDrawerOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  className="rounded-full gap-2"
-                  onClick={() => {
-                    setEditingKpiId(null);
-                    setKpiForm(EMPTY_KPI_FORM);
-                    setKpiDrawerOpen(true);
-                  }}
-                >
-                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                  Tambah KPI
-                </Button>
-              </SheetTrigger>
               <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
                 <SheetHeader className="space-y-2 px-1 pt-2">
                   <SheetTitle className="text-xl font-heading">
