@@ -120,8 +120,8 @@ export function VenueEventStep({ form }: { form: EditBookingForm }) {
               captionLayout="dropdown"
               selected={bookingDate ? parseDateOnly(bookingDate) : undefined}
               onSelect={(date) => { setBookingDate(date ? toDateOnly(date) : ""); setWeddingSession(""); clearError("eventDate"); }}
-              fromYear={new Date().getFullYear() - 10}
-              toYear={new Date().getFullYear() + 10}
+              startMonth={new Date(new Date().getFullYear() - 10, 0)}
+              endMonth={new Date(new Date().getFullYear() + 10, 11)}
               defaultMonth={bookingDate ? parseDateOnly(bookingDate) : new Date()}
               onMonthChange={setVisibleMonth}
               disabled={(d) => {
