@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, CloseCircle, AltArrowDown } from "@solar-icons/react";
-import { CreatePaymentStep, makeCreateInlinePayment, type CreateInlinePayment } from "@/app/(private)/dashboard/booking-weddings/_components/_create-booking/CreatePaymentStep";
+import { CreatePaymentStep } from "@/app/(private)/dashboard/booking-weddings/_components/_create-booking/CreatePaymentStep";
+import { CreatePaymentRecordStep, type CreatePaymentEntry } from "@/app/(private)/dashboard/booking-weddings/_components/_create-booking/CreatePaymentRecordStep";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SignatureCanvas from "react-signature-canvas";
 import { Drawer } from "@/components/shared/drawer";
@@ -18,7 +19,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
-import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah, toDateOnly, parseDateOnly } from "@/lib/utils";
@@ -284,7 +284,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const { data: resumeDraftDetail } = useDraftBookingDetail(pendingResumeDraftId);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   const sigSalesRef = useRef<SignatureCanvas>(null);
   const [signatureSales, setSignatureSales] = useState("");
@@ -438,16 +438,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [terms, setTerms] = useState<TermRow[]>(makeDefaultTerms);
   // Track COLLAPSED terms by uid (stable across drag-reorder) — default empty = semua kebuka
   const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
-  // Inline payment per-termin (opsional, keyed by term uid). Dikumpulin lokal — booking
-  // belum punya DB id — lalu disimpan sebagai cash-in saat finalize (finalize.payments).
-  const [inlinePayments, setInlinePayments] = useState<Map<string, CreateInlinePayment>>(new Map());
-  const updateInlinePayment = (uid: string, patch: Partial<CreateInlinePayment>) => {
-    setInlinePayments((prev) => {
-      const next = new Map(prev);
-      next.set(uid, { ...(next.get(uid) ?? makeCreateInlinePayment()), ...patch });
-      return next;
-    });
-  };
+  // Daftar pembayaran (opsional). Tiap entry menutup 1+ termin. Dikumpulin lokal —
+  // booking belum punya DB id — lalu disimpan sebagai cash-in saat finalize.
+  const [createPayments, setCreatePayments] = useState<CreatePaymentEntry[]>([]);
   // Guard: user has manually edited term amounts in step 3.
   // When true, allocatePrice will NOT override amounts[0] and [1] with the
   // BOOKING_FEE_DEFAULT / DP_DEFAULT constants — it preserves whatever the user typed.
@@ -480,7 +473,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   function resetToClean() {
     form.reset();
     setSelectedVenueId(""); setSelectedPackageId(""); setSelectedPackagePrice(0); setOriginalPackagePrice(0); setLastAllocatedPrice(0);
-    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setInlinePayments(new Map());
+    setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setCreatePayments([]);
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
     setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw("");
@@ -784,18 +777,23 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     visibleCategories.length === 0 ||
     visibleCategories.some((c) => !(categoryToggles[c.categoryName] ?? false));
 
-  // Step 5 complete: term of payments — TOP is now schedule-only (see
-  // docs/booking-top-payment-ledger-plan.md), so completeness is judged purely
-  // on the balance/dueDate rules, not per-term payment status/evidence anymore.
-  const isStep5Complete = !!wPaymentMethodId && (
+  // Step 5 complete: term of payments — TOP is schedule-only (jadwal + discount).
+  // Completeness judged on the balance/dueDate rules; payment recording moves to step 6.
+  const isStep5Complete =
     getBasePrice() === 0 || (
       (terms[0]?.amount ?? 0) > 0 &&
       getDifference() === 0 &&
       terms.every((t) => !!t.dueDate)
-    )
-  );
-  // Step 6 complete: signing location (+ signature when user IS the sales)
-  const isStep6Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
+    );
+  // Step 6 complete: booking fee (termin pertama) sudah tertutup oleh salah satu
+  // pembayaran yang dicatat (payment menunjuk ke uid termin pertama).
+  const firstTermUid = terms[0]?.uid;
+  const isStep6Complete =
+    !!firstTermUid &&
+    (terms[0]?.amount ?? 0) > 0 &&
+    createPayments.some((p) => p.amount > 0 && !!p.paymentMethodId && p.termUids.includes(firstTermUid));
+  // Step 7 complete: signing location (+ signature when user IS the sales)
+  const isStep7Complete = !!signingLocation.trim() && (!currentUserIsSales || !!signatureSales);
 
   // Recalc term dates when event date changes
   useEffect(() => {
@@ -1244,10 +1242,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       return;
     }
 
-    // ── Step 5 → 6: Term of Payments ──────────────────────────────────────────
-    // Fase 5: TOP = jadwal murni. Step-5 hanya validasi jadwal + simpan draft
-    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan setelah
-    // booking tersimpan lewat Finance AR / edit booking — bukan di create flow.
+    // ── Step 5 → 6: Term of Payments (jadwal murni) ──────────────────────────
+    // TOP = jadwal + discount. Step-5 hanya validasi jadwal + simpan draft
+    // (nama/nominal/tanggal). Pencatatan pembayaran (cash-in) dilakukan di step 6
+    // (Payment) dan disimpan saat finalize.
     if (currentStep === 5) {
       const firstTerm = terms[0];
       if (!firstTerm || !firstTerm.amount || firstTerm.amount <= 0) {
@@ -1274,7 +1272,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         };
         const capturedDraftId = draftId;
 
-        // Simpan step-3 di background — advance ke step-6 (TTD) tak perlu menunggu.
+        // Simpan step-3 di background — advance ke step-6 (Payment) tak perlu menunggu.
         const prev = step3SaveInFlightRef.current;
         const savePromise = backgroundSave(
           async () => {
@@ -1295,7 +1293,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      if (currentStep === 6) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
+      if (currentStep === 7) { sigSalesRef.current?.clear(); setSignatureSales(""); setUseDefaultSignature(false); }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -1331,27 +1329,28 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         return;
       }
 
-      // Inline payments (opsional) → cash-in yang tercatat saat booking dibuat.
-      // Hanya termin yang di-enable + punya rekening + nominal > 0 yang dikirim;
-      // tiap pembayaran bayar penuh ke termin-nya (alokasi by sortOrder). Bukti
-      // di-upload dulu (kalau ada) — gagal upload non-fatal (lanjut tanpa bukti).
+      // Pembayaran (opsional) → cash-in yang tercatat saat booking dibuat. Tiap entry
+      // menutup 1+ termin; nominal dialokasi greedy berurutan (termUids). Alokasi
+      // dikirim by sortOrder (server resolve termId dari sortOrder). Bukti di-upload
+      // dulu (kalau ada) — gagal upload non-fatal (lanjut tanpa bukti).
       const payments: {
         occurredAt: string;
         amount: number;
         paymentMethodId: string | null;
+        discountProgramId: string | null;
         discountAmount: number;
         notes: string | null;
         allocations: { sortOrder: number; amount: number }[];
         showInPo: boolean;
         evidence: string | null;
       }[] = [];
-      for (const t of terms) {
-        const ip = inlinePayments.get(t.uid);
-        if (!ip?.enabled || !ip.paymentMethodId || t.amount <= 0) continue;
+      const termByUid = new Map(terms.map((t) => [t.uid, t]));
+      for (const p of createPayments) {
+        if (p.amount <= 0 || !p.paymentMethodId || p.termUids.length === 0) continue;
         let evidence: string | null = null;
-        if (ip.evidenceFile) {
+        if (p.evidenceFile) {
           const fd = new FormData();
-          fd.append("file", ip.evidenceFile);
+          fd.append("file", p.evidenceFile);
           try {
             const up = await fetch("/api/upload/booking-fee-evidence", { method: "POST", body: fd });
             if (up.ok) {
@@ -1362,14 +1361,28 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             // non-fatal: lanjut tanpa bukti bayar
           }
         }
+        // Greedy allocation over the selected terms (in selection order).
+        const allocations: { sortOrder: number; amount: number }[] = [];
+        let budget = p.amount;
+        for (const uid of p.termUids) {
+          if (budget <= 0) break;
+          const t = termByUid.get(uid);
+          if (!t) continue;
+          const amt = Math.min(t.amount, budget);
+          if (amt > 0) {
+            allocations.push({ sortOrder: t.sortOrder, amount: amt });
+            budget -= amt;
+          }
+        }
         payments.push({
-          occurredAt: ip.occurredAt,
-          amount: t.amount,
-          paymentMethodId: ip.paymentMethodId || null,
-          discountAmount: 0,
-          notes: ip.notes.trim() || null,
-          allocations: [{ sortOrder: t.sortOrder, amount: t.amount }],
-          showInPo: ip.showInPo,
+          occurredAt: p.occurredAt,
+          amount: p.amount,
+          paymentMethodId: p.paymentMethodId || null,
+          discountProgramId: p.programId ?? null,
+          discountAmount: p.discountAmount,
+          notes: p.notes.trim() || null,
+          allocations,
+          showInPo: p.showInPo,
           evidence,
         });
       }
@@ -1485,9 +1498,10 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     (currentStep === 4 && !isStep4Complete) ||
     (currentStep === 5 && !isStep5Complete) ||
     (currentStep === 6 && !isStep6Complete) ||
+    (currentStep === 7 && !isStep7Complete) ||
     (currentStep === 2 && isDraftMutating) ||
-    (currentStep === 6 && isDraftMutating) ||
-    (currentStep === 6 && isSubmitting);
+    (currentStep === 7 && isDraftMutating) ||
+    (currentStep === 7 && isSubmitting);
 
   return (
     <Drawer isOpen={open} onClose={() => onOpenChange(false)} title="New Booking" maxWidth="sm:max-w-xl" steps={currentStep} totalSteps={totalSteps} isCloseButton={false}>
@@ -2339,61 +2353,57 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                   </div>
                 </div>
               )}
-              {/* ─── Step 5: Term of Payments ─── */}
+              {/* ─── Step 5: Term of Payments (jadwal murni) ─── */}
               {currentStep === 5 && (
-                <>
-                  {/* Payment Method (tetap di sini — bagian form RHF) */}
-                  <FormField control={form.control} name="paymentMethodId" render={({ field }) => (
-                    <FormItem className="mb-4">
-                      <FormLabel className="text-sm font-medium text-foreground">Pembayaran Melalui <span className="text-destructive">*</span></FormLabel>
-                      <BankAccountSelect value={field.value ?? ""} onChange={field.onChange} placeholder="Pilih metode pembayaran" crossVenue disableAdd />
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-
-                  {/* TOP builder — parity dengan edit flow */}
-                  <CreatePaymentStep
-                    terms={terms}
-                    setTerms={(updater) => {
-                      setTerms((prev) => {
-                        const next = typeof updater === "function" ? updater(prev) : updater;
-                        // Mark that the user has manually edited terms so allocatePrice
-                        // won't override amounts on discount changes.
-                        setUserHasCustomizedTerms(true);
-                        return next;
-                      });
-                    }}
-                    collapsedTerms={collapsedTerms}
-                    setCollapsedTerms={setCollapsedTerms}
-                    specialBonusName={specialBonusName}
-                    setSpecialBonusName={setSpecialBonusName}
-                    specialBonusAmount={specialBonusAmount}
-                    setSpecialBonusAmount={setSpecialBonusAmount}
-                    onAddTerm={() => {
-                      setTerms((prev) =>
-                        recalcTermDates(
-                          [
-                            ...prev,
-                            {
-                              uid: safeRandomUUID(),
-                              name: "",
-                              amount: 0,
-                              dueDate: "",
-                              sortOrder: prev.length,
-                            },
-                          ],
-                          wBookingDate,
-                        ),
-                      );
-                    }}
-                    packagePrice={getBasePrice()}
-                    inlinePayments={inlinePayments}
-                    updateInlinePayment={updateInlinePayment}
-                  />
-                </>
+                <CreatePaymentStep
+                  terms={terms}
+                  setTerms={(updater) => {
+                    setTerms((prev) => {
+                      const next = typeof updater === "function" ? updater(prev) : updater;
+                      // Mark that the user has manually edited terms so allocatePrice
+                      // won't override amounts on discount changes.
+                      setUserHasCustomizedTerms(true);
+                      return next;
+                    });
+                  }}
+                  collapsedTerms={collapsedTerms}
+                  setCollapsedTerms={setCollapsedTerms}
+                  specialBonusName={specialBonusName}
+                  setSpecialBonusName={setSpecialBonusName}
+                  specialBonusAmount={specialBonusAmount}
+                  setSpecialBonusAmount={setSpecialBonusAmount}
+                  onAddTerm={() => {
+                    setTerms((prev) =>
+                      recalcTermDates(
+                        [
+                          ...prev,
+                          {
+                            uid: safeRandomUUID(),
+                            name: "",
+                            amount: 0,
+                            dueDate: "",
+                            sortOrder: prev.length,
+                          },
+                        ],
+                        wBookingDate,
+                      ),
+                    );
+                  }}
+                  packagePrice={getBasePrice()}
+                />
               )}
-              {/* ─── Step 6: Signature ─── */}
+              {/* ─── Step 6: Payment (pencatatan cash-in) ─── */}
               {currentStep === 6 && (
+                <CreatePaymentRecordStep
+                  terms={terms}
+                  payments={createPayments}
+                  setPayments={setCreatePayments}
+                  defaultPaymentMethodId={wPaymentMethodId ?? ""}
+                  bookingFeeRecorded={isStep6Complete}
+                />
+              )}
+              {/* ─── Step 7: Signature ─── */}
+              {currentStep === 7 && (
                 <div className="space-y-6">
                   <div>
                     <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground', 'mb-2', 'block')}>Lokasi Tanda Tangan <span className="text-destructive">*</span></FormLabel>

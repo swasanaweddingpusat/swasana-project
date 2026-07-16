@@ -198,7 +198,7 @@ export function LedgerClient({
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         {/* Tab pills + Catat Transaksi */}
         <div className="flex items-center gap-3 px-4 py-4 sm:px-5">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hide">
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hide">
             {TABS.map((t) => {
               const isActive = tab === t.key;
               const count = tabCounts[t.key];
@@ -227,7 +227,7 @@ export function LedgerClient({
               );
             })}
           </div>
-          <Button className="ml-auto shrink-0 rounded-full" onClick={() => setDrawerOpen(true)}>
+          <Button className="shrink-0 rounded-full" onClick={() => setDrawerOpen(true)}>
             <AddCircle weight="BoldDuotone" className="size-4" />
             <span className="hidden sm:inline">Catat Transaksi</span>
           </Button>

@@ -20,6 +20,7 @@ import {
   Hourglass,
   Fire,
   Refresh,
+  CloseCircle,
 } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Drawer } from "@/components/shared/drawer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +53,7 @@ import type { PromoProgramsResult, PromoProgramItem } from "@/lib/queries/promo"
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DiscountType = "percentage" | "nominal";
+type VoucherType = "payment_discount" | "cashback";
 type ProgramStatus = "live" | "upcoming" | "quota-full" | "ended" | "inactive";
 
 interface DiscountProgram {
@@ -60,6 +62,7 @@ interface DiscountProgram {
   isActive: boolean;
   discountType: DiscountType;
   discountValue: number;
+  type: VoucherType;
   minTransaction: number | null;
   periodStart: Date;
   periodEnd: Date;
@@ -83,6 +86,7 @@ function mapDbToLocal(item: PromoProgramItem): DiscountProgram {
     isActive: item.isActive,
     discountType: item.discountType === "PERCENTAGE" ? "percentage" : "nominal",
     discountValue: item.discountValue,
+    type: item.type === "cashback" ? "cashback" : "payment_discount",
     minTransaction: item.minTransaction,
     periodStart: new Date(item.periodStart),
     periodEnd: new Date(item.periodEnd),
@@ -152,6 +156,7 @@ interface FormState {
   isActive: boolean;
   discountType: DiscountType;
   discountValue: string;
+  type: VoucherType;
   minTransaction: string;
   periodStart: Date | undefined;
   periodEnd: Date | undefined;
@@ -166,6 +171,7 @@ const EMPTY_FORM: FormState = {
   isActive: true,
   discountType: "percentage",
   discountValue: "",
+  type: "payment_discount",
   minTransaction: "",
   periodStart: undefined,
   periodEnd: undefined,
@@ -181,6 +187,7 @@ function programToForm(p: DiscountProgram): FormState {
     isActive: p.isActive,
     discountType: p.discountType,
     discountValue: String(p.discountValue),
+    type: p.type,
     minTransaction: p.minTransaction !== null ? fmtRp(p.minTransaction) : "",
     periodStart: p.periodStart,
     periodEnd: p.periodEnd,
@@ -321,6 +328,7 @@ export function DiscountPromoManager({ initialData }: Props) {
       isActive: form.isActive,
       discountType: dbDiscountType,
       discountValue,
+      type: form.type,
       minTransaction: minTransaction ?? null,
       periodStart: form.periodStart!,
       periodEnd: form.periodEnd!,
@@ -384,21 +392,34 @@ export function DiscountPromoManager({ initialData }: Props) {
           )}
         </Label>
         <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            id={id}
-            className={cn(
-              "flex h-9 w-full items-center gap-2 rounded-xl border bg-background px-3 text-sm",
-              "text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              !value && "text-muted-foreground",
-              error && "border-destructive"
+          <div className="relative">
+            <PopoverTrigger
+              id={id}
+              className={cn(
+                "flex h-9 w-full items-center gap-2 rounded-xl border bg-background px-3 text-sm",
+                "text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                !value && "text-muted-foreground",
+                value && "pr-9",
+                error && "border-destructive"
+              )}
+            >
+              <CalendarDate
+                weight="BoldDuotone"
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+              />
+              {value ? format(value, "d MMMM yyyy", { locale: localeId }) : "Pilih tanggal"}
+            </PopoverTrigger>
+            {value && (
+              <button
+                type="button"
+                onClick={() => onChange(undefined)}
+                aria-label="Hapus tanggal"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+              >
+                <CloseCircle weight="BoldDuotone" className="h-4 w-4" />
+              </button>
             )}
-          >
-            <CalendarDate
-              weight="BoldDuotone"
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-            />
-            {value ? format(value, "d MMMM yyyy", { locale: localeId }) : "Pilih tanggal"}
-          </PopoverTrigger>
+          </div>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               mode="single"
@@ -424,7 +445,7 @@ export function DiscountPromoManager({ initialData }: Props) {
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-foreground">Discount / Promo</h1>
+            <h1 className="text-base font-bold text-foreground">Voucher / Program</h1>
             <span className="text-sm text-muted-foreground">({filtered.length})</span>
           </div>
 
@@ -496,7 +517,7 @@ export function DiscountPromoManager({ initialData }: Props) {
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
             <TagPrice weight="BoldDuotone" className="h-10 w-10 opacity-30" />
-            <p className="text-sm">Belum ada program discount / promo.</p>
+            <p className="text-sm">Belum ada voucher / program aktif.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -514,14 +535,15 @@ export function DiscountPromoManager({ initialData }: Props) {
         )}
       </div>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogTitle>
-            {editingId ? "Edit Program" : "Tambah Program"} Discount / Promo
-          </DialogTitle>
-
-          <div className="space-y-5 pt-2">
+      {/* Add/Edit Drawer */}
+      <Drawer
+        isOpen={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={`${editingId ? "Edit" : "Tambah"} Voucher / Program`}
+        maxWidth="sm:max-w-lg"
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex-1 space-y-5 overflow-y-auto px-2 pb-4 pt-2">
             {/* Nama Program */}
             <div className="space-y-1.5">
               <Label htmlFor="dp-name">
@@ -551,6 +573,35 @@ export function DiscountPromoManager({ initialData }: Props) {
                 checked={form.isActive}
                 onCheckedChange={(v) => setField("isActive", v)}
               />
+            </div>
+
+            {/* Tipe Voucher */}
+            <div className="space-y-3">
+              <Label>
+                Tipe Voucher <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { value: "payment_discount", label: "Potong Bayar" },
+                    { value: "cashback", label: "Cashback" },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setField("type", value)}
+                    className={cn(
+                      "flex-1 rounded-xl border py-2 px-3 text-sm font-medium transition-colors cursor-pointer",
+                      form.type === value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-foreground/30"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Tipe + Nilai Potongan */}
@@ -721,27 +772,28 @@ export function DiscountPromoManager({ initialData }: Props) {
               />
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 pt-1">
-              <Button
-                variant="outline"
-                onClick={() => setFormOpen(false)}
-                disabled={saving}
-                className="flex-1 cursor-pointer rounded-xl"
-              >
-                Batal
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={saving || !form.name.trim()}
-                className="flex-1 cursor-pointer rounded-xl"
-              >
-                {saving ? "Menyimpan..." : editingId ? "Simpan" : "Tambah"}
-              </Button>
-            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+
+          {/* Actions — sticky footer */}
+          <div className="sticky bottom-0 flex gap-3 border-t bg-background px-2 pb-1 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setFormOpen(false)}
+              disabled={saving}
+              className="flex-1 cursor-pointer rounded-xl"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !form.name.trim()}
+              className="flex-1 cursor-pointer rounded-xl"
+            >
+              {saving ? "Menyimpan..." : editingId ? "Simpan" : "Tambah"}
+            </Button>
+          </div>
+        </div>
+      </Drawer>
 
       {/* Delete Confirmation */}
       <AlertDialog
@@ -752,7 +804,7 @@ export function DiscountPromoManager({ initialData }: Props) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Program Discount</AlertDialogTitle>
+            <AlertDialogTitle>Hapus Voucher / Program</AlertDialogTitle>
             <AlertDialogDescription>
               Hapus program{" "}
               <strong>&ldquo;{deleteTarget?.name}&rdquo;</strong>? Booking yang
@@ -869,8 +921,8 @@ function VoucherCard({
             </p>
           </div>
 
-          {/* Status badge */}
-          <div className="flex items-center gap-2">
+          {/* Status badge + Tipe badge */}
+          <div className="flex items-center gap-2 flex-wrap">
             {isLive ? (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border"
@@ -906,6 +958,12 @@ function VoucherCard({
                 Nonaktif
               </Badge>
             )}
+            <Badge
+              variant="outline"
+              className="text-xs rounded-full"
+            >
+              {program.type === "cashback" ? "Cashback" : "Potong Bayar"}
+            </Badge>
           </div>
 
           {/* Void stamp */}

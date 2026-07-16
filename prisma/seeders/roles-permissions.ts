@@ -53,6 +53,8 @@ const moduleActions: Record<string, string[]> = {
   procurement: ["view", "create", "edit", "delete", "approve"],
   // HR & Payroll module
   hr: ["view", "create", "edit", "delete", "approve"],
+  // Finance AP — customer payout (cashback program + overpay refund)
+  "finance-ap": ["view", "create", "edit", "delete"],
 };
 
 // Modules removed (not used in code):
@@ -62,7 +64,7 @@ const moduleActions: Record<string, string[]> = {
 // - catering: actions pake booking.edit
 // - dashboard: gak pake requirePagePermission
 // - decoration: actions pake booking.edit
-// - finance_ap: gak ada page/action yang cek
+// - finance_ap (underscore): lama / removed; pakai "finance-ap" (dash) sekarang
 // - notification: gak pake permission check
 // - user_management: redundant, pake settings
 // - venue_management: redundant, pake settings
@@ -127,6 +129,7 @@ const rolePermissionMap: Record<string, Record<string, string[]>> = {
     complimentary: ["view", "create", "edit", "delete"],
     customers: ["view", "create", "edit", "delete"],
     "finance-ar": ["view", "create", "edit", "delete"],
+    "finance-ap": ["view", "create", "edit", "delete"],
     groups: ["view", "view-all", "create", "edit", "delete"],
     leads: ["view", "create", "edit", "delete"],
     maintenance: ["view", "create", "edit", "delete"],

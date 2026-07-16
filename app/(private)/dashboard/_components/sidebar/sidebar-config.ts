@@ -125,8 +125,8 @@ export const navItems: NavItem[] = [
     permission: { module: "booking-mice", action: "view" },
   },
   {
-    name: "Discount / Promo",
-    href: "/dashboard/discount-promo",
+    name: "Voucher / Program",
+    href: "/dashboard/voucher",
     icon: TagPrice,
     permission: { module: "promo", action: "view" },
   },
@@ -213,6 +213,7 @@ export const navItems: NavItem[] = [
         submenu: [
           { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
           { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },
+          { name: "Customer Payout", href: "/dashboard/finance/accounts-payable/customer", icon: CardSend },
         ],
       },
     ],

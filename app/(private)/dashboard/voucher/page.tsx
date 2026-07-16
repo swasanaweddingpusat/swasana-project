@@ -5,8 +5,8 @@ import { DiscountPromoManager } from "./_components/discount-promo-manager";
 import { requirePagePermission } from "@/lib/require-page-permission";
 
 export const metadata: Metadata = {
-  title: "Discount / Promo - SWASANA",
-  description: "Program promo & discount aktif untuk booking",
+  title: "Voucher / Program - SWASANA",
+  description: "Program voucher & discount aktif untuk booking",
 };
 
 export default async function DiscountPromoPage(): Promise<React.JSX.Element> {
