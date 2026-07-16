@@ -7,7 +7,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, response } = await requirePermissionForRoute({
+  const { session: _session, response } = await requirePermissionForRoute({
     module: "vendor-specialist",
     action: "view",
   });

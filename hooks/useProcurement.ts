@@ -8,6 +8,7 @@ import {
   updateProcurement,
   deleteProcurement,
   approveProcurement,
+  approveProcurements,
   fetchProcurementSummary,
   exportProcurement,
   fetchAnnouncementList,
@@ -87,10 +88,18 @@ export function useApproveProcurement() {
   });
 }
 
+export function useBulkApproveProcurement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => approveProcurements(ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["procurement"] }),
+  });
+}
+
 export function useExportProcurement() {
   return useMutation({
     mutationFn: (
-      params: Partial<ProcurementFilterInput> & { format: "csv" | "excel" }
+      params: Partial<ProcurementFilterInput> & { format: "csv" | "excel" | "pdf" }
     ) => exportProcurement(params),
   });
 }

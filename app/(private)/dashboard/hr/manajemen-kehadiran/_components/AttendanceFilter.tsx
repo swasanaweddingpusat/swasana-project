@@ -215,160 +215,37 @@ export function AttendanceFilter(): React.ReactElement {
 
   return (
     <Card className="rounded-2xl shadow-sm">
-      <CardContent className="pt-5 pb-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          {/* Left section: mode toggle + inputs */}
-          <div className="flex flex-wrap items-end gap-3">
-            {/* Mode toggle pill */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Tampilkan per</label>
-              <div className="flex rounded-full border bg-muted p-0.5 gap-0.5">
-                {MODES.map((m) => (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => handleModeChange(m.value)}
-                    className={cn(
-                      "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                      currentMode === m.value
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Date input — only in date mode */}
-            {currentMode === "date" && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Tanggal</label>
-                <Input
-                  type="date"
-                  value={currentDate}
-                  onChange={(e) => updateParam("date", e.target.value)}
-                  className="w-44 rounded-xl"
-                />
-              </div>
-            )}
-
-            {/* Month select — only in month mode */}
-            {currentMode === "month" && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Bulan</label>
-                <Select value={currentMonth} onValueChange={(v) => updateParam("month", v)}>
-                  <SelectTrigger className="w-36 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((mo) => (
-                      <SelectItem key={mo.value} value={mo.value}>
-                        {mo.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Year select — in month and year mode */}
-            {(currentMode === "month" || currentMode === "year") && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Tahun</label>
-                <Select value={currentYear} onValueChange={(v) => updateParam("year", v)}>
-                  <SelectTrigger className="w-28 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getYearOptions().map((y) => (
-                      <SelectItem key={y.value} value={y.value}>
-                        {y.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Karyawan combobox — all modes */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Karyawan</label>
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger
-                  role="combobox"
-                  aria-expanded={open}
+      <CardContent className="p-5 space-y-4">
+        {/* Row 1: Mode toggle + Export buttons */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Tampilkan per</label>
+            <div className="flex rounded-full border bg-muted p-0.5 gap-0.5 w-fit">
+              {MODES.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => handleModeChange(m.value)}
                   className={cn(
-                    buttonVariants({ variant: "outline" }),
-                    "w-56 rounded-xl justify-between font-normal",
+                    "rounded-full px-4 py-1.5 text-sm font-medium transition-colors cursor-pointer",
+                    currentMode === m.value
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <span className={cn("truncate", !currentProfileId && "text-muted-foreground")}>
-                    {currentProfileId && selectedEmployee
-                      ? (selectedEmployee.fullName ?? selectedEmployee.email)
-                      : "Semua karyawan"}
-                  </span>
-                  <AltArrowDown weight="BoldDuotone" className="h-4 w-4 shrink-0 opacity-50" />
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      placeholder="Cari karyawan..."
-                      value={search}
-                      onValueChange={setSearch}
-                    />
-                    <CommandList>
-                      <CommandEmpty>Karyawan tidak ditemukan</CommandEmpty>
-                      <CommandGroup>
-                        <CommandItem value="" onSelect={() => handleEmployeeSelect("")}>
-                          <CheckCircle
-                            weight="BoldDuotone"
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              !currentProfileId ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          Semua karyawan
-                        </CommandItem>
-                        {employees.map((emp) => (
-                          <CommandItem
-                            key={emp.id}
-                            value={emp.id}
-                            onSelect={(val) => handleEmployeeSelect(val)}
-                          >
-                            <CheckCircle
-                              weight="BoldDuotone"
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                currentProfileId === emp.id ? "opacity-100" : "opacity-0",
-                              )}
-                            />
-                            {emp.fullName ?? emp.email}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                  {m.label}
+                </button>
+              ))}
             </div>
-
-            {/* Reset button */}
-            <Button variant="ghost" size="sm" onClick={handleReset} className="rounded-full">
-              <Restart weight="BoldDuotone" className="mr-1 h-4 w-4" />
-              Reset
-            </Button>
           </div>
 
-          {/* Right section: export buttons */}
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleExportExcel}
               disabled={exportingExcel}
-              className="rounded-full"
+              className="rounded-full flex-1 sm:flex-none"
             >
               <FileText weight="BoldDuotone" className="mr-1.5 h-4 w-4" />
               {exportingExcel ? "Mengunduh..." : "Excel"}
@@ -378,12 +255,134 @@ export function AttendanceFilter(): React.ReactElement {
               size="sm"
               onClick={handleExportPDF}
               disabled={exportingPDF}
-              className="rounded-full"
+              className="rounded-full flex-1 sm:flex-none"
             >
               <DocumentText weight="BoldDuotone" className="mr-1.5 h-4 w-4" />
               {exportingPDF ? "Mengunduh..." : "PDF"}
             </Button>
           </div>
+        </div>
+
+        {/* Row 2: Period filters + Employee + Reset */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+          {/* Date input — only in date mode */}
+          {currentMode === "date" && (
+            <div className="space-y-1 w-full sm:w-auto">
+              <label className="text-xs font-medium text-muted-foreground">Tanggal</label>
+              <Input
+                type="date"
+                value={currentDate}
+                onChange={(e) => updateParam("date", e.target.value)}
+                className="rounded-xl sm:w-44"
+              />
+            </div>
+          )}
+
+          {/* Month select — only in month mode */}
+          {currentMode === "month" && (
+            <div className="space-y-1 w-full sm:w-auto">
+              <label className="text-xs font-medium text-muted-foreground">Bulan</label>
+              <Select value={currentMonth} onValueChange={(v) => updateParam("month", v)}>
+                <SelectTrigger className="rounded-xl sm:w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((mo) => (
+                    <SelectItem key={mo.value} value={mo.value}>
+                      {mo.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Year select — in month and year mode */}
+          {(currentMode === "month" || currentMode === "year") && (
+            <div className="space-y-1 w-full sm:w-auto">
+              <label className="text-xs font-medium text-muted-foreground">Tahun</label>
+              <Select value={currentYear} onValueChange={(v) => updateParam("year", v)}>
+                <SelectTrigger className="rounded-xl sm:w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {getYearOptions().map((y) => (
+                    <SelectItem key={y.value} value={y.value}>
+                      {y.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Karyawan combobox */}
+          <div className="space-y-1 w-full sm:w-auto">
+            <label className="text-xs font-medium text-muted-foreground">Karyawan</label>
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger
+                role="combobox"
+                aria-expanded={open}
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "w-full sm:w-56 rounded-xl justify-between font-normal",
+                )}
+              >
+                <span className={cn("truncate", !currentProfileId && "text-muted-foreground")}>
+                  {currentProfileId && selectedEmployee
+                    ? (selectedEmployee.fullName ?? selectedEmployee.email)
+                    : "Semua karyawan"}
+                </span>
+                <AltArrowDown weight="BoldDuotone" className="h-4 w-4 shrink-0 opacity-50" />
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Cari karyawan..."
+                    value={search}
+                    onValueChange={setSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>Karyawan tidak ditemukan</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem value="" onSelect={() => handleEmployeeSelect("")}>
+                        <CheckCircle
+                          weight="BoldDuotone"
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            !currentProfileId ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                        Semua karyawan
+                      </CommandItem>
+                      {employees.map((emp) => (
+                        <CommandItem
+                          key={emp.id}
+                          value={emp.id}
+                          onSelect={(val) => handleEmployeeSelect(val)}
+                        >
+                          <CheckCircle
+                            weight="BoldDuotone"
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              currentProfileId === emp.id ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          {emp.fullName ?? emp.email}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Reset */}
+          <Button variant="ghost" size="sm" onClick={handleReset} className="rounded-full w-full sm:w-auto">
+            <Restart weight="BoldDuotone" className="mr-1 h-4 w-4" />
+            Reset
+          </Button>
         </div>
       </CardContent>
     </Card>

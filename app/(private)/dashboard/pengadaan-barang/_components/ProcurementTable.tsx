@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -35,6 +36,8 @@ interface ProcurementTableProps {
   page: number;
   limit: number;
   isLoading: boolean;
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
   onPageChange: (page: number) => void;
   onView?: (id: string) => void;
   onEdit?: (id: string) => void;
@@ -52,13 +55,28 @@ const STATUS_CONFIG: Record<
   COMPLETED: { label: "Selesai", dotClass: "bg-green-500", variant: "secondary" },
 };
 
+const SHORT_INDONESIAN_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "Mei",
+  "Jun",
+  "Jul",
+  "Agu",
+  "Sep",
+  "Okt",
+  "Nov",
+  "Des",
+];
+
 function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return new Date(date).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const parsed = new Date(date);
+  const day = parsed.getDate();
+  const month = SHORT_INDONESIAN_MONTHS[parsed.getMonth()] ?? "";
+  const year = parsed.getFullYear();
+  return `${day} ${month} ${year}`;
 }
 
 function buildPageRange(current: number, total: number): (number | "...")[] {
@@ -89,6 +107,8 @@ export function ProcurementTable({
   page,
   limit,
   isLoading,
+  selectedIds = [],
+  onSelectionChange,
   onPageChange,
   onView,
   onEdit,
@@ -96,6 +116,28 @@ export function ProcurementTable({
   onApprove,
 }: ProcurementTableProps) {
   const totalPages = Math.max(1, Math.ceil(total / limit));
+  const pendingIds = items.filter((item) => item.status === "PENDING").map((item) => item.id);
+  const selectedPendingIds = selectedIds.filter((id) => pendingIds.includes(id));
+  const allSelected = pendingIds.length > 0 && selectedPendingIds.length === pendingIds.length;
+  const isIndeterminate = selectedPendingIds.length > 0 && selectedPendingIds.length < pendingIds.length;
+
+  const toggleAll = (checked: boolean) => {
+    if (!onSelectionChange) return;
+    if (checked) {
+      onSelectionChange(Array.from(new Set([...selectedIds, ...pendingIds])));
+    } else {
+      onSelectionChange(selectedIds.filter((id) => !pendingIds.includes(id)));
+    }
+  };
+
+  const toggleRow = (id: string, checked: boolean) => {
+    if (!onSelectionChange) return;
+    if (checked) {
+      onSelectionChange(Array.from(new Set([...selectedIds, id])));
+    } else {
+      onSelectionChange(selectedIds.filter((selectedId) => selectedId !== id));
+    }
+  };
 
   if (isLoading) {
     return (
@@ -125,6 +167,16 @@ export function ProcurementTable({
         <Table className="w-full text-sm">
           <TableHeader className="bg-muted/50">
             <TableRow>
+              <TableHead className="w-12 px-3 py-2 text-muted-foreground">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={isIndeterminate}
+                  onCheckedChange={(checked) => toggleAll(checked === true)}
+                  disabled={!onSelectionChange || pendingIds.length === 0}
+                  className="cursor-pointer"
+                  aria-label="Pilih semua pengajuan Menunggu"
+                />
+              </TableHead>
               <TableHead className="px-3 py-2 text-muted-foreground">Tanggal</TableHead>
               <TableHead className="px-3 py-2 text-muted-foreground">Venue</TableHead>
               <TableHead className="px-3 py-2 text-muted-foreground">Nama Barang</TableHead>
@@ -143,7 +195,22 @@ export function ProcurementTable({
                 variant: "outline" as const,
               };
               return (
-                <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
+                <TableRow
+                  key={item.id}
+                  className={cn(
+                    "hover:bg-muted/40 transition-colors",
+                    selectedIds.includes(item.id) && "bg-muted/20"
+                  )}
+                >
+                  <TableCell className="px-3 py-2">
+                    <Checkbox
+                      checked={selectedIds.includes(item.id)}
+                      onCheckedChange={(checked) => toggleRow(item.id, checked === true)}
+                      disabled={!onSelectionChange || item.status !== "PENDING"}
+                      className="cursor-pointer"
+                      aria-label={item.status === "PENDING" ? "Pilih pengajuan" : "Tidak bisa dipilih"}
+                    />
+                  </TableCell>
                   <TableCell className="px-3 py-2 text-sm">
                     {formatDate(item.tanggalPermintaan)}
                   </TableCell>
@@ -235,12 +302,24 @@ export function ProcurementTable({
           return (
             <div
               key={item.id}
-              className="rounded-xl border bg-background p-3 space-y-2"
+              className={cn(
+                "rounded-xl border bg-background p-3 space-y-2",
+                selectedIds.includes(item.id) && "border-primary/40 bg-primary/5"
+              )}
             >
               <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={selectedIds.includes(item.id)}
+                  onCheckedChange={(checked) => toggleRow(item.id, checked === true)}
+                  disabled={!onSelectionChange || item.status !== "PENDING"}
+                  className="cursor-pointer"
+                  aria-label={item.status === "PENDING" ? "Pilih pengajuan" : "Tidak bisa dipilih"}
+                />
                 <span className="font-medium text-foreground truncate text-sm">
                   {item.namaBarang}
                 </span>
+                </div>
                 <Badge
                   variant={cfg.variant}
                   className="flex items-center gap-1.5 shrink-0 text-[10px] rounded-full"

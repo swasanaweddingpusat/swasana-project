@@ -1,5 +1,3 @@
-import { Label } from "@/components/ui/label";
-
 interface NpsSliderProps {
   value: number;
   onChange: (value: number) => void;

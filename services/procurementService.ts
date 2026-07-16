@@ -14,6 +14,7 @@ export async function fetchProcurementList(
   params: Partial<ProcurementFilterInput> = {}
 ): Promise<ProcurementListResult> {
   const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
   if (params.venueId) query.set("venueId", params.venueId);
   if (params.division) query.set("division", params.division);
   if (params.status) query.set("status", params.status);
@@ -23,7 +24,10 @@ export async function fetchProcurementList(
   if (params.limit) query.set("limit", String(params.limit));
 
   const res = await fetch(`/api/procurement?${query}`);
-  if (!res.ok) throw new Error("Gagal memuat data pengadaan");
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? "Gagal memuat data pengadaan");
+  }
   return res.json();
 }
 
@@ -86,17 +90,33 @@ export async function approveProcurement(
   return res.json();
 }
 
+export async function approveProcurements(ids: string[]): Promise<void> {
+  const res = await fetch(`/api/procurement/approve`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(err.error ?? "Gagal memproses approval massal");
+  }
+}
+
 export async function fetchProcurementSummary(venueId?: string): Promise<ProcurementSummaryResult> {
   const query = venueId ? `?venueId=${venueId}` : "";
   const res = await fetch(`/api/procurement/summary${query}`);
-  if (!res.ok) throw new Error("Gagal memuat ringkasan pengadaan");
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? "Gagal memuat ringkasan pengadaan");
+  }
   return res.json();
 }
 
 export async function exportProcurement(
-  params: Partial<ProcurementFilterInput> & { format: "csv" | "excel" }
+  params: Partial<ProcurementFilterInput> & { format: "csv" | "excel" | "pdf" }
 ): Promise<Blob> {
   const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
   if (params.venueId) query.set("venueId", params.venueId);
   if (params.division) query.set("division", params.division);
   if (params.status) query.set("status", params.status);

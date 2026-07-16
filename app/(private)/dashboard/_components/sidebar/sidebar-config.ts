@@ -31,13 +31,12 @@ import {
   TagPrice,
   ClipboardCheck,
   ChartSquare,
-  Star,
   PieChart,
+  Notebook,
+  MoneyBag,
   CardReceive,
   CardSend,
   CalendarMark,
-  MoneyBag,
-  Notebook,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -151,12 +150,13 @@ export const navItems: NavItem[] = [
         href: "/dashboard/vendor-specialist/analytics",
         icon: ChartSquare,
       },
-      {
-        name: "Indikator Pernikahan",
-        href: "/dashboard/vendor-specialist/wedding-indicators",
-        icon: Heart,
-      },
     ],
+  },
+  {
+    name: "Indikator Pernikahan",
+    href: "/dashboard/vendor-specialist/wedding-indicators",
+    icon: Heart,
+    permission: { module: "vendor-specialist", action: "view" },
   },
   {
     name: "Package",
