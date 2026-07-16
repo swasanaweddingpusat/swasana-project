@@ -366,12 +366,10 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
 
     const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
-    // Generate invoice numbers for terms
-    const terms = draft.termOfPayments;
     const invoiceNumbers: string[] = [];
-    if (terms.length > 0) {
+    if (draft.termOfPayments.length > 0) {
       const monthRoman = ROMAN[now.getMonth()];
-      for (const _ of terms) {
+      for (const _ of draft.termOfPayments) {
         const seq = await getNextSequence(`invoice-${year}`);
         invoiceNumbers.push(`${seq}/INV/${venue?.code ?? ""}/${monthRoman}/${year}`);
       }

@@ -493,7 +493,7 @@ export function ManajemenKinerjaClient() {
                   <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                   Tambah Review
                 </Button>
-              </DrawerTrigger>
+              </SheetTrigger>
               <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
                 <SheetHeader className="space-y-2 px-1 pt-2">
                   <SheetTitle className="text-xl font-heading">
@@ -768,7 +768,7 @@ export function ManajemenKinerjaClient() {
                   <AddCircle weight="BoldDuotone" className="h-4 w-4" />
                   Tambah KPI
                 </Button>
-              </DrawerTrigger>
+              </SheetTrigger>
               <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
                 <SheetHeader className="space-y-2 px-1 pt-2">
                   <SheetTitle className="text-xl font-heading">
