@@ -32,6 +32,7 @@ import {
   ClipboardCheck,
   ChartSquare,
   PieChart,
+  Notebook,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
