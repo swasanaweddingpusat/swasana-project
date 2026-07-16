@@ -6,6 +6,7 @@ import { Drawer } from "@/components/shared/drawer";
 import { Button } from "@/components/ui/button";
 import { SalesSignatureContent } from "./SalesSignatureDrawer";
 import { EditTopContentById } from "./edit-top-drawer";
+import { EditPaymentContentById } from "./EditPaymentStep";
 import { EditTakeoutContent } from "./EditTakeoutDrawer";
 import { EditPackageItemsContent } from "./EditPackageItemsDrawer";
 import { EditComplimentaryContent, type ComplimentaryHandle } from "./EditComplimentaryDrawer";
@@ -72,6 +73,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
       step === 3 ? "package-items" :
       step === 4 ? "takeout" :
       step === 5 ? "top" :
+      step === 6 ? "payment" :
       "signature",
     );
   }
@@ -94,7 +96,7 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           className="shrink-0 border-b border-border pb-2 sm:w-16 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-1.5"
         >
           <ol className="flex flex-row gap-0.5 sm:flex-col">
-            {([1, 2, 3, 4, 5, 6] as number[]).map((step) => {
+            {([1, 2, 3, 4, 5, 6, 7] as number[]).map((step) => {
               const isActive = currentStep === step;
               return (
                 <li key={step} className="flex-1 sm:flex-none">
@@ -203,6 +205,15 @@ export function EditBookingDrawer({ booking, open, onOpenChange }: Props) {
           )}
 
           {currentStep === 6 && booking && (
+            <EditPaymentContentById
+              active
+              bookingId={booking.id}
+              onSaved={linearMode ? () => advanceTo(7) : noOp}
+              saveLabel={linearMode ? "Continue" : "Simpan"}
+            />
+          )}
+
+          {currentStep === 7 && booking && (
             <SalesSignatureContent
               bookingId={booking.id}
               onDone={linearMode ? handleCloseAll : noOp}

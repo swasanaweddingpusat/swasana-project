@@ -30,11 +30,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { BankAccountSelect } from "@/components/shared/bank-account-select";
 import {
   DndContext,
   closestCenter,
@@ -55,12 +50,8 @@ import {
   AlignVerticalSpacing,
   AltArrowDown,
   Calendar as CalendarIcon,
-  CheckCircle,
-  CloseCircle,
-  MoneyBag,
   Pen,
   TrashBinTrash,
-  UploadMinimalistic,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 
@@ -77,34 +68,6 @@ export interface CreateTermRow {
   sortOrder: number;
 }
 
-/**
- * Inline payment satu termin (opsional). Dikumpulin lokal di create; disimpan
- * sebagai Ledger cash-in saat booking dibuat (finalize.payments). Nominal cash-in
- * = nominal termin-nya (bayar penuh), sama seperti inline payment di edit.
- */
-export interface CreateInlinePayment {
-  /** Accordion pembayaran terbuka untuk termin ini. */
-  enabled: boolean;
-  /** Tanggal pembayaran, format YYYY-MM-DD. */
-  occurredAt: string;
-  paymentMethodId: string;
-  evidenceFile: File | null;
-  notes: string;
-  showInPo: boolean;
-}
-
-/** Default inline-payment satu termin — accordion auto-kebuka, tanggal = hari ini. */
-export function makeCreateInlinePayment(): CreateInlinePayment {
-  return {
-    enabled: true,
-    occurredAt: new Date().toISOString().slice(0, 10),
-    paymentMethodId: "",
-    evidenceFile: null,
-    notes: "",
-    showInPo: false,
-  };
-}
-
 export interface CreatePaymentStepProps {
   terms: CreateTermRow[];
   setTerms: (updater: CreateTermRow[] | ((prev: CreateTermRow[]) => CreateTermRow[])) => void;
@@ -118,9 +81,6 @@ export interface CreatePaymentStepProps {
   onAddTerm: () => void;
   /** Gross package price (before discount). */
   packagePrice: number;
-  /** Inline payment per-termin (keyed by term uid). Owned by booking-drawer. */
-  inlinePayments: Map<string, CreateInlinePayment>;
-  updateInlinePayment: (uid: string, patch: Partial<CreateInlinePayment>) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -176,12 +136,9 @@ export function CreatePaymentStep({
   setSpecialBonusAmount,
   onAddTerm,
   packagePrice,
-  inlinePayments,
-  updateInlinePayment,
 }: CreatePaymentStepProps): React.ReactElement {
   const [datePickerOpen, setDatePickerOpen] = useState<string | null>(null);
   const [discountEditing, setDiscountEditing] = useState(false);
-  const todayStr = new Date().toISOString().slice(0, 10);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -239,10 +196,9 @@ export function CreatePaymentStep({
 
         {/* ── Info banner ── */}
         <p className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
-          Atur jadwal termin (nama, nominal, jatuh tempo). Pembayaran awal
-          (mis. Booking Fee / DP) bisa langsung dicatat per termin di{" "}
-          <span className="font-medium text-foreground">Catat Pembayaran Sekaligus</span> —
-          tersimpan saat booking dibuat.
+          Atur jadwal termin (nama, nominal, jatuh tempo). Pencatatan pembayaran
+          (mis. Booking Fee / DP) ada di langkah{" "}
+          <span className="font-medium text-foreground">Payment</span> berikutnya.
         </p>
 
         {/* ── Daftar termin ── */}
@@ -386,119 +342,6 @@ export function CreatePaymentStep({
                                 Nominal term pertama wajib diisi
                               </p>
                             )}
-
-                            {/* ── Catat Pembayaran Sekaligus (opsional) — parity edit ── */}
-                            {(() => {
-                              const ip = inlinePayments.get(term.uid) ?? makeCreateInlinePayment();
-                              const hasInput = !!ip.paymentMethodId;
-                              return (
-                                <div className="mt-1 rounded-xl border border-dashed border-border/70 bg-muted/20">
-                                  <button
-                                    type="button"
-                                    onClick={() => updateInlinePayment(term.uid, { enabled: !ip.enabled })}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                                  >
-                                    <MoneyBag
-                                      weight="BoldDuotone"
-                                      className={cn("size-3.5 shrink-0", hasInput && "text-primary")}
-                                    />
-                                    <span className="flex-1">Catat Pembayaran Sekaligus</span>
-                                    {hasInput && !ip.enabled && (
-                                      <Badge variant="secondary" className="shrink-0 gap-1 rounded-full">
-                                        <CheckCircle weight="BoldDuotone" className="size-3 text-primary" />
-                                        Terisi
-                                      </Badge>
-                                    )}
-                                    <AltArrowDown
-                                      weight="BoldDuotone"
-                                      className={cn("size-3.5 shrink-0 transition-transform", ip.enabled && "rotate-180")}
-                                    />
-                                  </button>
-
-                                  {ip.enabled && (
-                                    <div className="space-y-3 border-t border-border/50 px-3 pb-3 pt-2.5">
-                                      {/* Tanggal pembayaran */}
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-muted-foreground">Tanggal Pembayaran</Label>
-                                        <input
-                                          type="date"
-                                          value={ip.occurredAt}
-                                          max={todayStr}
-                                          onChange={(e) => updateInlinePayment(term.uid, { occurredAt: e.target.value })}
-                                          className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                        />
-                                      </div>
-
-                                      {/* Via Rekening */}
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-muted-foreground">Via Rekening</Label>
-                                        <BankAccountSelect
-                                          value={ip.paymentMethodId}
-                                          onChange={(v) => updateInlinePayment(term.uid, { paymentMethodId: v })}
-                                          placeholder="Pilih rekening penerima..."
-                                          crossVenue
-                                        />
-                                      </div>
-
-                                      {/* Bukti bayar */}
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-muted-foreground">Bukti Bayar (opsional)</Label>
-                                        {ip.evidenceFile ? (
-                                          <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
-                                            <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0 text-muted-foreground" />
-                                            <span className="min-w-0 flex-1 truncate text-xs">{ip.evidenceFile.name}</span>
-                                            <button
-                                              type="button"
-                                              onClick={() => updateInlinePayment(term.uid, { evidenceFile: null })}
-                                              className="shrink-0 text-muted-foreground hover:text-foreground"
-                                              aria-label="Hapus bukti bayar"
-                                            >
-                                              <CloseCircle weight="BoldDuotone" className="size-3.5" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground">
-                                            <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0" />
-                                            Upload bukti (JPG/PNG/PDF, maks 10MB)
-                                            <input
-                                              type="file"
-                                              accept="image/*,application/pdf"
-                                              className="sr-only"
-                                              onChange={(e) => updateInlinePayment(term.uid, { evidenceFile: e.target.files?.[0] ?? null })}
-                                            />
-                                          </label>
-                                        )}
-                                      </div>
-
-                                      {/* Keterangan */}
-                                      <div className="space-y-1">
-                                        <Label className="text-xs text-muted-foreground">Keterangan (opsional)</Label>
-                                        <Textarea
-                                          value={ip.notes}
-                                          onChange={(e) => updateInlinePayment(term.uid, { notes: e.target.value })}
-                                          placeholder="Catatan pembayaran..."
-                                          maxLength={500}
-                                          rows={2}
-                                          className="resize-none rounded-xl text-xs"
-                                        />
-                                      </div>
-
-                                      {/* Tampilkan di PO */}
-                                      <div className="flex items-center gap-2">
-                                        <Switch
-                                          id={`create-show-in-po-${term.uid}`}
-                                          checked={ip.showInPo}
-                                          onCheckedChange={(checked) => updateInlinePayment(term.uid, { showInPo: checked })}
-                                        />
-                                        <Label htmlFor={`create-show-in-po-${term.uid}`} className="cursor-pointer text-xs text-muted-foreground">
-                                          Tampilkan di PO
-                                        </Label>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>

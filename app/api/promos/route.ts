@@ -27,6 +27,7 @@ export async function GET(req: Request): Promise<Response> {
         isActive: true,
         discountType: true,
         discountValue: true,
+        type: true,
         minTransaction: true,
         periodStart: true,
         periodEnd: true,

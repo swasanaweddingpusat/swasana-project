@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ARFilterBar } from "../_components/ar-filter-bar";
 import { ARTable } from "../_components/ar-table";
 import { ARDetailDrawer } from "../_components/ar-detail-drawer";
+import { ARTerminSummary } from "../_components/ar-termin-summary";
 import { EditTopDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-top-drawer";
 import { useAR } from "@/hooks/use-ar";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -135,6 +136,8 @@ export default function AccountsReceivableTerminPage() {
           </Button>
         </div>
       </div>
+
+      <ARTerminSummary bookings={filtered} />
 
       <ARFilterBar
         filters={filters}

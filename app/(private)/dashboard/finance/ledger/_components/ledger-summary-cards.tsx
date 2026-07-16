@@ -34,7 +34,7 @@ function Card({ icon: Icon, label, value, sub }: CardProps): React.ReactElement 
           {label}
         </p>
       </div>
-      <p className="mt-3 font-heading text-xl font-bold tabular-nums text-foreground">{value}</p>
+      <p className="mt-3 font-heading text-base font-bold tabular-nums tracking-tight text-foreground sm:text-xl">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
@@ -84,7 +84,7 @@ export function LedgerSummaryCards({ summary }: { summary: LedgerSummaryData }):
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card
           icon={Wallet}
           label="Total Kas Masuk"
