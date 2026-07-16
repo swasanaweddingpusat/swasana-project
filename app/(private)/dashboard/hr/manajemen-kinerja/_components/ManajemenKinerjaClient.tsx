@@ -20,6 +20,14 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useEmployees } from "@/hooks/use-employees";
 import {
   usePerformanceReviews,
@@ -189,9 +197,11 @@ export function ManajemenKinerjaClient() {
 
   const [reviewForm, setReviewForm] = useState<ReviewForm>(EMPTY_REVIEW_FORM);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
 
   const [kpiForm, setKpiForm] = useState<KpiForm>(EMPTY_KPI_FORM);
   const [editingKpiId, setEditingKpiId] = useState<string | null>(null);
+  const [kpiDrawerOpen, setKpiDrawerOpen] = useState(false);
 
   // Set default employee when employees load
   useEffect(() => {
@@ -226,11 +236,13 @@ export function ManajemenKinerjaClient() {
       comments: review.comments ?? "",
       status: review.status,
     });
+    setReviewDrawerOpen(true);
   }
 
   function handleCancelEditReview() {
     setEditingReviewId(null);
     setReviewForm(EMPTY_REVIEW_FORM);
+    setReviewDrawerOpen(false);
   }
 
   async function handleSubmitReview() {
@@ -274,6 +286,7 @@ export function ManajemenKinerjaClient() {
         ...EMPTY_REVIEW_FORM,
         profileId: current.profileId,
       }));
+      setReviewDrawerOpen(false);
       return;
     }
     toast.error(result.error ?? "Gagal membuat review kinerja");
@@ -303,11 +316,13 @@ export function ManajemenKinerjaClient() {
       periodEndDate: toDateInputValue(kpi.periodEndDate),
       progressPercentage: String(kpi.progressPercentage),
     });
+    setKpiDrawerOpen(true);
   }
 
   function handleCancelEditKpi() {
     setEditingKpiId(null);
     setKpiForm(EMPTY_KPI_FORM);
+    setKpiDrawerOpen(false);
   }
 
   async function handleSubmitKpi() {
@@ -354,6 +369,7 @@ export function ManajemenKinerjaClient() {
     if (result.success) {
       toast.success("KPI dibuat");
       setKpiForm(EMPTY_KPI_FORM);
+      setKpiDrawerOpen(false);
       return;
     }
     toast.error(result.error ?? "Gagal membuat KPI");
@@ -463,159 +479,174 @@ export function ManajemenKinerjaClient() {
 
         {/* ── Tab: Review Kinerja ─────────────────────────────────────────────── */}
         <TabsContent value="review" className="mt-4 space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-            {/* Form */}
-            <Card className="rounded-2xl shadow-sm">
-              <CardHeader className="space-y-2">
-                <CardTitle className="text-lg font-heading">
-                  {editingReviewId ? "Edit review kinerja" : "Tambah review kinerja"}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {editingReviewId
-                    ? "Perbarui data review kinerja karyawan."
-                    : "Isi form untuk menambahkan review kinerja karyawan."}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="review-employee">Karyawan</Label>
-                  <select
-                    id="review-employee"
-                    value={reviewForm.profileId}
-                    onChange={(e) =>
-                      setReviewForm((current) => ({ ...current, profileId: e.target.value }))
-                    }
-                    disabled={!!editingReviewId}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none disabled:opacity-50"
-                  >
-                    <option value="">Pilih karyawan</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.fullName}
-                        {emp.employeeNumber ? ` (#${emp.employeeNumber})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex justify-end">
+            <Sheet open={reviewDrawerOpen} onOpenChange={setReviewDrawerOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  className="rounded-full gap-2"
+                  onClick={() => {
+                    setEditingReviewId(null);
+                    setReviewForm(EMPTY_REVIEW_FORM);
+                    setReviewDrawerOpen(true);
+                  }}
+                >
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                  Tambah Review
+                </Button>
+              </DrawerTrigger>
+              <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
+                <SheetHeader className="space-y-2 px-1 pt-2">
+                  <SheetTitle className="text-xl font-heading">
+                    {editingReviewId ? "Edit review kinerja" : "Tambah review kinerja"}
+                  </SheetTitle>
+                  <SheetDescription>
+                    {editingReviewId
+                      ? "Perbarui data review kinerja karyawan."
+                      : "Isi form untuk menambahkan review kinerja karyawan."}
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6 space-y-4 px-1 pb-6">
                   <div className="space-y-2">
-                    <Label htmlFor="review-start">Periode mulai</Label>
-                    <Input
-                      id="review-start"
-                      type="date"
-                      value={reviewForm.periodStartDate}
+                    <Label htmlFor="review-employee">Karyawan</Label>
+                    <select
+                      id="review-employee"
+                      value={reviewForm.profileId}
                       onChange={(e) =>
-                        setReviewForm((current) => ({
-                          ...current,
-                          periodStartDate: e.target.value,
-                        }))
+                        setReviewForm((current) => ({ ...current, profileId: e.target.value }))
                       }
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="review-end">Periode selesai</Label>
-                    <Input
-                      id="review-end"
-                      type="date"
-                      value={reviewForm.periodEndDate}
-                      onChange={(e) =>
-                        setReviewForm((current) => ({
-                          ...current,
-                          periodEndDate: e.target.value,
-                        }))
-                      }
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="review-rating">Rating (0–5)</Label>
-                  <Input
-                    id="review-rating"
-                    type="number"
-                    min={0}
-                    max={5}
-                    step={0.1}
-                    value={reviewForm.rating}
-                    onChange={(e) =>
-                      setReviewForm((current) => ({ ...current, rating: e.target.value }))
-                    }
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="review-status">Status</Label>
-                  <select
-                    id="review-status"
-                    value={reviewForm.status}
-                    onChange={(e) =>
-                      setReviewForm((current) => ({ ...current, status: e.target.value }))
-                    }
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
-                  >
-                    {REVIEW_STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {REVIEW_STATUS_LABELS[s]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="review-strengths">Kekuatan</Label>
-                  <Textarea
-                    id="review-strengths"
-                    rows={3}
-                    value={reviewForm.strengths}
-                    onChange={(e) =>
-                      setReviewForm((current) => ({ ...current, strengths: e.target.value }))
-                    }
-                    placeholder="Contoh: komunikasi baik, inisiatif tinggi"
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="review-comments">Komentar</Label>
-                  <Textarea
-                    id="review-comments"
-                    rows={3}
-                    value={reviewForm.comments}
-                    onChange={(e) =>
-                      setReviewForm((current) => ({ ...current, comments: e.target.value }))
-                    }
-                    placeholder="Catatan tambahan untuk karyawan"
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1 rounded-full gap-2"
-                    onClick={handleSubmitReview}
-                    disabled={isReviewPending}
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                    {editingReviewId ? "Simpan perubahan" : "Tambah review"}
-                  </Button>
-                  {editingReviewId && (
-                    <Button
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={handleCancelEditReview}
+                      disabled={!!editingReviewId}
+                      className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none disabled:opacity-50"
                     >
-                      Batal
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      <option value="">Pilih karyawan</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.fullName}
+                          {emp.employeeNumber ? ` (#${emp.employeeNumber})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            {/* Table */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="review-start">Periode mulai</Label>
+                      <Input
+                        id="review-start"
+                        type="date"
+                        value={reviewForm.periodStartDate}
+                        onChange={(e) =>
+                          setReviewForm((current) => ({
+                            ...current,
+                            periodStartDate: e.target.value,
+                          }))
+                        }
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="review-end">Periode selesai</Label>
+                      <Input
+                        id="review-end"
+                        type="date"
+                        value={reviewForm.periodEndDate}
+                        onChange={(e) =>
+                          setReviewForm((current) => ({
+                            ...current,
+                            periodEndDate: e.target.value,
+                          }))
+                        }
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="review-rating">Rating (0–5)</Label>
+                    <Input
+                      id="review-rating"
+                      type="number"
+                      min={0}
+                      max={5}
+                      step={0.1}
+                      value={reviewForm.rating}
+                      onChange={(e) =>
+                        setReviewForm((current) => ({ ...current, rating: e.target.value }))
+                      }
+                      className="rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="review-status">Status</Label>
+                    <select
+                      id="review-status"
+                      value={reviewForm.status}
+                      onChange={(e) =>
+                        setReviewForm((current) => ({ ...current, status: e.target.value }))
+                      }
+                      className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none"
+                    >
+                      {REVIEW_STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {REVIEW_STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="review-strengths">Kekuatan</Label>
+                    <Textarea
+                      id="review-strengths"
+                      rows={3}
+                      value={reviewForm.strengths}
+                      onChange={(e) =>
+                        setReviewForm((current) => ({ ...current, strengths: e.target.value }))
+                      }
+                      placeholder="Contoh: komunikasi baik, inisiatif tinggi"
+                      className="rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="review-comments">Komentar</Label>
+                    <Textarea
+                      id="review-comments"
+                      rows={3}
+                      value={reviewForm.comments}
+                      onChange={(e) =>
+                        setReviewForm((current) => ({ ...current, comments: e.target.value }))
+                      }
+                      placeholder="Catatan tambahan untuk karyawan"
+                      className="rounded-xl"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 rounded-full gap-2"
+                      onClick={handleSubmitReview}
+                      disabled={isReviewPending}
+                    >
+                      <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                      {editingReviewId ? "Simpan perubahan" : "Tambah review"}
+                    </Button>
+                    {editingReviewId && (
+                      <Button
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={handleCancelEditReview}
+                      >
+                        Batal
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+
+          <div className="grid gap-4">
             <Card className="rounded-2xl shadow-sm">
               <CardHeader className="space-y-2">
                 <SectionTitle
@@ -723,185 +754,200 @@ export function ManajemenKinerjaClient() {
 
         {/* ── Tab: KPI ────────────────────────────────────────────────────────── */}
         <TabsContent value="kpi" className="mt-4 space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-            {/* Form */}
-            <Card className="rounded-2xl shadow-sm">
-              <CardHeader className="space-y-2">
-                <CardTitle className="text-lg font-heading">
-                  {editingKpiId ? "Edit KPI" : "Tambah KPI"}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {editingKpiId
-                    ? "Perbarui data indikator KPI."
-                    : "Isi form untuk menambahkan KPI baru."}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="kpi-name">Nama KPI</Label>
-                  <Input
-                    id="kpi-name"
-                    value={kpiForm.name}
-                    onChange={(e) =>
-                      setKpiForm((current) => ({ ...current, name: e.target.value }))
-                    }
-                    placeholder="Contoh: Tingkat kepuasan pelanggan"
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="kpi-department">Departemen</Label>
-                  <div className="flex items-center gap-2">
-                    <Buildings weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+          <div className="flex justify-end">
+            <Sheet open={kpiDrawerOpen} onOpenChange={setKpiDrawerOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  className="rounded-full gap-2"
+                  onClick={() => {
+                    setEditingKpiId(null);
+                    setKpiForm(EMPTY_KPI_FORM);
+                    setKpiDrawerOpen(true);
+                  }}
+                >
+                  <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                  Tambah KPI
+                </Button>
+              </DrawerTrigger>
+              <SheetContent side="right" className="w-full max-w-xl overflow-y-auto sm:max-w-xl">
+                <SheetHeader className="space-y-2 px-1 pt-2">
+                  <SheetTitle className="text-xl font-heading">
+                    {editingKpiId ? "Edit KPI" : "Tambah KPI"}
+                  </SheetTitle>
+                  <SheetDescription>
+                    {editingKpiId
+                      ? "Perbarui data indikator KPI."
+                      : "Isi form untuk menambahkan KPI baru."}
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6 space-y-4 px-1 pb-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="kpi-name">Nama KPI</Label>
                     <Input
-                      id="kpi-department"
-                      value={kpiForm.department}
+                      id="kpi-name"
+                      value={kpiForm.name}
                       onChange={(e) =>
-                        setKpiForm((current) => ({ ...current, department: e.target.value }))
+                        setKpiForm((current) => ({ ...current, name: e.target.value }))
                       }
-                      placeholder="Contoh: Sales, Operations"
+                      placeholder="Contoh: Tingkat kepuasan pelanggan"
                       className="rounded-xl"
                     />
                   </div>
-                </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="kpi-target">Target</Label>
+                    <Label htmlFor="kpi-department">Departemen</Label>
+                    <div className="flex items-center gap-2">
+                      <Buildings weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="kpi-department"
+                        value={kpiForm.department}
+                        onChange={(e) =>
+                          setKpiForm((current) => ({ ...current, department: e.target.value }))
+                        }
+                        placeholder="Contoh: Sales, Operations"
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="kpi-target">Target</Label>
+                      <Input
+                        id="kpi-target"
+                        type="number"
+                        min={0}
+                        value={kpiForm.targetValue}
+                        onChange={(e) =>
+                          setKpiForm((current) => ({ ...current, targetValue: e.target.value }))
+                        }
+                        placeholder="100"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="kpi-achieved">Capaian</Label>
+                      <Input
+                        id="kpi-achieved"
+                        type="number"
+                        min={0}
+                        value={kpiForm.achievedValue}
+                        onChange={(e) =>
+                          setKpiForm((current) => ({
+                            ...current,
+                            achievedValue: e.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="kpi-unit">Satuan</Label>
                     <Input
-                      id="kpi-target"
-                      type="number"
-                      min={0}
-                      value={kpiForm.targetValue}
+                      id="kpi-unit"
+                      value={kpiForm.unit}
                       onChange={(e) =>
-                        setKpiForm((current) => ({ ...current, targetValue: e.target.value }))
+                        setKpiForm((current) => ({ ...current, unit: e.target.value }))
                       }
-                      placeholder="100"
+                      placeholder="Contoh: %, transaksi, unit"
                       className="rounded-xl"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="kpi-achieved">Capaian</Label>
+                    <Label htmlFor="kpi-progress">Progres (%)</Label>
                     <Input
-                      id="kpi-achieved"
+                      id="kpi-progress"
                       type="number"
                       min={0}
-                      value={kpiForm.achievedValue}
+                      max={100}
+                      value={kpiForm.progressPercentage}
                       onChange={(e) =>
                         setKpiForm((current) => ({
                           ...current,
-                          achievedValue: e.target.value,
+                          progressPercentage: e.target.value,
                         }))
                       }
                       placeholder="0"
                       className="rounded-xl"
                     />
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="kpi-unit">Satuan</Label>
-                  <Input
-                    id="kpi-unit"
-                    value={kpiForm.unit}
-                    onChange={(e) =>
-                      setKpiForm((current) => ({ ...current, unit: e.target.value }))
-                    }
-                    placeholder="Contoh: %, transaksi, unit"
-                    className="rounded-xl"
-                  />
-                </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="kpi-start">Periode mulai</Label>
+                      <Input
+                        id="kpi-start"
+                        type="date"
+                        value={kpiForm.periodStartDate}
+                        onChange={(e) =>
+                          setKpiForm((current) => ({
+                            ...current,
+                            periodStartDate: e.target.value,
+                          }))
+                        }
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="kpi-end">Periode selesai</Label>
+                      <Input
+                        id="kpi-end"
+                        type="date"
+                        value={kpiForm.periodEndDate}
+                        onChange={(e) =>
+                          setKpiForm((current) => ({
+                            ...current,
+                            periodEndDate: e.target.value,
+                          }))
+                        }
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="kpi-progress">Progres (%)</Label>
-                  <Input
-                    id="kpi-progress"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={kpiForm.progressPercentage}
-                    onChange={(e) =>
-                      setKpiForm((current) => ({
-                        ...current,
-                        progressPercentage: e.target.value,
-                      }))
-                    }
-                    placeholder="0"
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="kpi-start">Periode mulai</Label>
-                    <Input
-                      id="kpi-start"
-                      type="date"
-                      value={kpiForm.periodStartDate}
+                    <Label htmlFor="kpi-description">Deskripsi</Label>
+                    <Textarea
+                      id="kpi-description"
+                      rows={3}
+                      value={kpiForm.description}
                       onChange={(e) =>
-                        setKpiForm((current) => ({
-                          ...current,
-                          periodStartDate: e.target.value,
-                        }))
+                        setKpiForm((current) => ({ ...current, description: e.target.value }))
                       }
+                      placeholder="Konteks dan tujuan KPI ini"
                       className="rounded-xl"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="kpi-end">Periode selesai</Label>
-                    <Input
-                      id="kpi-end"
-                      type="date"
-                      value={kpiForm.periodEndDate}
-                      onChange={(e) =>
-                        setKpiForm((current) => ({
-                          ...current,
-                          periodEndDate: e.target.value,
-                        }))
-                      }
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="kpi-description">Deskripsi</Label>
-                  <Textarea
-                    id="kpi-description"
-                    rows={3}
-                    value={kpiForm.description}
-                    onChange={(e) =>
-                      setKpiForm((current) => ({ ...current, description: e.target.value }))
-                    }
-                    placeholder="Konteks dan tujuan KPI ini"
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1 rounded-full gap-2"
-                    onClick={handleSubmitKpi}
-                    disabled={isKpiPending}
-                  >
-                    <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-                    {editingKpiId ? "Simpan perubahan" : "Tambah KPI"}
-                  </Button>
-                  {editingKpiId && (
+                  <div className="flex gap-2">
                     <Button
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={handleCancelEditKpi}
+                      className="flex-1 rounded-full gap-2"
+                      onClick={handleSubmitKpi}
+                      disabled={isKpiPending}
                     >
-                      Batal
+                      <AddCircle weight="BoldDuotone" className="h-4 w-4" />
+                      {editingKpiId ? "Simpan perubahan" : "Tambah KPI"}
                     </Button>
-                  )}
+                    {editingKpiId && (
+                      <Button
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={handleCancelEditKpi}
+                      >
+                        Batal
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </SheetContent>
+            </Sheet>
+          </div>
 
-            {/* Table */}
+          <div className="grid gap-4">
             <Card className="rounded-2xl shadow-sm">
               <CardHeader className="space-y-2">
                 <SectionTitle

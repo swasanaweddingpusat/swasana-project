@@ -24,6 +24,8 @@ const procurementItemSelect = {
   total: true,
   status: true,
   division: true,
+  harga: true,
+  pettyCash: true,
   buktiBelUrl: true,
   approvedAt: true,
   createdAt: true,

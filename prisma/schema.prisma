@@ -2513,6 +2513,8 @@ model ProcurementItem {
   total              Decimal?
   status             ProcurementStatus    @default(PENDING)
   division           ProcurementDivision?
+  harga              Decimal              @default(0)
+  pettyCash          Decimal              @default(0)
   buktiBelUrl        String?
   createdById        String
   approvedById       String?

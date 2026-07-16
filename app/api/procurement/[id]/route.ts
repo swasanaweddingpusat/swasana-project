@@ -103,6 +103,8 @@ export async function PATCH(
           }),
           ...(parsed.data.total !== undefined && { total: parsed.data.total ?? null }),
           ...(parsed.data.division !== undefined && { division: parsed.data.division ?? null }),
+          ...(parsed.data.harga !== undefined && { harga: parsed.data.harga }),
+          ...(parsed.data.pettyCash !== undefined && { pettyCash: parsed.data.pettyCash }),
           ...(parsed.data.buktiBelUrl !== undefined && {
             buktiBelUrl: parsed.data.buktiBelUrl ?? null,
           }),

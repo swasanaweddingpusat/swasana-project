@@ -18,13 +18,15 @@ interface ProcurementFiltersProps {
   onFilterChange: (filters: Partial<ProcurementFilterInput>) => void;
 }
 
-const DIVISIONS = ["HR", "OPERATIONAL", "IT", "FINANCE", "MICE"];
+const DIVISIONS = ["HR", "OPERATIONAL", "IT", "FINANCE", "MICE"] as const;
+type ProcurementDivision = (typeof DIVISIONS)[number];
 const STATUSES = [
   { value: "PENDING", label: "Menunggu" },
   { value: "APPROVED", label: "Disetujui" },
   { value: "REJECTED", label: "Ditolak" },
   { value: "COMPLETED", label: "Selesai" },
-];
+] as const;
+type ProcurementStatus = (typeof STATUSES)[number]["value"];
 
 export function ProcurementFilters({
   venues,
@@ -99,7 +101,9 @@ export function ProcurementFilters({
           <Select
             value={filters.division ?? "all"}
             onValueChange={(v) =>
-              onFilterChange({ division: v === "all" ? undefined : v })
+              onFilterChange({
+                division: v === "all" ? undefined : (v as ProcurementDivision),
+              })
             }
           >
             <SelectTrigger className="rounded-xl h-9">
@@ -121,7 +125,9 @@ export function ProcurementFilters({
           <Select
             value={filters.status ?? "all"}
             onValueChange={(v) =>
-              onFilterChange({ status: v === "all" ? undefined : v })
+              onFilterChange({
+                status: v === "all" ? undefined : (v as ProcurementStatus),
+              })
             }
           >
             <SelectTrigger className="rounded-xl h-9">

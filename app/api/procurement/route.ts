@@ -84,6 +84,8 @@ export async function POST(req: Request): Promise<Response> {
           totalNonWedding: parsed.data.totalNonWedding ?? null,
           total: parsed.data.total ?? null,
           division: parsed.data.division ?? null,
+          harga: parsed.data.harga ?? 0,
+          pettyCash: parsed.data.pettyCash ?? 0,
           buktiBelUrl: parsed.data.buktiBelUrl ?? null,
           createdById: session.user.profileId,
         },

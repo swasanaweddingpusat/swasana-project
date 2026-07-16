@@ -20,6 +20,20 @@ export const createProcurementSchema = z.object({
   totalNonWedding: z.number().min(0).optional().nullable(),
   total: z.number().min(0).optional().nullable(),
   division: z.enum(["HR", "OPERATIONAL", "IT", "FINANCE", "MICE"]).optional().nullable(),
+  harga: z
+    .preprocess((v) => {
+      if (v === "" || v === null || v === undefined) return 0;
+      if (typeof v === "string") return Number(v);
+      return v;
+    }, z.number().min(0))
+    .default(0),
+  pettyCash: z
+    .preprocess((v) => {
+      if (v === "" || v === null || v === undefined) return 0;
+      if (typeof v === "string") return Number(v);
+      return v;
+    }, z.number().min(0))
+    .default(0),
   buktiBelUrl: z.string().optional().nullable(),
 });
 
@@ -39,13 +53,17 @@ export const approveProcurementSchema = z
     { message: "Keterangan wajib diisi saat menolak", path: ["keterangan"] }
   );
 
+export const bulkApproveProcurementSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, "Pilih setidaknya satu pengajuan"),
+});
+
 // ─── Procurement Filters ──────────────────────────────────────────────────────
 
 export const procurementFilterSchema = z.object({
   search: z.string().optional(),
   venueId: z.string().optional(),
-  division: z.string().optional(),
-  status: z.string().optional(),
+  division: z.enum(["HR", "OPERATIONAL", "IT", "FINANCE", "MICE"]).optional(),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "COMPLETED"]).optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
