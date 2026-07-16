@@ -70,16 +70,27 @@ export function EditProcurementDrawer({
     setValue,
     watch,
     formState: { errors },
-  } = useForm<CreateProcurementInput>({
+  } = useForm({
     resolver: zodResolver(createProcurementSchema),
     defaultValues: {
       keteranganAcara: "WEDDING",
       jumlahBarang: 1,
       sisaBarang: 0,
+      harga: 0,
+      pettyCash: 0,
     },
   });
 
   const buktiBelUrl = watch("buktiBelUrl");
+  const totalVal = watch("total");
+  const hargaVal = watch("harga");
+
+  useEffect(() => {
+    const t = Number(totalVal ?? 0);
+    const h = Number(hargaVal ?? 0);
+    const computed = t && h ? t * h : 0;
+    setValue("pettyCash", computed);
+  }, [totalVal, hargaVal, setValue]);
 
   useEffect(() => {
     if (open && item) {
@@ -101,6 +112,8 @@ export function EditProcurementDrawer({
         totalNonWedding: item.totalNonWedding != null ? Number(item.totalNonWedding) : undefined,
         total: item.total != null ? Number(item.total) : undefined,
         division: (item.division as "HR" | "OPERATIONAL" | "IT" | "FINANCE" | "MICE" | null) ?? null,
+        harga: item.harga != null ? Number(item.harga) : 0,
+        pettyCash: item.pettyCash != null ? Number(item.pettyCash) : 0,
         buktiBelUrl: item.buktiBelUrl ?? "",
       });
       setUploadFile(null);
@@ -318,7 +331,48 @@ export function EditProcurementDrawer({
               )}
             />
           </div>
-
+ 
+          {/* Petty Cash (nominal) */}
+          <div className="grid grid-cols-2 gap-3 items-end">
+            <div className="space-y-1">
+              <Label htmlFor="ep-harga">Harga per unit (Rp)</Label>
+              <Controller
+                name="harga"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    id="ep-harga"
+                    type="number"
+                    min={0}
+                    step={1}
+                    className="rounded-xl w-48"
+                    value={Number(field.value) || 0}
+                    onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                  />
+                )}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ep-petty-cash">Petty Cash (Rp)</Label>
+              <Controller
+                name="pettyCash"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    id="ep-petty-cash"
+                    type="number"
+                    min={0}
+                    step={1}
+                    className="rounded-xl w-48"
+                    value={Number(field.value) || 0}
+                    onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                    disabled
+                  />
+                )}
+              />
+            </div>
+          </div>
+ 
           {/* Wedding Note */}
           <div className="space-y-1.5">
             <Label htmlFor="ep-wedding-note">Wedding Note</Label>

@@ -209,6 +209,9 @@ model Profile {
   pushSubscriptions          PushSubscription[]
   evaluationsAsSpecialist    EventEvaluation[] @relation("EvaluationSpecialist")
   weddingIndicators          WeddingIndicator[] @relation("WeddingIndicatorCreator")
+  employeeDevelopments       EmployeeDevelopment[]
+  employeeCertifications     EmployeeCertification[]
+  performanceReviews         PerformanceReview[]
 
   @@index([roleId])
   @@index([managerId])
@@ -2107,6 +2110,7 @@ model EmployeeWorkAssignment {
   workLocationId  String
   workShiftId     String
   isDefault       Boolean      @default(false)
+  offdayDays      Int[]        @default([])
   effectiveDate   DateTime
   endDate         DateTime?
   createdAt       DateTime     @default(now())
@@ -2676,6 +2680,8 @@ model ProcurementItem {
   total              Decimal?
   status             ProcurementStatus    @default(PENDING)
   division           ProcurementDivision?
+  harga              Decimal              @default(0)
+  pettyCash          Decimal              @default(0)
   buktiBelUrl        String?
   createdById        String
   approvedById       String?
@@ -2879,4 +2885,117 @@ model WeddingIndicatorShare {
   weddingIndicator     WeddingIndicator             @relation(fields: [weddingIndicatorId], references: [id], onDelete: Cascade)
 
   @@map("wedding_indicator_shares")
+}
+
+// ─── HR Development & Performance ────────────────────────────────────────────
+
+enum TrainingStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum DevelopmentLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum CertificationStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+}
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+model TrainingProgram {
+  id                   String         @id @default(cuid())
+  name                 String
+  description          String?
+  startDate            DateTime
+  endDate              DateTime
+  status               TrainingStatus @default(SCHEDULED)
+  participantsCount    Int            @default(0)
+  completionPercentage Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@map("training_programs")
+}
+
+model EmployeeDevelopment {
+  id                   String           @id @default(cuid())
+  profileId            String
+  skill                String
+  level                DevelopmentLevel
+  startDate            DateTime
+  targetCompletionDate DateTime?
+  progressPercentage   Int              @default(0)
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  profile              Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_developments")
+}
+
+model EmployeeCertification {
+  id                String              @id @default(cuid())
+  profileId         String
+  certificationName String
+  issueDate         DateTime
+  expiryDate        DateTime?
+  status            CertificationStatus @default(ACTIVE)
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  profile           Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("employee_certifications")
+}
+
+model PerformanceReview {
+  id              String       @id @default(cuid())
+  profileId       String
+  periodStartDate DateTime
+  periodEndDate   DateTime
+  rating          Float
+  strengths       String?
+  comments        String?
+  status          ReviewStatus @default(PENDING)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  profile         Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("performance_reviews")
+}
+
+model Kpi {
+  id                 String   @id @default(cuid())
+  name               String
+  description        String?
+  department         String?
+  targetValue        Float
+  achievedValue      Float    @default(0)
+  unit               String
+  periodStartDate    DateTime
+  periodEndDate      DateTime
+  progressPercentage Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("kpis")
 }

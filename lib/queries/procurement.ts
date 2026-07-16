@@ -24,6 +24,8 @@ const procurementItemSelect = {
   total: true,
   status: true,
   division: true,
+  harga: true,
+  pettyCash: true,
   buktiBelUrl: true,
   approvedAt: true,
   createdAt: true,
@@ -40,9 +42,15 @@ export async function getProcurementList(filter: ProcurementFilterInput) {
   cacheTag("procurement");
   cacheLife("seconds");
 
-  const { venueId, division, status, dateFrom, dateTo, page, limit } = filter;
+  const { search, venueId, division, status, dateFrom, dateTo, page, limit } = filter;
 
   const where: Prisma.ProcurementItemWhereInput = {
+    ...(search && {
+      OR: [
+        { namaBarang: { contains: search, mode: "insensitive" as const } },
+        { picPenerima: { contains: search, mode: "insensitive" as const } },
+      ],
+    }),
     ...(venueId && { venueId }),
     ...(division && { division: division as "HR" | "OPERATIONAL" | "IT" | "FINANCE" | "MICE" }),
     ...(status && { status: status as "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" }),

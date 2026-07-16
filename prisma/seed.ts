@@ -1,3 +1,4 @@
+
 import { seedRolesPermissions } from "./seeders/roles-permissions";
 import { seedReferenceData } from "./seeders/reference-data";
 import { seedBrandsVenues } from "./seeders/brands-venues";

@@ -22,6 +22,7 @@ export async function GET(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url);
 
   const rawFilter = {
+    search: searchParams.get("search") ?? undefined,
     venueId: searchParams.get("venueId") ?? undefined,
     division: searchParams.get("division") ?? undefined,
     status: searchParams.get("status") ?? undefined,
@@ -83,6 +84,8 @@ export async function POST(req: Request): Promise<Response> {
           totalNonWedding: parsed.data.totalNonWedding ?? null,
           total: parsed.data.total ?? null,
           division: parsed.data.division ?? null,
+          harga: parsed.data.harga ?? 0,
+          pettyCash: parsed.data.pettyCash ?? 0,
           buktiBelUrl: parsed.data.buktiBelUrl ?? null,
           createdById: session.user.profileId,
         },

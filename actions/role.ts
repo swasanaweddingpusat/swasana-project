@@ -147,6 +147,7 @@ export async function renameModule(oldModule: string, newModule: string) {
   try {
     await db.$transaction([db.permission.updateMany({ where: { module: oldModule }, data: { module: trimmed } })]);
     revalidateTag("roles", "max");
+    revalidateTag("permissions", "max");
     return { success: true, newModule: trimmed };
   } catch (e) {
     console.error("[renameModule]", e);
@@ -165,6 +166,7 @@ export async function updatePermission(permissionId: string, action: string) {
       data: { action: action.trim().toLowerCase() },
     })]);
     revalidateTag("roles", "max");
+    revalidateTag("permissions", "max");
     return { success: true, permission };
   } catch (e) {
     console.error("[updatePermission]", e);
@@ -182,6 +184,7 @@ export async function reorderModules(moduleOrder: string[]) {
       moduleOrder.map((mod, i) => db.permission.updateMany({ where: { module: mod }, data: { moduleSortOrder: i } }))
     );
     revalidateTag("roles", "max");
+    revalidateTag("permissions", "max");
     return { success: true };
   } catch (e) {
     console.error("[reorderModules]", e);
@@ -197,6 +200,7 @@ export async function deletePermission(permissionId: string) {
   try {
     await db.$transaction([db.permission.delete({ where: { id: permissionId } })]);
     revalidateTag("roles", "max");
+    revalidateTag("permissions", "max");
     return { success: true };
   } catch (e) {
     console.error("[deletePermission]", e);

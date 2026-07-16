@@ -93,12 +93,27 @@ export async function getWeddingIndicatorById(id: string) {
   });
 }
 
-export async function getWeddingIndicatorsByVenue() {
+export async function getWeddingIndicatorsByVenue(filters?: {
+  search?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}): Promise<{ venueId: string; venueName: string; count: number }[]> {
+  const where: Prisma.WeddingIndicatorWhereInput = {};
+
+  if (filters?.search) {
+    where.coupleName = { contains: filters.search, mode: "insensitive" };
+  }
+
+  if (filters?.dateFrom || filters?.dateTo) {
+    where.eventDate = {};
+    if (filters.dateFrom) where.eventDate.gte = filters.dateFrom;
+    if (filters.dateTo) where.eventDate.lte = filters.dateTo;
+  }
+
   const results = await db.weddingIndicator.groupBy({
     by: ["venueId"],
-    _count: {
-      id: true,
-    },
+    where,
+    _count: { id: true },
   });
 
   // Fetch venue names for each group

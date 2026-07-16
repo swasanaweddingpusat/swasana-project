@@ -5,7 +5,7 @@ import { getWeddingIndicators } from "@/lib/queries/weddingIndicators";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
-  const { session, response } = await requirePermissionForRoute({
+  const { session: _session, response } = await requirePermissionForRoute({
     module: "vendor-specialist",
     action: "view",
   });

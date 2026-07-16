@@ -5,6 +5,7 @@ export const createWorkAssignmentSchema = z.object({
   workLocationId: z.string().min(1, "Lokasi wajib dipilih"),
   workShiftId: z.string().min(1, "Shift wajib dipilih"),
   isDefault: z.boolean().default(false),
+  offdayDays: z.array(z.number().int().min(1).max(7)).default([]),
   effectiveDate: z.coerce.date(),
   endDate: z.coerce.date().optional(),
 });
@@ -16,6 +17,7 @@ export const bulkCreateWorkAssignmentSchema = z.object({
   workLocationId: z.string().min(1, "Lokasi wajib dipilih"),
   workShiftId: z.string().min(1, "Shift wajib dipilih"),
   isDefault: z.boolean().default(false),
+  offdayDays: z.array(z.number().int().min(1).max(7)).default([]),
   effectiveDate: z.coerce.date(),
   endDate: z.coerce.date().optional(),
 });

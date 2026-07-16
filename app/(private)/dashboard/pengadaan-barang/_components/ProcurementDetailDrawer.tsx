@@ -23,23 +23,38 @@ const STATUS_CONFIG: Record<
   COMPLETED: { label: "Selesai", dotClass: "bg-green-500", variant: "secondary" },
 };
 
+const LONG_INDONESIAN_MONTHS = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
 function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  return new Date(date).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const parsed = new Date(date);
+  const day = parsed.getDate();
+  const month = LONG_INDONESIAN_MONTHS[parsed.getMonth()] ?? "";
+  const year = parsed.getFullYear();
+  return `${day} ${month} ${year}`;
 }
 
 function formatCurrency(val: Decimal | number | string | null | undefined): string {
   if (val == null) return "—";
   const num = typeof val === "number" ? val : Number(val);
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(num);
+  const whole = Math.trunc(Math.abs(num));
+  const formatted = whole
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `Rp ${num < 0 ? "-" : ""}${formatted}`;
 }
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
@@ -107,6 +122,8 @@ export function ProcurementDetailDrawer({
             <Field label="Sisa Barang" value={item.sisaBarang} />
           </div>
           <Field label="PIC Penerima" value={item.picPenerima} />
+          <Field label="Harga per Unit" value={formatCurrency(item.harga)} />
+          <Field label="Petty Cash" value={formatCurrency(item.pettyCash)} />
           {item.penggunaan && (
             <Field label="Penggunaan" value={item.penggunaan} />
           )}

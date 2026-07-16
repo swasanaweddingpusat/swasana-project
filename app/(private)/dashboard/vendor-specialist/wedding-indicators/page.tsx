@@ -8,6 +8,7 @@ import { getVenues } from "@/lib/queries/venues";
 import Link from "next/link";
 import { VenueFolderGrid } from "@/components/shared/wedding-indicators/VenueFolderGrid";
 import { IndicatorListTable } from "@/components/shared/wedding-indicators/IndicatorListTable";
+import { IndicatorFilterBar } from "@/components/shared/wedding-indicators/IndicatorFilterBar";
 import { Button } from "@/components/ui/button";
 
 export default async function WeddingIndicatorsPage({
@@ -18,6 +19,8 @@ export default async function WeddingIndicatorsPage({
     search?: string;
     venueId?: string;
     page?: string;
+    month?: string;
+    year?: string;
   }>;
 }) {
   const { session, error } = await requirePermission({
@@ -34,6 +37,20 @@ export default async function WeddingIndicatorsPage({
   const page = parseInt(params.page || "1");
   const search = params.search;
   const venueId = params.venueId;
+  const month = params.month ? parseInt(params.month) : undefined;
+  const year = params.year ? parseInt(params.year) : undefined;
+
+  let dateFrom: Date | undefined;
+  let dateTo: Date | undefined;
+  if (year) {
+    if (month) {
+      dateFrom = new Date(year, month - 1, 1);
+      dateTo = new Date(year, month, 0, 23, 59, 59, 999);
+    } else {
+      dateFrom = new Date(year, 0, 1);
+      dateTo = new Date(year, 11, 31, 23, 59, 59, 999);
+    }
+  }
 
   const allVenues = await getVenues();
   const venues = allVenues.map((v) => ({ id: v.id, name: v.name }));
@@ -48,10 +65,12 @@ export default async function WeddingIndicatorsPage({
       limit: 10,
       search,
       venueId,
+      dateFrom,
+      dateTo,
     });
     indicators = result.data;
   } else {
-    venueFolders = await getWeddingIndicatorsByVenue();
+    venueFolders = await getWeddingIndicatorsByVenue({ search, dateFrom, dateTo });
   }
 
   return (
@@ -86,6 +105,14 @@ export default async function WeddingIndicatorsPage({
         </div>
       </div>
 
+      <Suspense
+        fallback={
+          <div className="h-11 rounded-xl bg-muted/50 animate-pulse" />
+        }
+      >
+        <IndicatorFilterBar venues={venues} />
+      </Suspense>
+
       <div className="space-y-6">
         {view === "folder" && venueFolders.length > 0 ? (
           <VenueFolderGrid folders={venueFolders} />
@@ -97,11 +124,7 @@ export default async function WeddingIndicatorsPage({
               </div>
             }
           >
-            <IndicatorListTable
-              indicators={indicators}
-              venues={venues}
-              canCreate={false}
-            />
+            <IndicatorListTable indicators={indicators} />
           </Suspense>
         )}
       </div>

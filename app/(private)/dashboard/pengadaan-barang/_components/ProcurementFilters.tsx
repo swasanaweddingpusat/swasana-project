@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Magnifer } from "@solar-icons/react";
 import type { ProcurementFilterInput } from "@/lib/validations/procurement";
 
 interface ProcurementFiltersProps {
@@ -17,13 +18,15 @@ interface ProcurementFiltersProps {
   onFilterChange: (filters: Partial<ProcurementFilterInput>) => void;
 }
 
-const DIVISIONS = ["HR", "OPERATIONAL", "IT", "FINANCE", "MICE"];
+const DIVISIONS = ["HR", "OPERATIONAL", "IT", "FINANCE", "MICE"] as const;
+type ProcurementDivision = (typeof DIVISIONS)[number];
 const STATUSES = [
   { value: "PENDING", label: "Menunggu" },
   { value: "APPROVED", label: "Disetujui" },
   { value: "REJECTED", label: "Ditolak" },
   { value: "COMPLETED", label: "Selesai" },
-];
+] as const;
+type ProcurementStatus = (typeof STATUSES)[number]["value"];
 
 export function ProcurementFilters({
   venues,
@@ -32,6 +35,7 @@ export function ProcurementFilters({
 }: ProcurementFiltersProps) {
   const handleReset = () => {
     onFilterChange({
+      search: undefined,
       venueId: undefined,
       division: undefined,
       status: undefined,
@@ -41,6 +45,7 @@ export function ProcurementFilters({
   };
 
   const hasActiveFilters = !!(
+    filters.search ||
     filters.venueId ||
     filters.division ||
     filters.status ||
@@ -51,6 +56,24 @@ export function ProcurementFilters({
   return (
     <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
       <div className="flex flex-wrap gap-3 items-end">
+        <div className="min-w-48 flex-1 max-w-sm">
+          <p className="text-xs text-muted-foreground mb-1.5">Cari</p>
+          <div className="relative">
+            <Magnifer
+              weight="BoldDuotone"
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              placeholder="Nama barang atau PIC..."
+              value={filters.search ?? ""}
+              onChange={(e) =>
+                onFilterChange({ search: e.target.value || undefined })
+              }
+              className="rounded-xl h-9 pl-9"
+            />
+          </div>
+        </div>
+
         <div className="min-w-40">
           <p className="text-xs text-muted-foreground mb-1.5">Venue</p>
           <Select
@@ -78,7 +101,9 @@ export function ProcurementFilters({
           <Select
             value={filters.division ?? "all"}
             onValueChange={(v) =>
-              onFilterChange({ division: v === "all" ? undefined : v })
+              onFilterChange({
+                division: v === "all" ? undefined : (v as ProcurementDivision),
+              })
             }
           >
             <SelectTrigger className="rounded-xl h-9">
@@ -100,7 +125,9 @@ export function ProcurementFilters({
           <Select
             value={filters.status ?? "all"}
             onValueChange={(v) =>
-              onFilterChange({ status: v === "all" ? undefined : v })
+              onFilterChange({
+                status: v === "all" ? undefined : (v as ProcurementStatus),
+              })
             }
           >
             <SelectTrigger className="rounded-xl h-9">
