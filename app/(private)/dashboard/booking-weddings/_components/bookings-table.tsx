@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, Widget, UserCircle, TagPrice, Gift, Tag, HandMoney, ClockCircle } from "@solar-icons/react";
+import { Calendar as CalendarDays, ArrowLeft, ArrowRight, Magnifer as Search, Eye, Refresh, MenuDots as EllipsisVertical, TrashBinTrash as Trash2, CloseSquare as SquareX, Pen as Pencil, TransferHorizontal as ArrowLeftRight, FileText as FileSignature, Printer, FileSend as FileUp, ChatRound as MessageSquare, ClipboardCheck, AddCircle, UsersGroupRounded, Filter, DocumentText, UserCircle, TagPrice, ClockCircle } from "@solar-icons/react";
 const RotateCcw = Refresh;
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,13 +37,9 @@ import { EditBookingDrawer } from "./edit-booking-drawer";
 import { BookingPOPreviewModal, type BookingPOPreviewTarget } from "./booking-po-preview-modal";
 import { BookingCommentPanel } from "./booking-comment-panel";
 import { BookingTCDrawer } from "./booking-tc-drawer";
-import { EditPackageDrawer, type EditPackageTarget } from "./EditPackageDrawer";
 import { SetHargaBookingDrawer } from "./SetHargaBookingDrawer";
-import { EditComplimentaryDrawer, type EditComplimentaryTarget } from "./EditComplimentaryDrawer";
 import { RevisionHistoryDrawer } from "./RevisionHistoryDrawer";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { EditTakeoutDrawer } from "@/app/(private)/dashboard/booking-weddings/_components/EditTakeoutDrawer";
-import { EditTopDrawerById } from "@/app/(private)/dashboard/booking-weddings/_components/edit-top-drawer";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { fetchBookingComments } from "@/services/booking-comment-service";
 import { fetchBookingDetail } from "@/services/booking-detail-service";
@@ -51,7 +47,7 @@ import { PermissionGate } from "@/components/shared/permission-gate";
 import { ApproveModal } from "@/app/(private)/dashboard/packages/_components/approve-modal";
 import { ApprovalDialog } from "@/app/(private)/dashboard/packages/_components/approval-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import type { BookingsResult, BookingListItem, SalesProfile } from "@/lib/queries/bookings";
+import type { BookingsResult, BookingListItem, SalesProfile, ApprovalStatusFilter } from "@/lib/queries/bookings";
 
 const STATUS_DOT: Record<string, string> = {
   Confirmed: "bg-primary",
@@ -136,7 +132,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [dateTo, setDateTo] = useState<string>("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const [yearFilter, setYearFilter] = useState<number | null>(null);
-  const [approvalFilter, setApprovalFilter] = useState<"pending" | "approved" | "">("");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalStatusFilter | "">("");
 
   const { data: venues = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["venues-list"],
@@ -206,13 +202,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
   const [revisionCache, setRevisionCache] = useState<Record<string, { id: string; revisionNumber: number; reason: string | null; packageName: string; pax: number | null; price: number | null; createdAt: string }[]>>({});
   const [agreementModal, setAgreementModal] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [tcTarget, setTcTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
-  const [editPackageTarget, setEditPackageTarget] = useState<EditPackageTarget | null>(null);
   const [setHargaTarget, setSetHargaTarget] = useState<{ bookingId: string; customerName: string; packageName: string; pax: number; venueName?: string } | null>(null);
-  const [editComplimentaryTarget, setEditComplimentaryTarget] = useState<EditComplimentaryTarget | null>(null);
-  const [editTakeoutTarget, setEditTakeoutTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   const [revisionHistoryTarget, setRevisionHistoryTarget] = useState<BookingListItem | null>(null);
   const [syncPackageTarget, setSyncPackageTarget] = useState<BookingListItem | null>(null);
-  const [editTopTarget, setEditTopTarget] = useState<{ bookingId: string; customerName: string } | null>(null);
   // Approval records now ride along on each booking row (Fix #1: getBookings attaches
   // booking.bookingApprovals for the active page only), so no separate fetch of ALL
   // approval records is needed here. Build the entityId → record map from the list.
@@ -223,10 +215,18 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
       .map((r) => [r.entityId, r]),
   );
 
-  const APPROVAL_STATUS_OPTIONS: { id: "" | "pending" | "approved"; name: string }[] = [
+  const APPROVAL_STATUS_OPTIONS: { id: ApprovalStatusFilter | ""; name: string }[] = [
     { id: "", name: "Semua" },
-    { id: "pending", name: "Pending" },
-    { id: "approved", name: "Approved" },
+    { id: "pending", name: "Pending (semua step)" },
+    { id: "approved", name: "Approved (semua step)" },
+    { id: "sales-approved", name: "Sales — Sudah Approve" },
+    { id: "sales-pending", name: "Sales — Belum Approve" },
+    { id: "manager-approved", name: "Manager — Sudah Approve" },
+    { id: "manager-pending", name: "Manager — Belum Approve" },
+    { id: "finance-approved", name: "Finance — Sudah Approve" },
+    { id: "finance-pending", name: "Finance — Belum Approve" },
+    { id: "client-approved", name: "Client — Sudah TTD" },
+    { id: "client-pending", name: "Client — Belum TTD" },
   ];
 
   // Open the PO preview in a modal (no new tab). The modal fetches + renders
@@ -377,29 +377,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
             <Pencil weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Booking
           </DropdownMenuItem>
         )}
-        {can("booking", "edit-package") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && booking.bookingStatus !== "Canceled" && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditPackageTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
-            <Widget weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Package
-          </DropdownMenuItem>
-        )}
         {can("booking", "edit") && booking.bookingStatus !== "Lost" && booking.bookingStatus !== "Rejected" && booking.bookingStatus !== "Canceled" && (
           <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSyncPackageTarget(booking); }}>
             <RotateCcw weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Sync Paket dari Master
-          </DropdownMenuItem>
-        )}
-        {can("booking", "edit-package") && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditComplimentaryTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
-            <Gift weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Complimentary
-          </DropdownMenuItem>
-        )}
-        {can("booking", "edit") && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTakeoutTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
-            <Tag weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit Takeout
-          </DropdownMenuItem>
-        )}
-        {can("booking", "edit") && (
-          <DropdownMenuItem className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setEditTopTarget({ bookingId: booking.id, customerName: booking.snapCustomer?.name ?? "Customer" }); }}>
-            <HandMoney weight="BoldDuotone" className={cn('mr-2', 'h-4', 'w-4', 'text-primary')} /> Edit TOP
           </DropdownMenuItem>
         )}
         {can("booking", "edit-set-harga") && (
@@ -742,7 +722,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <SearchableSelect
           options={APPROVAL_STATUS_OPTIONS}
           value={approvalFilter || ""}
-          onChange={(val) => { setApprovalFilter(val as "pending" | "approved" | ""); setCurrentPage(1); }}
+          onChange={(val) => { setApprovalFilter(val as ApprovalStatusFilter | ""); setCurrentPage(1); }}
           placeholder="Semua"
           searchPlaceholder="Cari status approval..."
           emptyText="Status tidak ditemukan"
@@ -1571,38 +1551,6 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         />
       )}
 
-      {/* Edit Package Drawer — key forces remount on booking change, resetting all local state cleanly */}
-      <EditPackageDrawer
-        key={`pkg-${editPackageTarget?.bookingId ?? "none"}`}
-        target={editPackageTarget}
-        onClose={() => { if (editPackageTarget) invalidateDetail(editPackageTarget.bookingId); setEditPackageTarget(null); }}
-      />
-
-      {/* Edit Complimentary Drawer — key forces remount per booking so lazy-initializer picks up correct data */}
-      <EditComplimentaryDrawer
-        key={`comp-${editComplimentaryTarget?.bookingId ?? "none"}`}
-        target={editComplimentaryTarget}
-        onClose={() => { if (editComplimentaryTarget) invalidateDetail(editComplimentaryTarget.bookingId); setEditComplimentaryTarget(null); }}
-      />
-
-      {/* Edit Takeout Drawer */}
-      <EditTakeoutDrawer
-        key={`takeout-${editTakeoutTarget?.bookingId ?? "none"}`}
-        isOpen={!!editTakeoutTarget}
-        onClose={() => setEditTakeoutTarget(null)}
-        bookingId={editTakeoutTarget?.bookingId ?? ""}
-        customerName={editTakeoutTarget?.customerName ?? ""}
-      />
-
-      {/* Edit TOP Drawer */}
-      <EditTopDrawerById
-        key={`top-${editTopTarget?.bookingId ?? "none"}`}
-        isOpen={!!editTopTarget}
-        onClose={() => setEditTopTarget(null)}
-        bookingId={editTopTarget?.bookingId ?? ""}
-        customerName={editTopTarget?.customerName ?? ""}
-      />
-
       {/* Set Harga Booking Drawer */}
       {setHargaTarget && (
         <SetHargaBookingDrawer
@@ -1641,9 +1589,7 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
           "Data paket (nama, harga, item, T&C) akan ditarik ulang dari data master terbaru dan menimpa " +
           "snapshot booking ini. Setelan takeout tetap dipertahankan. Ini membuat versi baru, me-reset " +
           "approval ke Pending, dan klien harus tanda tangan ulang." +
-          ((syncPackageTarget?.termOfPayments ?? []).some((t) => t.paymentStatus === "paid" || t.paymentStatus === "refund" || t.ackStatus === "acknowledged")
-            ? " ⚠️ Booking ini sudah punya pembayaran tercatat — jika harga berubah, cek ulang cicilan (TOP) via Set Harga."
-            : "")
+          " ⚠️ Jika booking sudah punya pembayaran (cash-in ter-ack) dan harga berubah, cek ulang cicilan (TOP) via Set Harga."
         }
         confirmLabel={syncPackageMut.isPending ? "Memproses..." : "Ya, sync sekarang"}
         onConfirm={async () => {

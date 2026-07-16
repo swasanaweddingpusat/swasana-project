@@ -12,6 +12,7 @@ import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { generateAccessCode } from "@/lib/access-code";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
 import { restoreBookingRevisionSchema, syncBookingPackageSchema } from "@/lib/validations/booking";
+import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
 
 // ─── Shapes read out of BookingRevision.snapshotData (see lib/booking-revision.ts
 //     buildSnapshotData). Narrow interfaces so we never touch `any`. ────────────
@@ -149,7 +150,7 @@ export async function restoreBookingRevision(
       }),
       db.termOfPayment.findMany({
         where: { bookingId },
-        select: { paymentStatus: true, ackStatus: true },
+        select: { id: true },
       }),
     ]);
 
@@ -161,14 +162,14 @@ export async function restoreBookingRevision(
       return { success: false, error: "Versi ini sudah menjadi versi aktif." };
     }
 
-    // Money guard — block restore when payments are already recorded.
-    const hasRecordedPayment = terms.some(
-      (t) => t.paymentStatus === "paid" || t.paymentStatus === "refund" || t.ackStatus === "acknowledged",
-    );
+    // Money guard — block restore when payments are already recorded (§6.6).
+    // Pure-derived: cek alokasi Ledger cash-in ter-ack (kolom TOP legacy sudah di-drop).
+    const revisionPaidMap = await getTermPaidMapForBookings([bookingId]);
+    const hasRecordedPayment = terms.some((t) => (revisionPaidMap.get(t.id) ?? 0) > 0);
     if (hasRecordedPayment) {
       return {
         success: false,
-        error: "Ada pembayaran tercatat (lunas/refund/terverifikasi finance) — versi tidak bisa di-restore. Batalkan pembayaran dulu.",
+        error: "Ada pembayaran cash-in terverifikasi — versi tidak bisa di-restore. Batalkan pembayaran (void) dulu.",
       };
     }
 
@@ -341,7 +342,6 @@ export async function restoreBookingRevision(
 
     const newToken = crypto.randomUUID();
     const newAccessCode = generateAccessCode();
-    const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await db.$transaction([
       db.approvalRecord.updateMany({
@@ -358,7 +358,6 @@ export async function restoreBookingRevision(
           status: "Pending",
           token: newToken,
           accessCode: newAccessCode,
-          expiresAt: newExpiry,
           signedAt: null,
           viewedAt: null,
         },
@@ -570,7 +569,6 @@ export async function syncBookingPackage(
 
     const newToken = crypto.randomUUID();
     const newAccessCode = generateAccessCode();
-    const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await db.$transaction([
       db.approvalRecord.updateMany({
@@ -587,7 +585,6 @@ export async function syncBookingPackage(
           status: "Pending",
           token: newToken,
           accessCode: newAccessCode,
-          expiresAt: newExpiry,
           signedAt: null,
           viewedAt: null,
         },

@@ -20,7 +20,7 @@ export interface POPdfBooking {
   snapVendorItems: { id: string; vendorCategoryName: string; vendorName: string; itemName: string; itemPrice: number; qty: number; unit?: string | null; totalPrice: number; isAddons: boolean }[];
   snapBonuses: { id: string; vendorName: string; description?: string | null; qty: number }[];
   snapComplimentaries?: { id: string; name: string; description?: string | null; price: number; isShowPrice: boolean; qty: number }[];
-  termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null; paymentStatus: string }[];
+  termOfPayments: { id: string; name: string; amount: number; dueDate: Date | null }[];
   paymentMethod: { bankName: string; bankAccountNumber: string; bankRecipient: string } | null;
   sales: { fullName: string } | null;
   manager?: { fullName: string | null } | null;
@@ -379,12 +379,17 @@ function buildTableRows(booking: POPdfBooking): TableRow[] {
     });
   }
 
-  // Merge non-benefit internal items + vendor items, sort by sortOrder
+  // Group order: ALL internal items first (in their sortOrder), then ALL vendor
+  // items (in their sortOrder). We intentionally do NOT globally sort the merged
+  // list by sortOrder — internal and vendor each number from 0, so a global sort
+  // interleaves them (A internal, B vendor, C internal…). nonBenefitItems and
+  // packageVendorItems are already sorted by sortOrder above, so concatenating
+  // keeps each group contiguous: A,B,C… for internal, then D,E,F… for vendor.
   type MergedItem = { type: "internal"; itemName: string; itemDescription: string; sortOrder: number } | { type: "vendor"; categoryName: string; itemText: string; sortOrder: number; isTakeout: boolean };
   const mergedItems: MergedItem[] = [
     ...nonBenefitItems.map((i) => ({ type: "internal" as const, itemName: i.itemName, itemDescription: i.itemDescription, sortOrder: i.sortOrder })),
     ...packageVendorItems.map((i) => ({ type: "vendor" as const, categoryName: i.categoryName, itemText: i.itemText, sortOrder: i.sortOrder, isTakeout: i.isTakeout ?? false })),
-  ].sort((a, b) => a.sortOrder - b.sortOrder);
+  ];
 
   let alphaCounter = 0;
   mergedItems.forEach((item) => {
@@ -476,8 +481,10 @@ function replaceVariables(html: string, booking: POPdfBooking): string {
     package_price: booking.snapPackagePricing ? fmtRp(booking.snapPackagePricing.price) : "",
     discount_amount: fmtRp(booking.discountAmount ?? 0),
     booking_fee: (() => { const bf = booking.termOfPayments[0]; return bf ? fmtRp(bf.amount) : ""; })(),
-    total_paid: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0)),
-    remaining_balance: fmtRp(booking.termOfPayments.filter((t) => t.paymentStatus !== "paid").reduce((sum, t) => sum + t.amount, 0)),
+    // PO = kontrak (jadwal termin). Status "sudah dibayar" dilacak di Cashbook/AR (Fase 5),
+    // bukan di dokumen ini — total_paid selalu 0 saat PO digenerate.
+    total_paid: fmtRp(0),
+    remaining_balance: fmtRp(booking.termOfPayments.reduce((sum, t) => sum + t.amount, 0)),
     sales_name: booking.sales?.fullName ?? "",
     manager_name: booking.manager?.fullName ?? "",
     brand_name: booking.snapVenue?.brandName ?? "",
@@ -800,32 +807,11 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
                 </View>
               </>
             )}
-            {/* Pembayaran yang sudah masuk — satu baris per TOP berstatus "paid"
-                (booking fee, DP, dan cicilan lain yang sudah dibayar saat ini). */}
-            {booking.termOfPayments
-              .filter((t) => t.paymentStatus === "paid")
-              .map((t) => {
-                const d = t.dueDate ?? createdAt;
-                const tgl = new Date(d).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
-                // Bank tujuan lengkap: "BCA a.n. PT CITRA SWASANA BARU (1234567890)".
-                // Rakit hanya bagian yang ada isinya biar gak muncul "a.n." / "()" kosong.
-                const pm = booking.paymentMethod;
-                const bankParts: string[] = [];
-                if (pm?.bankName?.trim()) bankParts.push(pm.bankName.trim());
-                if (pm?.bankRecipient?.trim()) bankParts.push(`a.n. ${pm.bankRecipient.trim()}`);
-                if (pm?.bankAccountNumber?.trim()) bankParts.push(`(${pm.bankAccountNumber.trim()})`);
-                const bankInfo = bankParts.join(" ");
-                return (
-                  <View key={t.id} style={{ flexDirection: "row", borderBottomWidth: 1, borderColor: "#000" }}>
-                    <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>{t.name}{bankInfo ? ` via ${bankInfo}` : ""} · {tgl}</Text>
-                    <Text style={{ width: "30%", fontSize: 6, padding: 2 }}>{fmtRp(t.amount)}</Text>
-                  </View>
-                );
-              })}
-            {/* Sisa Bayar = total (setelah diskon) − seluruh TOP yang sudah paid */}
+            {/* Sisa Bayar = total setelah diskon. Pembayaran yang sudah masuk dilacak
+                terpisah di Cashbook/AR (Fase 5), tidak lagi ditempel di PO. */}
             <View style={{ flexDirection: "row" }}>
               <Text style={{ width: "70%", fontSize: 6, fontWeight: "bold", padding: 2, borderRightWidth: 1, borderColor: "#000" }}>Sisa Bayar</Text>
-              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); const paidTotal = booking.termOfPayments.filter((t) => t.paymentStatus === "paid").reduce((sum, t) => sum + t.amount, 0); return fmtRp(Math.max(0, totalPrice - paidTotal)); })()}</Text>
+              <Text style={{ width: "30%", fontSize: 6, fontWeight: "bold", padding: 2 }}>{(() => { const totalPrice = (booking.discountAmount ?? 0) > 0 ? Math.max(0, (varSnap?.price ?? 0) - (booking.discountAmount ?? 0)) : (varSnap?.price ?? 0); return fmtRp(totalPrice); })()}</Text>
             </View>
           </View>
 

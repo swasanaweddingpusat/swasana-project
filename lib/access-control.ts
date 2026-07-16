@@ -58,14 +58,6 @@ export async function getBookingIdFromTerm(termId: string): Promise<string | nul
   return term?.bookingId ?? null;
 }
 
-export async function getBookingIdFromPartialPayment(paymentId: string): Promise<string | null> {
-  const payment = await db.partialPayment.findUnique({
-    where: { id: paymentId },
-    select: { term: { select: { bookingId: true } } },
-  });
-  return payment?.term.bookingId ?? null;
-}
-
 export async function getBookingIdFromSnapVendorItem(snapVendorItemId: string): Promise<string | null> {
   const item = await db.snapVendorItem.findUnique({
     where: { id: snapVendorItemId },

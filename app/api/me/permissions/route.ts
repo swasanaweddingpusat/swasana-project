@@ -51,6 +51,8 @@ export async function GET() {
 
   const matrix: PermissionMatrix = {};
   for (const rp of rolePermissions) {
+    // Skip orphan grants whose permission row was deleted (dangling FK → null).
+    if (!rp.permission) continue;
     const { module, action } = rp.permission;
     if (!matrix[module]) matrix[module] = {};
     matrix[module][action] = true;

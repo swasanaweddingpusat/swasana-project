@@ -17,7 +17,7 @@ import { resolveManagerId } from "@/lib/resolve-manager";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
 import { generateEmaterai } from "@/lib/peruri";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
-import { deleteFromStorage } from "@/lib/storage";
+import { getTermPaidMapForBookings } from "@/lib/queries/ledger";
 
 export async function createBooking(data: unknown) {
   const { session, error } = await requirePermission({ module: "booking", action: "create" });
@@ -568,7 +568,7 @@ export async function createBooking(data: unknown) {
     if (input.termOfPayments && input.termOfPayments.length > 0) {
       ops.push(
         ...input.termOfPayments.map((t, i) =>
-          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i], paymentStatus: (t.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "partial" | "refund", paymentMethodId: input.paymentMethodId ?? null } })
+          db.termOfPayment.create({ data: { bookingId, name: t.name, amount: t.amount, dueDate: new Date(t.dueDate), sortOrder: t.sortOrder, invoiceNumber: invoiceNumbers[i] } })
         )
       );
     }
@@ -614,7 +614,6 @@ export async function createBooking(data: unknown) {
           bookingId,
           token: crypto.randomUUID(),
           accessCode: generateAccessCode(),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       })
     );
@@ -1190,17 +1189,15 @@ export async function editBooking(data: unknown) {
 
     // Compare term of payments. Three distinct signals:
     //  • topChanged       — structural change (count, names, amounts, order). Material.
-    //  • topStatusChanged — any payment-status delta (either direction). Forces a write.
-    //  • paidReversed      — a paid/refund term sent back as unpaid. Material (re-approval)
-    //                        AND its payment proof must be cleared.
+    //  • topSortOrderChanged — drag-reorder only (non-material, but needs a write).
+    // Fase 5: TOP = jadwal murni. Status pembayaran DERIVED dari Ledger — tidak lagi
+    // diubah lewat editBooking, jadi tak ada lagi "payment-status delta" di sini.
     let topChanged = false;
-    let topStatusChanged = false;
     let topSortOrderChanged = false;
-    let paidReversed = false;
     if (rest.termOfPayments && rest.termOfPayments.length > 0) {
       const currentTerms = await db.termOfPayment.findMany({
         where: { bookingId: id },
-        select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true, paymentStatus: true, ackStatus: true },
+        select: { id: true, name: true, amount: true, dueDate: true, sortOrder: true },
         orderBy: { sortOrder: "asc" },
       });
       const newTerms = rest.termOfPayments;
@@ -1251,22 +1248,6 @@ export async function editBooking(data: unknown) {
         }
       }
 
-      // Payment-status deltas — compared by term id (robust to ordering). Finance-
-      // acknowledged terms are locked and excluded; only unpaid/paid from the client
-      // are honoured (partial/refund are managed by the finance flows, not here).
-      for (const nw of newTerms) {
-        if (!nw.id) continue; // new term — covered by the structural path
-        const cur = dbById.get(nw.id);
-        if (!cur || cur.ackStatus === "acknowledged") continue;
-        const clientStatus = nw.paymentStatus;
-        if (clientStatus !== "paid" && clientStatus !== "unpaid") continue;
-        if (clientStatus !== cur.paymentStatus) {
-          topStatusChanged = true;
-          if ((cur.paymentStatus === "paid" || cur.paymentStatus === "refund") && clientStatus === "unpaid") {
-            paidReversed = true;
-          }
-        }
-      }
     }
 
     // refreshPackagePrice (re-select same package): detect whether the master price
@@ -1291,25 +1272,9 @@ export async function editBooking(data: unknown) {
       }
     }
 
-    // unpaid→paid persists WITHOUT resetting approval; a paid→unpaid reversal IS
-    // material (paidReversed) and re-triggers the approval revision flow below.
     // NOTE: complimentaries are intentionally excluded from material-change detection.
     // They are managed independently via saveSnapComplimentaries (EditComplimentaryDrawer)
     // which does NOT reset approval or client agreement.
-    const hasMaterialChange =
-      venueChanged ||
-      packageChanged ||
-      priceRefreshed ||
-      eventDateChanged ||
-      discountChanged ||
-      takeoutChanged ||
-      topChanged ||
-      paidReversed;
-    // Terms must be re-written whenever structure, status, or sort-order changed.
-    // sortOrder-only change (drag reorder) is non-material but still needs a write
-    // so the new display order is persisted correctly.
-    const termsNeedWrite = topChanged || topStatusChanged || topSortOrderChanged;
-
     // Snapshot freeze gate. Once the client signs (snapshotFrozenAt set), the frozen
     // snapshot (SnapCustomer, pricing, internal items) must not be silently overwritten.
     // A material change is the legitimate re-edit path: it spins a NEW revision the
@@ -1318,6 +1283,25 @@ export async function editBooking(data: unknown) {
     // Client step) must leave the SIGNED SnapCustomer untouched — the Customer master
     // still updates for CRM, but the PO snapshot the client signed stays intact.
     const isFrozen = booking.snapshotFrozenAt != null;
+    // Material-change detection only applies AFTER the client has signed (snapshotFrozenAt set).
+    // Before the client signs, the booking is still in its first-draft revision — sales may
+    // freely change package/venue/price/terms without spinning a new revision or resetting
+    // approval. Snap tables (venue/package/pricing) still update so the PO reflects the latest
+    // data, but no revision is created and approval is not reset.
+    const hasMaterialChange =
+      isFrozen &&
+      (venueChanged ||
+        packageChanged ||
+        priceRefreshed ||
+        eventDateChanged ||
+        discountChanged ||
+        takeoutChanged ||
+        topChanged);
+    // Terms must be re-written whenever structure or sort-order changed.
+    // sortOrder-only change (drag reorder) is non-material but still needs a write
+    // so the new display order is persisted correctly.
+    const termsNeedWrite = topChanged || topSortOrderChanged;
+
     const skipSnapCustomerWrite = isFrozen && !hasMaterialChange;
 
     // Fetch old snap names for activity log (before transaction overwrites them)
@@ -1633,31 +1617,18 @@ export async function editBooking(data: unknown) {
     // NOTE: complimentaries are NOT managed here. They are edited independently via
     // saveSnapComplimentaries (EditComplimentaryDrawer) which does not affect approval.
 
-    // Storage keys of payment proofs to delete AFTER the transaction commits (paid→unpaid).
-    // Collected here, deleted best-effort post-commit so a failed delete never rolls
-    // back the booking update.
-    const evidenceKeysToDelete: string[] = [];
-
-    // Term of payments — re-write when structure OR payment status changed.
+    // Term of payments — re-write when structure OR sort-order changed. TOP kini
+    // jadwal murni (name/amount/dueDate/sortOrder); status pembayaran DERIVED dari Ledger.
     if (termsNeedWrite && rest.termOfPayments && rest.termOfPayments.length > 0) {
-      // Re-fetch existing terms from DB to detect locked terms server-side.
-      // We NEVER trust client-sent paymentStatus / ackStatus for authorization.
+      // Lock (§6.6): term dengan alokasi Ledger cash-in ter-ack tidak boleh dihapus.
+      const editPaidMap = await getTermPaidMapForBookings([id]);
       const dbTerms = await db.termOfPayment.findMany({
         where: { bookingId: id },
-        select: { id: true, name: true, amount: true, paymentStatus: true, ackStatus: true, paymentEvidence: true },
+        select: { id: true },
       });
-      const dbTermById = new Map(dbTerms.map((t) => [t.id, t]));
-
-      // A term is locked when it has been paid, refunded, or acknowledged by finance.
-      // Locked terms must NOT be silently deleted; their data may still be updated via
-      // the explicit pencil-click gesture (the authorization signal).
-      const isLockedTerm = (t: { paymentStatus: string; ackStatus: string }) =>
-        t.paymentStatus === "paid" ||
-        t.paymentStatus === "refund" ||
-        t.ackStatus === "acknowledged";
 
       const lockedTermIds = new Set(
-        dbTerms.filter(isLockedTerm).map((t) => t.id),
+        dbTerms.filter((t) => (editPaidMap.get(t.id) ?? 0) > 0).map((t) => t.id),
       );
 
       // Client-sent term IDs that are still in DB (the rest are new terms).
@@ -1672,25 +1643,6 @@ export async function editBooking(data: unknown) {
         db.termOfPayment.deleteMany({ where: { bookingId: id, id: { notIn: [...keepIds] } } }),
         ...rest.termOfPayments.map((t) => {
           if (t.id) {
-            const cur = dbTermById.get(t.id);
-            // Resolve the status to persist. Finance-acknowledged terms are immutable —
-            // keep their stored status. Otherwise honour client unpaid/paid only;
-            // partial/refund are owned by the finance flows, so fall back to stored.
-            let nextStatus = cur?.paymentStatus;
-            if (cur && cur.ackStatus !== "acknowledged") {
-              if (t.paymentStatus === "paid" || t.paymentStatus === "unpaid") {
-                nextStatus = t.paymentStatus;
-              }
-            }
-            // paid/refund → unpaid: clear the proof and queue the storage object for deletion.
-            const reversedToUnpaid =
-              !!cur &&
-              cur.ackStatus !== "acknowledged" &&
-              (cur.paymentStatus === "paid" || cur.paymentStatus === "refund") &&
-              nextStatus === "unpaid";
-            if (reversedToUnpaid && cur?.paymentEvidence) {
-              evidenceKeysToDelete.push(cur.paymentEvidence);
-            }
             return db.termOfPayment.update({
               where: { id: t.id },
               data: {
@@ -1698,13 +1650,9 @@ export async function editBooking(data: unknown) {
                 amount: t.amount,
                 dueDate: new Date(t.dueDate),
                 sortOrder: t.sortOrder,
-                ...(nextStatus !== undefined && { paymentStatus: nextStatus }),
-                ...(reversedToUnpaid && { paymentEvidence: null }),
               },
             });
           }
-          // New term (no id) — always allowed. New terms can only be created as unpaid;
-          // marking paid requires a real id + evidence upload via the dedicated endpoint.
           return db.termOfPayment.create({
             data: {
               bookingId: id,
@@ -1712,7 +1660,6 @@ export async function editBooking(data: unknown) {
               amount: t.amount,
               dueDate: new Date(t.dueDate),
               sortOrder: t.sortOrder,
-              paymentStatus: t.paymentStatus === "paid" ? "paid" : "unpaid",
             },
           });
         })
@@ -1727,20 +1674,6 @@ export async function editBooking(data: unknown) {
 
     await db.$transaction(ops);
 
-    // Best-effort: delete payment-proof objects for terms reverted paid→unpaid.
-    // Runs post-commit so a storage failure never rolls back the booking write.
-    if (evidenceKeysToDelete.length > 0) {
-      await Promise.allSettled(
-        evidenceKeysToDelete.map(async (key) => {
-          try {
-            await deleteFromStorage(key);
-          } catch (err) {
-            console.error("[editBooking] Failed to delete reverted payment evidence", key, err);
-          }
-        })
-      );
-    }
-
     // Snapshot approval + create revision — when any material change detected
     if (hasMaterialChange) {
       const reasons: string[] = [];
@@ -1751,7 +1684,6 @@ export async function editBooking(data: unknown) {
       if (discountChanged) reasons.push("discount");
       if (takeoutChanged) reasons.push("takeout");
       if (topChanged) reasons.push("terms of payment");
-      if (paidReversed) reasons.push("payment reversed to unpaid");
       const revisionId = await createBookingRevision(id, session!.user.profileId!, `Changed ${reasons.join(", ")}`);
 
       const approvalRecord = await db.approvalRecord.findUnique({
@@ -1804,7 +1736,7 @@ export async function editBooking(data: unknown) {
             ...newStepOps,
             db.clientAgreement.updateMany({
               where: { bookingId: id },
-              data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+              data: { status: "Pending", signedAt: null, viewedAt: null, token: newToken, accessCode: newAccessCode },
             }),
           ]);
         }
@@ -1813,6 +1745,8 @@ export async function editBooking(data: unknown) {
 
     // If signatureSales was provided without a material change (signature-only save
     // from SalesSignatureContent in the continue flow), update the current sales step.
+    // The sales rep signs the front "user" step (approverType "user", stepOrder 0 —
+    // see lib/approval-flows.ts); there is no "sales" approverType.
     if (!hasMaterialChange && rest.signatureSales) {
       const approvalRecord = await db.approvalRecord.findUnique({
         where: { module_entityId: { module: "booking", entityId: id } },
@@ -1822,7 +1756,7 @@ export async function editBooking(data: unknown) {
         await db.approvalRecordStep.updateMany({
           where: {
             recordId: approvalRecord.id,
-            approverType: "sales",
+            approverType: "user",
             revisionId: booking.currentRevisionId ?? undefined,
           },
           data: {
@@ -1960,7 +1894,9 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
       console.error("[updateBookingSignature] revision snapshot refresh failed:", e);
     }
 
-    // Only update the approval step when the caller is the sales PIC and provides a signature.
+    // Only update the approval step when the caller is the sales PIC and provides a
+    // signature. The sales rep signs the front "user" step (approverType "user",
+    // stepOrder 0 — see lib/approval-flows.ts); there is no "sales" approverType.
     if (signatureSales) {
       const approvalRecord = await db.approvalRecord.findUnique({
         where: { module_entityId: { module: "booking", entityId: id } },
@@ -1970,7 +1906,7 @@ export async function updateBookingSignature(data: unknown): Promise<{ success: 
         await db.approvalRecordStep.updateMany({
           where: {
             recordId: approvalRecord.id,
-            approverType: "sales",
+            approverType: "user",
             revisionId: booking.currentRevisionId ?? undefined,
           },
           data: {

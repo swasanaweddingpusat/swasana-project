@@ -2,6 +2,23 @@ import { prisma } from "./_client";
 import { resolveApprovalSteps } from "../../lib/approval-flows";
 
 export async function seedPackages() {
+  // GUARD: this seeder is a full teardown+rebuild — it wipes ALL bookings (required
+  // because booking.packageId is onDelete: Restrict) then drops & re-creates packages
+  // with fresh IDs. On a DB that already holds real data (e.g. cloned from staging)
+  // that destroys bookings and orphans every packageId FK. Only run the destructive
+  // reset on a fresh DB, or when explicitly forced via SEED_RESET_BOOKINGS=true.
+  const forceReset = process.env.SEED_RESET_BOOKINGS === "true";
+  if (!forceReset) {
+    const existingPackages = await prisma.package.count();
+    if (existingPackages > 0) {
+      console.log(
+        `⏭️  seedPackages skipped — ${existingPackages} packages already exist. ` +
+          `Set SEED_RESET_BOOKINGS=true to force a full reseed (this WILL delete all bookings).`,
+      );
+      return;
+    }
+  }
+
   // Truncate approval data for packages & bookings (steps cascade from records)
   const { count: approvalSteps } = await prisma.approvalRecordStep.deleteMany({
     where: { record: { module: { in: ["package", "booking"] } } },

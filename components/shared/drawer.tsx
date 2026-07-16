@@ -32,6 +32,9 @@ interface DrawerProps {
   backButtonLabel?: string;
   headerActions?: React.ReactNode;
   childrenClassName?: string;
+  /** Horizontal padding of the sheet body (header + content). Defaults to "px-5".
+   *  Pass a tighter value (e.g. "px-2") for content-dense drawers that need width. */
+  paddingX?: string;
 }
 
 export function Drawer({
@@ -50,6 +53,7 @@ export function Drawer({
   backButtonLabel = "Back",
   headerActions,
   childrenClassName,
+  paddingX = "px-5",
 }: DrawerProps) {
   return (
     <Sheet
@@ -67,7 +71,8 @@ export function Drawer({
     >
       <SheetContent
         className={cn(
-          `flex py-6 px-5 flex-col gap-6`,
+          `flex py-6 flex-col gap-6`,
+          paddingX,
           maxWidth.includes("max-w-full")
             ? "inset-0 max-w-none! w-full! border-none"
             : `w-screen! ${maxWidth}`

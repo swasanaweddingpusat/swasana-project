@@ -68,6 +68,8 @@ export interface ARTermin {
   ackStatus: ARTerminAckStatus;
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
+  /** Bank tujuan transfer, e.g. "BCA 149" (bankName + 3 digit akhir rekening). Null = belum di-set. */
+  viaRekening: string | null;
 }
 
 export type ARBookingStatus = "Pending" | "Uploaded" | "Confirmed" | "Rejected" | "Canceled" | "Lost";
@@ -91,6 +93,44 @@ export interface ARBooking {
   jatuhTempo: string;
   statusTermin: ARTerminStatus;
   termins: ARTermin[];
+}
+
+// ─── AR Aging & Client (UI-derived, no new query) ────────────────────────────
+
+/** Aging bucket keys — derived client-side from ARTermin.agingDays. */
+export type AgingBucketKey = "not_due" | "d1_30" | "d31_60" | "d61_90" | "d90_plus";
+
+/** One termin flattened into the aging report table. */
+export interface AgingRow {
+  bookingId: string;
+  terminId: string;
+  client: string;
+  noPo: string;
+  terminName: string;
+  dueDate: string;
+  outstanding: number;
+  agingDays: number | null;
+  bucket: AgingBucketKey;
+  salesPicName: string;
+  venueId: string;
+  salesId: string;
+}
+
+/** Aggregated AR per customer for the Client page. */
+export interface ARClientRow {
+  client: string;
+  bookingCount: number;
+  totalKontrak: number;
+  dibayar: number;
+  sisa: number;
+  bookings: {
+    id: string;
+    noPo: string;
+    namaEvent: string;
+    totalPrice: number;
+    outstanding: number;
+    statusTermin: ARTerminStatus;
+  }[];
 }
 
 // ─── AP Types (Accounts Payable) ─────────────────────────────────────────────
@@ -169,3 +209,10 @@ export interface APFilters {
   search?: string;
   dateRange?: { from?: string; to?: string };
 }
+
+// ─── Ledger Types ─────────────────────────────────────────────────────────────
+//
+// Cashbook (buku besar cash-in) sekarang pakai DB nyata — tipe read-model-nya
+// hidup di lib/queries/ledger.ts (`LedgerRow`, `LedgerActivity`, dst). Blok tipe
+// dummy lama (LedgerEntry/LedgerSummary/LedgerFilters/…) sudah dihapus pada
+// cutover Fase 4; jangan tambahkan tipe Ledger di sini lagi.

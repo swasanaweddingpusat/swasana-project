@@ -394,42 +394,30 @@ export async function getGroupsWithPerformance(
         ${dateFilter}
       GROUP BY b."salesId"
     `,
-    // ── Query 3: DB-level financial aggregation per salesId ──────────────────
-    // Piutang logic (mirrors computeTopFinancials):
-    //   paid + acknowledged  → totalRevenue
-    //   paid + not acked     → piutang (full amount)
-    //   partial              → piutang = amount - SUM(partial_payments.amount)
-    //   unpaid               → piutang (full amount)
-    //   refund               → excluded from both
-    // Note: piutang filter includes all active booking statuses (non-Canceled, non-draft)
-    //       because outstanding amounts can exist on any status.
+    // ── Query 3: DB-level financial aggregation per salesId (pure-derived §Fase 5) ─
+    // Raw SQL used here instead of JS helper (computeTopFinancials) to collapse the
+    // aggregation into a single DB round-trip. "Terbayar" per termin HANYA dari Ledger
+    // cash-in ter-ack (kolom TOP.paymentStatus/ackStatus sudah di-drop).
+    //   effectiveKas = LEAST(Σ ledger_paid, t.amount)   → total_revenue (kas)
+    //   piutang      = GREATEST(0, t.amount - effectiveKas)
     db.$queryRaw<FinancialAggRow[]>`
       SELECT
         b."salesId"  AS sales_id,
         COALESCE(SUM(
-          CASE
-            WHEN t."paymentStatus" = 'refund'                                   THEN 0
-            WHEN t."paymentStatus" = 'paid' AND t."ackStatus" = 'acknowledged'  THEN 0
-            WHEN t."paymentStatus" = 'paid'                                     THEN t.amount
-            WHEN t."paymentStatus" = 'partial'
-              THEN GREATEST(0, t.amount - COALESCE(pp_sum.partial_paid, 0))
-            WHEN t."paymentStatus" = 'unpaid'                                   THEN t.amount
-            ELSE 0
-          END
+          GREATEST(0, t.amount - LEAST(COALESCE(ledger_sum.ledger_paid, 0), t.amount))
         ), 0)        AS piutang,
         COALESCE(SUM(
-          CASE
-            WHEN t."paymentStatus" = 'paid' AND t."ackStatus" = 'acknowledged'  THEN t.amount
-            ELSE 0
-          END
+          LEAST(COALESCE(ledger_sum.ledger_paid, 0), t.amount)
         ), 0)        AS total_revenue
       FROM bookings b
       JOIN term_of_payments t ON t."bookingId" = b.id
       LEFT JOIN (
-        SELECT pp."termId", SUM(pp.amount) AS partial_paid
-        FROM partial_payments pp
-        GROUP BY pp."termId"
-      ) pp_sum ON pp_sum."termId" = t.id
+        SELECT pa."termId", SUM(pa.amount) AS ledger_paid
+        FROM payment_allocations pa
+        JOIN ledgers l ON l.id = pa."ledgerId"
+        WHERE l.direction = 'in' AND l."ackStatus" = 'acknowledged' AND l."voidedAt" IS NULL
+        GROUP BY pa."termId"
+      ) ledger_sum ON ledger_sum."termId" = t.id
       WHERE
         b."recordStatus" = 'saved'
         AND b."salesId" = ANY(${allSalesIds})

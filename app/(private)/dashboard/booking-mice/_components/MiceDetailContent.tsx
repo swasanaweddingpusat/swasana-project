@@ -54,15 +54,6 @@ function TermRow({ term }: { term: MiceTerm }) {
         <span className="text-xs text-muted-foreground">
           Jatuh tempo: {fmtDate(term.dueDate)}
         </span>
-        <span
-          className={
-            term.paymentStatus === "Paid"
-              ? "text-xs font-medium text-foreground"
-              : "text-xs text-muted-foreground"
-          }
-        >
-          {term.paymentStatus}
-        </span>
       </div>
     </div>
   );

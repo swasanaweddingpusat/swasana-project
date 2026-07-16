@@ -6,12 +6,13 @@ export type MiceBookingStatus =
   | "Canceled"
   | "Lost";
 
+// Fase 5: TOP = jadwal murni (nama/nominal/tanggal). Status pembayaran dilacak
+// di Cashbook (Ledger), bukan lagi per termin.
 export interface MiceTerm {
   id: string;
   name: string;
   amount: number;
   dueDate: string; // ISO
-  paymentStatus: string;
 }
 
 export interface MiceBookingItem {

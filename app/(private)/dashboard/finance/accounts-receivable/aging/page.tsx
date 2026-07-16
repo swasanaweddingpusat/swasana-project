@@ -1,21 +1,64 @@
-import { ClockCircle } from "@solar-icons/react";
+"use client";
+
+import { useMemo, useState } from "react";
+import { useAR } from "@/hooks/use-ar";
+import { ARFilterBar } from "../_components/ar-filter-bar";
+import { ARAgingView } from "../_components/ar-aging-view";
+import type { ARFilters } from "@/types/finance";
 
 export default function AccountsReceivableAgingPage() {
+  const { data: arResult, isLoading } = useAR();
+  const [filters, setFilters] = useState<ARFilters>({});
+
+  const bookings = useMemo(() => arResult?.data ?? [], [arResult?.data]);
+
+  const venues = useMemo(() => {
+    const seen = new Map<string, string>();
+    bookings.forEach((b) => {
+      if (b.venueId && b.namaEvent !== "-") seen.set(b.venueId, b.namaEvent);
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [bookings]);
+
+  const salesPics = useMemo(() => {
+    const seen = new Map<string, string>();
+    bookings.forEach((b) => {
+      if (b.salesId && b.salesPicName !== "-") seen.set(b.salesId, b.salesPicName);
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [bookings]);
+
+  const filtered = useMemo(() => {
+    const q = filters.search?.trim().toLowerCase();
+    return bookings.filter((b) => {
+      if (filters.status && b.statusTermin !== filters.status) return false;
+      if (filters.venue && b.venueId !== filters.venue) return false;
+      if (filters.salesPic && b.salesId !== filters.salesPic) return false;
+      if (filters.dateRange?.from && b.customerDate < filters.dateRange.from) return false;
+      if (filters.dateRange?.to && b.customerDate > filters.dateRange.to) return false;
+      if (q) {
+        const haystack = `${b.customerEvent} ${b.namaEvent} ${b.noPo}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [bookings, filters]);
+
   return (
-    <div className="flex flex-col gap-4 py-6 px-2">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-base font-bold text-foreground">Accounts Receivable — Aging</h1>
+        <h1 className="text-base font-bold text-foreground">Aging Report</h1>
+        <span className="text-xs text-muted-foreground">{filtered.length} booking</span>
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card p-12 text-center">
-        <ClockCircle weight="BoldDuotone" className="h-10 w-10 text-muted-foreground" />
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-foreground">Aging Report</p>
-          <p className="text-sm text-muted-foreground">
-            Halaman ini sedang disiapkan.
-          </p>
-        </div>
-      </div>
+      <ARFilterBar
+        filters={filters}
+        onFiltersChange={(f) => setFilters(f)}
+        venues={venues}
+        salesPics={salesPics}
+      />
+
+      <ARAgingView bookings={filtered} loading={isLoading} />
     </div>
   );
 }
