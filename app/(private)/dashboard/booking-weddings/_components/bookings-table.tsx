@@ -39,7 +39,6 @@ import { BookingCommentPanel } from "./booking-comment-panel";
 import { BookingTCDrawer } from "./booking-tc-drawer";
 import { SetHargaBookingDrawer } from "./SetHargaBookingDrawer";
 import { RevisionHistoryDrawer } from "./RevisionHistoryDrawer";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useUnreadCommentCounts } from "@/hooks/use-unread-comment-counts";
 import { fetchBookingComments } from "@/services/booking-comment-service";
 import { fetchBookingDetail } from "@/services/booking-detail-service";
@@ -1580,27 +1579,62 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         onPreviewPO={previewPO}
       />
 
-      {/* Sync Paket dari Master — tarik ulang data paket terbaru ke snapshot booking */}
-      <ConfirmDialog
-        open={!!syncPackageTarget}
-        onOpenChange={(o) => { if (!o) setSyncPackageTarget(null); }}
-        title="Sync paket dari master?"
-        description={
-          "Data paket (nama, harga, item, T&C) akan ditarik ulang dari data master terbaru dan menimpa " +
-          "snapshot booking ini. Setelan takeout tetap dipertahankan. Ini membuat versi baru, me-reset " +
-          "approval ke Pending, dan klien harus tanda tangan ulang." +
-          " ⚠️ Jika booking sudah punya pembayaran (cash-in ter-ack) dan harga berubah, cek ulang cicilan (TOP) via Set Harga."
-        }
-        confirmLabel={syncPackageMut.isPending ? "Memproses..." : "Ya, sync sekarang"}
-        onConfirm={async () => {
-          if (!syncPackageTarget) return;
-          const res = await syncPackageMut.mutateAsync({ bookingId: syncPackageTarget.id });
-          if (!res.success) { toast.error(res.error ?? "Gagal sync paket."); return; }
-          toast.success("Paket berhasil di-sync dari master");
-          invalidateDetail(syncPackageTarget.id);
-          setSyncPackageTarget(null);
-        }}
-      />
+      {/* Sync Paket dari Master — tarik ulang data paket terbaru ke snapshot booking.
+          Poin-poin apa yang terjadi disusun kondisional: sebelum klien TTD approval
+          tidak direset (parity Edit Booking), sesudah TTD baru reset + TTD ulang. */}
+      <AlertDialog open={!!syncPackageTarget} onOpenChange={(o) => { if (!o) setSyncPackageTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sync paket dari master?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isi paket booking <strong>{syncPackageTarget?.snapCustomer?.name ?? "ini"}</strong> akan ditarik ulang dari data master terbaru. Yang akan terjadi:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <ol className={cn("space-y-2.5", "rounded-xl", "border", "border-border", "bg-muted/30", "p-4")}>
+            {(syncPackageTarget?.snapshotFrozenAt
+              ? [
+                  "Data paket (nama, harga, item, dan T&C) ditarik ulang dari master terbaru dan menimpa isi booking ini.",
+                  "Setelan takeout (harga jual custom per kategori) tetap dipertahankan.",
+                  "Dibuat revisi baru dan approval di-reset ke Pending — perlu approval ulang dari awal.",
+                  "Persetujuan klien dibatalkan; klien harus tanda tangan ulang kontraknya.",
+                  "⚠️ Jika harga berubah dan booking sudah punya pembayaran, cek ulang cicilan (TOP) lewat Set Harga.",
+                ]
+              : [
+                  "Data paket (nama, harga, item, dan T&C) ditarik ulang dari master terbaru dan menimpa isi booking ini.",
+                  "Setelan takeout (harga jual custom per kategori) tetap dipertahankan.",
+                  "Approval yang sudah berjalan (Manager/Finance) TIDAK direset — tetap seperti sekarang.",
+                  "Booking belum ditandatangani klien, jadi tidak dibuat revisi baru dan klien tidak perlu tanda tangan ulang.",
+                  "⚠️ Jika harga berubah dan booking sudah punya pembayaran, cek ulang cicilan (TOP) lewat Set Harga.",
+                ]
+            ).map((text, i) => (
+              <li key={i} className={cn("flex", "gap-2.5", "text-sm", "text-muted-foreground")}>
+                <span className={cn("mt-0.5", "flex", "h-5", "w-5", "shrink-0", "items-center", "justify-center", "rounded-full", "bg-primary/10", "text-xs", "font-semibold", "text-primary")}>
+                  {i + 1}
+                </span>
+                <span>{text}</span>
+              </li>
+            ))}
+          </ol>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={syncPackageMut.isPending}
+              onClick={async () => {
+                if (!syncPackageTarget) return;
+                const res = await syncPackageMut.mutateAsync({ bookingId: syncPackageTarget.id });
+                if (!res.success) { toast.error(res.error ?? "Gagal sync paket."); return; }
+                toast.success("Paket berhasil di-sync dari master");
+                invalidateDetail(syncPackageTarget.id);
+                setSyncPackageTarget(null);
+              }}
+            >
+              {syncPackageMut.isPending ? "Memproses..." : "Ya, sync sekarang"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Booking Approval Dialog (from chip) */}
       {approvalDialogTarget && user && (
