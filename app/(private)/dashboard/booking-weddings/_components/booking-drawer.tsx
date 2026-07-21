@@ -1375,14 +1375,23 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         if (p.evidenceFile) {
           const fd = new FormData();
           fd.append("file", p.evidenceFile);
+          // User sengaja melampirkan bukti — kalau upload gagal JANGAN diam-diam
+          // lanjut tanpa bukti. Tampilkan alasannya (403 izin / 413 file kegedean /
+          // 500 storage) lalu batalkan finalize biar tidak ada pembayaran tercatat
+          // tanpa bukti yang dikira sukses.
           try {
             const up = await fetch("/api/upload/booking-fee-evidence", { method: "POST", body: fd });
             if (up.ok) {
               const d = (await up.json()) as { key?: string };
               evidence = d.key ?? null;
+            } else {
+              const d = (await up.json().catch(() => ({}))) as { error?: string };
+              toast.error(d.error ?? `Gagal upload bukti (${up.status}).`);
+              return;
             }
           } catch {
-            // non-fatal: lanjut tanpa bukti bayar
+            toast.error("Gagal upload bukti — periksa koneksi lalu coba lagi.");
+            return;
           }
         }
         // Greedy allocation over the selected terms (in selection order).
