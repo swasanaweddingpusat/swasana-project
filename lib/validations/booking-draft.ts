@@ -210,10 +210,12 @@ export const finalizeDraftSchema = z.object({
             z.object({
               sortOrder: z.coerce.number().int(),
               amount: z.coerce.number().int().positive(),
+              /** Tampilkan porsi alokasi ini (per termin) di Summary Payment PO PDF. */
+              showInPo: z.boolean().default(false),
             })
           )
           .default([]),
-        /** Tampilkan pembayaran ini di Summary Payment PO PDF. Default OFF. */
+        /** DEPRECATED — flag PO kini per-alokasi. Dipertahankan utk kompat payload lama. */
         showInPo: z.boolean().default(false),
       })
     )

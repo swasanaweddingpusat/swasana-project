@@ -244,6 +244,100 @@ export async function updatePackage(id: string, data: unknown): Promise<
   }
 }
 
+export async function duplicatePackage(id: string): Promise<
+  { success: true; data: { id: string; packageName: string } } | { success: false; error: string }
+> {
+  const { session, error } = await requirePermission({ module: "package", action: "create" });
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`pkg-duplicate:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    const source = await db.package.findUnique({
+      where: { id },
+      select: {
+        packageName: true,
+        venueId: true,
+        notes: true,
+        pax: true,
+        margin: true,
+        sellingPrice: true,
+        termAndCondition: true,
+        categoryPrices: { select: { categoryId: true, categoryName: true, basePrice: true, sortOrder: true, isShow: true } },
+        vendorItems: { select: { categoryId: true, categoryName: true, itemText: true, sortOrder: true } },
+        internalItems: { select: { itemName: true, itemDescription: true, sortOrder: true } },
+      },
+    });
+    if (!source) return { success: false, error: "Package tidak ditemukan." };
+
+    const newId = crypto.randomUUID();
+    const newName = `${source.packageName} (Copy)`;
+
+    // Some legacy rows carry a categoryId pointing to a Category that no longer
+    // exists (orphaned FK). Re-copying it verbatim trips the FK constraint, so
+    // resolve which categoryIds are still live and null out the rest — matching
+    // the schema's onDelete: SetNull semantics. categoryName is kept for display.
+    const referencedCategoryIds = [
+      ...source.categoryPrices.map((c) => c.categoryId),
+      ...source.vendorItems.map((v) => v.categoryId),
+    ].filter((cid): cid is string => cid !== null);
+    const liveCategories = referencedCategoryIds.length
+      ? await db.category.findMany({ where: { id: { in: referencedCategoryIds } }, select: { id: true } })
+      : [];
+    const liveCategoryIds = new Set(liveCategories.map((c) => c.id));
+    const safeCategoryId = (cid: string | null): string | null => (cid && liveCategoryIds.has(cid) ? cid : null);
+
+    // Copy as a fresh draft — no ApprovalRecord created, so approvers aren't
+    // notified until the user reviews & submits the duplicate. Unavailable until approved.
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      db.package.create({
+        data: {
+          id: newId,
+          packageName: newName,
+          venueId: source.venueId,
+          notes: source.notes,
+          pax: source.pax,
+          margin: source.margin,
+          sellingPrice: source.sellingPrice,
+          termAndCondition: source.termAndCondition,
+          approvalStatus: "draft",
+          available: false,
+        },
+      }),
+      ...source.categoryPrices.map((c) =>
+        db.packageCategoryPrice.create({
+          data: { packageId: newId, categoryId: safeCategoryId(c.categoryId), categoryName: c.categoryName, basePrice: c.basePrice, sortOrder: c.sortOrder, isShow: c.isShow },
+        })
+      ),
+      ...source.vendorItems.map((v) =>
+        db.packageVendorItem.create({
+          data: { packageId: newId, categoryId: safeCategoryId(v.categoryId), categoryName: v.categoryName, itemText: v.itemText, sortOrder: v.sortOrder },
+        })
+      ),
+      ...source.internalItems.map((it) =>
+        db.packageInternalItem.create({
+          data: { packageId: newId, itemName: it.itemName, itemDescription: it.itemDescription, sortOrder: it.sortOrder },
+        })
+      ),
+    ];
+
+    await db.$transaction(ops);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "packages.duplicate",
+      entityType: "package",
+      entityId: newId,
+      description: `Duplicated package "${source.packageName}" → "${newName}"`,
+    });
+
+    revalidateTag("packages", "max");
+    return { success: true, data: { id: newId, packageName: newName } };
+  } catch (e) {
+    console.error("[duplicatePackage]", e);
+    return { success: false, error: "Terjadi kesalahan." };
+  }
+}
+
 export async function deletePackage(id: string): Promise<
   { success: true } | { success: false; error: string }
 > {

@@ -18,6 +18,7 @@ import {
   UploadMinimalistic,
   CardReceive,
   Link as LinkIcon,
+  Pen,
   TagPrice,
   TrashBinTrash,
 } from "@solar-icons/react";
@@ -34,11 +35,11 @@ import {
 import { useActivePromos, computePromoDiscount } from "@/hooks/use-active-promos";
 import { computeAllocationPreview } from "@/lib/payment-allocation";
 import { cn } from "@/lib/utils";
-import { createCashIn, deleteCashIn } from "@/actions/ledger";
+import { createCashIn, deleteCashIn, updateCashIn } from "@/actions/ledger";
 import { useQueryClient } from "@tanstack/react-query";
 import { getBookingFinanceDetailClient } from "@/services/booking-finance-service";
 import { useBookingFinanceDetail } from "@/hooks/use-booking-finance-detail";
-import { useToggleCashInShowInPo } from "@/hooks/use-ledger";
+import { useToggleAllocationShowInPo } from "@/hooks/use-ledger";
 import { fmtRp, type FinanceTerm } from "./edit-finance-shared";
 import type { BookingCashIn } from "@/lib/queries/ledger";
 
@@ -62,21 +63,26 @@ interface PaymentContentProps {
 
 /** Alokasi GROSS greedy ke termin terpilih (urut = sortOrder fetch). Tiap termin
  *  diisi penuh sampai budget habis; termin terakhir bisa parsial. Server tetap
- *  jadi guard final untuk over-allocation. */
+ *  jadi guard final untuk over-allocation. `poTermIds` = termin yang porsinya
+ *  ditampilkan di Summary PO (per-alokasi showInPo). `coveredOf` = nominal termin
+ *  yang sudah tertutup cash-in LAIN (non-void, exclude yang sedang diedit) — jadi
+ *  sisa tagihan dihitung konsisten dengan picker (bukan acked-only `t.paid`). */
 function buildAllocations(
   gross: number,
   selectedIds: string[],
   terms: FinanceTerm[],
-): { termId: string; amount: number }[] {
+  poTermIds: string[],
+  coveredOf: (termId: string) => number,
+): { termId: string; amount: number; showInPo: boolean }[] {
   const selected = terms.filter((t) => selectedIds.includes(t.id));
-  const out: { termId: string; amount: number }[] = [];
+  const out: { termId: string; amount: number; showInPo: boolean }[] = [];
   let budget = gross;
   for (const t of selected) {
     if (budget <= 0) break;
-    const remaining = Math.max(0, t.amount - t.paid);
+    const remaining = Math.max(0, t.amount - coveredOf(t.id));
     const amount = Math.min(remaining, budget);
     if (amount > 0) {
-      out.push({ termId: t.id, amount });
+      out.push({ termId: t.id, amount, showInPo: poTermIds.includes(t.id) });
       budget -= amount;
     }
   }
@@ -90,6 +96,20 @@ function todayISO(): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+/** Nominal satu termin yang sudah tertutup oleh cash-in LAIN (semua non-void:
+ *  pending + acked). Baca langsung dari PaymentAllocation.amount (GROSS) — bukan
+ *  acked-only `t.paid` — biar termin yang baru dibayar tapi belum diverifikasi
+ *  Finance TETAP terhitung terkunci di picker (parity dengan create flow). */
+function coveredByOtherCashIns(termId: string, cashIns: BookingCashIn[]): number {
+  let covered = 0;
+  for (const ci of cashIns) {
+    for (const a of ci.allocations) {
+      if (a.termId === termId) covered += a.amount;
+    }
+  }
+  return covered;
+}
+
 function PaymentContent({
   bookingId,
   terms,
@@ -99,18 +119,23 @@ function PaymentContent({
   onSaved,
 }: PaymentContentProps): React.ReactElement {
   const qc = useQueryClient();
-  const toggleShowInPoMutation = useToggleCashInShowInPo(bookingId);
+  const toggleAllocPoMutation = useToggleAllocationShowInPo(bookingId);
   const promos = useActivePromos();
 
-  // ── Add-payment form state ────────────────────────────────────────────────
+  // ── Add/edit-payment form state ───────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
+  /** null = mode tambah; berisi ledgerId = mode edit cash-in pending. */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [occurredAt, setOccurredAt] = useState(todayISO());
   const [amount, setAmount] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  /** S3 key bukti lama saat edit — dipertahankan kalau user tak upload ulang. */
+  const [existingEvidence, setExistingEvidence] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
-  const [showInPo, setShowInPo] = useState(false);
+  /** Termin yang porsinya di-toggle tampil di PO (subset selectedTermIds). */
+  const [poTermIds, setPoTermIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [programId, setProgramId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookingCashIn | null>(null);
@@ -120,11 +145,53 @@ function PaymentContent({
 
   const promoSelected = promos.find((p) => p.id === programId) ?? null;
 
+  // Coverage termin dihitung dari SEMUA cash-in non-void (pending + acked), KECUALI
+  // yang sedang diedit — biar termin yang sudah dibayar penuh tapi belum diverifikasi
+  // Finance tetap terkunci di picker (bukan cuma acked-only `t.paid`). Parity create.
+  const otherCashIns = editingId ? cashIns.filter((ci) => ci.id !== editingId) : cashIns;
+  const coveredOf = (id: string): number => coveredByOtherCashIns(id, otherCashIns);
+
   // Preview alokasi greedy — urut sortOrder (sama dengan buildAllocations submit).
   const orderedSelected = terms
     .filter((t) => selectedTermIds.includes(t.id))
-    .map((t) => ({ id: t.id, remaining: Math.max(0, t.amount - t.paid) }));
+    .map((t) => ({ id: t.id, remaining: Math.max(0, t.amount - coveredOf(t.id)) }));
   const alloc = computeAllocationPreview(orderedSelected, amountNum);
+
+  // Nominal habis teralokasi penuh (tidak ada sisa `lebih`) → termin lain yang
+  // belum terpilih dikunci. Kalau lebih bayar baru bebas kaitkan ke mana saja.
+  const budgetConsumed = amountNum > 0 && alloc.lebih === 0;
+
+  // Termin terpilih yang TIDAK kebagian alokasi (Rp0) padahal masih ada sisa tagihan —
+  // muncul saat nominal diturunkan. Ini yang diblokir; sisa tagihan termin yang kebagian
+  // sebagian (`kurang > 0`) itu WAJAR (cicilan) dan tetap boleh disimpan.
+  const remainingOf = (id: string): number => {
+    const t = terms.find((x) => x.id === id);
+    return t ? Math.max(0, t.amount - coveredOf(id)) : 0;
+  };
+  const unfundedSelected = selectedTermIds.filter(
+    (id) => remainingOf(id) > 0 && (alloc.perTerm.get(id) ?? 0) <= 0,
+  );
+  const hasUnfunded = unfundedSelected.length > 0;
+
+  /** Lepas otomatis termin yang tak kebagian alokasi — dipanggil saat blur field nominal. */
+  function pruneUnfunded(): void {
+    if (amountNum <= 0 || unfundedSelected.length === 0) return;
+    setSelectedTermIds((prev) => prev.filter((id) => !unfundedSelected.includes(id)));
+    // Termin yang dilepas tak lagi bisa tampil di PO — buang porsi PO-nya juga.
+    setPoTermIds((prev) => prev.filter((id) => !unfundedSelected.includes(id)));
+  }
+
+  // Bukti bayar wajib: file baru dilampirkan ATAU (saat edit) bukti lama masih ada.
+  const hasEvidence = !!evidenceFile || !!existingEvidence;
+  // Submit boleh selama nominal ter-alokasi ke SEMUA termin terpilih (tiap termin
+  // kebagian > 0). Sisa tagihan termin (cicilan) wajar — TIDAK memblokir. Yang blokir:
+  // termin terpilih yang kebagian Rp0 (hasUnfunded). Bukti bayar WAJIB.
+  const canSubmitForm =
+    amountNum > 0 &&
+    !!paymentMethodId &&
+    selectedTermIds.length > 0 &&
+    !hasUnfunded &&
+    hasEvidence;
 
   // Booking fee = termin pertama; tertutup kalau paid > 0 atau ada cash-in ke situ.
   const firstTerm = terms[0];
@@ -134,18 +201,45 @@ function PaymentContent({
       cashIns.some((ci) => ci.allocations.some((a) => a.termId === firstTerm.id)));
 
   function resetForm(): void {
+    setEditingId(null);
     setOccurredAt(todayISO());
     setAmount("");
     setPaymentMethodId("");
     setSelectedTermIds([]);
     setEvidenceFile(null);
+    setExistingEvidence(null);
     setNotes("");
-    setShowInPo(false);
+    setPoTermIds([]);
     setProgramId(null);
   }
 
+  /** Buka form dalam mode edit dengan data cash-in pending di-prefill. */
+  function openEdit(ci: BookingCashIn): void {
+    setEditingId(ci.id);
+    setOccurredAt(ci.occurredAt.slice(0, 10));
+    setAmount(String(ci.amount));
+    setPaymentMethodId(ci.paymentMethodId ?? "");
+    setSelectedTermIds(ci.allocations.map((a) => a.termId));
+    setEvidenceFile(null);
+    setExistingEvidence(ci.evidence);
+    setNotes(ci.notes ?? "");
+    setPoTermIds(ci.allocations.filter((a) => a.showInPo).map((a) => a.termId));
+    setProgramId(ci.discountProgramId);
+    setFormOpen(true);
+  }
+
   function toggleTermSelection(id: string): void {
+    const wasSelected = selectedTermIds.includes(id);
     setSelectedTermIds((prev) =>
+      wasSelected ? prev.filter((v) => v !== id) : [...prev, id],
+    );
+    // Term di-uncheck → porsi PO-nya ikut lepas (poTermIds selalu subset selectedTermIds).
+    if (wasSelected) setPoTermIds((prev) => prev.filter((v) => v !== id));
+  }
+
+  /** Toggle "tampil di PO" satu termin — hanya untuk termin terpilih & kebagian alokasi. */
+  function togglePoTerm(id: string): void {
+    setPoTermIds((prev) =>
       prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id],
     );
   }
@@ -154,11 +248,16 @@ function PaymentContent({
     if (amountNum <= 0) { toast.error("Jumlah pembayaran wajib diisi."); return; }
     if (!paymentMethodId) { toast.error("Pilih rekening penerima."); return; }
     if (selectedTermIds.length === 0) { toast.error("Pilih minimal satu termin."); return; }
+    if (hasUnfunded) { toast.error("Ada termin yang belum kebagian alokasi. Lepas termin itu atau naikkan nominal."); return; }
+    if (!hasEvidence) { toast.error("Bukti bayar wajib dilampirkan."); return; }
 
     setSubmitting(true);
 
-    // Upload bukti dulu (kalau ada) — gagal upload non-fatal.
-    let evidenceKey: string | null = null;
+    // Upload bukti baru (kalau ada). User sengaja melampirkan bukti, jadi kalau
+    // upload gagal JANGAN diam-diam simpan tanpa bukti — tampilkan alasannya
+    // (403 izin / 413 file kegedean / 500 storage) lalu batalkan submit. Saat edit
+    // tanpa upload ulang, pertahankan bukti lama (existingEvidence).
+    let evidenceKey: string | null = existingEvidence;
     if (evidenceFile) {
       const fd = new FormData();
       fd.append("file", evidenceFile);
@@ -166,31 +265,53 @@ function PaymentContent({
         const up = await fetch("/api/upload/booking-fee-evidence", { method: "POST", body: fd });
         if (up.ok) {
           const d = (await up.json()) as { key?: string };
-          evidenceKey = d.key ?? null;
+          evidenceKey = d.key ?? evidenceKey;
+        } else {
+          const d = (await up.json().catch(() => ({}))) as { error?: string };
+          toast.error(d.error ?? `Gagal upload bukti (${up.status}).`);
+          setSubmitting(false);
+          return;
         }
       } catch {
-        // non-fatal
+        toast.error("Gagal upload bukti — periksa koneksi lalu coba lagi.");
+        setSubmitting(false);
+        return;
       }
     }
 
-    const allocations = buildAllocations(amountNum, selectedTermIds, terms);
+    // Porsi PO hanya valid untuk termin yang benar-benar terpilih & kebagian alokasi >0.
+    const poTerms = poTermIds.filter(
+      (id) => selectedTermIds.includes(id) && (alloc.perTerm.get(id) ?? 0) > 0,
+    );
+    const allocations = buildAllocations(amountNum, selectedTermIds, terms, poTerms, coveredOf);
     const discountAmount = computePromoDiscount(amountNum, promoSelected);
-    const result = await createCashIn({
-      bookingId,
-      occurredAt: new Date(occurredAt).toISOString(),
-      amount: amountNum,
-      paymentMethodId: paymentMethodId || null,
-      discountProgramId: programId,
-      discountAmount,
-      evidence: evidenceKey,
-      notes: notes.trim() || null,
-      showInPo,
-      allocations,
-    });
+    const result = editingId
+      ? await updateCashIn({
+          ledgerId: editingId,
+          occurredAt: new Date(occurredAt).toISOString(),
+          amount: amountNum,
+          paymentMethodId: paymentMethodId || null,
+          discountProgramId: programId,
+          discountAmount,
+          evidence: evidenceKey,
+          notes: notes.trim() || null,
+          allocations,
+        })
+      : await createCashIn({
+          bookingId,
+          occurredAt: new Date(occurredAt).toISOString(),
+          amount: amountNum,
+          paymentMethodId: paymentMethodId || null,
+          discountProgramId: programId,
+          discountAmount,
+          evidence: evidenceKey,
+          notes: notes.trim() || null,
+          allocations,
+        });
     setSubmitting(false);
 
     if (!result.success) { toast.error(result.error); return; }
-    toast.success("Pembayaran berhasil dicatat");
+    toast.success(editingId ? "Pembayaran berhasil diperbarui" : "Pembayaran berhasil dicatat");
     resetForm();
     setFormOpen(false);
     void qc.invalidateQueries({ queryKey: ["bookings"] });
@@ -233,6 +354,8 @@ function PaymentContent({
 
   const s3Base = (process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "").replace(/\/$/, "");
   const termName = (termId: string): string => terms.find((t) => t.id === termId)?.name ?? "Termin";
+  // Sembunyikan cash-in yang sedang diedit dari daftar (form-nya sudah di atas).
+  const visibleCashIns = editingId ? cashIns.filter((ci) => ci.id !== editingId) : cashIns;
 
   return (
     <div className="flex h-full flex-col">
@@ -261,7 +384,7 @@ function PaymentContent({
               size="sm"
               variant="outline"
               className="gap-1.5 rounded-full"
-              onClick={() => setFormOpen(true)}
+              onClick={() => { resetForm(); setFormOpen(true); }}
             >
               <AddCircle weight="BoldDuotone" className="size-4" />
               Tambah Pembayaran
@@ -274,7 +397,7 @@ function PaymentContent({
           <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
             <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <CardReceive weight="BoldDuotone" className="size-3.5" />
-              Pembayaran Baru
+              {editingId ? "Edit Pembayaran" : "Pembayaran Baru"}
             </p>
 
             {/* Tanggal */}
@@ -299,6 +422,7 @@ function PaymentContent({
                   value={amountNum ? amountNum.toLocaleString("id-ID") : ""}
                   placeholder="0"
                   onChange={(e) => setAmount(e.target.value)}
+                  onBlur={pruneUnfunded}
                   className="h-9 border-0 bg-transparent px-0 tabular-nums shadow-none focus-visible:ring-0"
                 />
               </div>
@@ -341,58 +465,96 @@ function PaymentContent({
               <div className="flex flex-col gap-1.5">
                 {terms.map((t) => {
                   const selected = selectedTermIds.includes(t.id);
-                  const remaining = Math.max(0, t.amount - t.paid);
+                  const remaining = Math.max(0, t.amount - coveredOf(t.id));
                   const lunas = remaining <= 0;
                   const allocated = selected ? (alloc.perTerm.get(t.id) ?? 0) : 0;
                   const partial = selected && allocated > 0 && allocated < remaining;
                   const unfunded = selected && allocated <= 0;
+                  // Nominal habis → termin lain yang belum dipilih dikunci.
+                  const budgetLocked = budgetConsumed && !selected;
+                  const disabled = lunas || budgetLocked;
+                  // Toggle PO cuma relevan buat termin terpilih yang kebagian alokasi >0.
+                  const poEligible = selected && allocated > 0;
+                  const poOn = poTermIds.includes(t.id);
                   return (
-                    <button
+                    <div
                       key={t.id}
-                      type="button"
-                      disabled={lunas}
-                      onClick={() => toggleTermSelection(t.id)}
-                      aria-pressed={selected}
                       className={cn(
-                        "flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
-                        lunas
-                          ? "cursor-not-allowed border-border bg-muted/40 opacity-60"
+                        "overflow-hidden rounded-xl border transition-colors",
+                        disabled
+                          ? "border-border bg-muted/40 opacity-60"
                           : selected
                             ? "border-primary bg-primary/5"
-                            : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40",
+                            : "border-border bg-card",
                       )}
                     >
-                      {selected ? (
-                        <CheckCircle weight="BoldDuotone" className="size-4 shrink-0 text-primary" />
-                      ) : (
-                        <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => toggleTermSelection(t.id)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors",
+                          disabled
+                            ? "cursor-not-allowed"
+                            : selected
+                              ? ""
+                              : "hover:bg-secondary/40",
+                        )}
+                      >
+                        {selected ? (
+                          <CheckCircle weight="BoldDuotone" className="size-4 shrink-0 text-primary" />
+                        ) : (
+                          <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                        )}
+                        <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                          <span className="truncate">{t.name}</span>
+                          {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Lunas</span>}
+                          {budgetLocked && !lunas && (
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
+                          )}
+                          {partial && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
+                              Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
+                            </span>
+                          )}
+                          {unfunded && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                              Belum teralokasi
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          Rp{fmtRp(remaining)}
+                        </span>
+                      </button>
+                      {/* Toggle tampil-di-PO per termin — hanya untuk termin yang kebagian alokasi. */}
+                      {poEligible && (
+                        <div className="flex items-center justify-between gap-2 border-t border-primary/15 bg-background/60 px-3 py-1.5">
+                          <Label
+                            htmlFor={`edit-po-${t.id}`}
+                            className="cursor-pointer text-[11px] text-muted-foreground"
+                          >
+                            Tampilkan porsi ini di PO
+                          </Label>
+                          <Switch
+                            id={`edit-po-${t.id}`}
+                            checked={poOn}
+                            onCheckedChange={() => togglePoTerm(t.id)}
+                          />
+                        </div>
                       )}
-                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
-                        <span className="truncate">{t.name}</span>
-                        {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Lunas</span>}
-                        {partial && (
-                          <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
-                            Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
-                          </span>
-                        )}
-                        {unfunded && (
-                          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-                            Belum teralokasi
-                          </span>
-                        )}
-                      </span>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        Rp{fmtRp(remaining)}
-                      </span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Bukti bayar */}
+            {/* Bukti bayar (wajib) */}
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Bukti Bayar (opsional)</Label>
+              <Label className="text-xs text-muted-foreground">
+                Bukti Bayar <span className="text-destructive">*</span>
+              </Label>
               {evidenceFile ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
                   <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -409,7 +571,7 @@ function PaymentContent({
               ) : (
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground">
                   <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0" />
-                  Upload bukti (JPG/PNG/PDF, maks 10MB)
+                  {existingEvidence ? "Ganti bukti (biarkan untuk pertahankan yang lama)" : "Upload bukti (JPG/PNG/PDF, maks 10MB)"}
                   <input
                     type="file"
                     accept="image/*,application/pdf"
@@ -417,6 +579,12 @@ function PaymentContent({
                     onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
                   />
                 </label>
+              )}
+              {editingId && existingEvidence && !evidenceFile && (
+                <p className="text-[11px] text-muted-foreground">Bukti lama masih tersimpan.</p>
+              )}
+              {!hasEvidence && (
+                <p className="text-[11px] text-destructive">Bukti bayar wajib dilampirkan.</p>
               )}
             </div>
 
@@ -431,14 +599,6 @@ function PaymentContent({
                 rows={2}
                 className="resize-none rounded-xl text-xs"
               />
-            </div>
-
-            {/* Tampilkan di PO */}
-            <div className="flex items-center gap-2">
-              <Switch id="edit-add-show-in-po" checked={showInPo} onCheckedChange={setShowInPo} />
-              <Label htmlFor="edit-add-show-in-po" className="cursor-pointer text-xs text-muted-foreground">
-                Tampilkan di PO
-              </Label>
             </div>
 
             {/* Ringkasan alokasi — Client Bayar / Total Termin / Selisih */}
@@ -457,34 +617,57 @@ function PaymentContent({
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] text-muted-foreground">Selisih</span>
+                  <span className="text-[10px] text-muted-foreground">Sisa Termin</span>
                   <span
                     className={cn(
                       "truncate text-xs font-semibold tabular-nums",
-                      alloc.kurang > 0 && "text-destructive",
+                      alloc.kurang > 0 && "text-foreground",
                       alloc.lebih > 0 && "text-[var(--brand-gold)]",
                       alloc.kurang === 0 && alloc.lebih === 0 && "text-primary",
                     )}
                   >
-                    {alloc.kurang > 0 && `− Rp${fmtRp(alloc.kurang)} (Kurang)`}
+                    {alloc.kurang > 0 && `Rp${fmtRp(alloc.kurang)}`}
                     {alloc.lebih > 0 && `+ Rp${fmtRp(alloc.lebih)} (Lebih)`}
-                    {alloc.kurang === 0 && alloc.lebih === 0 && "Sesuai"}
+                    {alloc.kurang === 0 && alloc.lebih === 0 && "Lunas"}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Feedback selisih — kurang (parsial) / lebih (saldo) */}
-            {selectedTermIds.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
-              <div className="flex items-start gap-2 rounded-xl bg-[var(--brand-gold)]/10 p-2.5 text-xs text-foreground">
-                <DangerTriangle weight="BoldDuotone" className="mt-0.5 size-4 shrink-0 text-[var(--brand-gold)]" />
-                {alloc.kurang > 0 ? (
+            {/* Feedback alokasi — unfunded (blocking, merah) / cicilan (info) / lebih (saldo) */}
+            {selectedTermIds.length > 0 && amountNum > 0 && (hasUnfunded || alloc.kurang > 0 || alloc.lebih > 0) && (
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-xl p-2.5 text-xs",
+                  hasUnfunded
+                    ? "bg-destructive/10 text-destructive"
+                    : alloc.lebih > 0
+                      ? "bg-[var(--brand-gold)]/10 text-foreground"
+                      : "bg-muted text-muted-foreground",
+                )}
+              >
+                <DangerTriangle
+                  weight="BoldDuotone"
+                  className={cn(
+                    "mt-0.5 size-4 shrink-0",
+                    hasUnfunded
+                      ? "text-destructive"
+                      : alloc.lebih > 0
+                        ? "text-[var(--brand-gold)]"
+                        : "text-muted-foreground",
+                  )}
+                />
+                {hasUnfunded ? (
                   <span>
-                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — pembayaran belum menutup seluruh termin terpilih. Termin terakhir dicatat sebagian (pembayaran parsial), sisanya bisa dibayar nanti.
+                    {unfundedSelected.length} termin belum kebagian alokasi — nominal sudah habis sebelum sampai ke situ. Termin itu akan otomatis dilepas, atau naikkan nominal.
+                  </span>
+                ) : alloc.lebih > 0 ? (
+                  <span>
+                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
                   </span>
                 ) : (
                   <span>
-                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
+                    Sisa <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> tetap jadi tagihan termin (cicilan) — pembayaran ini boleh disimpan.
                   </span>
                 )}
               </div>
@@ -505,16 +688,16 @@ function PaymentContent({
                 type="button"
                 className="flex-1 rounded-full"
                 onClick={() => { void handleAddPayment(); }}
-                disabled={submitting}
+                disabled={!canSubmitForm || submitting}
               >
-                {submitting ? "Menyimpan..." : "Simpan Pembayaran"}
+                {submitting ? "Menyimpan..." : editingId ? "Simpan Perubahan" : "Simpan Pembayaran"}
               </Button>
             </div>
           </div>
         )}
 
-        {/* ── Daftar pembayaran tercatat ── */}
-        {cashIns.length === 0 && !formOpen ? (
+        {/* ── Daftar pembayaran tercatat (sembunyikan yang sedang diedit) ── */}
+        {visibleCashIns.length === 0 && !formOpen ? (
           <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-center">
             <CardReceive weight="BoldDuotone" className="mx-auto size-6 text-muted-foreground" />
             <p className="mt-2 text-sm text-muted-foreground">Belum ada pembayaran tercatat.</p>
@@ -522,7 +705,7 @@ function PaymentContent({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {cashIns.map((ci) => (
+            {visibleCashIns.map((ci) => (
               <div key={ci.id} className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -543,28 +726,52 @@ function PaymentContent({
                       {ci.ackStatus === "acknowledged" ? "Terverifikasi" : "Menunggu"}
                     </span>
                     {ci.ackStatus !== "acknowledged" && (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(ci)}
-                        className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
-                        aria-label="Hapus pembayaran"
-                      >
-                        <TrashBinTrash weight="BoldDuotone" className="size-4" />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(ci)}
+                          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          aria-label="Edit pembayaran"
+                        >
+                          <Pen weight="BoldDuotone" className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(ci)}
+                          className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
+                          aria-label="Hapus pembayaran"
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="size-4" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
 
-                {/* Termin yang ditutup */}
+                {/* Termin yang ditutup — tiap alokasi punya toggle "tampil di PO" sendiri. */}
                 {ci.allocations.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-col gap-1.5">
                     {ci.allocations.map((a) => (
-                      <span
-                        key={a.termId}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[11px] text-foreground"
+                      <div
+                        key={a.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-1.5"
                       >
-                        {termName(a.termId)} · Rp{fmtRp(a.amount)}
-                      </span>
+                        <span className="min-w-0 text-[11px] text-foreground">
+                          <span className="font-medium">{termName(a.termId)}</span>
+                          <span className="text-muted-foreground"> · Rp{fmtRp(a.amount)}</span>
+                        </span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground">PO</span>
+                          <Switch
+                            checked={a.showInPo}
+                            disabled={toggleAllocPoMutation.isPending}
+                            onCheckedChange={(val) => {
+                              void toggleAllocPoMutation.mutateAsync({ allocationId: a.id, showInPo: val });
+                            }}
+                            aria-label={`Tampilkan porsi ${termName(a.termId)} di PO`}
+                          />
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -585,17 +792,6 @@ function PaymentContent({
                   ) : (
                     <span className="text-[11px] text-muted-foreground">Tanpa bukti</span>
                   )}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground">Tampilkan di PO</span>
-                    <Switch
-                      checked={ci.showInPo}
-                      disabled={toggleShowInPoMutation.isPending}
-                      onCheckedChange={(val) => {
-                        void toggleShowInPoMutation.mutateAsync({ ledgerId: ci.id, showInPo: val });
-                      }}
-                      aria-label="Tampilkan di PO"
-                    />
-                  </div>
                 </div>
               </div>
             ))}

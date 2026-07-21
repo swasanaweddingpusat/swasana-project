@@ -114,14 +114,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Overview keuangan",
   },
   "/dashboard/finance/accounts-receivable": {
-    title: "Accounts Receivable",
-    subtitle: "Kelola piutang dan pembayaran masuk",
-    parent: "/dashboard/finance",
-  },
-  "/dashboard/finance/accounts-receivable/termin": {
-    title: "Termin",
+    title: "AR",
     subtitle: "Status termin pembayaran per booking",
-    parent: "/dashboard/finance/accounts-receivable",
+    parent: "/dashboard/finance",
   },
   "/dashboard/finance/accounts-receivable/aging": {
     title: "Aging",

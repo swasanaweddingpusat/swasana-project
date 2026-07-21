@@ -1298,6 +1298,10 @@ model PaymentAllocation {
   ledgerId  String
   termId    String
   amount    Int      // porsi GROSS cash-in yang offset termin ini (§6.4)
+  // Tampilkan porsi alokasi ini (per termin) di section Summary Payment PO PDF.
+  // Granular per-termin — satu cash-in bisa punya sebagian termin tampil, sebagian
+  // tidak. Default OFF. Voided ledger tetap di-exclude saat render.
+  showInPo  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   ledger Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)

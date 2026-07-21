@@ -51,6 +51,8 @@ export interface SubMenuItem {
   href: string;
   icon?: SolarIcon;
   permission?: Permission;
+  /** Tampil kalau punya SALAH SATU permission ini (OR). Dipakai untuk menu berbagi antar-role. */
+  anyPermission?: Permission[];
   submenu?: SubMenuItem[];
   hidden?: boolean;
 }
@@ -60,6 +62,8 @@ export interface NavItem {
   href: string;
   icon: SolarIcon;
   permission?: Permission;
+  /** Tampil kalau punya SALAH SATU permission ini (OR). */
+  anyPermission?: Permission[];
   submenu?: SubMenuItem[];
   hidden?: boolean;
 }
@@ -180,36 +184,46 @@ export const navItems: NavItem[] = [
     name: "Finance",
     href: "/dashboard/finance",
     icon: Wallet,
-    permission: { module: "finance-ar", action: "view" },
+    anyPermission: [
+      { module: "finance-ar", action: "view" },
+      { module: "finance-ap", action: "view" },
+    ],
     submenu: [
       {
         name: "Overview",
         href: "/dashboard/finance",
         icon: PieChart,
+        anyPermission: [
+          { module: "finance-ar", action: "view" },
+          { module: "finance-ap", action: "view" },
+        ],
       },
       {
         name: "Cashflow",
         href: "/dashboard/finance/ledger",
         icon: Notebook,
+        anyPermission: [
+          { module: "finance-ar", action: "view" },
+          { module: "finance-ap", action: "view" },
+        ],
+      },
+      {
+        name: "AR",
+        href: "/dashboard/finance/accounts-receivable",
+        icon: CardReceive,
+        permission: { module: "finance-ar", action: "view" },
       },
       {
         name: "Expense",
         href: "/dashboard/finance/accounts-payable/expense",
         icon: MoneyBag,
-      },
-      {
-        name: "Accounts Receivable",
-        href: "/dashboard/finance/accounts-receivable",
-        icon: CardReceive,
-        submenu: [
-          { name: "Termin", href: "/dashboard/finance/accounts-receivable/termin", icon: Bill },
-          { name: "Aging", href: "/dashboard/finance/accounts-receivable/aging", icon: ClockCircle },
-        ],
+        permission: { module: "finance-ap", action: "view" },
       },
       {
         name: "Accounts Payable",
         href: "/dashboard/finance/accounts-payable",
         icon: CardSend,
+        permission: { module: "finance-ap", action: "view" },
         submenu: [
           { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
           { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },

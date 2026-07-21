@@ -2,7 +2,7 @@
 
 import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requireAnyPermission } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
@@ -48,7 +48,11 @@ export async function updateTermOfPayments(
   newTerms?: NewTerm[],
   discount?: DiscountUpdate,
 ) {
-  const { session, error } = await requirePermission({ module: "booking", action: "edit" });
+  // Edit termin bisa dari sisi booking (sales/manager) ATAU finance-ar (halaman AR).
+  const { session, error } = await requireAnyPermission([
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "edit" },
+  ]);
   if (error) return { success: false, error };
   if (!mutationLimiter.check(`top-update:${session!.user.id}`)) return { success: false, ...rateLimitError() };
 

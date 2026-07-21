@@ -9,14 +9,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer, Filter, CloseCircle } from "@solar-icons/react";
+import { TrashBinTrash, ArrowLeft, ArrowRight, PenNewSquare, Eye, AddCircle, SettingsMinimalistic, ClipboardCheck, Refresh, FileText, Scanner, MenuDots, Magnifer, Filter, CloseCircle, Copy } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useVenues } from "@/hooks/use-venues";
-import { usePackages, useDeletePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable, useUnverifyPackage } from "@/hooks/use-packages";
+import { usePackages, useDeletePackage, useDuplicatePackage, useDeleteBulkPackages, usePackageApprovals, useTogglePackageAvailable, useUnverifyPackage } from "@/hooks/use-packages";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { fetchPackages } from "@/services/package-service";
 import { toast } from "sonner";
@@ -201,6 +201,7 @@ export function PackagesTable() {
   const totalPages = packagesResult?.totalPages ?? 0;
 
   const deleteMutation = useDeletePackage();
+  const duplicateMutation = useDuplicatePackage();
   const bulkDeleteMutation = useDeleteBulkPackages();
   const { canCreate, can, isAdmin } = usePermissions();
   const qc = useQueryClient();
@@ -219,6 +220,8 @@ export function PackagesTable() {
   const [editingPkg, setEditingPkg] = useState<PackageQueryItem | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [pkgToDelete, setPkgToDelete] = useState<string | null>(null);
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
+  const [pkgToDuplicate, setPkgToDuplicate] = useState<PackageQueryItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -299,6 +302,18 @@ export function PackagesTable() {
       toast.error(res.error ?? "Failed to delete");
     }
     setBulkDeleteOpen(false);
+  };
+
+  const handleDuplicate = async () => {
+    if (!pkgToDuplicate) return;
+    const res = await duplicateMutation.mutateAsync(pkgToDuplicate.id);
+    if (res.success) {
+      toast.success(`Package diduplikat sebagai "${res.data.packageName}"`);
+    } else {
+      toast.error(res.error ?? "Gagal menduplikat package");
+    }
+    setDuplicateConfirmOpen(false);
+    setPkgToDuplicate(null);
   };
 
   const openEdit = (pkg: PackageQueryItem) => {
@@ -414,7 +429,7 @@ export function PackagesTable() {
             <TooltipContent>Edit</TooltipContent>
           </Tooltip>
         )}
-        {(can("package", "view") || can("package", "delete") || (can("package", "set-status") && pkg.approvalStatus === "approved")) && (
+        {(can("package", "view") || can("package", "create") || can("package", "delete") || (can("package", "set-status") && pkg.approvalStatus === "approved")) && (
           <DropdownMenu>
             <Tooltip>
               <DropdownMenuTrigger asChild>
@@ -444,6 +459,14 @@ export function PackagesTable() {
                 >
                   <Scanner weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
                   Preview PO
+                </DropdownMenuItem>
+              )}
+              {can("package", "create") && (
+                <DropdownMenuItem
+                  onSelect={() => { setPkgToDuplicate(pkg); setDuplicateConfirmOpen(true); }}
+                >
+                  <Copy weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+                  Duplikat
                 </DropdownMenuItem>
               )}
               {can("package", "set-status") && pkg.approvalStatus === "approved" && (
@@ -487,6 +510,7 @@ export function PackagesTable() {
     const hasTc = can("package", "term-&-condition");
     const hasSetHarga = can("package", "set-harga");
     const hasPreview = can("package", "view");
+    const hasDuplicate = can("package", "create");
     const hasDelete = can("package", "delete");
 
     const approvalRecord = approvalMap.get(pkg.id);
@@ -495,7 +519,7 @@ export function PackagesTable() {
       pkg.approvalStatus !== "approved";
     const hasUnverify = can("package", "set-status") && pkg.approvalStatus === "approved";
 
-    const hasAnySecondary = hasTc || hasSetHarga || hasPreview || hasDelete || hasApproval || hasUnverify;
+    const hasAnySecondary = hasTc || hasSetHarga || hasPreview || hasDuplicate || hasDelete || hasApproval || hasUnverify;
     if (!hasAnySecondary) return null;
 
     return (
@@ -583,9 +607,17 @@ export function PackagesTable() {
               Preview PO
             </DropdownMenuItem>
           )}
+          {hasDuplicate && (
+            <DropdownMenuItem
+              onSelect={() => { setPkgToDuplicate(pkg); setDuplicateConfirmOpen(true); }}
+            >
+              <Copy weight="BoldDuotone" className="mr-2 h-4 w-4 text-primary" />
+              Duplikat
+            </DropdownMenuItem>
+          )}
           {hasUnverify && (
             <>
-              {(hasTc || hasSetHarga || hasApproval || hasPreview) && <DropdownMenuSeparator />}
+              {(hasTc || hasSetHarga || hasApproval || hasPreview || hasDuplicate) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 disabled={unverifyMutation.isPending}
                 onSelect={async () => {
@@ -602,7 +634,7 @@ export function PackagesTable() {
           )}
           {hasDelete && (
             <>
-              {(hasTc || hasSetHarga || hasApproval || hasPreview || hasUnverify) && <DropdownMenuSeparator />}
+              {(hasTc || hasSetHarga || hasApproval || hasPreview || hasDuplicate || hasUnverify) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onSelect={() => { setPkgToDelete(pkg.id); setDeleteConfirmOpen(true); }}
                 className="text-destructive focus:text-destructive"
@@ -1045,6 +1077,22 @@ export function PackagesTable() {
         onOpenChange={setPreviewOpen}
         target={previewTarget}
       />
+
+      {/* Duplicate Confirm */}
+      <Dialog open={duplicateConfirmOpen} onOpenChange={setDuplicateConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogTitle>Duplikat Package</DialogTitle>
+          <p className={cn('text-sm', 'text-muted-foreground')}>
+            Buat salinan dari <span className="font-medium text-foreground">{pkgToDuplicate?.packageName}</span>? Package baru dibuat sebagai draft dan belum tersedia sampai disetujui.
+          </p>
+          <div className={cn('flex', 'justify-end', 'gap-2', 'mt-4')}>
+            <Button variant="outline" onClick={() => setDuplicateConfirmOpen(false)}>Batal</Button>
+            <Button onClick={handleDuplicate} disabled={duplicateMutation.isPending}>
+              {duplicateMutation.isPending ? "Menduplikat..." : "Duplikat"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirm */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
