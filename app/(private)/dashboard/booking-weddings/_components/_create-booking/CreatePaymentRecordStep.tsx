@@ -49,9 +49,11 @@ export interface CreatePaymentEntry {
   amount: number;
   paymentMethodId: string;
   termUids: string[];
+  /** Subset dari termUids yang porsi alokasinya ditampilkan di Summary Payment PO
+   *  (per-termin). Kosong = tidak ada yang tampil di PO. */
+  poTermUids: string[];
   evidenceFile: File | null;
   notes: string;
-  showInPo: boolean;
   /** ID program promo yang dipilih (null = tanpa promo). */
   programId: string | null;
   /** Nominal potongan promo (0 = tanpa promo). Dikirim ke server as discountAmount. */
@@ -113,7 +115,9 @@ export function CreatePaymentRecordStep({
 }: CreatePaymentRecordStepProps): React.ReactElement {
   const promos = useActivePromos();
 
-  const [formOpen, setFormOpen] = useState(false);
+  // Auto-buka form HANYA di awal saat belum ada pembayaran — begitu masuk step,
+  // form tambah booking fee langsung siap. Klik Batal / sudah nambah → tetap tertutup.
+  const [formOpen, setFormOpen] = useState(() => payments.length === 0);
   /** null = mode tambah; berisi entry id = mode edit pembayaran lokal. */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [occurredAt, setOccurredAt] = useState(todayISO());
@@ -122,7 +126,8 @@ export function CreatePaymentRecordStep({
   const [selectedTermUids, setSelectedTermUids] = useState<string[]>([]);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
-  const [showInPo, setShowInPo] = useState(false);
+  /** Termin yang porsinya di-toggle tampil di PO (subset selectedTermUids). */
+  const [poTermUids, setPoTermUids] = useState<string[]>([]);
   const [programId, setProgramId] = useState<string | null>(null);
 
   const amountNum = Number(amount.replace(/[^\d]/g, "")) || 0;
@@ -160,6 +165,8 @@ export function CreatePaymentRecordStep({
   function pruneUnfunded(): void {
     if (amountNum <= 0 || unfundedSelected.length === 0) return;
     setSelectedTermUids((prev) => prev.filter((uid) => !unfundedSelected.includes(uid)));
+    // Termin yang dilepas tak lagi bisa tampil di PO — buang porsi PO-nya juga.
+    setPoTermUids((prev) => prev.filter((uid) => !unfundedSelected.includes(uid)));
   }
 
   function resetForm(): void {
@@ -170,7 +177,7 @@ export function CreatePaymentRecordStep({
     setSelectedTermUids([]);
     setEvidenceFile(null);
     setNotes("");
-    setShowInPo(false);
+    setPoTermUids([]);
     setProgramId(null);
   }
 
@@ -183,19 +190,33 @@ export function CreatePaymentRecordStep({
     setSelectedTermUids(p.termUids);
     setEvidenceFile(p.evidenceFile);
     setNotes(p.notes);
-    setShowInPo(p.showInPo);
+    setPoTermUids(p.poTermUids);
     setProgramId(p.programId);
     setFormOpen(true);
   }
 
   function toggleTermSelection(uid: string): void {
+    const wasSelected = selectedTermUids.includes(uid);
     setSelectedTermUids((prev) =>
+      wasSelected ? prev.filter((v) => v !== uid) : [...prev, uid],
+    );
+    // Term di-uncheck → porsi PO-nya ikut lepas (poTermUids selalu subset termUids).
+    if (wasSelected) setPoTermUids((prev) => prev.filter((v) => v !== uid));
+  }
+
+  /** Toggle "tampil di PO" satu termin — hanya untuk termin yang terpilih & kebagian alokasi. */
+  function togglePoTerm(uid: string): void {
+    setPoTermUids((prev) =>
       prev.includes(uid) ? prev.filter((v) => v !== uid) : [...prev, uid],
     );
   }
 
   function handleAddPayment(): void {
     const discountAmount = computePromoDiscount(amountNum, promoSelected);
+    // Porsi PO hanya valid untuk termin yang benar-benar terpilih & kebagian alokasi >0.
+    const poTerms = poTermUids.filter(
+      (uid) => selectedTermUids.includes(uid) && (alloc.perTerm.get(uid) ?? 0) > 0,
+    );
     if (editingId) {
       // Edit in-place — pertahankan id & urutan entry.
       setPayments((prev) =>
@@ -207,9 +228,9 @@ export function CreatePaymentRecordStep({
                 amount: amountNum,
                 paymentMethodId,
                 termUids: selectedTermUids,
+                poTermUids: poTerms,
                 evidenceFile,
                 notes: notes.trim(),
-                showInPo,
                 programId,
                 discountAmount,
               }
@@ -225,9 +246,9 @@ export function CreatePaymentRecordStep({
           amount: amountNum,
           paymentMethodId,
           termUids: selectedTermUids,
+          poTermUids: poTerms,
           evidenceFile,
           notes: notes.trim(),
-          showInPo,
           programId,
           discountAmount,
         },
@@ -370,48 +391,78 @@ export function CreatePaymentRecordStep({
                   // (kecuali sudah terpilih, biar tetap bisa di-uncheck).
                   const budgetLocked = budgetConsumed && !selected;
                   const disabled = lunas || budgetLocked;
+                  // Toggle PO cuma relevan buat termin terpilih yang kebagian alokasi >0.
+                  const poEligible = selected && allocated > 0;
+                  const poOn = poTermUids.includes(t.uid);
                   return (
-                    <button
+                    <div
                       key={t.uid}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => toggleTermSelection(t.uid)}
-                      aria-pressed={selected}
                       className={cn(
-                        "flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
+                        "overflow-hidden rounded-xl border transition-colors",
                         disabled
-                          ? "cursor-not-allowed border-border bg-muted/40 opacity-60"
+                          ? "border-border bg-muted/40 opacity-60"
                           : selected
                             ? "border-primary bg-primary/5"
-                            : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40",
+                            : "border-border bg-card",
                       )}
                     >
-                      {selected ? (
-                        <CheckCircle weight="BoldDuotone" className="size-4 shrink-0 text-primary" />
-                      ) : (
-                        <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => toggleTermSelection(t.uid)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors",
+                          disabled
+                            ? "cursor-not-allowed"
+                            : selected
+                              ? ""
+                              : "hover:bg-secondary/40",
+                        )}
+                      >
+                        {selected ? (
+                          <CheckCircle weight="BoldDuotone" className="size-4 shrink-0 text-primary" />
+                        ) : (
+                          <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                        )}
+                        <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                          <span className="truncate">{t.name || "Termin"}</span>
+                          {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Tercatat</span>}
+                          {budgetLocked && !lunas && (
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
+                          )}
+                          {partial && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
+                              Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
+                            </span>
+                          )}
+                          {unfunded && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                              Belum teralokasi
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          Rp{fmtRp(remaining)}
+                        </span>
+                      </button>
+                      {/* Toggle tampil-di-PO per termin — hanya untuk termin yang kebagian alokasi. */}
+                      {poEligible && (
+                        <div className="flex items-center justify-between gap-2 border-t border-primary/15 bg-background/60 px-3 py-1.5">
+                          <Label
+                            htmlFor={`create-po-${t.uid}`}
+                            className="cursor-pointer text-[11px] text-muted-foreground"
+                          >
+                            Tampilkan porsi ini di PO
+                          </Label>
+                          <Switch
+                            id={`create-po-${t.uid}`}
+                            checked={poOn}
+                            onCheckedChange={() => togglePoTerm(t.uid)}
+                          />
+                        </div>
                       )}
-                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
-                        <span className="truncate">{t.name || "Termin"}</span>
-                        {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Tercatat</span>}
-                        {budgetLocked && !lunas && (
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
-                        )}
-                        {partial && (
-                          <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
-                            Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
-                          </span>
-                        )}
-                        {unfunded && (
-                          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-                            Belum teralokasi
-                          </span>
-                        )}
-                      </span>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        Rp{fmtRp(remaining)}
-                      </span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -463,14 +514,6 @@ export function CreatePaymentRecordStep({
                 rows={2}
                 className="resize-none rounded-xl text-xs"
               />
-            </div>
-
-            {/* Tampilkan di PO */}
-            <div className="flex items-center gap-2">
-              <Switch id="create-add-show-in-po" checked={showInPo} onCheckedChange={setShowInPo} />
-              <Label htmlFor="create-add-show-in-po" className="cursor-pointer text-xs text-muted-foreground">
-                Tampilkan di PO
-              </Label>
             </div>
 
             {/* Ringkasan alokasi — Client Bayar / Total Termin / Selisih */}
@@ -628,7 +671,7 @@ export function CreatePaymentRecordStep({
                   </div>
                 )}
                 {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
-                {(p.evidenceFile || p.showInPo) && (
+                {(p.evidenceFile || p.poTermUids.length > 0) && (
                   <div className="flex items-center gap-3 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
                     {p.evidenceFile && (
                       <span className="inline-flex items-center gap-1">
@@ -636,7 +679,9 @@ export function CreatePaymentRecordStep({
                         {p.evidenceFile.name}
                       </span>
                     )}
-                    {p.showInPo && <span>Tampil di PO</span>}
+                    {p.poTermUids.length > 0 && (
+                      <span>{p.poTermUids.length} termin tampil di PO</span>
+                    )}
                   </div>
                 )}
               </div>

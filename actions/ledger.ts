@@ -52,6 +52,8 @@ export async function generateKwitansiNumber(
 const allocationInputSchema = z.object({
   termId: z.string().min(1),
   amount: z.number().int().positive(),
+  /** Tampilkan porsi alokasi ini (per termin) di Summary Payment PO PDF. Default OFF. */
+  showInPo: z.boolean().default(false),
 });
 
 const createCashInSchema = z.object({
@@ -71,7 +73,9 @@ const createCashInSchema = z.object({
   showInPo: z.boolean().default(false),
 });
 
-export type CreateCashInInput = z.infer<typeof createCashInSchema>;
+/** Caller-facing input (pre-defaults) — fn re-parses via safeParse, jadi field
+ *  ber-`.default()` (mis. showInPo deprecated) boleh dihilangkan oleh pemanggil. */
+export type CreateCashInInput = z.input<typeof createCashInSchema>;
 
 /* ─── Allocation guard (§6.5) ───────────────────────────────────────────────── */
 
@@ -236,7 +240,9 @@ export async function createCashIn(
           evidence: data.evidence ?? null,
           invoiceNumber,
           notes: data.notes ?? null,
-          showInPo: data.showInPo,
+          // Ledger.showInPo = derived (true jika ada alokasi yang tampil di PO) —
+          // sumber kebenaran render PO kini per-alokasi (PaymentAllocation.showInPo).
+          showInPo: data.allocations.some((a) => a.showInPo) || data.showInPo,
           snapTopName,
           snapPackageName: booking.snapPackagePricing?.packageName ?? null,
           snapVenueName: booking.snapVenue?.venueName ?? null,
@@ -245,7 +251,7 @@ export async function createCashIn(
       }),
       ...data.allocations.map((a) =>
         db.paymentAllocation.create({
-          data: { ledgerId, termId: a.termId, amount: a.amount },
+          data: { ledgerId, termId: a.termId, amount: a.amount, showInPo: a.showInPo },
         }),
       ),
       db.paymentActivity.create({
@@ -599,6 +605,96 @@ export async function setLedgerShowInPo(
   }
 }
 
+/* ─── Toggle show-in-PO per alokasi ─────────────────────────────────────────── */
+
+const setAllocationShowInPoSchema = z.object({
+  allocationId: z.string().min(1, "ID alokasi tidak valid"),
+  value: z.boolean(),
+});
+
+/**
+ * Set flag `showInPo` satu PaymentAllocation — nandain apakah PORSI alokasi ini
+ * (per termin) tampil di Summary Payment PO PDF. Sumber kebenaran render PO kini
+ * per-alokasi (lihat getPoPayments). `Ledger.showInPo` di-re-derive (true jika ADA
+ * satu saja alokasi ber-flag) supaya ringkasan level-cash-in tetap konsisten.
+ *
+ * Boleh di-toggle untuk semua status (pending/acknowledged) — flag ini presentasi,
+ * bukan data finansial (§6.5 immutability tidak berlaku untuk tampilan PO). Row void
+ * boleh di-toggle (harmless — render PO tetap exclude voidedAt != null).
+ */
+export async function setAllocationShowInPo(
+  input: z.infer<typeof setAllocationShowInPoSchema>,
+): Promise<ActionResult> {
+  const { session, error } = await requireAnyPermission([
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "edit" },
+  ]);
+  if (error) return { success: false, error };
+  if (!mutationLimiter.check(`alloc-showinpo:${session!.user.id}`)) {
+    return { success: false, ...rateLimitError() };
+  }
+
+  const parsed = setAllocationShowInPoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Input tidak valid" };
+  }
+  const { allocationId, value } = parsed.data;
+
+  try {
+    // Ambil alokasi + saudara sekandung (buat re-derive Ledger.showInPo) + bookingId (guard).
+    const alloc = await db.paymentAllocation.findUnique({
+      where: { id: allocationId },
+      select: {
+        id: true,
+        ledgerId: true,
+        ledger: {
+          select: {
+            bookingId: true,
+            allocations: { select: { id: true, showInPo: true } },
+          },
+        },
+      },
+    });
+    if (!alloc) return { success: false, error: "Alokasi tidak ditemukan." };
+    if (!(await assertBookingAccess(session!.user.profileId!, alloc.ledger.bookingId))) {
+      return { success: false, error: "Anda tidak memiliki akses ke booking ini." };
+    }
+
+    // Derived Ledger.showInPo = true jika ADA alokasi tampil di PO (pakai nilai baru
+    // untuk alokasi yang di-toggle, nilai lama untuk saudaranya).
+    const anyOn = alloc.ledger.allocations.some((a) =>
+      a.id === allocationId ? value : a.showInPo,
+    );
+
+    await db.$transaction([
+      db.paymentAllocation.update({
+        where: { id: allocationId },
+        data: { showInPo: value },
+      }),
+      db.ledger.update({
+        where: { id: alloc.ledgerId },
+        data: { showInPo: anyOn },
+      }),
+    ]);
+
+    await logAudit({
+      userId: session!.user.id,
+      action: "ledger.alloc_show_in_po_toggled",
+      entityType: "payment_allocation",
+      entityId: allocationId,
+      changes: { showInPo: value },
+      description: `Alokasi ${allocationId} showInPo = ${value}`,
+    });
+
+    revalidateTag("ledger", "max");
+    revalidateTag("ar-bookings", "max");
+    return { success: true };
+  } catch (e) {
+    console.error("[setAllocationShowInPo]", e);
+    return { success: false, error: "Gagal mengubah tampilan PO." };
+  }
+}
+
 /* ─── Delete cash-in ────────────────────────────────────────────────────────── */
 
 /**
@@ -663,12 +759,11 @@ const updateCashInSchema = z.object({
   evidence: z.string().min(1).nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   showInPo: z.boolean().default(false),
-  allocations: z
-    .array(z.object({ termId: z.string().min(1), amount: z.number().int().positive() }))
-    .default([]),
+  allocations: z.array(allocationInputSchema).default([]),
 });
 
-export type UpdateCashInInput = z.infer<typeof updateCashInSchema>;
+/** Caller-facing input (pre-defaults) — lihat CreateCashInInput. */
+export type UpdateCashInInput = z.input<typeof updateCashInSchema>;
 
 /**
  * Edit cash-in yang masih pending. Re-validasi alokasi terhadap constraint
@@ -721,7 +816,7 @@ export async function updateCashIn(input: UpdateCashInInput): Promise<ActionResu
       db.paymentAllocation.deleteMany({ where: { ledgerId: data.ledgerId } }),
       ...data.allocations.map((a) =>
         db.paymentAllocation.create({
-          data: { ledgerId: data.ledgerId, termId: a.termId, amount: a.amount },
+          data: { ledgerId: data.ledgerId, termId: a.termId, amount: a.amount, showInPo: a.showInPo },
         }),
       ),
       db.ledger.update({
@@ -735,7 +830,8 @@ export async function updateCashIn(input: UpdateCashInInput): Promise<ActionResu
           paymentMethodId: data.paymentMethodId ?? null,
           evidence: data.evidence ?? null,
           notes: data.notes ?? null,
-          showInPo: data.showInPo,
+          // Derived dari alokasi (lihat createCashIn) — konsisten sumber kebenaran PO.
+          showInPo: data.allocations.some((a) => a.showInPo) || data.showInPo,
         },
       }),
       db.paymentActivity.create({

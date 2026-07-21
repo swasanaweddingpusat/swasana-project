@@ -1364,8 +1364,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         discountProgramId: string | null;
         discountAmount: number;
         notes: string | null;
-        allocations: { sortOrder: number; amount: number }[];
-        showInPo: boolean;
+        allocations: { sortOrder: number; amount: number; showInPo: boolean }[];
         evidence: string | null;
       }[] = [];
       const termByUid = new Map(terms.map((t) => [t.uid, t]));
@@ -1394,8 +1393,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
             return;
           }
         }
-        // Greedy allocation over the selected terms (in selection order).
-        const allocations: { sortOrder: number; amount: number }[] = [];
+        // Greedy allocation over the selected terms (in selection order). Flag PO
+        // per-alokasi dari poTermUids (termin yang di-toggle tampil di Summary PO).
+        const allocations: { sortOrder: number; amount: number; showInPo: boolean }[] = [];
         let budget = p.amount;
         for (const uid of p.termUids) {
           if (budget <= 0) break;
@@ -1403,7 +1403,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           if (!t) continue;
           const amt = Math.min(t.amount, budget);
           if (amt > 0) {
-            allocations.push({ sortOrder: t.sortOrder, amount: amt });
+            allocations.push({ sortOrder: t.sortOrder, amount: amt, showInPo: p.poTermUids.includes(uid) });
             budget -= amt;
           }
         }
@@ -1415,7 +1415,6 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           discountAmount: p.discountAmount,
           notes: p.notes.trim() || null,
           allocations,
-          showInPo: p.showInPo,
           evidence,
         });
       }
