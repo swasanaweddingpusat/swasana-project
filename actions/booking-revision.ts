@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { canAccessBooking, getProfileDataScope } from "@/lib/access-control";
-import { createBookingRevision } from "@/lib/booking-revision";
+import { createBookingRevision, refreshCurrentRevisionSnapshot } from "@/lib/booking-revision";
 import { buildBookingApprovalSteps } from "@/lib/approval-flows";
 import { generateAccessCode } from "@/lib/access-code";
 import { computeFullPrice, calcFinalFromFullPrice } from "@/lib/package-prices";
@@ -443,7 +443,7 @@ export async function syncBookingPackage(
     const [booking, currentSnapCats] = await Promise.all([
       db.booking.findUnique({
         where: { id: bookingId },
-        select: { packageId: true, salesId: true },
+        select: { packageId: true, salesId: true, snapshotFrozenAt: true },
       }),
       db.snapPackageCategoryPrice.findMany({
         where: { bookingId },
@@ -453,6 +453,12 @@ export async function syncBookingPackage(
 
     if (!booking) return { success: false, error: "Booking tidak ditemukan." };
     if (!booking.packageId) return { success: false, error: "Booking ini tidak punya paket master untuk di-sync." };
+
+    // Frozen = klien SUDAH TTD (snapshotFrozenAt di-stamp di route sign). Ini yang
+    // menentukan apakah sync perlu reset approval. Sejalan dengan editBooking: selama
+    // klien belum TTD, ganti isi paket TIDAK spin revisi baru & TIDAK reset approval —
+    // approval Manager/Finance yang sudah ada tetap utuh, cukup refresh snapshot in-flight.
+    const isFrozen = booking.snapshotFrozenAt != null;
 
     const masterPkg = await db.package.findUnique({
       where: { id: booking.packageId },
@@ -550,7 +556,33 @@ export async function syncBookingPackage(
 
     await db.$transaction(ops);
 
-    // New revision from the freshly-synced state (append-only), then reset approval.
+    // ── Belum TTD klien → jalur ringan (parity editBooking) ──────────────────────
+    // Booking masih di revisi in-flight-nya: cukup refresh snapshot revisi aktif
+    // in-place biar PO PDF ikut paket baru. TIDAK spin revisi baru, TIDAK reset
+    // approvalRecord/step, TIDAK sentuh clientAgreement — approval yang sudah jalan
+    // (Manager/Finance) tetap utuh, token TTD klien tetap (toh klien belum tanda tangan).
+    if (!isFrozen) {
+      // Best-effort: sinkronkan snapshot revisi aktif dengan live tables yang baru
+      // ditimpa. No-op aman kalau tak ada revisi / sudah frozen (dijaga di helper).
+      await refreshCurrentRevisionSnapshot(bookingId);
+
+      await logAudit({
+        userId: session!.user.id,
+        action: "booking.package_synced",
+        result: "success",
+        entityType: "booking",
+        entityId: bookingId,
+        changes: { packageId: masterPkg.id, packageName: masterPkg.packageName, price: pkgPrice, reApproval: false },
+        description: `Sync paket dari master: ${masterPkg.packageName} (${formatIdr(pkgPrice)}) — belum TTD, approval tidak direset`,
+      });
+
+      revalidateTag("bookings", "max");
+      return { success: true };
+    }
+
+    // ── Sudah TTD klien → jalur penuh: revisi baru + reset approval + TTD ulang ───
+    // Isi kontrak yang sudah ditandatangani berubah, jadi persetujuan lama tidak lagi
+    // valid: bikin revisi append-only dari state hasil sync, lalu reset semua step.
     const newRevisionId = await createBookingRevision(
       bookingId,
       session!.user.profileId!,
@@ -617,8 +649,8 @@ export async function syncBookingPackage(
       result: "success",
       entityType: "booking",
       entityId: bookingId,
-      changes: { packageId: masterPkg.id, packageName: masterPkg.packageName, newRevisionId, price: pkgPrice },
-      description: `Sync paket dari master: ${masterPkg.packageName} (${formatIdr(pkgPrice)})`,
+      changes: { packageId: masterPkg.id, packageName: masterPkg.packageName, newRevisionId, price: pkgPrice, reApproval: true },
+      description: `Sync paket dari master: ${masterPkg.packageName} (${formatIdr(pkgPrice)}) — reset approval & TTD ulang`,
     });
 
     revalidateTag("bookings", "max");
