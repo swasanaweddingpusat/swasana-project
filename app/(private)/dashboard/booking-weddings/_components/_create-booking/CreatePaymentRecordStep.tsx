@@ -143,6 +143,11 @@ export function CreatePaymentRecordStep({
     .map((uid) => ({ id: uid, remaining: remainingOf(uid) }));
   const alloc = computeAllocationPreview(orderedSelected, amountNum);
 
+  // Nominal habis teralokasi penuh ke termin terpilih (tidak ada sisa `lebih`).
+  // Saat habis, termin lain yang belum terpilih tidak bisa ditambah — user harus
+  // ubah nominal dulu. Kalau lebih bayar (`lebih > 0`) baru bebas kaitkan termin lain.
+  const budgetConsumed = amountNum > 0 && alloc.lebih === 0;
+
   function resetForm(): void {
     setEditingId(null);
     setOccurredAt(todayISO());
@@ -222,7 +227,15 @@ export function CreatePaymentRecordStep({
     setPayments((prev) => prev.filter((p) => p.id !== id));
   }
 
-  const canSubmitForm = amountNum > 0 && !!paymentMethodId && selectedTermUids.length > 0;
+  // Submit boleh kalau nominal PAS atau LEBIH dari total termin terpilih.
+  // Kurang bayar (alloc.kurang > 0) tidak boleh — user mesti kurangi termin
+  // atau naikkan nominal dulu. Bukti bayar WAJIB dilampirkan.
+  const canSubmitForm =
+    amountNum > 0 &&
+    !!paymentMethodId &&
+    selectedTermUids.length > 0 &&
+    alloc.kurang === 0 &&
+    !!evidenceFile;
   const termName = (uid: string): string => terms.find((t) => t.uid === uid)?.name ?? "Termin";
 
   return (
@@ -338,16 +351,20 @@ export function CreatePaymentRecordStep({
                   const allocated = selected ? (alloc.perTerm.get(t.uid) ?? 0) : 0;
                   const partial = selected && allocated > 0 && allocated < remaining;
                   const unfunded = selected && allocated <= 0;
+                  // Nominal sudah habis → termin lain yang belum dipilih dikunci
+                  // (kecuali sudah terpilih, biar tetap bisa di-uncheck).
+                  const budgetLocked = budgetConsumed && !selected;
+                  const disabled = lunas || budgetLocked;
                   return (
                     <button
                       key={t.uid}
                       type="button"
-                      disabled={lunas}
+                      disabled={disabled}
                       onClick={() => toggleTermSelection(t.uid)}
                       aria-pressed={selected}
                       className={cn(
                         "flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
-                        lunas
+                        disabled
                           ? "cursor-not-allowed border-border bg-muted/40 opacity-60"
                           : selected
                             ? "border-primary bg-primary/5"
@@ -362,6 +379,9 @@ export function CreatePaymentRecordStep({
                       <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
                         <span className="truncate">{t.name || "Termin"}</span>
                         {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Tercatat</span>}
+                        {budgetLocked && !lunas && (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
+                        )}
                         {partial && (
                           <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
                             Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
@@ -382,9 +402,11 @@ export function CreatePaymentRecordStep({
               </div>
             </div>
 
-            {/* Bukti bayar */}
+            {/* Bukti bayar (wajib) */}
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Bukti Bayar (opsional)</Label>
+              <Label className="text-xs text-muted-foreground">
+                Bukti Bayar <span className="text-destructive">*</span>
+              </Label>
               {evidenceFile ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
                   <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -409,6 +431,9 @@ export function CreatePaymentRecordStep({
                     onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
                   />
                 </label>
+              )}
+              {!evidenceFile && (
+                <p className="text-[11px] text-destructive">Bukti bayar wajib dilampirkan.</p>
               )}
             </div>
 
@@ -466,13 +491,26 @@ export function CreatePaymentRecordStep({
               </div>
             )}
 
-            {/* Feedback selisih — kurang (parsial) / lebih (saldo) */}
+            {/* Feedback selisih — kurang (blocking) / lebih (saldo, boleh) */}
             {selectedTermUids.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
-              <div className="flex items-start gap-2 rounded-xl bg-[var(--brand-gold)]/10 p-2.5 text-xs text-foreground">
-                <DangerTriangle weight="BoldDuotone" className="mt-0.5 size-4 shrink-0 text-[var(--brand-gold)]" />
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-xl p-2.5 text-xs",
+                  alloc.kurang > 0
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-[var(--brand-gold)]/10 text-foreground",
+                )}
+              >
+                <DangerTriangle
+                  weight="BoldDuotone"
+                  className={cn(
+                    "mt-0.5 size-4 shrink-0",
+                    alloc.kurang > 0 ? "text-destructive" : "text-[var(--brand-gold)]",
+                  )}
+                />
                 {alloc.kurang > 0 ? (
                   <span>
-                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — pembayaran belum menutup seluruh termin terpilih. Termin terakhir dicatat sebagian (pembayaran parsial), sisanya bisa dibayar nanti.
+                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — nominal belum menutup termin terpilih. Kurangi termin atau naikkan nominal agar bisa disimpan.
                   </span>
                 ) : (
                   <span>

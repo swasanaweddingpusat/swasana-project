@@ -131,6 +131,19 @@ function PaymentContent({
     .map((t) => ({ id: t.id, remaining: Math.max(0, t.amount - t.paid) }));
   const alloc = computeAllocationPreview(orderedSelected, amountNum);
 
+  // Nominal habis teralokasi penuh (tidak ada sisa `lebih`) → termin lain yang
+  // belum terpilih dikunci. Kalau lebih bayar baru bebas kaitkan ke mana saja.
+  const budgetConsumed = amountNum > 0 && alloc.lebih === 0;
+  // Bukti bayar wajib: file baru dilampirkan ATAU (saat edit) bukti lama masih ada.
+  const hasEvidence = !!evidenceFile || !!existingEvidence;
+  // Submit boleh saat nominal PAS/LEBIH (kurang = blocking) + bukti bayar ada.
+  const canSubmitForm =
+    amountNum > 0 &&
+    !!paymentMethodId &&
+    selectedTermIds.length > 0 &&
+    alloc.kurang === 0 &&
+    hasEvidence;
+
   // Booking fee = termin pertama; tertutup kalau paid > 0 atau ada cash-in ke situ.
   const firstTerm = terms[0];
   const bookingFeePaid =
@@ -176,6 +189,8 @@ function PaymentContent({
     if (amountNum <= 0) { toast.error("Jumlah pembayaran wajib diisi."); return; }
     if (!paymentMethodId) { toast.error("Pilih rekening penerima."); return; }
     if (selectedTermIds.length === 0) { toast.error("Pilih minimal satu termin."); return; }
+    if (alloc.kurang > 0) { toast.error("Nominal kurang dari termin terpilih. Kurangi termin atau naikkan nominal."); return; }
+    if (!hasEvidence) { toast.error("Bukti bayar wajib dilampirkan."); return; }
 
     setSubmitting(true);
 
@@ -391,16 +406,19 @@ function PaymentContent({
                   const allocated = selected ? (alloc.perTerm.get(t.id) ?? 0) : 0;
                   const partial = selected && allocated > 0 && allocated < remaining;
                   const unfunded = selected && allocated <= 0;
+                  // Nominal habis → termin lain yang belum dipilih dikunci.
+                  const budgetLocked = budgetConsumed && !selected;
+                  const disabled = lunas || budgetLocked;
                   return (
                     <button
                       key={t.id}
                       type="button"
-                      disabled={lunas}
+                      disabled={disabled}
                       onClick={() => toggleTermSelection(t.id)}
                       aria-pressed={selected}
                       className={cn(
                         "flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
-                        lunas
+                        disabled
                           ? "cursor-not-allowed border-border bg-muted/40 opacity-60"
                           : selected
                             ? "border-primary bg-primary/5"
@@ -415,6 +433,9 @@ function PaymentContent({
                       <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
                         <span className="truncate">{t.name}</span>
                         {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Lunas</span>}
+                        {budgetLocked && !lunas && (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
+                        )}
                         {partial && (
                           <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
                             Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
@@ -435,9 +456,11 @@ function PaymentContent({
               </div>
             </div>
 
-            {/* Bukti bayar */}
+            {/* Bukti bayar (wajib) */}
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Bukti Bayar (opsional)</Label>
+              <Label className="text-xs text-muted-foreground">
+                Bukti Bayar <span className="text-destructive">*</span>
+              </Label>
               {evidenceFile ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
                   <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -465,6 +488,9 @@ function PaymentContent({
               )}
               {editingId && existingEvidence && !evidenceFile && (
                 <p className="text-[11px] text-muted-foreground">Bukti lama masih tersimpan.</p>
+              )}
+              {!hasEvidence && (
+                <p className="text-[11px] text-destructive">Bukti bayar wajib dilampirkan.</p>
               )}
             </div>
 
@@ -522,13 +548,26 @@ function PaymentContent({
               </div>
             )}
 
-            {/* Feedback selisih — kurang (parsial) / lebih (saldo) */}
+            {/* Feedback selisih — kurang (blocking) / lebih (saldo, boleh) */}
             {selectedTermIds.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
-              <div className="flex items-start gap-2 rounded-xl bg-[var(--brand-gold)]/10 p-2.5 text-xs text-foreground">
-                <DangerTriangle weight="BoldDuotone" className="mt-0.5 size-4 shrink-0 text-[var(--brand-gold)]" />
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-xl p-2.5 text-xs",
+                  alloc.kurang > 0
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-[var(--brand-gold)]/10 text-foreground",
+                )}
+              >
+                <DangerTriangle
+                  weight="BoldDuotone"
+                  className={cn(
+                    "mt-0.5 size-4 shrink-0",
+                    alloc.kurang > 0 ? "text-destructive" : "text-[var(--brand-gold)]",
+                  )}
+                />
                 {alloc.kurang > 0 ? (
                   <span>
-                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — pembayaran belum menutup seluruh termin terpilih. Termin terakhir dicatat sebagian (pembayaran parsial), sisanya bisa dibayar nanti.
+                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — nominal belum menutup termin terpilih. Kurangi termin atau naikkan nominal agar bisa disimpan.
                   </span>
                 ) : (
                   <span>
@@ -553,7 +592,7 @@ function PaymentContent({
                 type="button"
                 className="flex-1 rounded-full"
                 onClick={() => { void handleAddPayment(); }}
-                disabled={submitting}
+                disabled={!canSubmitForm || submitting}
               >
                 {submitting ? "Menyimpan..." : editingId ? "Simpan Perubahan" : "Simpan Pembayaran"}
               </Button>
