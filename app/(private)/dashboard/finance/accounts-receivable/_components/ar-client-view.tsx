@@ -201,7 +201,7 @@ function ClientRow({
                           </TableCell>
                           <TableCell className="px-4 py-2.5 text-right align-middle">
                             <Link
-                              href="/dashboard/finance/accounts-receivable/termin"
+                              href="/dashboard/finance/accounts-receivable"
                               className="inline-flex h-6 items-center rounded-full bg-secondary px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
                               onClick={(e: React.MouseEvent) => e.stopPropagation()}
                             >

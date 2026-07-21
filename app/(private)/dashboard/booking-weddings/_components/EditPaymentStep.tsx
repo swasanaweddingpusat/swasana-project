@@ -18,6 +18,7 @@ import {
   UploadMinimalistic,
   CardReceive,
   Link as LinkIcon,
+  Pen,
   TagPrice,
   TrashBinTrash,
 } from "@solar-icons/react";
@@ -34,7 +35,7 @@ import {
 import { useActivePromos, computePromoDiscount } from "@/hooks/use-active-promos";
 import { computeAllocationPreview } from "@/lib/payment-allocation";
 import { cn } from "@/lib/utils";
-import { createCashIn, deleteCashIn } from "@/actions/ledger";
+import { createCashIn, deleteCashIn, updateCashIn } from "@/actions/ledger";
 import { useQueryClient } from "@tanstack/react-query";
 import { getBookingFinanceDetailClient } from "@/services/booking-finance-service";
 import { useBookingFinanceDetail } from "@/hooks/use-booking-finance-detail";
@@ -102,13 +103,17 @@ function PaymentContent({
   const toggleShowInPoMutation = useToggleCashInShowInPo(bookingId);
   const promos = useActivePromos();
 
-  // ── Add-payment form state ────────────────────────────────────────────────
+  // ── Add/edit-payment form state ───────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
+  /** null = mode tambah; berisi ledgerId = mode edit cash-in pending. */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [occurredAt, setOccurredAt] = useState(todayISO());
   const [amount, setAmount] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  /** S3 key bukti lama saat edit — dipertahankan kalau user tak upload ulang. */
+  const [existingEvidence, setExistingEvidence] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [showInPo, setShowInPo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -134,14 +139,31 @@ function PaymentContent({
       cashIns.some((ci) => ci.allocations.some((a) => a.termId === firstTerm.id)));
 
   function resetForm(): void {
+    setEditingId(null);
     setOccurredAt(todayISO());
     setAmount("");
     setPaymentMethodId("");
     setSelectedTermIds([]);
     setEvidenceFile(null);
+    setExistingEvidence(null);
     setNotes("");
     setShowInPo(false);
     setProgramId(null);
+  }
+
+  /** Buka form dalam mode edit dengan data cash-in pending di-prefill. */
+  function openEdit(ci: BookingCashIn): void {
+    setEditingId(ci.id);
+    setOccurredAt(ci.occurredAt.slice(0, 10));
+    setAmount(String(ci.amount));
+    setPaymentMethodId(ci.paymentMethodId ?? "");
+    setSelectedTermIds(ci.allocations.map((a) => a.termId));
+    setEvidenceFile(null);
+    setExistingEvidence(ci.evidence);
+    setNotes(ci.notes ?? "");
+    setShowInPo(ci.showInPo);
+    setProgramId(ci.discountProgramId);
+    setFormOpen(true);
   }
 
   function toggleTermSelection(id: string): void {
@@ -157,8 +179,11 @@ function PaymentContent({
 
     setSubmitting(true);
 
-    // Upload bukti dulu (kalau ada) — gagal upload non-fatal.
-    let evidenceKey: string | null = null;
+    // Upload bukti baru (kalau ada). User sengaja melampirkan bukti, jadi kalau
+    // upload gagal JANGAN diam-diam simpan tanpa bukti — tampilkan alasannya
+    // (403 izin / 413 file kegedean / 500 storage) lalu batalkan submit. Saat edit
+    // tanpa upload ulang, pertahankan bukti lama (existingEvidence).
+    let evidenceKey: string | null = existingEvidence;
     if (evidenceFile) {
       const fd = new FormData();
       fd.append("file", evidenceFile);
@@ -166,31 +191,51 @@ function PaymentContent({
         const up = await fetch("/api/upload/booking-fee-evidence", { method: "POST", body: fd });
         if (up.ok) {
           const d = (await up.json()) as { key?: string };
-          evidenceKey = d.key ?? null;
+          evidenceKey = d.key ?? evidenceKey;
+        } else {
+          const d = (await up.json().catch(() => ({}))) as { error?: string };
+          toast.error(d.error ?? `Gagal upload bukti (${up.status}).`);
+          setSubmitting(false);
+          return;
         }
       } catch {
-        // non-fatal
+        toast.error("Gagal upload bukti — periksa koneksi lalu coba lagi.");
+        setSubmitting(false);
+        return;
       }
     }
 
     const allocations = buildAllocations(amountNum, selectedTermIds, terms);
     const discountAmount = computePromoDiscount(amountNum, promoSelected);
-    const result = await createCashIn({
-      bookingId,
-      occurredAt: new Date(occurredAt).toISOString(),
-      amount: amountNum,
-      paymentMethodId: paymentMethodId || null,
-      discountProgramId: programId,
-      discountAmount,
-      evidence: evidenceKey,
-      notes: notes.trim() || null,
-      showInPo,
-      allocations,
-    });
+    const result = editingId
+      ? await updateCashIn({
+          ledgerId: editingId,
+          occurredAt: new Date(occurredAt).toISOString(),
+          amount: amountNum,
+          paymentMethodId: paymentMethodId || null,
+          discountProgramId: programId,
+          discountAmount,
+          evidence: evidenceKey,
+          notes: notes.trim() || null,
+          showInPo,
+          allocations,
+        })
+      : await createCashIn({
+          bookingId,
+          occurredAt: new Date(occurredAt).toISOString(),
+          amount: amountNum,
+          paymentMethodId: paymentMethodId || null,
+          discountProgramId: programId,
+          discountAmount,
+          evidence: evidenceKey,
+          notes: notes.trim() || null,
+          showInPo,
+          allocations,
+        });
     setSubmitting(false);
 
     if (!result.success) { toast.error(result.error); return; }
-    toast.success("Pembayaran berhasil dicatat");
+    toast.success(editingId ? "Pembayaran berhasil diperbarui" : "Pembayaran berhasil dicatat");
     resetForm();
     setFormOpen(false);
     void qc.invalidateQueries({ queryKey: ["bookings"] });
@@ -261,7 +306,7 @@ function PaymentContent({
               size="sm"
               variant="outline"
               className="gap-1.5 rounded-full"
-              onClick={() => setFormOpen(true)}
+              onClick={() => { resetForm(); setFormOpen(true); }}
             >
               <AddCircle weight="BoldDuotone" className="size-4" />
               Tambah Pembayaran
@@ -274,7 +319,7 @@ function PaymentContent({
           <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
             <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <CardReceive weight="BoldDuotone" className="size-3.5" />
-              Pembayaran Baru
+              {editingId ? "Edit Pembayaran" : "Pembayaran Baru"}
             </p>
 
             {/* Tanggal */}
@@ -409,7 +454,7 @@ function PaymentContent({
               ) : (
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground">
                   <UploadMinimalistic weight="BoldDuotone" className="size-3.5 shrink-0" />
-                  Upload bukti (JPG/PNG/PDF, maks 10MB)
+                  {existingEvidence ? "Ganti bukti (biarkan untuk pertahankan yang lama)" : "Upload bukti (JPG/PNG/PDF, maks 10MB)"}
                   <input
                     type="file"
                     accept="image/*,application/pdf"
@@ -417,6 +462,9 @@ function PaymentContent({
                     onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
                   />
                 </label>
+              )}
+              {editingId && existingEvidence && !evidenceFile && (
+                <p className="text-[11px] text-muted-foreground">Bukti lama masih tersimpan.</p>
               )}
             </div>
 
@@ -507,7 +555,7 @@ function PaymentContent({
                 onClick={() => { void handleAddPayment(); }}
                 disabled={submitting}
               >
-                {submitting ? "Menyimpan..." : "Simpan Pembayaran"}
+                {submitting ? "Menyimpan..." : editingId ? "Simpan Perubahan" : "Simpan Pembayaran"}
               </Button>
             </div>
           </div>
@@ -543,14 +591,24 @@ function PaymentContent({
                       {ci.ackStatus === "acknowledged" ? "Terverifikasi" : "Menunggu"}
                     </span>
                     {ci.ackStatus !== "acknowledged" && (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(ci)}
-                        className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
-                        aria-label="Hapus pembayaran"
-                      >
-                        <TrashBinTrash weight="BoldDuotone" className="size-4" />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(ci)}
+                          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          aria-label="Edit pembayaran"
+                        >
+                          <Pen weight="BoldDuotone" className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(ci)}
+                          className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
+                          aria-label="Hapus pembayaran"
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="size-4" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

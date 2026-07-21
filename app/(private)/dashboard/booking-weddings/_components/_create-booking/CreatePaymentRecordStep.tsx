@@ -28,6 +28,7 @@ import {
   CloseCircle,
   DangerTriangle,
   Link as LinkIcon,
+  Pen,
   TagPrice,
   TrashBinTrash,
   UploadMinimalistic,
@@ -113,6 +114,8 @@ export function CreatePaymentRecordStep({
   const promos = useActivePromos();
 
   const [formOpen, setFormOpen] = useState(false);
+  /** null = mode tambah; berisi entry id = mode edit pembayaran lokal. */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [occurredAt, setOccurredAt] = useState(todayISO());
   const [amount, setAmount] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState(defaultPaymentMethodId);
@@ -126,17 +129,22 @@ export function CreatePaymentRecordStep({
 
   const promoSelected = promos.find((p) => p.id === programId) ?? null;
 
+  // Saat edit, entry yang sedang diubah TIDAK boleh menghitung dirinya sendiri
+  // sebagai "sudah tertutup" — kalau tidak, terminnya tampil lunas oleh dirinya.
+  const otherPayments = editingId ? payments.filter((p) => p.id !== editingId) : payments;
+
   // Preview alokasi greedy — urut sesuai pilihan user (sama dengan finalize).
   const remainingOf = (uid: string): number => {
     const t = terms.find((x) => x.uid === uid);
     if (!t) return 0;
-    return Math.max(0, t.amount - coveredByOthers(uid, payments, terms));
+    return Math.max(0, t.amount - coveredByOthers(uid, otherPayments, terms));
   };
   const orderedSelected = selectedTermUids
     .map((uid) => ({ id: uid, remaining: remainingOf(uid) }));
   const alloc = computeAllocationPreview(orderedSelected, amountNum);
 
   function resetForm(): void {
+    setEditingId(null);
     setOccurredAt(todayISO());
     setAmount("");
     setPaymentMethodId(defaultPaymentMethodId);
@@ -147,6 +155,20 @@ export function CreatePaymentRecordStep({
     setProgramId(null);
   }
 
+  /** Buka form dalam mode edit dengan data entry lokal di-prefill. */
+  function openEdit(p: CreatePaymentEntry): void {
+    setEditingId(p.id);
+    setOccurredAt(p.occurredAt);
+    setAmount(String(p.amount));
+    setPaymentMethodId(p.paymentMethodId);
+    setSelectedTermUids(p.termUids);
+    setEvidenceFile(p.evidenceFile);
+    setNotes(p.notes);
+    setShowInPo(p.showInPo);
+    setProgramId(p.programId);
+    setFormOpen(true);
+  }
+
   function toggleTermSelection(uid: string): void {
     setSelectedTermUids((prev) =>
       prev.includes(uid) ? prev.filter((v) => v !== uid) : [...prev, uid],
@@ -155,21 +177,43 @@ export function CreatePaymentRecordStep({
 
   function handleAddPayment(): void {
     const discountAmount = computePromoDiscount(amountNum, promoSelected);
-    setPayments((prev) => [
-      ...prev,
-      {
-        id: safeRandomUUID(),
-        occurredAt,
-        amount: amountNum,
-        paymentMethodId,
-        termUids: selectedTermUids,
-        evidenceFile,
-        notes: notes.trim(),
-        showInPo,
-        programId,
-        discountAmount,
-      },
-    ]);
+    if (editingId) {
+      // Edit in-place — pertahankan id & urutan entry.
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === editingId
+            ? {
+                ...p,
+                occurredAt,
+                amount: amountNum,
+                paymentMethodId,
+                termUids: selectedTermUids,
+                evidenceFile,
+                notes: notes.trim(),
+                showInPo,
+                programId,
+                discountAmount,
+              }
+            : p,
+        ),
+      );
+    } else {
+      setPayments((prev) => [
+        ...prev,
+        {
+          id: safeRandomUUID(),
+          occurredAt,
+          amount: amountNum,
+          paymentMethodId,
+          termUids: selectedTermUids,
+          evidenceFile,
+          notes: notes.trim(),
+          showInPo,
+          programId,
+          discountAmount,
+        },
+      ]);
+    }
     resetForm();
     setFormOpen(false);
   }
@@ -221,7 +265,7 @@ export function CreatePaymentRecordStep({
           <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
             <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <CardReceive weight="BoldDuotone" className="size-3.5" />
-              Pembayaran Baru
+              {editingId ? "Edit Pembayaran" : "Pembayaran Baru"}
             </p>
 
             {/* Tanggal */}
@@ -288,7 +332,7 @@ export function CreatePaymentRecordStep({
               <div className="flex flex-col gap-1.5">
                 {terms.map((t) => {
                   const selected = selectedTermUids.includes(t.uid);
-                  const covered = coveredByOthers(t.uid, payments, terms);
+                  const covered = coveredByOthers(t.uid, otherPayments, terms);
                   const remaining = Math.max(0, t.amount - covered);
                   const lunas = remaining <= 0;
                   const allocated = selected ? (alloc.perTerm.get(t.uid) ?? 0) : 0;
@@ -454,7 +498,7 @@ export function CreatePaymentRecordStep({
                 onClick={handleAddPayment}
                 disabled={!canSubmitForm}
               >
-                Simpan Pembayaran
+                {editingId ? "Simpan Perubahan" : "Simpan Pembayaran"}
               </Button>
             </div>
           </div>
@@ -478,14 +522,24 @@ export function CreatePaymentRecordStep({
                       {new Date(p.occurredAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removePayment(p.id)}
-                    className="shrink-0 rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
-                    aria-label="Hapus pembayaran"
-                  >
-                    <TrashBinTrash weight="BoldDuotone" className="size-4" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(p)}
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      aria-label="Edit pembayaran"
+                    >
+                      <Pen weight="BoldDuotone" className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removePayment(p.id)}
+                      className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
+                      aria-label="Hapus pembayaran"
+                    >
+                      <TrashBinTrash weight="BoldDuotone" className="size-4" />
+                    </button>
+                  </div>
                 </div>
                 {p.termUids.length > 0 && (
                   <div className="flex flex-wrap gap-1">

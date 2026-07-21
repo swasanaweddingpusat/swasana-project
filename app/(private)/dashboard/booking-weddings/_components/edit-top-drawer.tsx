@@ -447,6 +447,10 @@ function TopContent({
                                 <PopoverContent className="w-auto p-0" align="start">
                                   <Calendar
                                     mode="single"
+                                    captionLayout="dropdown"
+                                    startMonth={new Date(new Date().getFullYear() - 5, 0)}
+                                    endMonth={new Date(new Date().getFullYear() + 10, 11)}
+                                    defaultMonth={term.dueDate ? new Date(term.dueDate) : new Date()}
                                     selected={term.dueDate ? new Date(term.dueDate) : undefined}
                                     onSelect={(d) => {
                                       if (d) handleFieldChange(term.id, "dueDate", toLocalISO(d));

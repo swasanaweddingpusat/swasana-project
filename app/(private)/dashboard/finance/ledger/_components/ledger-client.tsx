@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AddCircle, Refresh } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 import { LedgerSummaryCards, type LedgerSummaryData } from "./ledger-summary-cards";
 import { LedgerFilterBar, type LedgerFilters } from "./ledger-filter-bar";
@@ -57,6 +58,9 @@ export function LedgerClient({
   paymentMethods,
 }: LedgerClientProps): React.ReactElement {
   const router = useRouter();
+  const { can } = usePermissions();
+  // Catat cash-in = domain AR. finance-ap boleh lihat cashflow tapi tak boleh catat.
+  const canRecord = can("finance-ar", "create");
 
   const [filters, setFilters] = useState<LedgerFilters>({});
   const [tab, setTab] = useState<TabKey>("all");
@@ -227,10 +231,12 @@ export function LedgerClient({
               );
             })}
           </div>
-          <Button className="shrink-0 rounded-full" onClick={() => setDrawerOpen(true)}>
-            <AddCircle weight="BoldDuotone" className="size-4" />
-            <span className="hidden sm:inline">Catat Transaksi</span>
-          </Button>
+          {canRecord && (
+            <Button className="shrink-0 rounded-full" onClick={() => setDrawerOpen(true)}>
+              <AddCircle weight="BoldDuotone" className="size-4" />
+              <span className="hidden sm:inline">Catat Transaksi</span>
+            </Button>
+          )}
         </div>
 
         {/* Toolbar */}

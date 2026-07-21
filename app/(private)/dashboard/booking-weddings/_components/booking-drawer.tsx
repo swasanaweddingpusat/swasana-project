@@ -177,10 +177,25 @@ function makeDefaultTerms(): TermRow[] {
   ];
 }
 
+/** Kurangi `months` bulan dari `date` (clamp hari akhir bulan, mis. 31 Mar − 1 bln = 28/29 Feb). */
+function subMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  const targetDay = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(targetDay, lastDay));
+  return d;
+}
+
 /**
- * Recalculates due dates for terms that have an empty dueDate.
- * Terms that already have a dueDate (manually set by user) are left untouched.
- * Pass `force = true` to overwrite all dates (e.g. explicit "reset dates" action).
+ * Isi due date termin yang masih kosong, dihitung MUNDUR dari event date.
+ * Termin terakhir (pelunasan) jatuh 1 bulan SEBELUM event; tiap termin di atasnya
+ * mundur 1 bulan lagi. Kalau event terlalu mepet (termin awal jatuh sebelum hari
+ * ini), fallback bagi rata dari hari ini s/d anchor (event − 1 bln) — biar tak ada
+ * termin yang jatuh di masa lalu. Hanya create flow (edit pakai edit-top-drawer).
+ *
+ * Termin yang tanggalnya sudah diisi user dibiarkan, kecuali `force = true`.
  */
 function recalcTermDates(terms: TermRow[], eventDate: string, force = false): TermRow[] {
   if (!eventDate || terms.length === 0) return terms;
@@ -188,16 +203,25 @@ function recalcTermDates(terms: TermRow[], eventDate: string, force = false): Te
   now.setHours(0, 0, 0, 0);
   const event = new Date(eventDate);
   event.setHours(0, 0, 0, 0);
-  const totalMs = event.getTime() - now.getTime();
-  if (totalMs <= 0) return terms;
+
+  // Anchor = pelunasan harus lunas 1 bulan sebelum acara.
+  const anchor = subMonths(event, 1);
+  anchor.setHours(0, 0, 0, 0);
+  if (anchor.getTime() <= now.getTime()) return terms; // event terlalu dekat — biarkan
+
   const n = terms.length;
+  // Kandidat tanggal per termin (mundur 1 bln dari anchor). Index 0 = paling awal.
+  const spaced = terms.map((_, i) => subMonths(anchor, n - 1 - i));
+  // Kalau termin paling awal jatuh sebelum hari ini → mepet, pakai bagi rata.
+  const tooTight = n > 1 && spaced[0].getTime() < now.getTime();
+  const totalMs = anchor.getTime() - now.getTime();
+
   return terms.map((t, i) => {
-    // Skip terms that already have a date set by the user, unless forced.
-    if (!force && t.dueDate) return t;
-    return {
-      ...t,
-      dueDate: toLocalISO(new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))),
-    };
+    if (!force && t.dueDate) return t; // tanggal manual user — jangan timpa
+    const date = tooTight
+      ? new Date(now.getTime() + Math.round((totalMs * i) / (n - 1 || 1)))
+      : spaced[i];
+    return { ...t, dueDate: toLocalISO(date) };
   });
 }
 
@@ -1351,14 +1375,23 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
         if (p.evidenceFile) {
           const fd = new FormData();
           fd.append("file", p.evidenceFile);
+          // User sengaja melampirkan bukti — kalau upload gagal JANGAN diam-diam
+          // lanjut tanpa bukti. Tampilkan alasannya (403 izin / 413 file kegedean /
+          // 500 storage) lalu batalkan finalize biar tidak ada pembayaran tercatat
+          // tanpa bukti yang dikira sukses.
           try {
             const up = await fetch("/api/upload/booking-fee-evidence", { method: "POST", body: fd });
             if (up.ok) {
               const d = (await up.json()) as { key?: string };
               evidence = d.key ?? null;
+            } else {
+              const d = (await up.json().catch(() => ({}))) as { error?: string };
+              toast.error(d.error ?? `Gagal upload bukti (${up.status}).`);
+              return;
             }
           } catch {
-            // non-fatal: lanjut tanpa bukti bayar
+            toast.error("Gagal upload bukti — periksa koneksi lalu coba lagi.");
+            return;
           }
         }
         // Greedy allocation over the selected terms (in selection order).
@@ -1931,8 +1964,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                             selected={field.value ? parseDateOnly(field.value) : undefined}
                             onSelect={(date) => { field.onChange(date ? toDateOnly(date) : ""); form.setValue("weddingSession", null); clearError("eventDate"); }}
                             disabled={(d) => getDateStatus(d) === "unavailable"}
-                            fromYear={new Date().getFullYear() - 10}
-                            toYear={new Date().getFullYear() + 10}
+                            startMonth={new Date(new Date().getFullYear() - 10, 0)}
+                            endMonth={new Date(new Date().getFullYear() + 10, 11)}
                             defaultMonth={field.value ? parseDateOnly(field.value) : new Date()}
                             onMonthChange={setVisibleMonth}
                             modifiers={{
