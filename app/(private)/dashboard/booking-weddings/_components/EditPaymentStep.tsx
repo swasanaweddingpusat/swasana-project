@@ -39,7 +39,7 @@ import { createCashIn, deleteCashIn, updateCashIn } from "@/actions/ledger";
 import { useQueryClient } from "@tanstack/react-query";
 import { getBookingFinanceDetailClient } from "@/services/booking-finance-service";
 import { useBookingFinanceDetail } from "@/hooks/use-booking-finance-detail";
-import { useToggleCashInShowInPo } from "@/hooks/use-ledger";
+import { useToggleAllocationShowInPo } from "@/hooks/use-ledger";
 import { fmtRp, type FinanceTerm } from "./edit-finance-shared";
 import type { BookingCashIn } from "@/lib/queries/ledger";
 
@@ -63,21 +63,23 @@ interface PaymentContentProps {
 
 /** Alokasi GROSS greedy ke termin terpilih (urut = sortOrder fetch). Tiap termin
  *  diisi penuh sampai budget habis; termin terakhir bisa parsial. Server tetap
- *  jadi guard final untuk over-allocation. */
+ *  jadi guard final untuk over-allocation. `poTermIds` = termin yang porsinya
+ *  ditampilkan di Summary PO (per-alokasi showInPo). */
 function buildAllocations(
   gross: number,
   selectedIds: string[],
   terms: FinanceTerm[],
-): { termId: string; amount: number }[] {
+  poTermIds: string[],
+): { termId: string; amount: number; showInPo: boolean }[] {
   const selected = terms.filter((t) => selectedIds.includes(t.id));
-  const out: { termId: string; amount: number }[] = [];
+  const out: { termId: string; amount: number; showInPo: boolean }[] = [];
   let budget = gross;
   for (const t of selected) {
     if (budget <= 0) break;
     const remaining = Math.max(0, t.amount - t.paid);
     const amount = Math.min(remaining, budget);
     if (amount > 0) {
-      out.push({ termId: t.id, amount });
+      out.push({ termId: t.id, amount, showInPo: poTermIds.includes(t.id) });
       budget -= amount;
     }
   }
@@ -100,7 +102,7 @@ function PaymentContent({
   onSaved,
 }: PaymentContentProps): React.ReactElement {
   const qc = useQueryClient();
-  const toggleShowInPoMutation = useToggleCashInShowInPo(bookingId);
+  const toggleAllocPoMutation = useToggleAllocationShowInPo(bookingId);
   const promos = useActivePromos();
 
   // ── Add/edit-payment form state ───────────────────────────────────────────
@@ -115,7 +117,8 @@ function PaymentContent({
   /** S3 key bukti lama saat edit — dipertahankan kalau user tak upload ulang. */
   const [existingEvidence, setExistingEvidence] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
-  const [showInPo, setShowInPo] = useState(false);
+  /** Termin yang porsinya di-toggle tampil di PO (subset selectedTermIds). */
+  const [poTermIds, setPoTermIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [programId, setProgramId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookingCashIn | null>(null);
@@ -151,6 +154,8 @@ function PaymentContent({
   function pruneUnfunded(): void {
     if (amountNum <= 0 || unfundedSelected.length === 0) return;
     setSelectedTermIds((prev) => prev.filter((id) => !unfundedSelected.includes(id)));
+    // Termin yang dilepas tak lagi bisa tampil di PO — buang porsi PO-nya juga.
+    setPoTermIds((prev) => prev.filter((id) => !unfundedSelected.includes(id)));
   }
 
   // Bukti bayar wajib: file baru dilampirkan ATAU (saat edit) bukti lama masih ada.
@@ -181,7 +186,7 @@ function PaymentContent({
     setEvidenceFile(null);
     setExistingEvidence(null);
     setNotes("");
-    setShowInPo(false);
+    setPoTermIds([]);
     setProgramId(null);
   }
 
@@ -195,13 +200,23 @@ function PaymentContent({
     setEvidenceFile(null);
     setExistingEvidence(ci.evidence);
     setNotes(ci.notes ?? "");
-    setShowInPo(ci.showInPo);
+    setPoTermIds(ci.allocations.filter((a) => a.showInPo).map((a) => a.termId));
     setProgramId(ci.discountProgramId);
     setFormOpen(true);
   }
 
   function toggleTermSelection(id: string): void {
+    const wasSelected = selectedTermIds.includes(id);
     setSelectedTermIds((prev) =>
+      wasSelected ? prev.filter((v) => v !== id) : [...prev, id],
+    );
+    // Term di-uncheck → porsi PO-nya ikut lepas (poTermIds selalu subset selectedTermIds).
+    if (wasSelected) setPoTermIds((prev) => prev.filter((v) => v !== id));
+  }
+
+  /** Toggle "tampil di PO" satu termin — hanya untuk termin terpilih & kebagian alokasi. */
+  function togglePoTerm(id: string): void {
+    setPoTermIds((prev) =>
       prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id],
     );
   }
@@ -241,7 +256,11 @@ function PaymentContent({
       }
     }
 
-    const allocations = buildAllocations(amountNum, selectedTermIds, terms);
+    // Porsi PO hanya valid untuk termin yang benar-benar terpilih & kebagian alokasi >0.
+    const poTerms = poTermIds.filter(
+      (id) => selectedTermIds.includes(id) && (alloc.perTerm.get(id) ?? 0) > 0,
+    );
+    const allocations = buildAllocations(amountNum, selectedTermIds, terms, poTerms);
     const discountAmount = computePromoDiscount(amountNum, promoSelected);
     const result = editingId
       ? await updateCashIn({
@@ -253,7 +272,6 @@ function PaymentContent({
           discountAmount,
           evidence: evidenceKey,
           notes: notes.trim() || null,
-          showInPo,
           allocations,
         })
       : await createCashIn({
@@ -265,7 +283,6 @@ function PaymentContent({
           discountAmount,
           evidence: evidenceKey,
           notes: notes.trim() || null,
-          showInPo,
           allocations,
         });
     setSubmitting(false);
@@ -433,48 +450,78 @@ function PaymentContent({
                   // Nominal habis → termin lain yang belum dipilih dikunci.
                   const budgetLocked = budgetConsumed && !selected;
                   const disabled = lunas || budgetLocked;
+                  // Toggle PO cuma relevan buat termin terpilih yang kebagian alokasi >0.
+                  const poEligible = selected && allocated > 0;
+                  const poOn = poTermIds.includes(t.id);
                   return (
-                    <button
+                    <div
                       key={t.id}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => toggleTermSelection(t.id)}
-                      aria-pressed={selected}
                       className={cn(
-                        "flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
+                        "overflow-hidden rounded-xl border transition-colors",
                         disabled
-                          ? "cursor-not-allowed border-border bg-muted/40 opacity-60"
+                          ? "border-border bg-muted/40 opacity-60"
                           : selected
                             ? "border-primary bg-primary/5"
-                            : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40",
+                            : "border-border bg-card",
                       )}
                     >
-                      {selected ? (
-                        <CheckCircle weight="BoldDuotone" className="size-4 shrink-0 text-primary" />
-                      ) : (
-                        <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => toggleTermSelection(t.id)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors",
+                          disabled
+                            ? "cursor-not-allowed"
+                            : selected
+                              ? ""
+                              : "hover:bg-secondary/40",
+                        )}
+                      >
+                        {selected ? (
+                          <CheckCircle weight="BoldDuotone" className="size-4 shrink-0 text-primary" />
+                        ) : (
+                          <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                        )}
+                        <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                          <span className="truncate">{t.name}</span>
+                          {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Lunas</span>}
+                          {budgetLocked && !lunas && (
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
+                          )}
+                          {partial && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
+                              Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
+                            </span>
+                          )}
+                          {unfunded && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                              Belum teralokasi
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          Rp{fmtRp(remaining)}
+                        </span>
+                      </button>
+                      {/* Toggle tampil-di-PO per termin — hanya untuk termin yang kebagian alokasi. */}
+                      {poEligible && (
+                        <div className="flex items-center justify-between gap-2 border-t border-primary/15 bg-background/60 px-3 py-1.5">
+                          <Label
+                            htmlFor={`edit-po-${t.id}`}
+                            className="cursor-pointer text-[11px] text-muted-foreground"
+                          >
+                            Tampilkan porsi ini di PO
+                          </Label>
+                          <Switch
+                            id={`edit-po-${t.id}`}
+                            checked={poOn}
+                            onCheckedChange={() => togglePoTerm(t.id)}
+                          />
+                        </div>
                       )}
-                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
-                        <span className="truncate">{t.name}</span>
-                        {lunas && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Lunas</span>}
-                        {budgetLocked && !lunas && (
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Nominal habis</span>
-                        )}
-                        {partial && (
-                          <span className="mt-0.5 block text-[11px] font-normal text-[var(--brand-gold)]">
-                            Dialokasi Rp{fmtRp(allocated)} · sisa Rp{fmtRp(remaining - allocated)}
-                          </span>
-                        )}
-                        {unfunded && (
-                          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-                            Belum teralokasi
-                          </span>
-                        )}
-                      </span>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        Rp{fmtRp(remaining)}
-                      </span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -529,14 +576,6 @@ function PaymentContent({
                 rows={2}
                 className="resize-none rounded-xl text-xs"
               />
-            </div>
-
-            {/* Tampilkan di PO */}
-            <div className="flex items-center gap-2">
-              <Switch id="edit-add-show-in-po" checked={showInPo} onCheckedChange={setShowInPo} />
-              <Label htmlFor="edit-add-show-in-po" className="cursor-pointer text-xs text-muted-foreground">
-                Tampilkan di PO
-              </Label>
             </div>
 
             {/* Ringkasan alokasi — Client Bayar / Total Termin / Selisih */}
@@ -686,16 +725,30 @@ function PaymentContent({
                   </div>
                 </div>
 
-                {/* Termin yang ditutup */}
+                {/* Termin yang ditutup — tiap alokasi punya toggle "tampil di PO" sendiri. */}
                 {ci.allocations.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-col gap-1.5">
                     {ci.allocations.map((a) => (
-                      <span
-                        key={a.termId}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[11px] text-foreground"
+                      <div
+                        key={a.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-1.5"
                       >
-                        {termName(a.termId)} · Rp{fmtRp(a.amount)}
-                      </span>
+                        <span className="min-w-0 text-[11px] text-foreground">
+                          <span className="font-medium">{termName(a.termId)}</span>
+                          <span className="text-muted-foreground"> · Rp{fmtRp(a.amount)}</span>
+                        </span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground">PO</span>
+                          <Switch
+                            checked={a.showInPo}
+                            disabled={toggleAllocPoMutation.isPending}
+                            onCheckedChange={(val) => {
+                              void toggleAllocPoMutation.mutateAsync({ allocationId: a.id, showInPo: val });
+                            }}
+                            aria-label={`Tampilkan porsi ${termName(a.termId)} di PO`}
+                          />
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -716,17 +769,6 @@ function PaymentContent({
                   ) : (
                     <span className="text-[11px] text-muted-foreground">Tanpa bukti</span>
                   )}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground">Tampilkan di PO</span>
-                    <Switch
-                      checked={ci.showInPo}
-                      disabled={toggleShowInPoMutation.isPending}
-                      onCheckedChange={(val) => {
-                        void toggleShowInPoMutation.mutateAsync({ ledgerId: ci.id, showInPo: val });
-                      }}
-                      aria-label="Tampilkan di PO"
-                    />
-                  </div>
                 </div>
               </div>
             ))}

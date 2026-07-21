@@ -153,8 +153,8 @@ export interface BookingCashIn {
   discountProgramId: string | null;
   discountAmount: number;
   evidence: string | null;
-  /** Alokasi ke termin — termId + jumlah GROSS. */
-  allocations: { termId: string; amount: number }[];
+  /** Alokasi ke termin — id + termId + jumlah GROSS + flag tampil di PO (per termin). */
+  allocations: { id: string; termId: string; amount: number; showInPo: boolean }[];
 }
 
 /**
@@ -185,8 +185,10 @@ export async function getBookingCashIns(bookingId: string): Promise<BookingCashI
       evidence: true,
       allocations: {
         select: {
+          id: true,
           termId: true,
           amount: true,
+          showInPo: true,
           term: { select: { name: true } },
         },
       },
@@ -207,8 +209,10 @@ export async function getBookingCashIns(bookingId: string): Promise<BookingCashI
     evidence: r.evidence ?? null,
     linkedTermNames: r.allocations.map((a) => a.term.name),
     allocations: r.allocations.map((a) => ({
+      id: a.id,
       termId: a.termId,
       amount: Number(a.amount),
+      showInPo: a.showInPo,
     })),
   }));
 }
