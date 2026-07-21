@@ -134,14 +134,35 @@ function PaymentContent({
   // Nominal habis teralokasi penuh (tidak ada sisa `lebih`) → termin lain yang
   // belum terpilih dikunci. Kalau lebih bayar baru bebas kaitkan ke mana saja.
   const budgetConsumed = amountNum > 0 && alloc.lebih === 0;
+
+  // Termin terpilih yang TIDAK kebagian alokasi (Rp0) padahal masih ada sisa tagihan —
+  // muncul saat nominal diturunkan. Ini yang diblokir; sisa tagihan termin yang kebagian
+  // sebagian (`kurang > 0`) itu WAJAR (cicilan) dan tetap boleh disimpan.
+  const remainingOf = (id: string): number => {
+    const t = terms.find((x) => x.id === id);
+    return t ? Math.max(0, t.amount - t.paid) : 0;
+  };
+  const unfundedSelected = selectedTermIds.filter(
+    (id) => remainingOf(id) > 0 && (alloc.perTerm.get(id) ?? 0) <= 0,
+  );
+  const hasUnfunded = unfundedSelected.length > 0;
+
+  /** Lepas otomatis termin yang tak kebagian alokasi — dipanggil saat blur field nominal. */
+  function pruneUnfunded(): void {
+    if (amountNum <= 0 || unfundedSelected.length === 0) return;
+    setSelectedTermIds((prev) => prev.filter((id) => !unfundedSelected.includes(id)));
+  }
+
   // Bukti bayar wajib: file baru dilampirkan ATAU (saat edit) bukti lama masih ada.
   const hasEvidence = !!evidenceFile || !!existingEvidence;
-  // Submit boleh saat nominal PAS/LEBIH (kurang = blocking) + bukti bayar ada.
+  // Submit boleh selama nominal ter-alokasi ke SEMUA termin terpilih (tiap termin
+  // kebagian > 0). Sisa tagihan termin (cicilan) wajar — TIDAK memblokir. Yang blokir:
+  // termin terpilih yang kebagian Rp0 (hasUnfunded). Bukti bayar WAJIB.
   const canSubmitForm =
     amountNum > 0 &&
     !!paymentMethodId &&
     selectedTermIds.length > 0 &&
-    alloc.kurang === 0 &&
+    !hasUnfunded &&
     hasEvidence;
 
   // Booking fee = termin pertama; tertutup kalau paid > 0 atau ada cash-in ke situ.
@@ -189,7 +210,7 @@ function PaymentContent({
     if (amountNum <= 0) { toast.error("Jumlah pembayaran wajib diisi."); return; }
     if (!paymentMethodId) { toast.error("Pilih rekening penerima."); return; }
     if (selectedTermIds.length === 0) { toast.error("Pilih minimal satu termin."); return; }
-    if (alloc.kurang > 0) { toast.error("Nominal kurang dari termin terpilih. Kurangi termin atau naikkan nominal."); return; }
+    if (hasUnfunded) { toast.error("Ada termin yang belum kebagian alokasi. Lepas termin itu atau naikkan nominal."); return; }
     if (!hasEvidence) { toast.error("Bukti bayar wajib dilampirkan."); return; }
 
     setSubmitting(true);
@@ -293,6 +314,8 @@ function PaymentContent({
 
   const s3Base = (process.env.NEXT_PUBLIC_S3_PUBLIC_URL ?? "").replace(/\/$/, "");
   const termName = (termId: string): string => terms.find((t) => t.id === termId)?.name ?? "Termin";
+  // Sembunyikan cash-in yang sedang diedit dari daftar (form-nya sudah di atas).
+  const visibleCashIns = editingId ? cashIns.filter((ci) => ci.id !== editingId) : cashIns;
 
   return (
     <div className="flex h-full flex-col">
@@ -359,6 +382,7 @@ function PaymentContent({
                   value={amountNum ? amountNum.toLocaleString("id-ID") : ""}
                   placeholder="0"
                   onChange={(e) => setAmount(e.target.value)}
+                  onBlur={pruneUnfunded}
                   className="h-9 border-0 bg-transparent px-0 tabular-nums shadow-none focus-visible:ring-0"
                 />
               </div>
@@ -531,47 +555,57 @@ function PaymentContent({
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] text-muted-foreground">Selisih</span>
+                  <span className="text-[10px] text-muted-foreground">Sisa Termin</span>
                   <span
                     className={cn(
                       "truncate text-xs font-semibold tabular-nums",
-                      alloc.kurang > 0 && "text-destructive",
+                      alloc.kurang > 0 && "text-foreground",
                       alloc.lebih > 0 && "text-[var(--brand-gold)]",
                       alloc.kurang === 0 && alloc.lebih === 0 && "text-primary",
                     )}
                   >
-                    {alloc.kurang > 0 && `− Rp${fmtRp(alloc.kurang)} (Kurang)`}
+                    {alloc.kurang > 0 && `Rp${fmtRp(alloc.kurang)}`}
                     {alloc.lebih > 0 && `+ Rp${fmtRp(alloc.lebih)} (Lebih)`}
-                    {alloc.kurang === 0 && alloc.lebih === 0 && "Sesuai"}
+                    {alloc.kurang === 0 && alloc.lebih === 0 && "Lunas"}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Feedback selisih — kurang (blocking) / lebih (saldo, boleh) */}
-            {selectedTermIds.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
+            {/* Feedback alokasi — unfunded (blocking, merah) / cicilan (info) / lebih (saldo) */}
+            {selectedTermIds.length > 0 && amountNum > 0 && (hasUnfunded || alloc.kurang > 0 || alloc.lebih > 0) && (
               <div
                 className={cn(
                   "flex items-start gap-2 rounded-xl p-2.5 text-xs",
-                  alloc.kurang > 0
+                  hasUnfunded
                     ? "bg-destructive/10 text-destructive"
-                    : "bg-[var(--brand-gold)]/10 text-foreground",
+                    : alloc.lebih > 0
+                      ? "bg-[var(--brand-gold)]/10 text-foreground"
+                      : "bg-muted text-muted-foreground",
                 )}
               >
                 <DangerTriangle
                   weight="BoldDuotone"
                   className={cn(
                     "mt-0.5 size-4 shrink-0",
-                    alloc.kurang > 0 ? "text-destructive" : "text-[var(--brand-gold)]",
+                    hasUnfunded
+                      ? "text-destructive"
+                      : alloc.lebih > 0
+                        ? "text-[var(--brand-gold)]"
+                        : "text-muted-foreground",
                   )}
                 />
-                {alloc.kurang > 0 ? (
+                {hasUnfunded ? (
                   <span>
-                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — nominal belum menutup termin terpilih. Kurangi termin atau naikkan nominal agar bisa disimpan.
+                    {unfundedSelected.length} termin belum kebagian alokasi — nominal sudah habis sebelum sampai ke situ. Termin itu akan otomatis dilepas, atau naikkan nominal.
+                  </span>
+                ) : alloc.lebih > 0 ? (
+                  <span>
+                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
                   </span>
                 ) : (
                   <span>
-                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
+                    Sisa <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> tetap jadi tagihan termin (cicilan) — pembayaran ini boleh disimpan.
                   </span>
                 )}
               </div>
@@ -600,8 +634,8 @@ function PaymentContent({
           </div>
         )}
 
-        {/* ── Daftar pembayaran tercatat ── */}
-        {cashIns.length === 0 && !formOpen ? (
+        {/* ── Daftar pembayaran tercatat (sembunyikan yang sedang diedit) ── */}
+        {visibleCashIns.length === 0 && !formOpen ? (
           <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-center">
             <CardReceive weight="BoldDuotone" className="mx-auto size-6 text-muted-foreground" />
             <p className="mt-2 text-sm text-muted-foreground">Belum ada pembayaran tercatat.</p>
@@ -609,7 +643,7 @@ function PaymentContent({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {cashIns.map((ci) => (
+            {visibleCashIns.map((ci) => (
               <div key={ci.id} className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">

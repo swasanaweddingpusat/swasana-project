@@ -148,6 +148,20 @@ export function CreatePaymentRecordStep({
   // ubah nominal dulu. Kalau lebih bayar (`lebih > 0`) baru bebas kaitkan termin lain.
   const budgetConsumed = amountNum > 0 && alloc.lebih === 0;
 
+  // Termin terpilih yang TIDAK kebagian alokasi (Rp0) padahal masih ada sisa tagihan —
+  // muncul saat nominal diturunkan atau termin dipilih sebelum nominal diisi. Ini yang
+  // diblokir; sisa tagihan termin yang kebagian sebagian (`kurang > 0`) itu WAJAR (cicilan).
+  const unfundedSelected = selectedTermUids.filter(
+    (uid) => remainingOf(uid) > 0 && (alloc.perTerm.get(uid) ?? 0) <= 0,
+  );
+  const hasUnfunded = unfundedSelected.length > 0;
+
+  /** Lepas otomatis termin yang tak kebagian alokasi — dipanggil saat blur field nominal. */
+  function pruneUnfunded(): void {
+    if (amountNum <= 0 || unfundedSelected.length === 0) return;
+    setSelectedTermUids((prev) => prev.filter((uid) => !unfundedSelected.includes(uid)));
+  }
+
   function resetForm(): void {
     setEditingId(null);
     setOccurredAt(todayISO());
@@ -227,14 +241,14 @@ export function CreatePaymentRecordStep({
     setPayments((prev) => prev.filter((p) => p.id !== id));
   }
 
-  // Submit boleh kalau nominal PAS atau LEBIH dari total termin terpilih.
-  // Kurang bayar (alloc.kurang > 0) tidak boleh — user mesti kurangi termin
-  // atau naikkan nominal dulu. Bukti bayar WAJIB dilampirkan.
+  // Submit boleh selama nominal ter-alokasi ke SEMUA termin terpilih (tiap termin
+  // kebagian > 0). Sisa tagihan termin (cicilan) itu wajar — TIDAK memblokir. Yang
+  // diblokir: termin terpilih yang kebagian Rp0 (hasUnfunded). Bukti bayar WAJIB.
   const canSubmitForm =
     amountNum > 0 &&
     !!paymentMethodId &&
     selectedTermUids.length > 0 &&
-    alloc.kurang === 0 &&
+    !hasUnfunded &&
     !!evidenceFile;
   const termName = (uid: string): string => terms.find((t) => t.uid === uid)?.name ?? "Termin";
 
@@ -303,6 +317,7 @@ export function CreatePaymentRecordStep({
                   value={amountNum ? amountNum.toLocaleString("id-ID") : ""}
                   placeholder="0"
                   onChange={(e) => setAmount(e.target.value)}
+                  onBlur={pruneUnfunded}
                   className="h-9 border-0 bg-transparent px-0 tabular-nums shadow-none focus-visible:ring-0"
                 />
               </div>
@@ -474,47 +489,57 @@ export function CreatePaymentRecordStep({
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] text-muted-foreground">Selisih</span>
+                  <span className="text-[10px] text-muted-foreground">Sisa Termin</span>
                   <span
                     className={cn(
                       "truncate text-xs font-semibold tabular-nums",
-                      alloc.kurang > 0 && "text-destructive",
+                      alloc.kurang > 0 && "text-foreground",
                       alloc.lebih > 0 && "text-[var(--brand-gold)]",
                       alloc.kurang === 0 && alloc.lebih === 0 && "text-primary",
                     )}
                   >
-                    {alloc.kurang > 0 && `− Rp${fmtRp(alloc.kurang)} (Kurang)`}
+                    {alloc.kurang > 0 && `Rp${fmtRp(alloc.kurang)}`}
                     {alloc.lebih > 0 && `+ Rp${fmtRp(alloc.lebih)} (Lebih)`}
-                    {alloc.kurang === 0 && alloc.lebih === 0 && "Sesuai"}
+                    {alloc.kurang === 0 && alloc.lebih === 0 && "Lunas"}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Feedback selisih — kurang (blocking) / lebih (saldo, boleh) */}
-            {selectedTermUids.length > 0 && amountNum > 0 && (alloc.kurang > 0 || alloc.lebih > 0) && (
+            {/* Feedback alokasi — unfunded (blocking, merah) / cicilan (info) / lebih (saldo) */}
+            {selectedTermUids.length > 0 && amountNum > 0 && (hasUnfunded || alloc.kurang > 0 || alloc.lebih > 0) && (
               <div
                 className={cn(
                   "flex items-start gap-2 rounded-xl p-2.5 text-xs",
-                  alloc.kurang > 0
+                  hasUnfunded
                     ? "bg-destructive/10 text-destructive"
-                    : "bg-[var(--brand-gold)]/10 text-foreground",
+                    : alloc.lebih > 0
+                      ? "bg-[var(--brand-gold)]/10 text-foreground"
+                      : "bg-muted text-muted-foreground",
                 )}
               >
                 <DangerTriangle
                   weight="BoldDuotone"
                   className={cn(
                     "mt-0.5 size-4 shrink-0",
-                    alloc.kurang > 0 ? "text-destructive" : "text-[var(--brand-gold)]",
+                    hasUnfunded
+                      ? "text-destructive"
+                      : alloc.lebih > 0
+                        ? "text-[var(--brand-gold)]"
+                        : "text-muted-foreground",
                   )}
                 />
-                {alloc.kurang > 0 ? (
+                {hasUnfunded ? (
                   <span>
-                    Kurang <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> — nominal belum menutup termin terpilih. Kurangi termin atau naikkan nominal agar bisa disimpan.
+                    {unfundedSelected.length} termin belum kebagian alokasi — nominal sudah habis sebelum sampai ke situ. Termin itu akan otomatis dilepas, atau naikkan nominal.
+                  </span>
+                ) : alloc.lebih > 0 ? (
+                  <span>
+                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
                   </span>
                 ) : (
                   <span>
-                    Lebih <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.lebih)}</span> — kelebihan akan tercatat sebagai saldo lebih bayar booking.
+                    Sisa <span className="font-semibold tabular-nums">Rp{fmtRp(alloc.kurang)}</span> tetap jadi tagihan termin (cicilan) — pembayaran ini boleh disimpan.
                   </span>
                 )}
               </div>
@@ -542,8 +567,8 @@ export function CreatePaymentRecordStep({
           </div>
         )}
 
-        {/* ── Daftar pembayaran ── */}
-        {payments.length === 0 && !formOpen ? (
+        {/* ── Daftar pembayaran (sembunyikan yang sedang diedit — otherPayments) ── */}
+        {otherPayments.length === 0 && !formOpen ? (
           <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-center">
             <CardReceive weight="BoldDuotone" className="mx-auto size-6 text-muted-foreground" />
             <p className="mt-2 text-sm text-muted-foreground">Belum ada pembayaran.</p>
@@ -551,7 +576,7 @@ export function CreatePaymentRecordStep({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {payments.map((p) => (
+            {otherPayments.map((p) => (
               <div key={p.id} className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
