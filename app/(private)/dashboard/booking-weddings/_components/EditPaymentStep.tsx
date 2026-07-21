@@ -64,19 +64,22 @@ interface PaymentContentProps {
 /** Alokasi GROSS greedy ke termin terpilih (urut = sortOrder fetch). Tiap termin
  *  diisi penuh sampai budget habis; termin terakhir bisa parsial. Server tetap
  *  jadi guard final untuk over-allocation. `poTermIds` = termin yang porsinya
- *  ditampilkan di Summary PO (per-alokasi showInPo). */
+ *  ditampilkan di Summary PO (per-alokasi showInPo). `coveredOf` = nominal termin
+ *  yang sudah tertutup cash-in LAIN (non-void, exclude yang sedang diedit) — jadi
+ *  sisa tagihan dihitung konsisten dengan picker (bukan acked-only `t.paid`). */
 function buildAllocations(
   gross: number,
   selectedIds: string[],
   terms: FinanceTerm[],
   poTermIds: string[],
+  coveredOf: (termId: string) => number,
 ): { termId: string; amount: number; showInPo: boolean }[] {
   const selected = terms.filter((t) => selectedIds.includes(t.id));
   const out: { termId: string; amount: number; showInPo: boolean }[] = [];
   let budget = gross;
   for (const t of selected) {
     if (budget <= 0) break;
-    const remaining = Math.max(0, t.amount - t.paid);
+    const remaining = Math.max(0, t.amount - coveredOf(t.id));
     const amount = Math.min(remaining, budget);
     if (amount > 0) {
       out.push({ termId: t.id, amount, showInPo: poTermIds.includes(t.id) });
@@ -91,6 +94,20 @@ function todayISO(): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Nominal satu termin yang sudah tertutup oleh cash-in LAIN (semua non-void:
+ *  pending + acked). Baca langsung dari PaymentAllocation.amount (GROSS) — bukan
+ *  acked-only `t.paid` — biar termin yang baru dibayar tapi belum diverifikasi
+ *  Finance TETAP terhitung terkunci di picker (parity dengan create flow). */
+function coveredByOtherCashIns(termId: string, cashIns: BookingCashIn[]): number {
+  let covered = 0;
+  for (const ci of cashIns) {
+    for (const a of ci.allocations) {
+      if (a.termId === termId) covered += a.amount;
+    }
+  }
+  return covered;
 }
 
 function PaymentContent({
@@ -128,10 +145,16 @@ function PaymentContent({
 
   const promoSelected = promos.find((p) => p.id === programId) ?? null;
 
+  // Coverage termin dihitung dari SEMUA cash-in non-void (pending + acked), KECUALI
+  // yang sedang diedit — biar termin yang sudah dibayar penuh tapi belum diverifikasi
+  // Finance tetap terkunci di picker (bukan cuma acked-only `t.paid`). Parity create.
+  const otherCashIns = editingId ? cashIns.filter((ci) => ci.id !== editingId) : cashIns;
+  const coveredOf = (id: string): number => coveredByOtherCashIns(id, otherCashIns);
+
   // Preview alokasi greedy — urut sortOrder (sama dengan buildAllocations submit).
   const orderedSelected = terms
     .filter((t) => selectedTermIds.includes(t.id))
-    .map((t) => ({ id: t.id, remaining: Math.max(0, t.amount - t.paid) }));
+    .map((t) => ({ id: t.id, remaining: Math.max(0, t.amount - coveredOf(t.id)) }));
   const alloc = computeAllocationPreview(orderedSelected, amountNum);
 
   // Nominal habis teralokasi penuh (tidak ada sisa `lebih`) → termin lain yang
@@ -143,7 +166,7 @@ function PaymentContent({
   // sebagian (`kurang > 0`) itu WAJAR (cicilan) dan tetap boleh disimpan.
   const remainingOf = (id: string): number => {
     const t = terms.find((x) => x.id === id);
-    return t ? Math.max(0, t.amount - t.paid) : 0;
+    return t ? Math.max(0, t.amount - coveredOf(id)) : 0;
   };
   const unfundedSelected = selectedTermIds.filter(
     (id) => remainingOf(id) > 0 && (alloc.perTerm.get(id) ?? 0) <= 0,
@@ -260,7 +283,7 @@ function PaymentContent({
     const poTerms = poTermIds.filter(
       (id) => selectedTermIds.includes(id) && (alloc.perTerm.get(id) ?? 0) > 0,
     );
-    const allocations = buildAllocations(amountNum, selectedTermIds, terms, poTerms);
+    const allocations = buildAllocations(amountNum, selectedTermIds, terms, poTerms, coveredOf);
     const discountAmount = computePromoDiscount(amountNum, promoSelected);
     const result = editingId
       ? await updateCashIn({
@@ -442,7 +465,7 @@ function PaymentContent({
               <div className="flex flex-col gap-1.5">
                 {terms.map((t) => {
                   const selected = selectedTermIds.includes(t.id);
-                  const remaining = Math.max(0, t.amount - t.paid);
+                  const remaining = Math.max(0, t.amount - coveredOf(t.id));
                   const lunas = remaining <= 0;
                   const allocated = selected ? (alloc.perTerm.get(t.id) ?? 0) : 0;
                   const partial = selected && allocated > 0 && allocated < remaining;
