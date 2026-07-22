@@ -1,5 +1,5 @@
 import { getBookings, type ApprovalStatusFilter } from "@/lib/queries/bookings";
-import { requirePermissionForRoute, canViewSalesBookings } from "@/lib/permissions";
+import { requirePermissionForRoute, canViewSalesBookings, isSuperAdmin, hasPermission } from "@/lib/permissions";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import type { DataScope } from "@/types/user";
 
@@ -59,24 +59,30 @@ export async function GET(request: Request) {
   const rawSalesId = searchParams.get("salesId") ?? undefined;
   const salesId = rawSalesId?.trim() || undefined;
 
-  // Scope guard: when salesId is requested, verify the caller shares a group
-  // with that sales profile (or is super admin / has groups:view-all).
-  // On denial we return an empty result with the same shape — no error detail
-  // exposed to the client.
-  if (salesId) {
-    if (!profileId) {
-      return new Response(
-        JSON.stringify({ data: [], total: 0 }, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
-        { headers: { "content-type": "application/json" } },
-      );
-    }
+  const emptyResult = () =>
+    new Response(
+      JSON.stringify({ data: [], total: 0 }, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
+      { headers: { "content-type": "application/json" } },
+    );
+
+  // Scope guard for salesId-filtered queries.
+  //  - "__none__" = sentinel for "Tanpa PIC" (detached bookings, salesId null).
+  //    Not a real profile, so canViewSalesBookings can't authorize it — instead
+  //    gate on elevated visibility (super admin / groups:view-all / booking:transfer)
+  //    since these are orphaned bookings meant to be re-assigned.
+  //  - a real salesId → verify the caller shares a group with that sales profile
+  //    (or is super admin / has groups:view-all).
+  // On denial we return an empty result with the same shape — no error detail exposed.
+  if (salesId === "__none__") {
+    const allowed =
+      (await isSuperAdmin(session.user.roleId)) ||
+      (await hasPermission(session.user.roleId, "groups", "view-all")) ||
+      (await hasPermission(session.user.roleId, "booking", "transfer"));
+    if (!allowed) return emptyResult();
+  } else if (salesId) {
+    if (!profileId) return emptyResult();
     const allowed = await canViewSalesBookings(profileId, session.user.roleId, salesId);
-    if (!allowed) {
-      return new Response(
-        JSON.stringify({ data: [], total: 0 }, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
-        { headers: { "content-type": "application/json" } },
-      );
-    }
+    if (!allowed) return emptyResult();
   }
 
   // When salesId is present, use "all" scope so the caller (e.g. a group

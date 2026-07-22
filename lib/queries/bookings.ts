@@ -176,7 +176,11 @@ export async function getBookings(
     rs === "all" ? {} :
     { recordStatus: "saved" };
   const dateFilter = buildDateFilter(options?.dateFrom, options?.dateTo, options?.year);
-  const salesIdFilter: Prisma.BookingWhereInput = options?.salesId ? { salesId: options.salesId } : {};
+  // "__none__" = sentinel for "Tanpa PIC" (unassigned sales, salesId null) — used
+  // by the Booking list filter so detached bookings can be found & transferred.
+  const salesIdFilter: Prisma.BookingWhereInput =
+    options?.salesId === "__none__" ? { salesId: null } :
+    options?.salesId ? { salesId: options.salesId } : {};
   let approvalStatusFilter: Prisma.BookingWhereInput = {};
   const stageMatch = options?.approvalStatus?.match(/^(sales|manager|finance|client)-(approved|pending)$/);
   if (stageMatch) {

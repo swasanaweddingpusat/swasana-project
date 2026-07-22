@@ -7,6 +7,7 @@ import { inviteUserSchema, updateUserSchema } from "@/lib/validations/user";
 import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { isForeignKeyViolation } from "@/lib/prisma-errors";
 import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
@@ -245,12 +246,14 @@ export async function deleteUser(userId: string) {
     // lead.createdById, approvalRecord, bookingRevision, bookingComment,
     // userTarget and maintenanceTicket — all with `onDelete: Restrict`. Those
     // rows are business records that must not be orphaned, so a hard delete is
-    // refused by Postgres (FK violation, P2003).
+    // refused by Postgres (FK violation).
     //
     // Strategy: try the hard delete; if any Restrict relation blocks it, fall
-    // back to a soft delete (status → inactive) so the account is disabled
-    // without destroying the linked business data. Sessions are cleared in both
-    // paths so the user can no longer authenticate.
+    // back to detach + soft delete — the sales is unassigned from their bookings
+    // (salesId → null, "tanpa PIC", ready to transfer to another sales) and the
+    // account is disabled (status → inactive). The financial/approval audit trail
+    // (ledger, approval signatures, quotations) is preserved intact. Sessions are
+    // cleared in both paths so the user can no longer authenticate.
     try {
       // Cascades from User → Profile (onDelete: Cascade) handle
       // EmailVerificationToken, PasswordResetToken, UserGroupMember, Notification etc.
@@ -274,11 +277,12 @@ export async function deleteUser(userId: string) {
 
       return { success: true, message: "Pengguna berhasil dihapus." };
     } catch (err) {
-      // P2003 = foreign key constraint violation → user has linked business
-      // records. Soft delete instead of failing.
-      const isFkViolation =
-        err instanceof Error && "code" in err && (err as { code: string }).code === "P2003";
-      if (!isFkViolation) throw err;
+      // Foreign-key constraint violation → user has linked business records.
+      // Soft delete instead of failing. Detect via helper so BOTH Prisma's
+      // "P2003" and the raw Postgres "23503" are caught — with the PrismaPg/Neon
+      // driver adapter the SQLSTATE can bubble up unmapped, and a P2003-only
+      // check silently missed it (the "Terjadi kesalahan" bug).
+      if (!isForeignKeyViolation(err)) throw err;
 
       if (profile.status === "inactive") {
         return {
@@ -287,27 +291,44 @@ export async function deleteUser(userId: string) {
         };
       }
 
+      // Count the bookings this sales owns so the message can tell the admin how
+      // many are now "tanpa PIC" and need transferring. Covers both WEDDINGS and
+      // MICE (same bookings table).
+      const detachedCount = await db.booking.count({ where: { salesId: profile.id } });
+
       await db.$transaction([
+        // Detach: bookings become "tanpa PIC" (salesId null) — transferable to
+        // another sales via the Booking list. Only touches the sales assignment;
+        // manager, snapshots, approvals and payments are untouched.
+        db.booking.updateMany({ where: { salesId: profile.id }, data: { salesId: null } }),
         db.profile.update({ where: { id: profile.id }, data: { status: "inactive" } }),
         db.session.deleteMany({ where: { userId: profile.userId } }),
       ]);
 
       revalidateTag("users", "max");
+      revalidateTag("bookings", "max");
       await logAudit({
         userId: session!.user.profileId,
         action: "user.deactivated",
         entityType: "profile",
         entityId: userId,
-        description: `Pengguna ${profile.email} dinonaktifkan (punya data terkait, tidak bisa dihapus permanen)`,
-        changes: { before: { status: profile.status }, after: { status: "inactive" } },
+        description: `Pengguna ${profile.email} dinonaktifkan; ${detachedCount} booking di-detach jadi tanpa PIC`,
+        changes: {
+          before: { status: profile.status },
+          after: { status: "inactive" },
+          detachedBookings: detachedCount,
+        },
         ipAddress,
         userAgent,
       });
 
+      const bookingNote =
+        detachedCount > 0
+          ? ` ${detachedCount} booking-nya kini tanpa PIC — transfer ke sales lain lewat menu Booking.`
+          : "";
       return {
         success: true,
-        message:
-          "Pengguna memiliki data terkait (booking/quotation/lead) sehingga tidak bisa dihapus permanen. Akun dinonaktifkan dan tidak bisa login lagi.",
+        message: `Sales dinonaktifkan (punya data terkait, tidak bisa dihapus permanen) dan tidak bisa login lagi.${bookingNote}`,
       };
     }
   } catch (error) {

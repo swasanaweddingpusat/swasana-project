@@ -86,8 +86,14 @@ function SkeletonTableBody({ rows = ROWS_PER_PAGE }: { rows?: number }) {
 
 const getRoleBadgeClass = () => "bg-secondary text-secondary-foreground";
 
-const getStatusBadgeClass = (verified: boolean) =>
-  verified ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground";
+// Status badge derives from account status first (inactive = soft-deleted/detached),
+// then email verification. Inactive uses destructive tint to signal a disabled account.
+function getStatusBadge(status: string | undefined, verified: boolean): { label: string; className: string } {
+  if (status === "inactive") return { label: "Nonaktif", className: "bg-destructive/10 text-destructive" };
+  if (status === "suspended") return { label: "Suspended", className: "bg-destructive/10 text-destructive" };
+  if (verified) return { label: "Verified", className: "bg-primary text-primary-foreground" };
+  return { label: "Pending", className: "bg-muted text-muted-foreground" };
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -309,6 +315,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                   <SelectContent>
                     <SelectItem value="verified">Verified</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="inactive">Nonaktif</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button
@@ -369,6 +376,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                   {paginatedUsers.map((user, index) => {
                     const roleName = user.profile?.role?.name ?? "";
                     const isVerified = user.profile?.isEmailVerified ?? false;
+                    const statusBadge = getStatusBadge(user.profile?.status, isVerified);
                     const dataScope = user.profile?.dataScope ?? "own";
                     const rowNumber = (page - 1) * rowsPerPage + index + 1;
                     const createdDate = user.createdAt
@@ -410,8 +418,8 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2.5', 'text-xs', 'text-muted-foreground')}>{createdDate}</TableCell>
                         <TableCell className={cn('px-2', 'py-2.5')}>
-                          <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getStatusBadgeClass(isVerified))}>
-                            {isVerified ? "Verified" : "Pending"}
+                          <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", statusBadge.className)}>
+                            {statusBadge.label}
                           </span>
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2.5')}>
@@ -449,6 +457,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
             {paginatedUsers.map((user, index) => {
               const roleName = user.profile?.role?.name ?? "";
               const isVerified = user.profile?.isEmailVerified ?? false;
+              const statusBadge = getStatusBadge(user.profile?.status, isVerified);
               const dataScope = user.profile?.dataScope ?? "own";
               const rowNumber = (page - 1) * rowsPerPage + index + 1;
               const createdDate = user.createdAt
@@ -471,8 +480,8 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                         <p className={cn('text-xs', 'text-muted-foreground', 'truncate')}>{user.email}</p>
                       </div>
                     </div>
-                    <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium", getStatusBadgeClass(isVerified))}>
-                      {isVerified ? "Verified" : "Pending"}
+                    <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium", statusBadge.className)}>
+                      {statusBadge.label}
                     </span>
                   </div>
 
