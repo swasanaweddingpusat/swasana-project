@@ -62,14 +62,18 @@ async function _queryTopSales(
   const candidateBookings = await db.booking.findMany({
     where: {
       recordStatus: "saved",
+      // Exclude "tanpa PIC" bookings (salesId null) — they belong to no sales and
+      // must not be attributed to anyone's performance.
+      salesId: allowedProfileIds ? { in: allowedProfileIds } : { not: null },
       eventDate: { gte: startDate, lte: endDate },
-      ...(allowedProfileIds ? { salesId: { in: allowedProfileIds } } : {}),
     },
     select: { salesId: true },
     take: 500,
   });
 
-  const candidateSalesIds = [...new Set(candidateBookings.map((b) => b.salesId))];
+  const candidateSalesIds = [
+    ...new Set(candidateBookings.map((b) => b.salesId).filter((id): id is string => id !== null)),
+  ];
 
   if (candidateSalesIds.length === 0) return [];
 
@@ -125,6 +129,9 @@ async function _queryTopSales(
     { bookingStatus: BookingStatus; category: EventCategory; price: number }[]
   >();
   for (const b of allBookings) {
+    // salesId is nullable ("tanpa PIC"); the query already filters to candidate
+    // salesIds so this is a type-narrowing guard, never expected to skip a row.
+    if (!b.salesId) continue;
     const list = bookingsBySalesId.get(b.salesId) ?? [];
     list.push({
       bookingStatus: b.bookingStatus,

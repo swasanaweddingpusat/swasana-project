@@ -92,7 +92,7 @@ export interface ARBooking {
   namaEvent: string;
   brandName: string | null;
   venueId: string;
-  salesId: string;
+  salesId: string | null;
   salesPicName: string;
   packageName: string | null;
   totalPrice: number;
@@ -120,7 +120,7 @@ export interface AgingRow {
   bucket: AgingBucketKey;
   salesPicName: string;
   venueId: string;
-  salesId: string;
+  salesId: string | null;
 }
 
 /** Aggregated AR per customer for the Client page. */

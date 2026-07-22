@@ -48,15 +48,25 @@ export async function getUsers(filters: UserFilters = {}) {
 
   const { search, roleId, status, dataScope, page = 1, limit = 20 } = filters;
 
+  // Status filter mapping:
+  //  - "verified" / "pending" → derived from isEmailVerified (not a Profile.status)
+  //  - "active" / "inactive" / "suspended" → literal Profile.status
+  //  - undefined (default) → hide inactive accounts (soft-deleted / detached sales)
+  //    so they don't clutter the list; still reachable via the explicit "Nonaktif" filter.
+  const statusWhere = (() => {
+    if (status === "verified") return { isEmailVerified: true, status: { not: "inactive" as const } };
+    if (status === "pending") return { isEmailVerified: false, status: { not: "inactive" as const } };
+    if (status === "active" || status === "inactive" || status === "suspended") {
+      return { status };
+    }
+    return { status: { not: "inactive" as const } };
+  })();
+
   const where = {
     profile: {
       ...(roleId && { roleId }),
       ...(dataScope && { dataScope }),
-      ...(status === "pending"
-        ? { isEmailVerified: false }
-        : status
-        ? { status: status as "active" | "inactive" | "suspended" }
-        : {}),
+      ...statusWhere,
     },
     ...(search && {
       OR: [

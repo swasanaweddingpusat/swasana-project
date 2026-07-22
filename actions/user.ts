@@ -7,6 +7,7 @@ import { inviteUserSchema, updateUserSchema } from "@/lib/validations/user";
 import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/permissions";
 import { mutationLimiter, rateLimitError } from "@/lib/rate-limit";
+import { isForeignKeyViolation } from "@/lib/prisma-errors";
 import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
@@ -245,12 +246,14 @@ export async function deleteUser(userId: string) {
     // lead.createdById, approvalRecord, bookingRevision, bookingComment,
     // userTarget and maintenanceTicket — all with `onDelete: Restrict`. Those
     // rows are business records that must not be orphaned, so a hard delete is
-    // refused by Postgres (FK violation, P2003).
+    // refused by Postgres (FK violation).
     //
     // Strategy: try the hard delete; if any Restrict relation blocks it, fall
-    // back to a soft delete (status → inactive) so the account is disabled
-    // without destroying the linked business data. Sessions are cleared in both
-    // paths so the user can no longer authenticate.
+    // back to detach + soft delete — the sales is unassigned from their bookings
+    // (salesId → null, "tanpa PIC", ready to transfer to another sales) and the
+    // account is disabled (status → inactive). The financial/approval audit trail
+    // (ledger, approval signatures, quotations) is preserved intact. Sessions are
+    // cleared in both paths so the user can no longer authenticate.
     try {
       // Cascades from User → Profile (onDelete: Cascade) handle
       // EmailVerificationToken, PasswordResetToken, UserGroupMember, Notification etc.
@@ -274,45 +277,114 @@ export async function deleteUser(userId: string) {
 
       return { success: true, message: "Pengguna berhasil dihapus." };
     } catch (err) {
-      // P2003 = foreign key constraint violation → user has linked business
-      // records. Soft delete instead of failing.
-      const isFkViolation =
-        err instanceof Error && "code" in err && (err as { code: string }).code === "P2003";
-      if (!isFkViolation) throw err;
+      // Foreign-key constraint violation → user has linked business records.
+      // Soft delete instead of failing. Detect via helper so BOTH Prisma's
+      // "P2003" and the raw Postgres "23503" are caught — with the PrismaPg/Neon
+      // driver adapter the SQLSTATE can bubble up unmapped, and a P2003-only
+      // check silently missed it (the "Terjadi kesalahan" bug).
+      if (!isForeignKeyViolation(err)) throw err;
 
-      if (profile.status === "inactive") {
-        return {
-          success: true,
-          message: "Pengguna memiliki data terkait dan sudah dinonaktifkan sebelumnya.",
-        };
-      }
+      // Count the bookings this sales owns so the message can tell the admin how
+      // many are now "tanpa PIC" and need transferring. Covers both WEDDINGS and
+      // MICE (same bookings table).
+      const detachedCount = await db.booking.count({ where: { salesId: profile.id } });
+      const wasAlreadyInactive = profile.status === "inactive";
 
+      // NB: do NOT early-return when the profile is already inactive. A profile
+      // deactivated by an older code path (before booking-detach existed) can
+      // still own bookings, and Postgres keeps refusing the hard delete until
+      // they're detached. Re-running the detach here fixes that legacy orphan
+      // state; updateMany is idempotent (0 rows when nothing is attached).
       await db.$transaction([
+        // Detach: bookings become "tanpa PIC" (salesId null) — transferable to
+        // another sales via the Booking list. Only touches the sales assignment;
+        // manager, snapshots, approvals and payments are untouched.
+        db.booking.updateMany({ where: { salesId: profile.id }, data: { salesId: null } }),
         db.profile.update({ where: { id: profile.id }, data: { status: "inactive" } }),
         db.session.deleteMany({ where: { userId: profile.userId } }),
       ]);
 
       revalidateTag("users", "max");
-      await logAudit({
-        userId: session!.user.profileId,
-        action: "user.deactivated",
-        entityType: "profile",
-        entityId: userId,
-        description: `Pengguna ${profile.email} dinonaktifkan (punya data terkait, tidak bisa dihapus permanen)`,
-        changes: { before: { status: profile.status }, after: { status: "inactive" } },
-        ipAddress,
-        userAgent,
-      });
+      if (detachedCount > 0) revalidateTag("bookings", "max");
 
-      return {
-        success: true,
-        message:
-          "Pengguna memiliki data terkait (booking/quotation/lead) sehingga tidak bisa dihapus permanen. Akun dinonaktifkan dan tidak bisa login lagi.",
-      };
+      // Only audit when something actually changed — a repeat click on an
+      // already-inactive account with nothing left to detach is a no-op.
+      if (!wasAlreadyInactive || detachedCount > 0) {
+        await logAudit({
+          userId: session!.user.profileId,
+          action: "user.deactivated",
+          entityType: "profile",
+          entityId: userId,
+          description: `Pengguna ${profile.email} dinonaktifkan; ${detachedCount} booking di-detach jadi tanpa PIC`,
+          changes: {
+            before: { status: profile.status },
+            after: { status: "inactive" },
+            detachedBookings: detachedCount,
+          },
+          ipAddress,
+          userAgent,
+        });
+      }
+
+      const bookingNote =
+        detachedCount > 0
+          ? ` ${detachedCount} booking-nya kini tanpa PIC — transfer ke sales lain lewat menu Booking.`
+          : "";
+      const base = wasAlreadyInactive
+        ? "Pengguna sudah nonaktif sebelumnya."
+        : "Sales dinonaktifkan (punya data terkait, tidak bisa dihapus permanen) dan tidak bisa login lagi.";
+      return { success: true, message: `${base}${bookingNote}` };
     }
   } catch (error) {
     console.error("[deleteUser] Error:", error);
     return { success: false, error: "Terjadi kesalahan saat menghapus pengguna." };
+  }
+}
+
+// ─── Reactivate User ──────────────────────────────────────────────────────────
+
+/**
+ * Re-enable a soft-deleted (inactive) account so it can log in again.
+ * The reverse of deleteUser's soft-delete branch. Bookings that were detached
+ * when the account was deactivated are NOT reclaimed — they stay "tanpa PIC"
+ * (they may have already been transferred to another sales), so reassigning is a
+ * separate, deliberate step via the Booking list.
+ */
+export async function reactivateUser(userId: string) {
+  const { session, error: permError } = await requirePermission({ module: "settings-users", action: "edit" });
+  if (permError) return { success: false, error: permError };
+  if (!mutationLimiter.check(`user-reactivate:${session!.user.id}`)) return { success: false, ...rateLimitError() };
+
+  try {
+    const profile = await db.profile.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, status: true },
+    });
+    if (!profile) return { success: false, error: "Pengguna tidak ditemukan." };
+    if (profile.status === "active") {
+      return { success: true, message: "Pengguna sudah aktif." };
+    }
+
+    await db.profile.update({ where: { id: userId }, data: { status: "active" } });
+
+    revalidateTag("users", "max");
+
+    const h = await headers();
+    await logAudit({
+      userId: session!.user.profileId,
+      action: "user.reactivated",
+      entityType: "profile",
+      entityId: userId,
+      description: `Pengguna ${profile.email} diaktifkan kembali`,
+      changes: { before: { status: profile.status }, after: { status: "active" } },
+      ipAddress: h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? undefined,
+      userAgent: h.get("user-agent") ?? undefined,
+    });
+
+    return { success: true, message: "Pengguna diaktifkan kembali dan bisa login lagi." };
+  } catch (error) {
+    console.error("[reactivateUser] Error:", error);
+    return { success: false, error: "Terjadi kesalahan saat mengaktifkan pengguna." };
   }
 }
 

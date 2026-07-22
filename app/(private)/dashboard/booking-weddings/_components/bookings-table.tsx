@@ -619,6 +619,9 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
         <SearchableSelect
           options={[
             { id: "", name: "Semua Sales" },
+            // "__none__" = booking tanpa PIC (sales-nya sudah dinonaktifkan/detach)
+            // — supaya bisa ditemukan lalu di-transfer ke sales lain.
+            { id: "__none__", name: "Tanpa PIC" },
             ...salesProfiles.map((s) => ({ id: s.id, name: s.fullName ?? s.id })),
           ]}
           value={salesFilter || ""}
@@ -1060,12 +1063,12 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                               <span className={cn('text-muted-foreground', 'text-[10px]')}>No PO</span>
                             )}
                           </div>
-                          {booking.sales?.fullName && (
-                            <div className={cn('flex', 'items-center', 'gap-0.5', 'mt-1', 'text-[10px]', 'text-muted-foreground')}>
-                              <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{booking.sales.fullName}</span>
-                            </div>
-                          )}
+                          <div className={cn('flex', 'items-center', 'gap-0.5', 'mt-1', 'text-[10px]', 'text-muted-foreground')}>
+                            <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                            {booking.sales?.fullName
+                              ? <span className="truncate">{booking.sales.fullName}</span>
+                              : <span className="truncate italic">Tanpa PIC</span>}
+                          </div>
                         </div>
                       </TableCell>
 
@@ -1229,13 +1232,13 @@ export function BookingsTable({ initialData, salesProfiles }: { initialData: Boo
                       )}
                     </div>
 
-                    {/* Row 4b: Sales PIC — shown below PO when available */}
-                    {booking.sales?.fullName && (
-                      <div className={cn('flex', 'items-center', 'gap-0.5', 'text-[10px]', 'text-muted-foreground')}>
-                        <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{booking.sales.fullName}</span>
-                      </div>
-                    )}
+                    {/* Row 4b: Sales PIC — "Tanpa PIC" when booking is detached */}
+                    <div className={cn('flex', 'items-center', 'gap-0.5', 'text-[10px]', 'text-muted-foreground')}>
+                      <UserCircle weight="BoldDuotone" className="h-3 w-3 shrink-0" />
+                      {booking.sales?.fullName
+                        ? <span className="truncate">{booking.sales.fullName}</span>
+                        : <span className="truncate italic">Tanpa PIC</span>}
+                    </div>
 
                     {/* Footer: mobile action tile bar — icon above + label below, centered */}
                     <div className={cn('flex', 'items-center', 'justify-center', 'gap-1', 'pt-1', 'border-t', 'border-border')} onClick={(e) => e.stopPropagation()}>
