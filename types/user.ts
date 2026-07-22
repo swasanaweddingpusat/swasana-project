@@ -138,10 +138,15 @@ export interface PermissionMatrix {
 
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
+// UI-facing status filter. "verified"/"pending" derive from isEmailVerified;
+// "active"/"inactive"/"suspended" map to Profile.status. Default (undefined)
+// hides inactive (soft-deleted / detached sales) accounts.
+export type UserStatusFilter = ProfileStatus | "pending" | "verified";
+
 export interface UserFilters {
   search?: string;
   roleId?: string;
-  status?: ProfileStatus | "pending";
+  status?: UserStatusFilter;
   dataScope?: DataScope;
   page?: number;
   limit?: number;

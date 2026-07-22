@@ -820,7 +820,7 @@ model Booking {
   withMaterai           Boolean              @default(false)
   discountName          String?
   discountAmount        Int                  @default(0)
-  salesId               String
+  salesId               String?
   managerId             String?
   customerId            String
   venueId               String
@@ -849,7 +849,7 @@ model Booking {
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
-  sales               Profile              @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
+  sales               Profile?             @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
   customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
   venue               Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
