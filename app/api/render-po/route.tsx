@@ -49,6 +49,7 @@ export async function POST(req: Request) {
         weddingType: snap.weddingType as string | null,
         eventTime: (snap.eventTime as string | null | undefined) ?? null,
         signingLocation: snap.signingLocation as string | null,
+        notes: (snap.notes as string | null | undefined) ?? null,
         snapCustomer: snap.snapCustomer as POPdfBooking["snapCustomer"],
         snapVenue: snap.snapVenue as POPdfBooking["snapVenue"],
         snapPackage: snap.snapPackage as POPdfBooking["snapPackage"],
@@ -71,8 +72,11 @@ export async function POST(req: Request) {
       customerName = ((snap.snapCustomer as Record<string, unknown> | null)?.name as string ?? "Customer").replace(/[^a-zA-Z0-9]/g, "_");
       venueName = (revision.venueName ?? "Venue").replace(/[^a-zA-Z0-9]/g, "_");
       eventDate = new Date((snap.eventDate ?? snap.bookingDate) as string).toISOString().split("T")[0];
-      const bookingForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { signingLocation: true, snapPackagePricing: { select: { termAndCondition: true } } } });
+      const bookingForTc = await db.booking.findUnique({ where: { id: bookingId }, select: { signingLocation: true, notes: true, snapPackagePricing: { select: { termAndCondition: true } } } });
       termAndConditionHtml = bookingForTc?.snapPackagePricing?.termAndCondition ?? null;
+      // Note Date Event mirrors signingLocation: it's a live administrative field, so an
+      // older snapshot (frozen before notes existed) falls back to the current booking value.
+      pdfBooking.notes = pdfBooking.notes ?? bookingForTc?.notes ?? null;
       // signingLocation (Lokasi TTD) is an administrative field designed to always
       // reflect the latest live value (see patchSnapshotAdminFields). It is entered at
       // Step 6 but the revision snapshot is frozen at Step 2 on a material change, so an
@@ -110,6 +114,7 @@ export async function POST(req: Request) {
         weddingType: booking.weddingType,
         eventTime: booking.eventTime ?? null,
         signingLocation: booking.signingLocation,
+        notes: booking.notes,
         snapCustomer: booking.snapCustomer,
         snapVenue: booking.snapVenue,
         snapPackage: booking.snapPackage,
