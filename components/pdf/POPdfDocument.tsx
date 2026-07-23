@@ -10,6 +10,8 @@ export interface POPdfBooking {
   weddingType: string | null;
   eventTime?: string | null;
   signingLocation: string | null;
+  /** Catatan tanggal event (booking.notes) — tampil di bawah panel detail acara. */
+  notes?: string | null;
   snapCustomer: { name: string; mobileNumber: string; cppNik?: string | null; cpwNik?: string | null; ktpAddress?: string | null; cppAddress?: string | null; cpwAddress?: string | null; emailCpp?: string | null; emailCpw?: string | null } | null;
   snapVenue: { venueName: string; address?: string | null; description?: string | null; brandName?: string | null; brandCode?: string | null } | null;
   snapPackage: { packageName: string; notes?: string | null } | null;
@@ -646,7 +648,16 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               return (
                 <View style={{ flexDirection: "row" }}>
                   <View style={{ flex: 1, paddingRight: 12 }}>{renderSide(leftItems)}</View>
-                  <View style={{ flex: 1, paddingLeft: 12 }}>{renderSide(rightItems)}</View>
+                  <View style={{ flex: 1, paddingLeft: 12 }}>
+                    {renderSide(rightItems)}
+                    {/* Note Date Event — catatan tanggal acara (booking.notes) di bawah "Tempat" (kolom kanan) */}
+                    {booking.notes?.trim() ? (
+                      <View style={[s.infoPairRow, { marginTop: 6 }]}>
+                        <Text style={s.infoPairLabel}>Note</Text>
+                        <Text style={s.infoPairValue}>: {booking.notes.trim()}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               );
             })()}

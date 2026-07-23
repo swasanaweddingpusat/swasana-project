@@ -71,6 +71,7 @@ export async function POST(req: Request) {
       weddingType: booking.weddingType,
       eventTime: booking.eventTime ?? null,
       signingLocation: booking.signingLocation,
+      notes: booking.notes,
       snapCustomer: booking.snapCustomer,
       snapVenue: booking.snapVenue,
       snapPackage: booking.snapPackage,
