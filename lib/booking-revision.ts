@@ -30,6 +30,7 @@ function buildSnapshotData(booking: BookingWithSnapshot) {
     weddingSession: booking.weddingSession,
     weddingType: booking.weddingType,
     signingLocation: booking.signingLocation,
+    notes: booking.notes,
     snapCustomer: booking.snapCustomer,
     snapVenue: booking.snapVenue,
     snapPackage: booking.snapPackage,
@@ -184,7 +185,7 @@ export async function refreshCurrentRevisionSnapshot(bookingId: string): Promise
 export async function patchSnapshotAdminFields(bookingId: string): Promise<boolean> {
   const booking = await db.booking.findUnique({
     where: { id: bookingId },
-    select: { currentRevisionId: true, signingLocation: true },
+    select: { currentRevisionId: true, signingLocation: true, notes: true },
   });
   if (!booking?.currentRevisionId) return false;
 
@@ -194,12 +195,15 @@ export async function patchSnapshotAdminFields(bookingId: string): Promise<boole
   });
   if (!revision) return false;
 
-  // Merge only the two admin fields into the existing snapshot JSON, leaving
-  // all pricing/package/customer/TOP data untouched.
+  // Merge only the admin/live fields into the existing snapshot JSON, leaving
+  // all pricing/package/customer/TOP data untouched. Note Date Event (notes) is a
+  // free-text field that never triggers a material change, so — like signingLocation —
+  // it stays fresh in an already-signed snapshot.
   const existingSnap = (revision.snapshotData ?? {}) as Record<string, unknown>;
   const patched: Record<string, unknown> = {
     ...existingSnap,
     signingLocation: booking.signingLocation ?? null,
+    notes: booking.notes ?? null,
   };
 
   await db.bookingRevision.update({
