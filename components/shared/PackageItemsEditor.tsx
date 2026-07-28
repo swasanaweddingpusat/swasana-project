@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -30,8 +29,7 @@ import {
   UsersGroupRounded,
 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { useCategories } from "@/hooks/use-categories";
-import { createCategory } from "@/actions/category";
+import { useCategories, useCreateCategory } from "@/hooks/use-categories";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,9 +125,9 @@ export function PackageItemsEditor({
   activeTab: controlledTab,
   onTabChange,
 }: PackageItemsEditorProps) {
-  const qc = useQueryClient();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const { data: categories = [] } = useCategories();
+  const createCategoryMut = useCreateCategory();
 
   const [internalTab, setInternalTab] = React.useState<PackageItemsTab>("internal");
   const activeTab = controlledTab ?? internalTab;
@@ -354,12 +352,11 @@ export function PackageItemsEditor({
                       searchPlaceholder="Cari kategori..."
                       emptyText="Kategori tidak ditemukan"
                       onAdd={async (name) => {
-                        const res = await createCategory(name);
+                        const res = await createCategoryMut.mutateAsync(name);
                         if (!res.success) {
                           toast.error(res.error ?? "Gagal menambahkan");
                           return;
                         }
-                        await qc.invalidateQueries({ queryKey: ["categories"] });
                         setVendorItemCategory(item.uid, res.category.id, res.category.name);
                         toast.success(`Kategori "${res.category.name}" ditambahkan`);
                       }}

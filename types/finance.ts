@@ -39,7 +39,12 @@ export interface ARFilters {
   status?: ARTerminStatus;
   venue?: string;
   salesPic?: string;
-  dateRange?: { from?: string; to?: string };
+  /** Exact event date, `yyyy-MM-dd`. Mutually exclusive with eventMonth/eventYear. */
+  eventDate?: string;
+  /** Event month as `"1".."12"`. Combined (AND) with eventYear. */
+  eventMonth?: string;
+  /** Event year as `"2026"`. */
+  eventYear?: string;
   search?: string;
 }
 

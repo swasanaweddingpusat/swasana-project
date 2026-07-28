@@ -28,14 +28,24 @@ export default function AccountsReceivableAgingPage() {
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
   }, [bookings]);
 
+  // Distinct event years present, newest first — feeds the year filter dropdown.
+  const years = useMemo(() => {
+    const seen = new Set<string>();
+    bookings.forEach((b) => {
+      if (b.customerDate) seen.add(b.customerDate.slice(0, 4));
+    });
+    return Array.from(seen).sort((a, b) => b.localeCompare(a));
+  }, [bookings]);
+
   const filtered = useMemo(() => {
     const q = filters.search?.trim().toLowerCase();
     return bookings.filter((b) => {
       if (filters.status && b.statusTermin !== filters.status) return false;
       if (filters.venue && b.venueId !== filters.venue) return false;
       if (filters.salesPic && b.salesId !== filters.salesPic) return false;
-      if (filters.dateRange?.from && b.customerDate < filters.dateRange.from) return false;
-      if (filters.dateRange?.to && b.customerDate > filters.dateRange.to) return false;
+      if (filters.eventDate && b.customerDate.slice(0, 10) !== filters.eventDate) return false;
+      if (filters.eventMonth && b.customerDate.slice(5, 7) !== filters.eventMonth) return false;
+      if (filters.eventYear && b.customerDate.slice(0, 4) !== filters.eventYear) return false;
       if (q) {
         const haystack = `${b.customerEvent} ${b.namaEvent} ${b.noPo}`.toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -56,6 +66,7 @@ export default function AccountsReceivableAgingPage() {
         onFiltersChange={(f) => setFilters(f)}
         venues={venues}
         salesPics={salesPics}
+        years={years}
       />
 
       <ARAgingView bookings={filtered} loading={isLoading} />
