@@ -138,9 +138,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kewajiban uang keluar ke customer — cashback & refund overpay",
     parent: "/dashboard/finance/accounts-payable",
   },
-  "/dashboard/finance/ledger": {
-    title: "Cashflow",
-    subtitle: "Buku besar cashflow — piutang, uang masuk, sampai pendapatan diakui.",
+  "/dashboard/finance/income": {
+    title: "Income",
+    subtitle: "Catatan kas masuk — uang riil yang sudah diterima & diverifikasi Finance.",
     parent: "/dashboard/finance",
   },
   "/dashboard/voucher": {

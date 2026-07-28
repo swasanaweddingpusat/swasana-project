@@ -198,8 +198,8 @@ export const navItems: NavItem[] = [
         ],
       },
       {
-        name: "Cashflow",
-        href: "/dashboard/finance/ledger",
+        name: "Income",
+        href: "/dashboard/finance/income",
         icon: Notebook,
         anyPermission: [
           { module: "finance-ar", action: "view" },
