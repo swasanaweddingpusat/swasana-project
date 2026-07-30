@@ -104,21 +104,6 @@ export function AnnouncementTab({ venues, addTrigger = 0 }: AnnouncementTabProps
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <BellBing weight="BoldDuotone" className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-lg font-heading font-semibold text-foreground">
-            Pengumuman
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Kelola pengumuman untuk tim pengadaan
-          </p>
-        </div>
-      </div>
-
       {/* Error state */}
       {isError && (
         <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
