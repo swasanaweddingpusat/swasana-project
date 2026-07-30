@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import type { DateRange } from "react-day-picker";
 import {
   CalendarDate,
   CloseCircle,
@@ -12,8 +11,8 @@ import {
   UsersGroupRounded,
   Magnifer,
   Filter,
+  TagHorizontal,
 } from "@solar-icons/react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -32,10 +31,12 @@ interface ARFilterBarProps {
   onFiltersChange: (filters: ARFilters) => void;
   venues?: { id: string; name: string }[];
   salesPics?: { id: string; name: string }[];
+  /** Distinct event years present in the data, e.g. ["2026","2025"] (desc). */
+  years?: string[];
 }
 
-const STATUS_CHIPS: { value: ARTerminStatus | "all"; label: string }[] = [
-  { value: "all", label: "Semua" },
+/** Status options for the dropdown — excludes "all" (the dropdown renders its own "Semua Status" reset). */
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "paid", label: "Lunas" },
   { value: "partial", label: "Partial" },
   { value: "overdue", label: "Aging" },
@@ -43,69 +44,306 @@ const STATUS_CHIPS: { value: ARTerminStatus | "all"; label: string }[] = [
   { value: "not_due_yet", label: "Not Due Yet" },
 ];
 
-function fmt(iso: string) {
-  return format(new Date(iso), "dd MMM");
+/** Zero-padded values so they compare directly against `customerDate.slice(5,7)`. */
+const MONTHS: { value: string; label: string }[] = [
+  { value: "01", label: "Januari" },
+  { value: "02", label: "Februari" },
+  { value: "03", label: "Maret" },
+  { value: "04", label: "April" },
+  { value: "05", label: "Mei" },
+  { value: "06", label: "Juni" },
+  { value: "07", label: "Juli" },
+  { value: "08", label: "Agustus" },
+  { value: "09", label: "September" },
+  { value: "10", label: "Oktober" },
+  { value: "11", label: "November" },
+  { value: "12", label: "Desember" },
+];
+
+/** Parse a stored `yyyy-MM-dd` back to a local Date for the calendar. */
+function parseDate(iso: string): Date {
+  return new Date(`${iso}T00:00:00`);
 }
 
-export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics = [] }: ARFilterBarProps) {
+/* ─── Reusable filter dropdown (one shape for all secondary filters) ─────────── */
+
+interface FilterOption {
+  value: string;
+  label: string;
+}
+
+/** Shared pill-trigger classes so every dropdown looks identical. */
+function comboTriggerCls(active: boolean): string {
+  return cn(
+    "inline-flex h-8 w-full cursor-pointer items-center justify-between gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors",
+    active
+      ? "border-primary/40 bg-primary/5 text-foreground"
+      : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+  );
+}
+
+/**
+ * One dropdown to rule them all — Popover + Solar chevron + left-aligned label,
+ * so Status/Venue/Sales/Bulan/Tahun render identically (native <Select> would
+ * force a lucide chevron and centered value we can't restyle).
+ */
+function FilterCombo({
+  icon: Icon,
+  allLabel,
+  emptyLabel,
+  value,
+  options,
+  onSelect,
+  searchable = false,
+}: {
+  icon: typeof Filter;
+  allLabel: string;
+  emptyLabel?: string;
+  value: string | undefined;
+  options: FilterOption[];
+  onSelect: (value: string) => void;
+  searchable?: boolean;
+}): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const active = !!value;
+  const label = options.find((o) => o.value === value)?.label ?? allLabel;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger role="combobox" aria-expanded={open} className={comboTriggerCls(active)}>
+        <Icon weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 rotate-0!" />
+        <span className="flex-1 truncate text-left">{label}</span>
+        <AltArrowDown weight="BoldDuotone" className={cn("h-3 w-3 shrink-0 transition-transform", open && "rotate-180")} />
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <Command>
+          {searchable && <CommandInput placeholder="Cari..." autoFocus />}
+          <CommandList>
+            <CommandEmpty>{emptyLabel ?? "Tidak ditemukan."}</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value={allLabel}
+                onSelect={() => { onSelect(""); setOpen(false); }}
+                className="cursor-pointer"
+              >
+                <CheckCircle weight="BoldDuotone" className={cn("mr-2 h-4 w-4 shrink-0", !active ? "opacity-100" : "opacity-0")} />
+                {allLabel}
+              </CommandItem>
+              {options.map((o) => (
+                <CommandItem
+                  key={o.value}
+                  value={o.label}
+                  onSelect={() => { onSelect(o.value); setOpen(false); }}
+                  className="cursor-pointer"
+                >
+                  <CheckCircle weight="BoldDuotone" className={cn("mr-2 h-4 w-4 shrink-0", value === o.value ? "opacity-100" : "opacity-0")} />
+                  <span className="flex-1 truncate">{o.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* ─── Secondary Filters Fragment ────────────────────────────────────────────── */
+
+interface SecondaryFiltersProps {
+  filters: ARFilters;
+  setVenue: (v: string) => void;
+  venues: { id: string; name: string }[];
+  setSales: (v: string) => void;
+  salesPics: { id: string; name: string }[];
+  dateOpen: boolean;
+  setDateOpen: (open: boolean) => void;
+  dateLabel: string;
+  dateActive: boolean;
+  handleDateSelect: (date: Date | undefined) => void;
+  setEventMonth: (v: string) => void;
+  setEventYear: (v: string) => void;
+  years: string[];
+  onFiltersChange: (filters: ARFilters) => void;
+  hasAny: boolean;
+  reset: () => void;
+}
+
+function SecondaryFilters({
+  filters,
+  setVenue,
+  venues,
+  setSales,
+  salesPics,
+  dateOpen,
+  setDateOpen,
+  dateLabel,
+  dateActive,
+  handleDateSelect,
+  setEventMonth,
+  setEventYear,
+  years,
+  onFiltersChange,
+  hasAny,
+  reset,
+}: SecondaryFiltersProps): React.ReactElement {
+  return (
+    <>
+      {/* Venue */}
+      {venues.length > 1 && (
+        <FilterCombo
+          icon={Buildings}
+          allLabel="Semua Venue"
+          emptyLabel="Venue tidak ditemukan."
+          value={filters.venue}
+          options={venues.map((v) => ({ value: v.id, label: v.name }))}
+          onSelect={setVenue}
+          searchable
+        />
+      )}
+
+      {/* Sales PIC */}
+      {salesPics.length > 1 && (
+        <FilterCombo
+          icon={UsersGroupRounded}
+          allLabel="Semua Sales"
+          emptyLabel="Sales tidak ditemukan."
+          value={filters.salesPic}
+          options={salesPics.map((s) => ({ value: s.id, label: s.name }))}
+          onSelect={setSales}
+          searchable
+        />
+      )}
+
+      {/* Event date — exact single day. Picking one clears month/year. */}
+      <Popover open={dateOpen} onOpenChange={setDateOpen}>
+        <PopoverTrigger className={comboTriggerCls(dateActive)}>
+          <CalendarDate weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1 truncate text-left">{dateLabel}</span>
+          <AltArrowDown weight="BoldDuotone" className={cn("h-3 w-3 shrink-0 transition-transform", dateOpen && "rotate-180")} />
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={filters.eventDate ? parseDate(filters.eventDate) : undefined}
+            onSelect={handleDateSelect}
+            numberOfMonths={1}
+          />
+          {dateActive && (
+            <div className="border-t border-border px-3 py-2">
+              <button
+                type="button"
+                onClick={() => { onFiltersChange({ ...filters, eventDate: undefined }); setDateOpen(false); }}
+                className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-destructive"
+              >
+                Hapus tanggal
+              </button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Event month — combinable with year. Picking one clears exact date. */}
+      <FilterCombo
+        icon={CalendarDate}
+        allLabel="Semua Bulan"
+        value={filters.eventMonth}
+        options={MONTHS}
+        onSelect={setEventMonth}
+      />
+
+      {/* Event year — combinable with month. Picking one clears exact date. */}
+      <FilterCombo
+        icon={CalendarDate}
+        allLabel="Semua Tahun"
+        value={filters.eventYear}
+        options={years.map((y) => ({ value: y, label: y }))}
+        onSelect={setEventYear}
+      />
+
+      {/* Reset button */}
+      {hasAny && (
+        <button
+          type="button"
+          onClick={reset}
+          title="Reset semua filter"
+          className="inline-flex h-8 w-full cursor-pointer items-center justify-center gap-1 rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
+          Reset
+        </button>
+      )}
+    </>
+  );
+}
+
+/* ─── Main Export ────────────────────────────────────────────────────────────── */
+
+export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics = [], years = [] }: ARFilterBarProps): React.ReactElement {
   const [dateOpen, setDateOpen] = useState(false);
-  const [salesOpen, setSalesOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
-  const activeStatus = filters.status ?? "all";
-  const selectedSales = salesPics.find((s) => s.id === filters.salesPic);
-  const hasSecondary = !!(filters.venue || filters.salesPic || filters.dateRange);
+  // Status lives inline as its own control now — the Filter dropdown only groups
+  // the remaining secondary filters, so its badge/highlight excludes status.
+  const hasSecondary = !!(filters.venue || filters.salesPic || filters.eventDate || filters.eventMonth || filters.eventYear);
   const hasAny = !!(filters.status || filters.search || hasSecondary);
+  const secondaryCount = [
+    filters.venue,
+    filters.salesPic,
+    filters.eventDate,
+    filters.eventMonth,
+    filters.eventYear,
+  ].filter(Boolean).length;
 
-  const rangeSelected: DateRange | undefined = filters.dateRange
-    ? {
-        from: filters.dateRange.from ? new Date(filters.dateRange.from) : undefined,
-        to: filters.dateRange.to ? new Date(filters.dateRange.to) : undefined,
-      }
-    : undefined;
-
-  function setStatus(val: ARTerminStatus | "all") {
+  function setStatus(val: ARTerminStatus | "all"): void {
     onFiltersChange({ ...filters, status: val === "all" ? undefined : val });
   }
 
-  function setVenue(v: string) {
+  function setVenue(v: string): void {
     onFiltersChange({ ...filters, venue: v || undefined });
   }
 
-  function setSales(v: string) {
+  function setSales(v: string): void {
     onFiltersChange({ ...filters, salesPic: v || undefined });
   }
 
-  function setSearch(v: string) {
+  function setSearch(v: string): void {
     onFiltersChange({ ...filters, search: v || undefined });
   }
 
-  function handleRangeSelect(range: DateRange | undefined) {
-    if (!range) {
-      onFiltersChange({ ...filters, dateRange: undefined });
+  // Exact date is mutually exclusive with month/year — a specific day already
+  // pins the month and year, so keeping those set would only confuse.
+  function handleDateSelect(date: Date | undefined): void {
+    if (!date) {
+      onFiltersChange({ ...filters, eventDate: undefined });
       return;
     }
     onFiltersChange({
       ...filters,
-      dateRange: {
-        from: range.from ? format(range.from, "yyyy-MM-dd") : undefined,
-        to: range.to ? format(range.to, "yyyy-MM-dd") : undefined,
-      },
+      eventDate: format(date, "yyyy-MM-dd"),
+      eventMonth: undefined,
+      eventYear: undefined,
     });
-    if (range.from && range.to) setDateOpen(false);
+    setDateOpen(false);
   }
 
-  function reset() {
+  function setEventMonth(v: string): void {
+    onFiltersChange({ ...filters, eventMonth: v || undefined, eventDate: undefined });
+  }
+
+  function setEventYear(v: string): void {
+    onFiltersChange({ ...filters, eventYear: v || undefined, eventDate: undefined });
+  }
+
+  function reset(): void {
     onFiltersChange({});
   }
 
-  const dateLabel =
-    filters.dateRange?.from && filters.dateRange?.to
-      ? `${fmt(filters.dateRange.from)} – ${fmt(filters.dateRange.to)}`
-      : filters.dateRange?.from
-        ? `Ab ${fmt(filters.dateRange.from)}`
-        : "Tanggal Event";
+  const dateLabel = filters.eventDate
+    ? format(parseDate(filters.eventDate), "dd MMM yyyy")
+    : "Tanggal Event";
 
-  const dateActive = !!(filters.dateRange?.from || filters.dateRange?.to);
+  const dateActive = !!filters.eventDate;
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
@@ -138,153 +376,58 @@ export function ARFilterBar({ filters, onFiltersChange, venues = [], salesPics =
         )}
       </div>
 
-      {/* Status — dropdown chip, in line with the other scope filters */}
-      <Select
-        value={activeStatus}
-        onValueChange={(v) => setStatus(v as ARTerminStatus | "all")}
-      >
-        <SelectTrigger
-          size="sm"
-          className={cn(
-            "h-8 min-w-36 max-w-48 gap-1.5 rounded-full border-border px-3.5 text-xs font-medium",
-            filters.status
-              ? "border-primary/40 bg-primary/5 text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          <Filter weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 rotate-0!" />
-          <SelectValue placeholder="Status" />
-        </SelectTrigger>
-        <SelectContent>
-          {STATUS_CHIPS.map((chip) => (
-            <SelectItem key={chip.value} value={chip.value}>{chip.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* Status — standalone dropdown, primary lens for the table */}
+      <div className="w-40">
+        <FilterCombo
+          icon={TagHorizontal}
+          allLabel="Semua Status"
+          value={filters.status}
+          options={STATUS_OPTIONS}
+          onSelect={(v) => setStatus((v || "all") as ARTerminStatus | "all")}
+        />
+      </div>
 
-      {/* Scope chips — same h-8 rounded-full family, each with a leading icon */}
-      {venues.length > 1 && (
-        <Select value={filters.venue ?? "_all"} onValueChange={(v) => setVenue(v === "_all" ? "" : v)}>
-          <SelectTrigger
-            size="sm"
-            className={cn(
-              "h-8 min-w-36 max-w-48 gap-1.5 rounded-full border-border px-3.5 text-xs font-medium",
-              filters.venue
-                ? "border-primary/40 bg-primary/5 text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            <Buildings weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0 rotate-0!" />
-            <SelectValue placeholder="Venue" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">Semua Venue</SelectItem>
-            {venues.map((v) => (
-              <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      {salesPics.length > 1 && (
-        <Popover open={salesOpen} onOpenChange={setSalesOpen}>
-          <PopoverTrigger
-            role="combobox"
-            aria-expanded={salesOpen}
-            className={cn(
-              "inline-flex h-8 max-w-48 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors",
-              filters.salesPic
-                ? "border-primary/40 bg-primary/5 text-foreground"
-                : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            <UsersGroupRounded weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{selectedSales?.name ?? "Semua Sales"}</span>
-            <AltArrowDown weight="BoldDuotone" className={cn("h-3 w-3 shrink-0 transition-transform", salesOpen && "rotate-180")} />
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-0" align="start">
-            <Command>
-              <CommandInput placeholder="Cari sales..." autoFocus />
-              <CommandList>
-                <CommandEmpty>Sales tidak ditemukan.</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value="Semua Sales"
-                    onSelect={() => { setSales(""); setSalesOpen(false); }}
-                    className="cursor-pointer"
-                  >
-                    <CheckCircle
-                      weight="BoldDuotone"
-                      className={cn("mr-2 h-4 w-4 shrink-0", !filters.salesPic ? "opacity-100" : "opacity-0")}
-                    />
-                    Semua Sales
-                  </CommandItem>
-                  {salesPics.map((s) => (
-                    <CommandItem
-                      key={s.id}
-                      value={s.name}
-                      onSelect={() => { setSales(s.id); setSalesOpen(false); }}
-                      className="cursor-pointer"
-                    >
-                      <CheckCircle
-                        weight="BoldDuotone"
-                        className={cn("mr-2 h-4 w-4 shrink-0", filters.salesPic === s.id ? "opacity-100" : "opacity-0")}
-                      />
-                      <span className="flex-1 truncate">{s.name}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      )}
-
-      <Popover open={dateOpen} onOpenChange={setDateOpen}>
+      {/* Remaining secondary filters grouped under one Filter dropdown */}
+      <Popover open={filterOpen} onOpenChange={setFilterOpen}>
         <PopoverTrigger
           className={cn(
             "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors",
-            dateActive
+            hasSecondary
               ? "border-primary/40 bg-primary/5 text-foreground"
               : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >
-          <CalendarDate weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
-          {dateLabel}
-          <AltArrowDown weight="BoldDuotone" className={cn("h-3 w-3 shrink-0 transition-transform", dateOpen && "rotate-180")} />
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="range"
-            selected={rangeSelected}
-            onSelect={handleRangeSelect}
-            numberOfMonths={1}
-          />
-          {dateActive && (
-            <div className="border-t border-border px-3 py-2">
-              <button
-                type="button"
-                onClick={() => { onFiltersChange({ ...filters, dateRange: undefined }); setDateOpen(false); }}
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-              >
-                Hapus rentang tanggal
-              </button>
-            </div>
+          <Filter weight="BoldDuotone" className="h-3.5 w-3.5 shrink-0" />
+          Filter
+          {secondaryCount > 0 && (
+            <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+              {secondaryCount}
+            </span>
           )}
+        </PopoverTrigger>
+        <PopoverContent className="w-80 p-3" align="start">
+          <div className="flex flex-col gap-2">
+            <SecondaryFilters
+              filters={filters}
+              setVenue={setVenue}
+              venues={venues}
+              setSales={setSales}
+              salesPics={salesPics}
+              dateOpen={dateOpen}
+              setDateOpen={setDateOpen}
+              dateLabel={dateLabel}
+              dateActive={dateActive}
+              handleDateSelect={handleDateSelect}
+              setEventMonth={setEventMonth}
+              setEventYear={setEventYear}
+              years={years}
+              onFiltersChange={onFiltersChange}
+              hasAny={hasAny}
+              reset={reset}
+            />
+          </div>
         </PopoverContent>
       </Popover>
-
-      {hasAny && (
-        <button
-          type="button"
-          onClick={reset}
-          title="Reset semua filter"
-          className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-        >
-          <CloseCircle weight="BoldDuotone" className="h-3.5 w-3.5" />
-          Reset
-        </button>
-      )}
     </div>
   );
 }

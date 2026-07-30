@@ -114,14 +114,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Overview keuangan",
   },
   "/dashboard/finance/accounts-receivable": {
-    title: "Accounts Receivable",
-    subtitle: "Kelola piutang dan pembayaran masuk",
-    parent: "/dashboard/finance",
-  },
-  "/dashboard/finance/accounts-receivable/termin": {
-    title: "Termin",
+    title: "AR",
     subtitle: "Status termin pembayaran per booking",
-    parent: "/dashboard/finance/accounts-receivable",
+    parent: "/dashboard/finance",
   },
   "/dashboard/finance/accounts-receivable/aging": {
     title: "Aging",
@@ -135,27 +130,22 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
   "/dashboard/finance/accounts-payable": {
     title: "Accounts Payable",
-    subtitle: "Kelola hutang dan pembayaran keluar",
+    subtitle: "Kewajiban uang keluar — outstanding & per event",
     parent: "/dashboard/finance",
   },
-  "/dashboard/finance/accounts-payable/rekening-vendor": {
-    title: "Rekening Vendor",
-    subtitle: "Daftar rekening pembayaran vendor",
+  "/dashboard/finance/accounts-payable/customer": {
+    title: "Customer Payout",
+    subtitle: "Kewajiban uang keluar ke customer — cashback & refund overpay",
     parent: "/dashboard/finance/accounts-payable",
   },
-  "/dashboard/finance/accounts-payable/rekening-venue": {
-    title: "Rekening Venue",
-    subtitle: "Daftar rekening pembayaran venue",
-    parent: "/dashboard/finance/accounts-payable",
-  },
-  "/dashboard/finance/ledger": {
-    title: "Cashflow",
-    subtitle: "Buku besar cashflow — piutang, uang masuk, sampai pendapatan diakui.",
+  "/dashboard/finance/income": {
+    title: "Income",
+    subtitle: "Catatan kas masuk — uang riil yang sudah diterima & diverifikasi Finance.",
     parent: "/dashboard/finance",
   },
-  "/dashboard/discount-promo": {
-    title: "Discount / Promo",
-    subtitle: "Program promo & discount aktif",
+  "/dashboard/voucher": {
+    title: "Voucher / Program",
+    subtitle: "Program voucher & discount aktif",
   },
 
   // ─── Notifications ─────────────────────────────────────────────────────────

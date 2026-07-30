@@ -52,7 +52,7 @@ function hasActiveChild(
 /**
  * Di antara sibling yang cocok, yang paling spesifik (href terpanjang) menang.
  * Mencegah leaf ber-href pendek (mis. Overview "/dashboard/finance") ikut aktif
- * saat sibling yang lebih dalam (Cashflow "/dashboard/finance/ledger") yang
+ * saat sibling yang lebih dalam (Income "/dashboard/finance/income") yang
  * sebenarnya cocok.
  */
 function mostSpecificActiveHref(items: { href: string }[], pathname: string): string | null {

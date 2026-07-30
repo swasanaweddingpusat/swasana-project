@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { InviteDrawer } from "./invite-drawer";
 import { BulkEditModal } from "./BulkEditModal";
-import { useUsers, useDeleteUser } from "@/hooks/use-users";
+import { useUsers, useDeleteUser, useReactivateUser } from "@/hooks/use-users";
 import { resendInvitation } from "@/actions/user";
 import type { UsersQueryResult, UserQueryItem } from "@/lib/queries/users";
 import type { RolesQueryResult } from "@/lib/queries/roles";
@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   TrashBinTrash, PenNewSquare, Letter, MenuDots, ArrowLeft, ArrowRight,
-  CloseCircle, UserPlus, Filter, Refresh,
+  CloseCircle, UserPlus, Filter, Refresh, UserCheck,
 } from "@solar-icons/react";
 
 // ─── Skeleton Components ───────────────────────────────────────────────────────
@@ -86,8 +86,14 @@ function SkeletonTableBody({ rows = ROWS_PER_PAGE }: { rows?: number }) {
 
 const getRoleBadgeClass = () => "bg-secondary text-secondary-foreground";
 
-const getStatusBadgeClass = (verified: boolean) =>
-  verified ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground";
+// Status badge derives from account status first (inactive = soft-deleted/detached),
+// then email verification. Inactive uses destructive tint to signal a disabled account.
+function getStatusBadge(status: string | undefined, verified: boolean): { label: string; className: string } {
+  if (status === "inactive") return { label: "Nonaktif", className: "bg-destructive/10 text-destructive" };
+  if (status === "suspended") return { label: "Suspended", className: "bg-destructive/10 text-destructive" };
+  if (verified) return { label: "Verified", className: "bg-primary text-primary-foreground" };
+  return { label: "Pending", className: "bg-muted text-muted-foreground" };
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -124,12 +130,14 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
   const totalPages = Math.ceil(total / rowsPerPage);
 
   const deleteUserMutation = useDeleteUser();
+  const reactivateUserMutation = useReactivateUser();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserQueryItem | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserQueryItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
@@ -180,10 +188,19 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
     setIsDeleting(true);
     const result = await deleteUserMutation.mutateAsync(userToDelete.profile.id);
     setIsDeleting(false);
-    if (result.success) { toast.success("User berhasil dihapus"); }
+    if (result.success) { toast.success(result.message ?? "User berhasil dihapus"); }
     else { toast.error(result.error); }
     setDeleteConfirmOpen(false);
     setUserToDelete(null);
+  };
+
+  const handleReactivate = async (user: UserQueryItem) => {
+    if (!user.profile) return;
+    setReactivatingId(user.profile.id);
+    const result = await reactivateUserMutation.mutateAsync(user.profile.id);
+    setReactivatingId(null);
+    if (result.success) { toast.success(result.message ?? "User diaktifkan kembali"); }
+    else { toast.error(result.error); }
   };
 
   const handleConfirmBulkDelete = async () => {
@@ -309,6 +326,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                   <SelectContent>
                     <SelectItem value="verified">Verified</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="inactive">Nonaktif</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button
@@ -369,6 +387,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                   {paginatedUsers.map((user, index) => {
                     const roleName = user.profile?.role?.name ?? "";
                     const isVerified = user.profile?.isEmailVerified ?? false;
+                    const statusBadge = getStatusBadge(user.profile?.status, isVerified);
                     const dataScope = user.profile?.dataScope ?? "own";
                     const rowNumber = (page - 1) * rowsPerPage + index + 1;
                     const createdDate = user.createdAt
@@ -410,8 +429,8 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2.5', 'text-xs', 'text-muted-foreground')}>{createdDate}</TableCell>
                         <TableCell className={cn('px-2', 'py-2.5')}>
-                          <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", getStatusBadgeClass(isVerified))}>
-                            {isVerified ? "Verified" : "Pending"}
+                          <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", statusBadge.className)}>
+                            {statusBadge.label}
                           </span>
                         </TableCell>
                         <TableCell className={cn('px-2', 'py-2.5')}>
@@ -429,9 +448,15 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                                     <Letter weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> {resendingId === user.profile?.id ? "Sending..." : "Resend Invitation"}
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }} className="text-destructive focus:text-destructive">
-                                  <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Delete
-                                </DropdownMenuItem>
+                                {user.profile?.status === "inactive" ? (
+                                  <DropdownMenuItem onClick={() => handleReactivate(user)} disabled={reactivatingId === user.profile?.id}>
+                                    <UserCheck weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2', 'text-primary')} /> {reactivatingId === user.profile?.id ? "Mengaktifkan..." : "Aktifkan"}
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }} className="text-destructive focus:text-destructive">
+                                    <TrashBinTrash weight="BoldDuotone" className={cn('h-3.5', 'w-3.5', 'mr-2')} /> Delete
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -449,6 +474,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
             {paginatedUsers.map((user, index) => {
               const roleName = user.profile?.role?.name ?? "";
               const isVerified = user.profile?.isEmailVerified ?? false;
+              const statusBadge = getStatusBadge(user.profile?.status, isVerified);
               const dataScope = user.profile?.dataScope ?? "own";
               const rowNumber = (page - 1) * rowsPerPage + index + 1;
               const createdDate = user.createdAt
@@ -471,8 +497,8 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                         <p className={cn('text-xs', 'text-muted-foreground', 'truncate')}>{user.email}</p>
                       </div>
                     </div>
-                    <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium", getStatusBadgeClass(isVerified))}>
-                      {isVerified ? "Verified" : "Pending"}
+                    <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium", statusBadge.className)}>
+                      {statusBadge.label}
                     </span>
                   </div>
 
@@ -516,15 +542,27 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
                         <Letter weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-muted-foreground')} /> {resendingId === user.profile?.id ? "..." : "Resend"}
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className={cn('h-9', 'w-9', 'shrink-0', 'text-destructive', 'hover:text-destructive', 'hover:bg-destructive/10')}
-                      onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }}
-                      aria-label={`Delete ${user.profile?.fullName ?? user.email}`}
-                    >
-                      <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className={cn('h-4', 'w-4')} />
-                    </Button>
+                    {user.profile?.status === "inactive" ? (
+                      <Button
+                        variant="outline"
+                        className={cn('h-9', 'flex-1', 'text-xs')}
+                        onClick={() => handleReactivate(user)}
+                        disabled={reactivatingId === user.profile?.id}
+                        aria-label={`Aktifkan ${user.profile?.fullName ?? user.email}`}
+                      >
+                        <UserCheck weight="BoldDuotone" aria-hidden="true" className={cn('h-3.5', 'w-3.5', 'mr-1', 'text-primary')} /> {reactivatingId === user.profile?.id ? "..." : "Aktifkan"}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className={cn('h-9', 'w-9', 'shrink-0', 'text-destructive', 'hover:text-destructive', 'hover:bg-destructive/10')}
+                        onClick={() => { setUserToDelete(user); setDeleteConfirmOpen(true); }}
+                        aria-label={`Delete ${user.profile?.fullName ?? user.email}`}
+                      >
+                        <TrashBinTrash weight="BoldDuotone" aria-hidden="true" className={cn('h-4', 'w-4')} />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -570,7 +608,7 @@ export function UsersTable({ initialData, roles }: UsersTableProps) {
       </Card>
 
       {/* Delete Dialog */}
-      <DeleteDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} isDeleting={isDeleting} onConfirm={handleConfirmDelete} title="Are you sure you want to delete this user?" description="This action cannot be undone. The user will be permanently deleted." />
+      <DeleteDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} isDeleting={isDeleting} onConfirm={handleConfirmDelete} title="Hapus pengguna ini?" description="Pengguna tanpa data terkait akan dihapus permanen. Jika punya data (booking/quotation/lead), akun otomatis dinonaktifkan (tidak bisa login) dan booking-nya jadi Tanpa PIC — bukan dihapus. Bisa diaktifkan lagi lewat filter Nonaktif." />
 
       {/* Bulk Delete Dialog */}
       <DeleteDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen} isDeleting={isBulkDeleting} onConfirm={handleConfirmBulkDelete} title={`Delete ${selectedUsers.size} users?`} description={`Are you sure you want to delete ${selectedUsers.size} selected users? This action cannot be undone.`} confirmLabel={`Delete ${selectedUsers.size} Users`} />

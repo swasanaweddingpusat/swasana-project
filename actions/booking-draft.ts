@@ -963,16 +963,20 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
         const cashAmount = gross - discountAmount;
 
         let budget = gross;
-        const allocOps: { termId: string; amount: number }[] = [];
+        const allocOps: { termId: string; amount: number; showInPo: boolean }[] = [];
         for (const a of p.allocations) {
           const term = termBySortOrder.get(a.sortOrder);
           if (!term || budget <= 0) continue;
           const amt = Math.min(a.amount, term.amount, budget);
           if (amt > 0) {
-            allocOps.push({ termId: term.id, amount: amt });
+            allocOps.push({ termId: term.id, amount: amt, showInPo: a.showInPo ?? false });
             budget -= amt;
           }
         }
+
+        // Ledger.showInPo = derived (true jika ada alokasi tampil di PO) — sumber
+        // kebenaran render PO kini per-alokasi. Fallback flag lama (p.showInPo).
+        const ledgerShowInPo = allocOps.some((a) => a.showInPo) || (p.showInPo ?? false);
 
         const ledgerId = crypto.randomUUID();
         ops.push(
@@ -992,13 +996,13 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
               evidence: p.evidence ?? null,
               invoiceNumber: kwitansiNumbers[pi] ?? null,
               notes: p.notes?.trim() || null,
-              showInPo: p.showInPo ?? false,
+              showInPo: ledgerShowInPo,
               createdById: session!.user.profileId!,
             },
           }),
           ...allocOps.map((a) =>
             db.paymentAllocation.create({
-              data: { ledgerId, termId: a.termId, amount: a.amount },
+              data: { ledgerId, termId: a.termId, amount: a.amount, showInPo: a.showInPo },
             }),
           ),
           db.paymentActivity.create({

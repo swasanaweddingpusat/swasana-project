@@ -8,6 +8,7 @@ import {
   createPackage,
   updatePackage,
   deletePackage,
+  duplicatePackage,
   deleteBulkPackages,
   saveVendorItems,
   saveInternalItems,
@@ -53,6 +54,14 @@ export function useDeletePackage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deletePackage(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
+  });
+}
+
+export function useDuplicatePackage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => duplicatePackage(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["packages"] }),
   });
 }

@@ -38,6 +38,7 @@ export async function createPromo(input: CreatePromoInput): Promise<PromoResult>
           isActive: parsed.data.isActive,
           discountType: parsed.data.discountType,
           discountValue: parsed.data.discountValue,
+          type: parsed.data.type,
           minTransaction: parsed.data.minTransaction ?? null,
           periodStart: parsed.data.periodStart,
           periodEnd: parsed.data.periodEnd,
@@ -52,6 +53,7 @@ export async function createPromo(input: CreatePromoInput): Promise<PromoResult>
           isActive: true,
           discountType: true,
           discountValue: true,
+          type: true,
           minTransaction: true,
           periodStart: true,
           periodEnd: true,
@@ -99,6 +101,7 @@ export async function updatePromo(
     if (parsed.data.isActive !== undefined) updateData.isActive = parsed.data.isActive;
     if (parsed.data.discountType !== undefined) updateData.discountType = parsed.data.discountType;
     if (parsed.data.discountValue !== undefined) updateData.discountValue = parsed.data.discountValue;
+    if (parsed.data.type !== undefined) updateData.type = parsed.data.type;
     if (parsed.data.minTransaction !== undefined) updateData.minTransaction = parsed.data.minTransaction ?? null;
     if (parsed.data.periodStart !== undefined) updateData.periodStart = parsed.data.periodStart;
     if (parsed.data.periodEnd !== undefined) updateData.periodEnd = parsed.data.periodEnd;
@@ -117,6 +120,7 @@ export async function updatePromo(
           isActive: true,
           discountType: true,
           discountValue: true,
+          type: true,
           minTransaction: true,
           periodStart: true,
           periodEnd: true,

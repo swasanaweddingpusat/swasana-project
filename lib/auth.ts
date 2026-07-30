@@ -38,6 +38,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/auth/login",
     error: "/auth/login",
   },
+  // A rejected credentials login (authorize → null) surfaces as a CredentialsSignin
+  // error, which NextAuth's default logger dumps as a multi-line stack trace — noise
+  // that reads like a crash. Our authorize() already logs the real reason concisely
+  // and writes an audit row, so swallow just that one error type here and let every
+  // other error (adapter/JWT/config) log normally.
+  logger: {
+    error(error: Error) {
+      if (error?.name === "CredentialsSignin" || (error as { type?: string })?.type === "CredentialsSignin") return;
+      console.error(`[auth][error] ${error?.message ?? error}`);
+    },
+    warn(code) {
+      console.warn(`[auth][warn] ${code}`);
+    },
+    debug() {},
+  },
   providers: [
     Credentials({
       name: "credentials",

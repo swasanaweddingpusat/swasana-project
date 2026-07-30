@@ -12,13 +12,22 @@ import { usePermissions } from "@/hooks/use-permissions";
 
 type CanFn = (module: string, action: string) => boolean;
 
+function passesPermission(
+  item: { permission?: { module: string; action: string }; anyPermission?: { module: string; action: string }[] },
+  can: CanFn,
+): boolean {
+  if (item.permission && !can(item.permission.module, item.permission.action)) return false;
+  if (item.anyPermission && !item.anyPermission.some((p) => can(p.module, p.action))) return false;
+  return true;
+}
+
 function filterSubMenus(items: SubMenuItem[], can: CanFn): SubMenuItem[] {
   return items.flatMap((item) => {
     if (item.hidden) return [];
-    if (item.permission && !can(item.permission.module, item.permission.action)) return [];
+    if (!passesPermission(item, can)) return [];
     if (item.submenu) {
       const filtered = filterSubMenus(item.submenu, can);
-      if (!item.permission && filtered.length === 0) return [];
+      if (!item.permission && !item.anyPermission && filtered.length === 0) return [];
       return [{ ...item, submenu: filtered }];
     }
     return [item];
@@ -37,10 +46,10 @@ function filterNavItems(items: NavItem[], can: CanFn, isGroupMember: boolean): N
       if (!can("groups", "view") && !isGroupMember) return [];
       return [item];
     }
-    if (item.permission && !can(item.permission.module, item.permission.action)) return [];
+    if (!passesPermission(item, can)) return [];
     if (item.submenu) {
       const filtered = filterSubMenus(item.submenu, can);
-      if (!item.permission && filtered.length === 0) return [];
+      if (!item.permission && !item.anyPermission && filtered.length === 0) return [];
       return [{ ...item, submenu: filtered }];
     }
     return [item];

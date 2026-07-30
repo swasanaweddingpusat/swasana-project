@@ -5,6 +5,7 @@ import { POPdfDocument } from "@/components/pdf/POPdfDocument";
 import { getBaseUrl } from "@/lib/url";
 import { apiLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { humanizeRoleName } from "@/lib/approval-flows";
+import { getPoPayments } from "@/lib/queries/getPoPayments";
 async function loadImageAsBase64(fileName: string): Promise<string | null> {
   try {
     const base = await getBaseUrl();
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
       weddingType: booking.weddingType,
       eventTime: booking.eventTime ?? null,
       signingLocation: booking.signingLocation,
+      notes: booking.notes,
       snapCustomer: booking.snapCustomer,
       snapVenue: booking.snapVenue,
       snapPackage: booking.snapPackage,
@@ -89,6 +91,10 @@ export async function POST(req: Request) {
       discountAmount: booking.discountAmount,
     };
 
+    // Payments di PO = event SETELAH snapshot freeze → SELALU live-fetch (tidak ikut
+    // revisi). Sama seperti /api/render-po — tanpa ini section "Summary Payment"
+    // kehilangan baris booking fee/angsuran & Sisa Bayar jadi = total penuh.
+    pdfBooking.poPayments = await getPoPayments(booking.id);
 
     const termAndConditionHtml: string | null = booking.snapPackagePricing?.termAndCondition ?? null;
 

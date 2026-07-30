@@ -213,6 +213,8 @@ model Profile {
   employeeDevelopments       EmployeeDevelopment[]
   employeeCertifications     EmployeeCertification[]
   performanceReviews         PerformanceReview[]
+  payablesSettled            BookingPayable[]   @relation("PayableSettler")
+  payablesCreated            BookingPayable[]   @relation("PayableCreator")
 
   @@index([roleId])
   @@index([managerId])
@@ -496,6 +498,7 @@ model PaymentMethod {
   quotations         Quotation[]
   quotationTemplates QuotationTemplate[]
   ledgers            Ledger[]
+  payables           BookingPayable[]
 
   @@index([vendorId])
   @@index([venueId])
@@ -819,7 +822,7 @@ model Booking {
   withMaterai           Boolean              @default(false)
   discountName          String?
   discountAmount        Int                  @default(0)
-  salesId               String
+  salesId               String?
   managerId             String?
   customerId            String
   venueId               String
@@ -848,7 +851,7 @@ model Booking {
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
-  sales               Profile              @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
+  sales               Profile?             @relation("BookingSales", fields: [salesId], references: [id], onDelete: Restrict)
   manager             Profile?             @relation("BookingManager", fields: [managerId], references: [id])
   customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
   venue               Venue                @relation(fields: [venueId], references: [id], onDelete: Restrict)
@@ -888,6 +891,7 @@ model Booking {
   editDraft         BookingEditDraft?
   eventEvaluations  EventEvaluation[]
   creditBalance     CreditBalance?
+  bookingPayables   BookingPayable[]
 
   @@index([salesId])
   @@index([managerId])
@@ -1192,6 +1196,42 @@ model CreditBalance {
   @@map("credit_balances")
 }
 
+/// Kewajiban uang KELUAR ke CUSTOMER (akrual). Lahir `outstanding` (kas diam),
+/// jadi `paid` saat AP disburse (kas keluar riil -> Ledger direction=out).
+/// BUKAN cashbook — kewajiban-belum-bayar sengaja di LUAR Ledger (§7.1 ERD).
+model BookingPayable {
+  id                 String        @id @default(cuid())
+  bookingId          String
+  type               PayableType
+  programId          String?
+  sourceLedgerId     String?
+  settlementLedgerId String?       @unique
+  amount             Int
+  status             PayableStatus @default(outstanding)
+  paymentMethodId    String?
+  disbursementNumber String?       @unique
+  settledAt          DateTime?
+  settledById        String?
+  notes              String?
+  createdById        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  booking          Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  program          DiscountProgram? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  sourceLedger     Ledger?          @relation("PayableSource", fields: [sourceLedgerId], references: [id], onDelete: SetNull)
+  settlementLedger Ledger?          @relation("PayableSettlement", fields: [settlementLedgerId], references: [id], onDelete: SetNull)
+  paymentMethod    PaymentMethod?   @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  settledBy        Profile?         @relation("PayableSettler", fields: [settledById], references: [id], onDelete: SetNull)
+  createdBy        Profile?         @relation("PayableCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([bookingId, status])
+  @@index([programId])
+  @@index([sourceLedgerId])
+  @@index([paymentMethodId])
+  @@map("booking_payables")
+}
+
 // ─── Cashflow Ledger (Buku Besar / Cashbook) ─────────────────────────────────
 // Single-entry cashbook. Sekarang cuma direction=in (cash in). PartialPayment
 // digeneralisasi ke sini. Revenue recognition ada di Booking.recognizedAt (bukan row ini).
@@ -1239,8 +1279,10 @@ model Ledger {
   acknowledgedBy  Profile?            @relation("LedgerAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
   voidedBy        Profile?            @relation("LedgerVoider", fields: [voidedById], references: [id], onDelete: SetNull)
   createdBy       Profile?            @relation("LedgerCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  allocations     PaymentAllocation[]
-  activities      PaymentActivity[]
+  allocations        PaymentAllocation[]
+  activities         PaymentActivity[]
+  payableSource      BookingPayable[]    @relation("PayableSource")
+  payableSettlement  BookingPayable?     @relation("PayableSettlement")
 
   @@unique([invoiceNumber])
   @@index([bookingId, direction, ackStatus])
@@ -1258,6 +1300,10 @@ model PaymentAllocation {
   ledgerId  String
   termId    String
   amount    Int      // porsi GROSS cash-in yang offset termin ini (§6.4)
+  // Tampilkan porsi alokasi ini (per termin) di section Summary Payment PO PDF.
+  // Granular per-termin — satu cash-in bisa punya sebagian termin tampil, sebagian
+  // tidak. Default OFF. Voided ledger tetap di-exclude saat render.
+  showInPo  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   ledger Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
@@ -1466,6 +1512,17 @@ enum LedgerAckStatus {
 enum LedgerPaymentStatus {
   unpaid
   paid
+}
+
+enum PayableType {
+  program_cashback
+  overpay_refund
+}
+
+enum PayableStatus {
+  outstanding
+  paid
+  void
 }
 
 enum PaymentActivityAction {
@@ -2637,12 +2694,18 @@ enum DiscountType {
   NOMINAL
 }
 
+enum VoucherType {
+  payment_discount
+  cashback
+}
+
 model DiscountProgram {
   id                  String       @id @default(uuid())
   name                String
   isActive            Boolean      @default(true)
   discountType        DiscountType
   discountValue       Int
+  type                VoucherType  @default(payment_discount)
   minTransaction      Int?
   periodStart         DateTime
   periodEnd           DateTime
@@ -2654,6 +2717,7 @@ model DiscountProgram {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
   ledgers             Ledger[]
+  payables            BookingPayable[]
 
   @@index([isActive])
   @@index([periodStart, periodEnd])

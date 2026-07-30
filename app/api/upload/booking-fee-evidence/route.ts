@@ -1,7 +1,6 @@
-import { auth } from "@/lib/auth";
 import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { uploadToStorage, generateStorageKey } from "@/lib/storage";
-import { requirePermission } from "@/lib/permissions";
+import { requireAnyPermissionForRoute } from "@/lib/permissions";
 
 const ALLOWED_TYPES = [
   "image/jpeg",
@@ -14,12 +13,16 @@ const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 /** POST — receive multipart file, upload to storage, return key */
 export async function POST(req: Request): Promise<Response> {
-  const session = await auth();
-  if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
-  // Requires leads:create permission to upload evidence
-  const { error } = await requirePermission({ module: "leads", action: "create" });
-  if (error) return Response.json({ error }, { status: 403 });
+  // Bukti bayar dilampirkan saat membuat/mengedit booking & mencatat cash-in —
+  // samakan gate dengan alurnya: create booking (booking:create, step Payment),
+  // edit booking / catat-ulang (booking:edit), atau finance catat cash-in
+  // (finance-ar:edit). Siapa pun yang boleh mencatat pembayaran boleh upload bukti.
+  const { session, response } = await requireAnyPermissionForRoute([
+    { module: "booking", action: "create" },
+    { module: "booking", action: "edit" },
+    { module: "finance-ar", action: "edit" },
+  ]);
+  if (response) return response;
 
   if (!mutationLimiter.check(`booking-fee-upload:${session.user.id}`)) {
     return rateLimitResponse();

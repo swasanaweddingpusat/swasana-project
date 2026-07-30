@@ -40,6 +40,9 @@ export async function canAccessBooking(
     },
   });
   if (myGroups.length === 0) return false;
+  // A booking "tanpa PIC" (salesId null) is owned by no sales, so it's not
+  // reachable through any group scope — only "all" scope (handled earlier) sees it.
+  if (!booking.salesId) return false;
   const reachableIds = new Set<string>();
   for (const g of myGroups) {
     if (g.leaderId) reachableIds.add(g.leaderId);

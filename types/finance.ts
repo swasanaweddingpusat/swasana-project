@@ -39,7 +39,12 @@ export interface ARFilters {
   status?: ARTerminStatus;
   venue?: string;
   salesPic?: string;
-  dateRange?: { from?: string; to?: string };
+  /** Exact event date, `yyyy-MM-dd`. Mutually exclusive with eventMonth/eventYear. */
+  eventDate?: string;
+  /** Event month as `"1".."12"`. Combined (AND) with eventYear. */
+  eventMonth?: string;
+  /** Event year as `"2026"`. */
+  eventYear?: string;
   search?: string;
 }
 
@@ -92,7 +97,7 @@ export interface ARBooking {
   namaEvent: string;
   brandName: string | null;
   venueId: string;
-  salesId: string;
+  salesId: string | null;
   salesPicName: string;
   packageName: string | null;
   totalPrice: number;
@@ -120,7 +125,7 @@ export interface AgingRow {
   bucket: AgingBucketKey;
   salesPicName: string;
   venueId: string;
-  salesId: string;
+  salesId: string | null;
 }
 
 /** Aggregated AR per customer for the Client page. */
