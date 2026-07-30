@@ -5,14 +5,13 @@ import { toast } from "sonner";
 import { ProcurementStats } from "./ProcurementStats";
 import { ProcurementFilters } from "./ProcurementFilters";
 import { ProcurementTable } from "./ProcurementTable";
-import { AddProcurementDrawer } from "./AddProcurementDrawer";
 import { EditProcurementDrawer } from "./EditProcurementDrawer";
 import { ProcurementDetailDrawer } from "./ProcurementDetailDrawer";
 import { ApproveProcurementDialog } from "./ApproveProcurementDialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AddCircle, AltArrowDown } from "@solar-icons/react";
+import { AltArrowDown } from "@solar-icons/react";
 import {
   useProcurementList,
   useProcurementSummary,
@@ -44,7 +43,6 @@ export function ProcurementClient({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allPagesSelected, setAllPagesSelected] = useState(false);
   const [bulkApproveOpen, setBulkApproveOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const { mutateAsync: deleteMutation, isPending: isDeleting } =
@@ -185,14 +183,6 @@ export function ProcurementClient({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <Button
-            size="sm"
-            className="rounded-full gap-2"
-            onClick={() => setAddOpen(true)}
-          >
-            <AddCircle weight="BoldDuotone" className="h-4 w-4" />
-            Tambah Pengajuan
-          </Button>
-          <Button
             variant="secondary"
             size="sm"
             className="rounded-full"
@@ -252,12 +242,6 @@ export function ProcurementClient({
         onEdit={(id) => setEditItem(findItem(id))}
         onDelete={(id) => setDeleteId(id)}
         onApprove={(id) => setApproveItem(findItem(id))}
-      />
-
-      <AddProcurementDrawer
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        venues={initialVenues}
       />
 
       <EditProcurementDrawer

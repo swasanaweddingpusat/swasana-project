@@ -139,21 +139,6 @@ export function VenueBudgetTab({ venues, addTrigger = 0 }: VenueBudgetTabProps):
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-secondary shrink-0">
-          <Wallet weight="BoldDuotone" className="h-5 w-5 text-[var(--brand-ink)]" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground">
-            Anggaran Venue
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Kelola alokasi anggaran pengadaan per venue per periode
-          </p>
-        </div>
-      </div>
-
       {/* Period filter */}
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
         <label
