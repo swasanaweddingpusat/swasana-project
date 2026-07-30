@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Book, UserPlus, CalendarAdd, Buildings, DocumentAdd, AltArrowDown } from "@solar-icons/react";
+import { Book, UserPlus, CalendarAdd, Buildings, DocumentAdd, AltArrowDown, BoxMinimalistic, BellBing, Wallet2 } from "@solar-icons/react";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
@@ -13,6 +13,7 @@ import { useLeadDrawer } from "@/components/providers/lead-drawer-provider";
 import { useBookingDrawer } from "@/components/providers/booking-drawer-provider";
 import { useMiceBookingDrawer } from "@/components/providers/mice-booking-drawer-provider";
 import { useQuotationDrawer } from "@/components/providers/quotation-drawer-provider";
+import { useProcurementDrawer } from "@/components/providers/procurement-drawer-provider";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ export function Header() {
   const { openBookingDrawer } = useBookingDrawer();
   const { openMiceBookingDrawer } = useMiceBookingDrawer();
   const { openQuotationDrawer } = useQuotationDrawer();
+  const { openProcurementDrawer, openAnnouncementDrawer, openBudgetDrawer } = useProcurementDrawer();
   const { can, isLoading: permLoading } = usePermissions();
   usePoll();
 
@@ -48,7 +50,8 @@ export function Header() {
   const canCreateWedding = can("booking", "create");
   const canCreateMice = can("booking-mice", "create");
   const canCreateQuotation = can("quotations", "create");
-  const hasAnyCreatePermission = canCreateLead || canCreateWedding || canCreateMice || canCreateQuotation;
+  const canCreateProcurement = can("procurement", "create");
+  const hasAnyCreatePermission = canCreateLead || canCreateWedding || canCreateMice || canCreateQuotation || canCreateProcurement;
 
   return (
     <header className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-4")}>
@@ -138,6 +141,46 @@ export function Header() {
                     <p className="mt-0.5 text-xs text-muted-foreground">Meeting, insentif, konferensi</p>
                   </div>
                 </DropdownMenuItem>
+              )}
+              {canCreateProcurement && (
+                <>
+                  <DropdownMenuItem
+                    className="gap-3 py-2.5 cursor-pointer"
+                    onClick={() => openProcurementDrawer()}
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <BoxMinimalistic weight="BoldDuotone" className="h-4 w-4 text-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-none">Tambah Pengajuan</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Ajukan pembelian barang baru</p>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="gap-3 py-2.5 cursor-pointer"
+                    onClick={() => openAnnouncementDrawer()}
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <BellBing weight="BoldDuotone" className="h-4 w-4 text-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-none">Tambah Pengumuman</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Buat pengumuman untuk tim</p>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="gap-3 py-2.5 cursor-pointer"
+                    onClick={() => openBudgetDrawer()}
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <Wallet2 weight="BoldDuotone" className="h-4 w-4 text-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-none">Tambah Anggaran</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Atur anggaran venue per periode</p>
+                    </div>
+                  </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>

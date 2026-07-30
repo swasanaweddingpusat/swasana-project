@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AddCircle, TrashBinTrash, PenNewSquare, Book } from "@solar-icons/react";
+import { AddCircle, TrashBinTrash, PenNewSquare, Book, AltArrowDown } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -81,12 +81,15 @@ export function TutorialManager({ initialCategories }: Props) {
   const [stepImage, setStepImage] = useState("");
   const [editingStep, setEditingStep] = useState<TutorialStep | null>(null);
 
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [stepVideoUrl, setStepVideoUrl] = useState("");
   const [stepVideoType, setStepVideoType] = useState<"youtube" | "mp4" | "minio" | "none">("none");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
 
   const [uploadingDocStepId, setUploadingDocStepId] = useState<string | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
 
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<TutorialCategory | null>(null);
   const [deleteLessonTarget, setDeleteLessonTarget] = useState<TutorialLesson | null>(null);
@@ -478,15 +481,23 @@ export function TutorialManager({ initialCategories }: Props) {
             ) : (
               <div className="space-y-2 p-4">
                 {categories.map((category) => (
-                  <button
+                  <div
                     key={category.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       setSelectedCategoryId(category.id);
                       setSelectedLessonId(category.lessons[0]?.id ?? null);
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedCategoryId(category.id);
+                        setSelectedLessonId(category.lessons[0]?.id ?? null);
+                      }
+                    }}
                     className={cn(
-                      "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition",
+                      "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition cursor-pointer",
                       selectedCategoryId === category.id
                         ? "border-primary bg-primary/10"
                         : "border-border bg-background hover:border-primary/50"
@@ -517,7 +528,7 @@ export function TutorialManager({ initialCategories }: Props) {
                         <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
                       </button>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -545,12 +556,19 @@ export function TutorialManager({ initialCategories }: Props) {
               ) : (
                 <div className="space-y-2">
                   {selectedCategory.lessons.map((lesson) => (
-                    <button
+                    <div
                       key={lesson.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedLessonId(lesson.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedLessonId(lesson.id);
+                        }
+                      }}
                       className={cn(
-                        "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition",
+                        "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition cursor-pointer",
                         selectedLessonId === lesson.id
                           ? "border-primary bg-primary/10"
                           : "border-border bg-background hover:border-primary/50"
@@ -576,7 +594,7 @@ export function TutorialManager({ initialCategories }: Props) {
                           <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
                         </button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -602,63 +620,82 @@ export function TutorialManager({ initialCategories }: Props) {
                 <p className="text-sm text-muted-foreground">Belum ada step dalam lesson ini.</p>
               ) : (
                 <div className="space-y-2">
-                  {selectedLesson.steps.map((step, index) => (
-                    <div key={step.id} className="rounded-2xl border border-border bg-background p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium text-foreground">{index + 1}. {step.title}</p>
-                          <p className="text-sm text-muted-foreground line-clamp-2">{step.caption}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditStepDialog(step)}
-                            className="p-1 rounded-md text-muted-foreground hover:bg-muted"
-                          >
-                            <PenNewSquare weight="BoldDuotone" className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteStepTarget(step)}
-                            className="p-1 rounded-md text-destructive hover:bg-destructive/10"
-                          >
-                            <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                      {step.image ? <p className="mt-2 text-xs text-muted-foreground">Gambar: {step.image}</p> : null}
-                      {step.videoType ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Video ({step.videoType}): {step.videoUrl}
-                        </p>
-                      ) : null}
-                      {/* Documents */}
-                      <div className="mt-3 border-t pt-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Dokumen terlampir</p>
-                        {step.documents.map((doc) => (
-                          <div key={doc.id} className="flex items-center gap-2 mb-1">
-                            <span className="text-xs text-foreground truncate flex-1">{doc.name}</span>
+                  {selectedLesson.steps.map((step, index) => {
+                    const isExpanded = expandedSteps.has(step.id);
+                    return (
+                      <div key={step.id} className="rounded-2xl border border-border bg-background">
+                        <div
+                          className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none"
+                          onClick={() =>
+                            setExpandedSteps((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(step.id)) { next.delete(step.id); } else { next.add(step.id); }
+                              return next;
+                            })
+                          }
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <AltArrowDown
+                              weight="BoldDuotone"
+                              className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform", !isExpanded && "-rotate-90")}
+                            />
+                            <p className="font-medium text-foreground truncate">{index + 1}. {step.title}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               type="button"
-                              disabled={deletingDocId === doc.id}
-                              onClick={() => handleDeleteDocument(step.id, doc.id)}
-                              className="p-0.5 rounded text-destructive hover:bg-destructive/10"
+                              onClick={(e) => { e.stopPropagation(); openEditStepDialog(step); }}
+                              className="p-1 rounded-md text-muted-foreground hover:bg-muted"
                             >
-                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                              <PenNewSquare weight="BoldDuotone" className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setDeleteStepTarget(step); }}
+                              className="p-1 rounded-md text-destructive hover:bg-destructive/10"
+                            >
+                              <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
                             </button>
                           </div>
-                        ))}
-                        <button
-                          type="button"
-                          disabled={uploadingDocStepId === step.id}
-                          onClick={() => handleAddDocument(step.id)}
-                          className="mt-1 text-xs text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {uploadingDocStepId === step.id ? "Mengunggah..." : "+ Tambah Dokumen"}
-                        </button>
+                        </div>
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-0 space-y-2">
+                            <p className="text-sm text-muted-foreground">{step.caption}</p>
+                            {step.image ? <p className="text-xs text-muted-foreground">Gambar: {step.image}</p> : null}
+                            {step.videoType ? (
+                              <p className="text-xs text-muted-foreground">
+                                Video ({step.videoType}): {step.videoUrl}
+                              </p>
+                            ) : null}
+                            <div className="border-t pt-3">
+                              <p className="text-xs font-medium text-muted-foreground mb-2">Dokumen terlampir</p>
+                              {step.documents.map((doc) => (
+                                <div key={doc.id} className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs text-foreground truncate flex-1">{doc.name}</span>
+                                  <button
+                                    type="button"
+                                    disabled={deletingDocId === doc.id}
+                                    onClick={() => handleDeleteDocument(step.id, doc.id)}
+                                    className="p-0.5 rounded text-destructive hover:bg-destructive/10"
+                                  >
+                                    <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                disabled={uploadingDocStepId === step.id}
+                                onClick={() => handleAddDocument(step.id)}
+                                className="mt-1 text-xs text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {uploadingDocStepId === step.id ? "Mengunggah..." : "+ Tambah Dokumen"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -757,13 +794,63 @@ export function TutorialManager({ initialCategories }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="step-image">Path Gambar (opsional)</Label>
-              <Input
-                id="step-image"
-                value={stepImage}
-                onChange={(e) => setStepImage(e.target.value)}
-                placeholder="Contoh: /tutorial/booking/01-dashboard.png"
-              />
+              <Label>Gambar (opsional)</Label>
+              <div className="flex items-center gap-2">
+                {stepImage ? (
+                  <>
+                    <span className="flex-1 truncate text-sm text-muted-foreground">{stepImage.split("/").pop()}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStepImage("")}
+                    >
+                      Hapus
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploadingImage}
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = "image/png,image/jpeg,image/webp,image/gif";
+                      input.onchange = async () => {
+                        const file = input.files?.[0];
+                        if (!file) return;
+                        setIsUploadingImage(true);
+                        try {
+                          const fd = new FormData();
+                          fd.append("file", file);
+                          fd.append("type", "image");
+                          const res = await fetch("/api/upload/tutorial-media", { method: "POST", body: fd });
+                          const data = await res.json() as { url?: string; error?: string };
+                          if (!res.ok || data.error) {
+                            toast.error(data.error ?? "Gagal upload gambar.");
+                            return;
+                          }
+                          setStepImage(data.url!);
+                        } finally {
+                          setIsUploadingImage(false);
+                        }
+                      };
+                      input.click();
+                    }}
+                  >
+                    {isUploadingImage ? "Mengunggah..." : "Pilih File Gambar"}
+                  </Button>
+                )}
+              </div>
+              {stepImage && (
+                <img
+                  src={stepImage}
+                  alt="Preview"
+                  className="mt-2 max-h-40 rounded-xl border border-border object-contain"
+                />
+              )}
             </div>
             {/* Video section */}
             <div className="space-y-2">

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Plus_Jakarta_Sans, Quicksand, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { auth } from "@/lib/auth";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -81,15 +82,17 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
     <html lang="id" className={`${jakarta.variable} ${fraunces.variable} ${quicksand.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full font-sans" suppressHydrationWarning>
-        <SessionProvider>
+        <SessionProvider session={session}>
           <QueryProvider>
             <TooltipProvider>
               {children}

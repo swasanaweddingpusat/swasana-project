@@ -142,7 +142,8 @@ export async function GET(req: Request): Promise<Response> {
             "Content-Disposition": `attachment; filename="procurement-${new Date().toISOString().split("T")[0]}.xlsx"`,
           },
         });
-      } catch {
+      } catch (err) {
+        console.error("[PROCUREMENT] Failed to export Excel:", err);
         return Response.json(
           { error: "Export Excel tidak tersedia, gunakan format CSV" },
           { status: 501 }
@@ -247,7 +248,8 @@ export async function GET(req: Request): Promise<Response> {
             "Content-Disposition": `attachment; filename="procurement-${new Date().toISOString().split("T")[0]}.pdf"`,
           },
         });
-      } catch {
+      } catch (err) {
+        console.error("[PROCUREMENT] Failed to export PDF:", err);
         return Response.json(
           { error: "Export PDF tidak tersedia saat ini." },
           { status: 501 }
@@ -256,7 +258,8 @@ export async function GET(req: Request): Promise<Response> {
     }
 
     return Response.json({ error: "Format ekspor tidak didukung." }, { status: 400 });
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to export items:", err);
     return Response.json({ error: "Gagal mengekspor data pengadaan" }, { status: 500 });
   }
 }

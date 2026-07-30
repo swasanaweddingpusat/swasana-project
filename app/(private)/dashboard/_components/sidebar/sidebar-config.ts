@@ -37,6 +37,9 @@ import {
   CardReceive,
   CardSend,
   CalendarMark,
+  BillList,
+  BellBing,
+  Wallet2,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -228,6 +231,12 @@ export const navItems: NavItem[] = [
     href: "/dashboard/pengadaan-barang",
     icon: CartLarge,
     permission: { module: "procurement", action: "view" },
+    submenu: [
+      { name: "Pengadaan", href: "/dashboard/pengadaan-barang", icon: BillList, permission: { module: "procurement", action: "view" } },
+      { name: "Ringkasan", href: "/dashboard/pengadaan-barang/ringkasan", icon: ChartSquare, permission: { module: "procurement", action: "view" } },
+      { name: "Pengumuman", href: "/dashboard/pengadaan-barang/pengumuman", icon: BellBing, permission: { module: "procurement", action: "view" } },
+      { name: "Anggaran Venue", href: "/dashboard/pengadaan-barang/anggaran-venue", icon: Wallet2, permission: { module: "procurement", action: "view" } },
+    ],
   },
   {
     name: "Absensi",

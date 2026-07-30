@@ -6,5 +6,9 @@ export const metadata: Metadata = { title: "Manajemen Kinerja" };
 
 export default async function ManajemenKinerjaPage() {
   await requirePagePermission("hr");
-  return <ManajemenKinerjaClient />;
+  return (
+    <div className="mb-6 flex w-full flex-col gap-6">
+      <ManajemenKinerjaClient />
+    </div>
+  );
 }

@@ -19,11 +19,12 @@ import {
 import { CloseCircle, UploadMinimalistic, AddSquare } from "@solar-icons/react";
 import { createProcurementSchema, type CreateProcurementInput } from "@/lib/validations/procurement";
 import { useCreateProcurement } from "@/hooks/useProcurement";
+import { useVenues } from "@/hooks/use-venues";
 
 interface AddProcurementDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  venues: { id: string; name: string }[];
+  venues?: { id: string; name: string }[];
   onSuccess?: () => void;
 }
 
@@ -43,9 +44,11 @@ async function uploadProcurementFile(file: File): Promise<string> {
 export function AddProcurementDrawer({
   open,
   onOpenChange,
-  venues,
+  venues: venuesProp,
   onSuccess,
 }: AddProcurementDrawerProps) {
+  const { data: venuesQuery = [] } = useVenues();
+  const venues = venuesProp ?? venuesQuery;
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -307,12 +310,15 @@ export function AddProcurementDrawer({
                 render={({ field }) => (
                   <Input
                     id="ap-harga"
-                    type="number"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="numeric"
                     className="rounded-xl w-48"
-                    value={Number(field.value) || 0}
-                    onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                    value={Number(field.value) ? new Intl.NumberFormat("id-ID").format(Number(field.value)) : ""}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      field.onChange(raw === "" ? 0 : Number(raw));
+                    }}
                   />
                 )}
               />
@@ -325,12 +331,10 @@ export function AddProcurementDrawer({
                 render={({ field }) => (
                   <Input
                     id="ap-petty-cash"
-                    type="number"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="numeric"
                     className="rounded-xl w-48"
-                    value={Number(field.value) || 0}
-                    onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                    value={Number(field.value) ? new Intl.NumberFormat("id-ID").format(Number(field.value)) : "0"}
                     disabled
                   />
                 )}

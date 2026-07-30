@@ -8,6 +8,7 @@ import { BookingDrawerProvider } from "@/components/providers/booking-drawer-pro
 import { LeadDrawerProvider } from "@/components/providers/lead-drawer-provider";
 import { QuotationDrawerProvider } from "@/components/providers/quotation-drawer-provider";
 import { MiceBookingDrawerProvider } from "@/components/providers/mice-booking-drawer-provider";
+import { ProcurementDrawerProvider } from "@/components/providers/procurement-drawer-provider";
 import { MobileBottomNav } from "./_components/mobile-bottom-nav/MobileBottomNav";
 import { PwaInstallPrompt } from "@/components/shared/PwaInstallPrompt";
 
@@ -23,6 +24,7 @@ export default function DashboardLayout({
           <MiceBookingDrawerProvider>
             <QuotationDrawerProvider>
               <LeadDrawerProvider>
+                <ProcurementDrawerProvider>
                 <Suspense fallback={null}>
                   <SwasanaSidebar />
                 </Suspense>
@@ -40,6 +42,7 @@ export default function DashboardLayout({
                   </Suspense>
                   <PwaInstallPrompt />
                 </SidebarInset>
+              </ProcurementDrawerProvider>
               </LeadDrawerProvider>
             </QuotationDrawerProvider>
           </MiceBookingDrawerProvider>

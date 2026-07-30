@@ -6,5 +6,9 @@ export const metadata: Metadata = { title: "Pengembangan SDM" };
 
 export default async function PengembanganSdmPage() {
   await requirePagePermission("hr");
-  return <PengembanganSdmClient />;
+  return (
+    <div className="mb-6 flex w-full flex-col gap-6">
+      <PengembanganSdmClient />
+    </div>
+  );
 }

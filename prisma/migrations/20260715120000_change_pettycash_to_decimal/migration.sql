@@ -3,3 +3,4 @@
 -- This migration previously attempted a boolean→numeric cast that
 -- is no longer applicable.
 SELECT 1;
+
