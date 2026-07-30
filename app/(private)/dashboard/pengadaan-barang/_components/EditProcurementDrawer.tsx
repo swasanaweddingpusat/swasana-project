@@ -342,12 +342,15 @@ export function EditProcurementDrawer({
                 render={({ field }) => (
                   <Input
                     id="ep-harga"
-                    type="number"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="numeric"
                     className="rounded-xl w-48"
-                    value={Number(field.value) || 0}
-                    onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                    value={Number(field.value) ? new Intl.NumberFormat("id-ID").format(Number(field.value)) : ""}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      field.onChange(raw === "" ? 0 : Number(raw));
+                    }}
                   />
                 )}
               />
@@ -360,12 +363,10 @@ export function EditProcurementDrawer({
                 render={({ field }) => (
                   <Input
                     id="ep-petty-cash"
-                    type="number"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="numeric"
                     className="rounded-xl w-48"
-                    value={Number(field.value) || 0}
-                    onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                    value={Number(field.value) ? new Intl.NumberFormat("id-ID").format(Number(field.value)) : "0"}
                     disabled
                   />
                 )}

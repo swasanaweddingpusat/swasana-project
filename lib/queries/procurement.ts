@@ -180,10 +180,177 @@ export async function getAnnouncementList(page = 1, limit = 20) {
   };
 }
 
+// ─── Period Helpers ──────────────────────────────────────────────────────────
+
+function periodToDateRange(period: string): { gte: Date; lt: Date } {
+  const year = Number(period.slice(0, 4));
+  const month = Number(period.slice(5));
+  const gte = new Date(year, month - 1, 1);
+  const lt = new Date(year, month, 1); // JS Date handles month overflow (month 12 → next year Jan)
+  return { gte, lt };
+}
+
+// ─── Summary by Venue ────────────────────────────────────────────────────────
+
+export async function getProcurementSummaryByVenue(period?: string) {
+  "use cache";
+  cacheTag("procurement");
+  cacheTag("procurement-budgets");
+  cacheLife("seconds");
+
+  const dateRange = period ? periodToDateRange(period) : null;
+
+  const where: Prisma.ProcurementItemWhereInput = dateRange
+    ? { tanggalPermintaan: dateRange }
+    : {};
+
+  const venues = await db.venue.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
+  const [countsRaw, budgets] = await Promise.all([
+    Promise.all(
+      venues.map(async (venue) => {
+        const [pending, approved, rejected, completed, totalSpent] =
+          await Promise.all([
+            db.procurementItem.count({
+              where: { ...where, venueId: venue.id, status: "PENDING" },
+            }),
+            db.procurementItem.count({
+              where: { ...where, venueId: venue.id, status: "APPROVED" },
+            }),
+            db.procurementItem.count({
+              where: { ...where, venueId: venue.id, status: "REJECTED" },
+            }),
+            db.procurementItem.count({
+              where: { ...where, venueId: venue.id, status: "COMPLETED" },
+            }),
+            db.procurementItem.aggregate({
+              where: {
+                ...where,
+                venueId: venue.id,
+                status: { in: ["APPROVED", "COMPLETED"] },
+              },
+              _sum: { pettyCash: true },
+            }),
+          ]);
+        return {
+          venueId: venue.id,
+          venueName: venue.name,
+          pending,
+          approved,
+          rejected,
+          completed,
+          total: pending + approved + rejected + completed,
+          totalSpent: Number(totalSpent._sum.pettyCash ?? 0),
+        };
+      })
+    ),
+    period
+      ? db.procurementVenueBudget.findMany({
+          where: { period },
+          select: { venueId: true, budgetAmount: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const budgetMap = new Map<string, number>(
+    budgets.map((b) => [b.venueId, Number(b.budgetAmount)])
+  );
+
+  const counts = countsRaw.map((row) => ({
+    ...row,
+    budgetAmount: budgetMap.get(row.venueId) ?? 0,
+  }));
+
+  return counts.filter((c) => c.total > 0);
+}
+
+// ─── Venue Budgets ───────────────────────────────────────────────────────────
+
+const venueBudgetSelect = {
+  id: true,
+  venueId: true,
+  budgetAmount: true,
+  usedAmount: true,
+  period: true,
+  note: true,
+  createdAt: true,
+  updatedAt: true,
+  venue: { select: { id: true, name: true } },
+  updatedBy: { select: { id: true, fullName: true } },
+} satisfies Prisma.ProcurementVenueBudgetSelect;
+
+export async function getVenueBudgetList(period?: string, page = 1, limit = 20) {
+  "use cache";
+  cacheTag("procurement-budgets");
+  cacheLife("seconds");
+
+  const where: Prisma.ProcurementVenueBudgetWhereInput = period
+    ? { period }
+    : {};
+
+  const [rawItems, total] = await Promise.all([
+    db.procurementVenueBudget.findMany({
+      where,
+      select: venueBudgetSelect,
+      orderBy: [{ venue: { name: "asc" } }, { period: "desc" }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.procurementVenueBudget.count({ where }),
+  ]);
+
+  // Dynamically compute usedAmount from actual procurement spending
+  const spendingTotals = await Promise.all(
+    rawItems.map((item) => {
+      const dateRange = periodToDateRange(item.period);
+      return db.procurementItem.aggregate({
+        where: {
+          venueId: item.venueId,
+          tanggalPermintaan: dateRange,
+          status: { in: ["APPROVED", "COMPLETED"] },
+        },
+        _sum: { pettyCash: true },
+      });
+    })
+  );
+
+  const items = rawItems.map((item, idx) => ({
+    ...item,
+    usedAmount: Number(spendingTotals[idx]._sum.pettyCash ?? 0),
+  }));
+
+  return {
+    items,
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
+}
+
+export async function getVenueBudgetById(id: string) {
+  "use cache";
+  cacheTag("procurement-budgets");
+  cacheLife("seconds");
+
+  return db.procurementVenueBudget.findUnique({
+    where: { id },
+    select: venueBudgetSelect,
+  });
+}
+
 // ─── Inferred Result Types ────────────────────────────────────────────────────
 
 export type ProcurementListResult = Awaited<ReturnType<typeof getProcurementList>>;
 export type ProcurementItem = ProcurementListResult["items"][number];
 export type ProcurementSummaryResult = Awaited<ReturnType<typeof getProcurementSummary>>;
+export type SummaryByVenueResult = Awaited<ReturnType<typeof getProcurementSummaryByVenue>>;
+export type SummaryByVenueItem = SummaryByVenueResult[number];
 export type AnnouncementListResult = Awaited<ReturnType<typeof getAnnouncementList>>;
 export type AnnouncementItem = AnnouncementListResult["items"][number];
+export type VenueBudgetListResult = Awaited<ReturnType<typeof getVenueBudgetList>>;
+export type VenueBudgetItem = VenueBudgetListResult["items"][number];

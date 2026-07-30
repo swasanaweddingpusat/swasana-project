@@ -25,7 +25,8 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const result = await getAnnouncementList(page, limit);
     return Response.json(result);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to list announcements:", err);
     return Response.json({ error: "Gagal mengambil data pengumuman" }, { status: 500 });
   }
 }
@@ -76,7 +77,8 @@ export async function POST(req: Request): Promise<Response> {
     revalidateTag("procurement", "max");
 
     return Response.json(item, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to create announcement:", err);
     return Response.json({ error: "Gagal membuat pengumuman" }, { status: 500 });
   }
 }

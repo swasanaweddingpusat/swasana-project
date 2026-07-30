@@ -66,7 +66,8 @@ export async function PATCH(
     revalidateTag("procurement", "max");
 
     return Response.json(updated);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to update announcement:", err);
     return Response.json({ error: "Gagal mengupdate pengumuman." }, { status: 500 });
   }
 }
@@ -112,7 +113,8 @@ export async function DELETE(
     revalidateTag("procurement", "max");
 
     return Response.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to delete announcement:", err);
     return Response.json({ error: "Gagal menghapus pengumuman." }, { status: 500 });
   }
 }

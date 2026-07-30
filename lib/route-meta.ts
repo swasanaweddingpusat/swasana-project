@@ -227,6 +227,21 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     title: "Pengadaan Barang",
     subtitle: "Kelola pengajuan pengadaan dan pembelian barang",
   },
+  "/dashboard/pengadaan-barang/ringkasan": {
+    title: "Ringkasan Pengadaan",
+    subtitle: "Statistik dan ringkasan pengadaan barang",
+    parent: "/dashboard/pengadaan-barang",
+  },
+  "/dashboard/pengadaan-barang/pengumuman": {
+    title: "Pengumuman Pengadaan",
+    subtitle: "Kelola pengumuman pengadaan barang",
+    parent: "/dashboard/pengadaan-barang",
+  },
+  "/dashboard/pengadaan-barang/anggaran-venue": {
+    title: "Anggaran Venue",
+    subtitle: "Kelola anggaran pengadaan per venue",
+    parent: "/dashboard/pengadaan-barang",
+  },
 
   // ─── HR & Payroll ──────────────────────────────────────────────────────────
   "/dashboard/hr": {

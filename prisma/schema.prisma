@@ -206,6 +206,7 @@ model Profile {
   procurementItemsCreated    ProcurementItem[]   @relation("ProcurementCreator")
   procurementItemsApproved   ProcurementItem[]   @relation("ProcurementApprover")
   procurementAnnouncements   ProcurementAnnouncement[] @relation("ProcurementAnnouncementCreator")
+  procurementVenueBudgets    ProcurementVenueBudget[]  @relation("ProcurementBudgetUpdater")
   pushSubscriptions          PushSubscription[]
   evaluationsAsSpecialist    EventEvaluation[] @relation("EvaluationSpecialist")
   weddingIndicators          WeddingIndicator[] @relation("WeddingIndicatorCreator")
@@ -356,8 +357,9 @@ model Venue {
   quotationTemplates QuotationTemplate[]
   maintenanceTickets MaintenanceTicket[]
   workLocations      WorkLocation[]
-  procurementItems   ProcurementItem[]
-  eventEvaluations   EventEvaluation[]
+  procurementItems      ProcurementItem[]
+  procurementBudgets    ProcurementVenueBudget[]
+  eventEvaluations      EventEvaluation[]
   weddingIndicators  WeddingIndicator[]
 
   @@index([brandId])
@@ -2782,6 +2784,26 @@ model ProcurementAnnouncement {
   @@index([isActive])
   @@index([createdById])
   @@map("procurement_announcements")
+}
+
+model ProcurementVenueBudget {
+  id            String   @id @default(uuid())
+  venueId       String
+  budgetAmount  Decimal  @default(0)
+  usedAmount    Decimal  @default(0)
+  period        String
+  note          String?
+  updatedById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  venue     Venue   @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  updatedBy Profile @relation("ProcurementBudgetUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([venueId, period])
+  @@index([venueId])
+  @@index([period])
+  @@map("procurement_venue_budgets")
 }
 
 model PushSubscription {

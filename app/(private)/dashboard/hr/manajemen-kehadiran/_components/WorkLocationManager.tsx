@@ -23,14 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { PermissionGate } from "@/components/shared/permission-gate";
 import {
   useWorkLocations,
@@ -205,67 +197,70 @@ export function WorkLocationManager() {
           )}
 
           {!isLoading && locations && locations.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nama</TableHead>
-                    <TableHead>Alamat</TableHead>
-                    <TableHead>Venue</TableHead>
-                    <TableHead>Lat/Lng</TableHead>
-                    <TableHead>Radius</TableHead>
-                    <TableHead>Karyawan</TableHead>
-                    <TableHead className="w-20">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {locations.map((loc) => (
-                    <TableRow key={loc.id}>
-                      <TableCell className="font-medium">{loc.name}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {loc.address || "-"}
-                      </TableCell>
-                      <TableCell>{loc.venue?.name ?? "-"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {loc.latitude && loc.longitude
-                          ? `${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)}`
-                          : "-"}
-                      </TableCell>
-                      <TableCell>{loc.radiusMeters}m</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="rounded-full text-xs">
-                          <UsersGroupRounded weight="BoldDuotone" className="mr-1 h-3 w-3" />
-                          {loc._count.assignments}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <PermissionGate module="hr-attendance" action="edit">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full"
-                              onClick={() => handleOpenEdit(loc)}
-                            >
-                              <Pen weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </Button>
-                          </PermissionGate>
-                          <PermissionGate module="hr-attendance" action="delete">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
-                              onClick={() => setDeleteTarget(loc)}
-                            >
-                              <TrashBinTrash weight="BoldDuotone" className="h-3.5 w-3.5" />
-                            </Button>
-                          </PermissionGate>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {locations.map((loc) => (
+                <div
+                  key={loc.id}
+                  className="rounded-2xl border border-border p-5 space-y-3 transition-shadow hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="rounded-full bg-muted p-2.5 text-foreground shrink-0">
+                        <MapPoint weight="BoldDuotone" className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{loc.name}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {loc.address || "Alamat belum diisi"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <PermissionGate module="hr-attendance" action="edit">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={() => handleOpenEdit(loc)}
+                        >
+                          <Pen weight="BoldDuotone" className="h-4 w-4" />
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate module="hr-attendance" action="delete">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(loc)}
+                        >
+                          <TrashBinTrash weight="BoldDuotone" className="h-4 w-4" />
+                        </Button>
+                      </PermissionGate>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {loc.venue?.name && (
+                      <Badge variant="outline" className="rounded-full text-xs">
+                        {loc.venue.name}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="rounded-full text-xs">
+                      {loc.radiusMeters}m radius
+                    </Badge>
+                    <Badge variant="secondary" className="rounded-full text-xs">
+                      <UsersGroupRounded weight="BoldDuotone" className="mr-1 h-3 w-3" />
+                      {loc._count.assignments} karyawan
+                    </Badge>
+                  </div>
+
+                  {loc.latitude && loc.longitude && (
+                    <p className="text-xs text-muted-foreground">
+                      {Number(loc.latitude).toFixed(4)}, {Number(loc.longitude).toFixed(4)}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

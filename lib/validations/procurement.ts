@@ -82,6 +82,26 @@ export const createAnnouncementSchema = z.object({
 
 export const updateAnnouncementSchema = createAnnouncementSchema.partial();
 
+// ─── Venue Budgets ───────────────────────────────────────────────────────────
+
+export const createVenueBudgetSchema = z.object({
+  venueId: z.string().min(1, "Venue wajib dipilih"),
+  budgetAmount: z.preprocess(
+    (v) => {
+      if (v === "" || v === null || v === undefined) return 0;
+      if (typeof v === "string") return Number(v);
+      return v;
+    },
+    z.number().min(0, "Budget tidak boleh negatif")
+  ),
+  period: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, "Format periode harus YYYY-MM"),
+  note: z.string().optional().nullable(),
+});
+
+export const updateVenueBudgetSchema = createVenueBudgetSchema.partial();
+
 // ─── Inferred Types ───────────────────────────────────────────────────────────
 
 export type CreateProcurementInput = z.infer<typeof createProcurementSchema>;
@@ -90,3 +110,5 @@ export type ApproveProcurementInput = z.infer<typeof approveProcurementSchema>;
 export type ProcurementFilterInput = z.infer<typeof procurementFilterSchema>;
 export type CreateAnnouncementInput = z.infer<typeof createAnnouncementSchema>;
 export type UpdateAnnouncementInput = z.infer<typeof updateAnnouncementSchema>;
+export type CreateVenueBudgetInput = z.infer<typeof createVenueBudgetSchema>;
+export type UpdateVenueBudgetInput = z.infer<typeof updateVenueBudgetSchema>;
