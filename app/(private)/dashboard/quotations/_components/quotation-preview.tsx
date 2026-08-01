@@ -20,11 +20,10 @@ interface QuotationPreviewProps {
 
 const PRINT_AREA_ID = "quotation-print-area";
 
-/** Nomor dokumen — pakai yang ada, atau derive dari id + kategori. */
+/** Nomor dokumen — pakai yang ada, atau derive dari id (quotation = MICE-only). */
 function deriveQuotationNo(q: QuotationItem): string {
   if (q.quotationNo) return q.quotationNo;
-  const suffix = q.category === "mice" ? "MICE" : "WED";
-  return `#${q.id}-${suffix}`;
+  return `#${q.id}-MICE`;
 }
 
 function formatRupiah(amount: number): string {
@@ -344,9 +343,7 @@ export function QuotationPreview({
                 </p>
                 <div className="mt-12 w-56 border-t border-foreground pt-1 text-center">
                   <p className="font-bold text-foreground">{q.salesName}</p>
-                  <p className="text-muted-foreground">
-                    {q.category === "mice" ? "MICE Event Sales" : "Event Sales"}
-                  </p>
+                  <p className="text-muted-foreground">MICE Event Sales</p>
                 </div>
               </div>
             </div>

@@ -227,6 +227,24 @@ export async function getLeadStatuses() {
   });
 }
 
+export async function getLeadSegments() {
+  "use cache";
+  cacheTag("lead-segments");
+  cacheLife("minutes");
+
+  return db.leadSegment.findMany({
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      sortOrder: true,
+    },
+    orderBy: { sortOrder: "asc" },
+    take: 200,
+  });
+}
+
 export type LeadsResult = Awaited<ReturnType<typeof getLeads>>;
 export type LeadItem = LeadsResult["items"][number];
 export type LeadStatusItem = Awaited<ReturnType<typeof getLeadStatuses>>[number];
+export type LeadSegmentItem = Awaited<ReturnType<typeof getLeadSegments>>[number];

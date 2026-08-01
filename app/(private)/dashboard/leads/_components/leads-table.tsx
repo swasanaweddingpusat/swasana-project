@@ -50,6 +50,9 @@ export function LeadsTable() {
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<LeadItem | null>(null);
   const [dealTarget, setDealTarget] = useState<LeadItem | null>(null);
+  // MICE deal = flip status only (no booking). Booking MICE dibuat nanti lewat
+  // Quotation → Booking, bukan langsung dari lead. Wedding tetap Deal + draft booking.
+  const [dealMiceTarget, setDealMiceTarget] = useState<LeadItem | null>(null);
   const [lostTarget, setLostTarget] = useState<LeadItem | null>(null);
   const [resetTarget, setResetTarget] = useState<LeadItem | null>(null);
   const [detailLead, setDetailLead] = useState<LeadItem | null>(null);
@@ -122,7 +125,34 @@ export function LeadsTable() {
         return;
       }
     }
+    // MICE: Deal cukup flip status. Booking MICE dibuat belakangan lewat
+    // Quotation → Booking (relasi tetap lewat lead via quotation). Wedding tetap
+    // pakai DealConfirmModal → langsung buat draft booking.
+    const category = lead.eventType?.category ?? lead.category;
+    if (category === "MICE") {
+      setDealMiceTarget(lead);
+      return;
+    }
     setDealTarget(lead);
+  }
+
+  async function handleConfirmDealMice() {
+    if (!dealMiceTarget) return;
+    if (!dealStatus) { toast.error("Status Deal tidak ditemukan."); return; }
+    setIsMarkingStatus(true);
+    try {
+      const res = await updateStatus({ id: dealMiceTarget.id, statusId: dealStatus.id });
+      if (res.success) {
+        toast.success(`${dealMiceTarget.name} ditandai sebagai Deal.`);
+        setDealMiceTarget(null);
+      } else {
+        toast.error(res.error ?? "Gagal mengubah status.");
+      }
+    } catch {
+      toast.error("Gagal mengubah status.");
+    } finally {
+      setIsMarkingStatus(false);
+    }
   }
 
   function handleMarkLost(lead: LeadItem) {
@@ -489,6 +519,25 @@ export function LeadsTable() {
               className={cn("bg-destructive", "text-destructive-foreground", "hover:bg-destructive/90")}
             >
               {isDeleting ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* MICE Deal — flip status saja, tanpa buat booking. Booking MICE menyusul
+          lewat Quotation → Booking. */}
+      <AlertDialog open={!!dealMiceTarget} onOpenChange={(open) => !open && setDealMiceTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tandai sebagai Deal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tandai <strong>{dealMiceTarget?.name}</strong> sebagai <strong>Deal</strong>? Booking belum dibuat pada tahap ini — selanjutnya buat penawaran lewat Quotation, lalu Booking MICE dibuat saat client membayar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMarkingStatus}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDealMice} disabled={isMarkingStatus}>
+              {isMarkingStatus ? "Memproses..." : "Tandai Deal"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

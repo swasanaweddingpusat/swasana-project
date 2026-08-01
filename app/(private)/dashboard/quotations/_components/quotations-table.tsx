@@ -271,11 +271,10 @@ function formatRupiah(amount: number): string {
   });
 }
 
-/** Nomor dokumen — pakai yang ada, atau derive dari id + kategori. */
+/** Nomor dokumen — pakai yang ada, atau derive dari id (quotation = MICE-only). */
 function deriveQuotationNo(q: QuotationItem): string {
   if (q.quotationNo) return q.quotationNo;
-  const suffix = q.category === "mice" ? "MICE" : "WED";
-  return `#${q.id}-${suffix}`;
+  return `#${q.id}-MICE`;
 }
 
 function formatDate(dateStr: string): string {

@@ -829,15 +829,6 @@ export function MiceBookingDrawer({
                     )} />
                   </div>
 
-                  {/* Quotation */}
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quotation</p>
-                    <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground cursor-not-allowed select-none">
-                      Modul Quotation menyusul
-                    </div>
-                    <p className="text-xs text-muted-foreground">Integrasi quotation akan tersedia di versi berikutnya.</p>
-                  </div>
-
                   {/* Detail Event */}
                   <div className="border-t border-border pt-4 space-y-3">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Detail Event</p>
@@ -859,6 +850,11 @@ export function MiceBookingDrawer({
                         <FormMessage />
                       </FormItem>
                     )} />
+                  </div>
+
+                  {/* Jadwal Event */}
+                  <div className="border-t border-border pt-4 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Jadwal Event</p>
                     <FormField control={form.control} name="eventDate" rules={{ required: "Tanggal event wajib diisi" }} render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tanggal Event *</FormLabel>

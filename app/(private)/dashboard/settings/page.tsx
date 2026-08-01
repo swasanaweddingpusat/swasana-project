@@ -18,6 +18,7 @@ import {
   Sledgehammer,
   Document,
   Book,
+  Buildings2,
   type IconProps,
 } from "@solar-icons/react";
 import type { ComponentType } from "react";
@@ -120,6 +121,13 @@ const GROUPS: SettingGroup[] = [
         module: "settings-source-of-information",
       },
       {
+        title: "Lead Segment",
+        description: "Kelola master segment/kategori untuk lead MICE.",
+        icon: Buildings2,
+        href: "/dashboard/settings/lead-segment",
+        module: "settings-lead-segment",
+      },
+      {
         title: "Tingkat Pendidikan",
         description: "Kelola daftar tingkat pendidikan karyawan.",
         icon: Diploma,
@@ -179,6 +187,7 @@ export default async function SettingsHubPage() {
     "settings-event-types", "settings-order-status",
     "settings-quotation-templates", "settings-tutorial",
     "customers", "settings-role-permission",
+    "settings-lead-segment",
     "settings-maintenance-category",
     "settings-maintenance-priority",
     "settings-maintenance-status",

@@ -37,9 +37,32 @@ import { PermissionGate } from "@/components/shared/permission-gate";
 import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 
-function formatEventDate(date: Date | string | null): string {
+function formatShortDate(date: Date | string | null): string {
   if (!date) return "—";
   return format(new Date(date), "d MMM yyyy");
+}
+
+/** First contact from the stored contactNumbers JSON, or null when empty. */
+function firstContactNumber(
+  contactNumbers: LeadItem["contactNumbers"],
+): { label: string; number: string } | null {
+  if (!Array.isArray(contactNumbers) || contactNumbers.length === 0) return null;
+  const c = contactNumbers[0] as { label?: string; number?: string };
+  if (!c?.number) return null;
+  return { label: c.label ?? "", number: c.number };
+}
+
+/** Category chip — Wedding vs MICE, token-safe (no hardcoded colors). */
+function CategoryBadge({ category, className }: { category: string; className?: string }) {
+  const isMice = category === "MICE";
+  return (
+    <Badge
+      variant={isMice ? "outline" : "secondary"}
+      className={cn("rounded-full font-medium", className)}
+    >
+      {isMice ? "MICE" : "Wedding"}
+    </Badge>
+  );
 }
 
 interface LeadsListViewProps {
@@ -183,43 +206,35 @@ function MobileLeadCard({
           </span>
         </div>
 
-        {/* Row 2: Venue + Event Type badge */}
-        <div className="flex items-start gap-1.5 flex-wrap text-xs text-muted-foreground">
-          <span className="flex flex-col gap-0.5 min-w-0">
-            <span className="truncate">{lead.venue?.name ?? "Venue —"}</span>
-            {lead.venueSecondary && (
-              <span className="text-muted-foreground/70 truncate">{lead.venueSecondary.name}</span>
-            )}
-          </span>
-          {lead.eventType && (
+        {/* Row 2: Kategori + instansi (MICE) — applies to both categories */}
+        <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+          <CategoryBadge category={lead.category} className="text-[10px] px-1.5 py-0" />
+          {lead.category === "MICE" && lead.instansi && (
             <>
-              <span aria-hidden="true" className="mt-0.5">·</span>
-              <span className="text-foreground/70 mt-0.5">{lead.eventType.name}</span>
-              <Badge variant="outline" className="text-[10px] px-1 py-0 mt-0.5">
-                {lead.eventType.category === "MICE" ? "MICE" : "Wedding"}
-              </Badge>
+              <span aria-hidden="true">·</span>
+              <span className="text-foreground/70 truncate min-w-0">{lead.instansi}</span>
+            </>
+          )}
+          {lead.sourceOfInformation?.name && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="truncate min-w-0">{lead.sourceOfInformation.name}</span>
             </>
           )}
         </div>
 
-        {/* Row 3: Tanggal + Pax */}
+        {/* Row 3: Masuk (creation date) + Pax */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-start gap-1">
-            <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0 mt-px" />
-            <span className="flex flex-col gap-0.5">
-              <span>
-                {formatEventDate(lead.eventDate)}
-                {lead.time && <span className="text-muted-foreground"> · {lead.time}</span>}
-              </span>
-              {lead.eventDateAlt && (
-                <span className="text-muted-foreground/70">alt: {formatEventDate(lead.eventDateAlt)}</span>
-              )}
-            </span>
-          </span>
           <span className="flex items-center gap-1">
-            <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            {lead.estimatedPax ? lead.estimatedPax.toLocaleString("id-ID") : "—"} pax
+            <CalendarMark weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            Masuk {formatShortDate(lead.createdAt)}
           </span>
+          {lead.estimatedPax != null && (
+            <span className="flex items-center gap-1">
+              <UsersGroupRounded weight="BoldDuotone" aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+              {lead.estimatedPax.toLocaleString("id-ID")} pax
+            </span>
+          )}
         </div>
 
         {/* Row 4: Sales */}
@@ -371,12 +386,12 @@ export function LeadsListView({
               <TableHead className="px-4 whitespace-nowrap w-12 text-right hidden sm:table-cell">No</TableHead>
               {/* Client — always visible; sub-row embeds pax + sumber */}
               <TableHead className="px-4 whitespace-nowrap">Client</TableHead>
-              {/* Tanggal Event — md+ (freed up after Pax/Sumber removed) */}
-              <TableHead className="px-4 whitespace-nowrap hidden md:table-cell">Tanggal Event</TableHead>
-              {/* Venue — lg+ */}
-              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Venue</TableHead>
-              {/* Event Type — xl+ (push out to give lg breathing room) */}
-              <TableHead className="px-4 whitespace-nowrap hidden xl:table-cell">Event Type</TableHead>
+              {/* Kategori — md+ (applies to both Wedding & MICE, unlike the removed event columns) */}
+              <TableHead className="px-4 whitespace-nowrap hidden md:table-cell">Kategori</TableHead>
+              {/* Kontak — lg+ */}
+              <TableHead className="px-4 whitespace-nowrap hidden lg:table-cell">Kontak</TableHead>
+              {/* Masuk — xl+ (lead creation date, for pipeline aging) */}
+              <TableHead className="px-4 whitespace-nowrap hidden xl:table-cell">Masuk</TableHead>
               {/* Status — always visible */}
               <TableHead className="px-4 whitespace-nowrap">Status</TableHead>
               {/* Sales — md+ */}
@@ -421,52 +436,42 @@ export function LeadsListView({
                     })()}
                   </TableCell>
 
-                  {/* Tanggal Event — md+ */}
+                  {/* Kategori — md+ (MICE shows instansi as sub-line when present) */}
                   <TableCell className="px-4 text-foreground/80 hidden md:table-cell">
-                    <div className="whitespace-nowrap">{formatEventDate(lead.eventDate)}</div>
-                    {lead.time && (
-                      <div className="text-xs text-muted-foreground">{lead.time}</div>
-                    )}
-                    {lead.eventDateAlt && (
-                      <div className="text-xs text-muted-foreground/70 whitespace-nowrap">
-                        alt: {formatEventDate(lead.eventDateAlt)}
+                    <CategoryBadge category={lead.category} />
+                    {lead.category === "MICE" && lead.instansi && (
+                      <div
+                        className="text-xs text-muted-foreground truncate max-w-40 mt-1"
+                        title={lead.instansi}
+                      >
+                        {lead.instansi}
                       </div>
                     )}
                   </TableCell>
 
-                  {/* Venue — lg+ */}
+                  {/* Kontak — lg+ */}
                   <TableCell className="px-4 text-foreground/80 hidden lg:table-cell">
-                    {lead.venue ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="truncate max-w-36" title={lead.venue.name}>
-                          {lead.venue.name}
-                        </span>
-                        {lead.venueSecondary && (
-                          <span
-                            className="text-xs text-muted-foreground/70 truncate max-w-36"
-                            title={lead.venueSecondary.name}
-                          >
-                            {lead.venueSecondary.name}
+                    {(() => {
+                      const contact = firstContactNumber(lead.contactNumbers);
+                      if (!contact) return <span className="text-muted-foreground">—</span>;
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="whitespace-nowrap font-medium tabular-nums">
+                            +{contact.number}
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                          {contact.label && (
+                            <span className="text-xs text-muted-foreground truncate max-w-36">
+                              {contact.label}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
 
-                  {/* Event Type — xl+ */}
-                  <TableCell className="px-4 whitespace-nowrap text-foreground/80 hidden xl:table-cell">
-                    {lead.eventType ? (
-                      <span className="flex items-center gap-1.5">
-                        {lead.eventType.name}
-                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                          {lead.eventType.category === "MICE" ? "MICE" : "Wedding"}
-                        </Badge>
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                  {/* Masuk — xl+ (creation date for pipeline aging) */}
+                  <TableCell className="px-4 whitespace-nowrap text-muted-foreground hidden xl:table-cell">
+                    {formatShortDate(lead.createdAt)}
                   </TableCell>
 
                   {/* Status — pill style */}

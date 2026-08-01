@@ -55,6 +55,11 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kelola status pipeline lead",
     parent: "/dashboard/settings",
   },
+  "/dashboard/settings/lead-segment": {
+    title: "Lead Segment",
+    subtitle: "Kelola master segment/kategori untuk lead MICE",
+    parent: "/dashboard/settings",
+  },
   "/dashboard/settings/education-level": {
     title: "Tingkat Pendidikan",
     subtitle: "Kelola daftar tingkat pendidikan karyawan",

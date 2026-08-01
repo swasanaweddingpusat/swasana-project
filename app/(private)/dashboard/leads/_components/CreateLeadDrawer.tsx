@@ -43,6 +43,7 @@ import {
 import { useVenues } from "@/hooks/use-venues";
 import { useEventTypes } from "@/hooks/use-event-types";
 import { useLeadStatuses } from "@/hooks/use-lead-statuses";
+import { useLeadSegments } from "@/hooks/use-lead-segments";
 import { useSalesUsers } from "@/hooks/use-sales-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCreateLead } from "@/hooks/use-leads";
@@ -176,6 +177,18 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
   const [contactInput, setContactInput] = useState({ name: "", phone: "" });
 
+  // ── MICE segment options (from master + local escape-hatch additions) ────────
+  const { data: masterSegments = [] } = useLeadSegments();
+  const [localSegmentAdditions, setLocalSegmentAdditions] = useState<{ id: string; name: string }[]>([]);
+  const miceSegments = [
+    ...masterSegments
+      .filter((s) => s.isActive)
+      .map((s) => ({ id: s.id, name: s.name })),
+    ...localSegmentAdditions.filter(
+      (la) => !masterSegments.some((ms) => ms.name === la.name),
+    ),
+  ];
+
   // ── UI toggles ─────────────────────────────────────────────────────────────
   const [showDateAlt, setShowDateAlt] = useState(false);
   const [showVenueSecondary, setShowVenueSecondary] = useState(false);
@@ -204,6 +217,9 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
   // locked. AssignableSalesUser.id and session.user.profileId are both profile ids.
   const isSalesRole =
     currentUser?.roleName === "sales" || currentUser?.roleName === "sales-mice";
+
+  // sales-mice only works with MICE leads — auto-select category and hide the picker.
+  const isMiceOnly = currentUser?.roleName === "sales-mice";
   const isSelfAssignableSales =
     isSalesRole &&
     !!currentUser?.profileId &&
@@ -218,6 +234,11 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
         : { ...prev, assignedToId: currentUser.profileId! },
     );
   }, [open, isSelfAssignableSales, currentUser?.profileId]);
+
+  // Auto-select MICE for sales-mice role — they only handle corporate leads.
+  useEffect(() => {
+    if (open && isMiceOnly && category !== "MICE") setCategory("MICE");
+  }, [open, isMiceOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const isWedding = category === "WEDDINGS";
@@ -255,16 +276,16 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
     !category ||
     !form.name.trim() ||
     contactNumbers.length === 0 ||
-    !form.eventDate ||
-    !form.eventTypeId ||
+    (!isMice && !form.eventDate) ||
+    (!isMice && !form.eventTypeId) ||
     !form.sourceOfInformationId ||
     !form.assignedToId ||
     !form.statusId ||
     (isWedding && !form.weddingSession) ||
     (isWedding && !!form.eventDateAlt && !form.weddingSessionAlt) ||
     (isBitrixSource && !form.bitrixId.trim()) ||
-    (!!form.eventDateAlt && form.eventDateAlt === form.eventDate) ||
-    isLockIncomplete;
+    (!isMice && !!form.eventDateAlt && form.eventDateAlt === form.eventDate) ||
+    (!isMice && isLockIncomplete);
 
   // ── Auto-fill time from session + event type ────────────────────────────────
   const selectedEventType = eventTypeOptions.find((et) => et.id === form.eventTypeId);
@@ -337,6 +358,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
     setShowDateAlt(false);
     setShowVenueSecondary(false);
     setBookingFeeEvidence(null);
+    setLocalSegmentAdditions([]);
     setSubmitError(null);
   }
 
@@ -436,9 +458,9 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
           <div className="flex flex-col gap-6 pb-4">
 
             {/* ════════════════════════════════════════════════════════
-                STEP 0 — Pilih Tipe Booking (ALWAYS VISIBLE ON TOP)
+                STEP 0 — Pilih Tipe Booking (hidden for sales-mice)
             ════════════════════════════════════════════════════════ */}
-            <div className="flex flex-col gap-3">
+            {!isMiceOnly && <div className="flex flex-col gap-3">
               <p className="text-sm font-semibold text-foreground">
                 Tipe Booking <span className="text-destructive">*</span>
               </p>
@@ -511,7 +533,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                   </div>
                 </button>
               </div>
-            </div>
+            </div>}
 
             {/* ════════════════════════════════════════════════════════
                 FIELDS — hanya tampil setelah kategori dipilih
@@ -524,13 +546,13 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
-                      {isWedding ? "Nama Pasangan" : "Nama Client"}
+                      {isMice ? "Perusahaan / Instansi" : "Nama Pasangan"}
                       <span className="text-destructive ml-0.5">*</span>
                     </label>
                     <Input
                       value={form.name}
                       onChange={(e) => setField("name", e.target.value)}
-                      placeholder={isWedding ? "e.g. Budi & Siti" : "e.g. PT Maju Bersama"}
+                      placeholder={isMice ? "e.g. PT Maju Bersama" : "e.g. Budi & Siti"}
                       className="rounded-xl"
                     />
                   </div>
@@ -538,13 +560,26 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                   {isMice && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-medium text-foreground">
-                        Perusahaan / Instansi
+                        Segment / Kategori
+                        <span className="ml-1.5 font-normal text-muted-foreground text-xs">(opsional)</span>
                       </label>
-                      <Input
-                        value={form.instansi}
-                        onChange={(e) => setField("instansi", e.target.value)}
-                        placeholder="e.g. PT Maju Bersama (opsional)"
-                        className="rounded-xl"
+                      <SearchableSelect
+                        options={miceSegments}
+                        value={miceSegments.find((s) => s.name === form.instansi)?.id ?? ""}
+                        onChange={(id) => {
+                          const matched = miceSegments.find((s) => s.id === id);
+                          setField("instansi", matched?.name ?? "");
+                        }}
+                        onAdd={(name) => {
+                          const id = name.toLowerCase().replace(/\s+/g, "-");
+                          const newOpt = { id, name };
+                          setLocalSegmentAdditions((prev) => [...prev, newOpt]);
+                          setField("instansi", name);
+                        }}
+                        placeholder="Pilih atau tambah segment..."
+                        searchPlaceholder="Cari segment..."
+                        emptyText="Belum ada segment"
+                        addingLabel="Menambahkan..."
                       />
                     </div>
                   )}
@@ -699,6 +734,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                           phoneValue={contactInput.phone}
                           onPhoneChange={(v) => setContactInput((p) => ({ ...p, phone: v }))}
                           onAdd={addContact}
+                          namePlaceholder={isMice ? "Nama PIC..." : "Label wajib: cpw, cpp, ortu..."}
                         />
                       </PopoverContent>
                     </Popover>
@@ -712,7 +748,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                 </div>
 
                 {/* ── SECTION: Venue ────────────────────────────────── */}
-                <div className="flex flex-col gap-4">
+                {!isMice && <div className="flex flex-col gap-4">
                   <SectionHeader icon={MapPoint} title="Venue" />
 
                   <div className="flex flex-col gap-1.5">
@@ -764,10 +800,10 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                     </button>
                   )}
 
-                </div>
+                </div>}
 
                 {/* ── SECTION: Tanggal Event ────────────────────────── */}
-                <div className="flex flex-col gap-4">
+                {!isMice && <div className="flex flex-col gap-4">
                   <SectionHeader icon={CalendarDate} title="Tanggal Event" />
 
                   {/* Tanggal Utama + session-nya */}
@@ -868,10 +904,10 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       Tambah Tanggal Alternatif
                     </button>
                   )}
-                </div>
+                </div>}
 
                 {/* ── SECTION: Kunci Tanggal & Venue ───────────────────── */}
-                <div className="flex flex-col gap-4">
+                {!isMice && <div className="flex flex-col gap-4">
                   {/* ── Toggle: Kunci Tanggal & Venue ─────────────────── */}
                   <div className="flex flex-col gap-3">
                     <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5">
@@ -1084,10 +1120,10 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       </div>
                     </div>
                   )}
-                </div>
+                </div>}
 
                 {/* ── SECTION: Detail Event ─────────────────────────── */}
-                <div className="flex flex-col gap-4">
+                {!isMice && <div className="flex flex-col gap-4">
                   <SectionHeader icon={Buildings2} title="Detail Event" />
 
                   <div className="flex flex-col gap-1.5">
@@ -1143,7 +1179,7 @@ export function CreateLeadDrawer({ open, onOpenChange, onSuccess }: CreateLeadDr
                       className="rounded-xl"
                     />
                   </div>
-                </div>
+                </div>}
 
                 {/* ── SECTION: Sales & Pipeline ─────────────────────── */}
                 <div className="flex flex-col gap-4">

@@ -178,6 +178,7 @@ export async function getAssignableSalesUsers() {
     select: {
       id: true,
       fullName: true,
+      phoneNumber: true,
       role: { select: { name: true } },
     },
     orderBy: { fullName: "asc" },
