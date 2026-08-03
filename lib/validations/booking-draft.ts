@@ -27,8 +27,11 @@ export const createDraftStep1Schema = z.object({
   contactNumbers: z.string().optional().default(""),
   contactEmailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).default(""),
   contactEmailCpw: z.string().email("Email CPW tidak valid").optional().or(z.literal("")).default(""),
-  contactNikCpp: z.string().length(16, "NIK CPP harus 16 digit").regex(/^\d+$/, "NIK CPP hanya angka").optional().or(z.literal("")).default(""),
-  contactNikCpw: z.string().length(16, "NIK CPW harus 16 digit").regex(/^\d+$/, "NIK CPW hanya angka").optional().or(z.literal("")).default(""),
+  contactIdTypeCpp: z.enum(["KTP", "Paspor"]).default("KTP"),
+  contactIdTypeCpw: z.enum(["KTP", "Paspor"]).default("KTP"),
+  // Nomor identitas dibiarkan longgar di sini; format divalidasi per-tipe di superRefine.
+  contactNikCpp: z.string().optional().or(z.literal("")).default(""),
+  contactNikCpw: z.string().optional().or(z.literal("")).default(""),
   contactCppAddress: z.string().optional().default(""),
   contactCpwAddress: z.string().optional().default(""),
   contactBitrixId: z.string().optional().default(""),
@@ -40,6 +43,23 @@ export const createDraftStep1Schema = z.object({
   // Step 1 also collects discount/bonus name (optional at this stage)
   specialBonusName: z.string().optional().nullable(),
   specialBonusAmount: z.coerce.number().optional().nullable(),
+}).superRefine((data, ctx) => {
+  const nikCpp = data.contactNikCpp ?? "";
+  if (nikCpp !== "") {
+    if (data.contactIdTypeCpp === "KTP" && !/^\d{16}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPP harus 16 digit angka", path: ["contactNikCpp"] });
+    } else if (data.contactIdTypeCpp === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["contactNikCpp"] });
+    }
+  }
+  const nikCpw = data.contactNikCpw ?? "";
+  if (nikCpw !== "") {
+    if (data.contactIdTypeCpw === "KTP" && !/^\d{16}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPW harus 16 digit angka", path: ["contactNikCpw"] });
+    } else if (data.contactIdTypeCpw === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["contactNikCpw"] });
+    }
+  }
 });
 
 export type CreateDraftStep1Input = z.infer<typeof createDraftStep1Schema>;

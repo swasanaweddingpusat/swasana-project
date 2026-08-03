@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const idTypeEnum = z.enum(["KTP", "Paspor"]);
+
 export const bookingSchema = z.object({
   eventDate: z.string().min(1, "Tanggal event wajib diisi"),
   weddingSession: z.enum(["morning", "evening", "fullday"]).optional().nullable(),
@@ -9,8 +11,10 @@ export const bookingSchema = z.object({
   contactNumbers: z.string().optional().default(""),
   contactEmailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).default(""),
   contactEmailCpw: z.string().email("Email CPW tidak valid").optional().or(z.literal("")).default(""),
-  contactNikCpp: z.string().length(16, "NIK CPP harus 16 digit").regex(/^\d+$/, "NIK CPP hanya angka").optional().or(z.literal("")).default(""),
-  contactNikCpw: z.string().length(16, "NIK CPW harus 16 digit").regex(/^\d+$/, "NIK CPW hanya angka").optional().or(z.literal("")).default(""),
+  contactIdTypeCpp: idTypeEnum.default("KTP"),
+  contactIdTypeCpw: idTypeEnum.default("KTP"),
+  contactNikCpp: z.string().optional().or(z.literal("")).default(""),
+  contactNikCpw: z.string().optional().or(z.literal("")).default(""),
   contactCppAddress: z.string().optional().default(""),
   contactCpwAddress: z.string().optional().default(""),
   contactBitrixId: z.string().optional().default(""),
@@ -60,6 +64,23 @@ export const bookingSchema = z.object({
   signatureSales: z.string().optional().nullable(),
   withMaterai: z.boolean().default(false),
   leadId: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  const nikCpp = data.contactNikCpp ?? "";
+  if (nikCpp !== "") {
+    if (data.contactIdTypeCpp === "KTP" && !/^\d{16}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPP harus 16 digit angka", path: ["contactNikCpp"] });
+    } else if (data.contactIdTypeCpp === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["contactNikCpp"] });
+    }
+  }
+  const nikCpw = data.contactNikCpw ?? "";
+  if (nikCpw !== "") {
+    if (data.contactIdTypeCpw === "KTP" && !/^\d{16}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPW harus 16 digit angka", path: ["contactNikCpw"] });
+    } else if (data.contactIdTypeCpw === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["contactNikCpw"] });
+    }
+  }
 });
 
 export const updateBookingSchema = z.object({
@@ -92,8 +113,10 @@ export const editBookingSchema = z.object({
   contactNumbers: z.string().optional().default(""),
   contactEmailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).default(""),
   contactEmailCpw: z.string().email("Email CPW tidak valid").optional().or(z.literal("")).default(""),
-  contactNikCpp: z.string().length(16, "NIK CPP harus 16 digit").regex(/^\d+$/, "NIK CPP hanya angka").optional().or(z.literal("")).default(""),
-  contactNikCpw: z.string().length(16, "NIK CPW harus 16 digit").regex(/^\d+$/, "NIK CPW hanya angka").optional().or(z.literal("")).default(""),
+  contactIdTypeCpp: idTypeEnum.default("KTP"),
+  contactIdTypeCpw: idTypeEnum.default("KTP"),
+  contactNikCpp: z.string().optional().or(z.literal("")).default(""),
+  contactNikCpw: z.string().optional().or(z.literal("")).default(""),
   contactCppAddress: z.string().optional().default(""),
   contactCpwAddress: z.string().optional().default(""),
   contactBitrixId: z.string().optional().default(""),
@@ -131,6 +154,23 @@ export const editBookingSchema = z.object({
    *  master harus di-refresh dari DB. Diset true di drawer saat SearchableSelect
    *  paket onChange terpicu. False = harga snapshot tidak di-touch. */
   refreshPackagePrice: z.boolean().optional().default(false),
+}).superRefine((data, ctx) => {
+  const nikCpp = data.contactNikCpp ?? "";
+  if (nikCpp !== "") {
+    if (data.contactIdTypeCpp === "KTP" && !/^\d{16}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPP harus 16 digit angka", path: ["contactNikCpp"] });
+    } else if (data.contactIdTypeCpp === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["contactNikCpp"] });
+    }
+  }
+  const nikCpw = data.contactNikCpw ?? "";
+  if (nikCpw !== "") {
+    if (data.contactIdTypeCpw === "KTP" && !/^\d{16}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPW harus 16 digit angka", path: ["contactNikCpw"] });
+    } else if (data.contactIdTypeCpw === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["contactNikCpw"] });
+    }
+  }
 });
 
 /** Client-info-only update: updates snapCustomer + customer master WITHOUT touching
@@ -141,13 +181,32 @@ export const updateBookingClientInfoSchema = z.object({
   contactNumbers: z.string().optional().default(""),
   contactEmailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).default(""),
   contactEmailCpw: z.string().email("Email CPW tidak valid").optional().or(z.literal("")).default(""),
-  contactNikCpp: z.string().length(16, "NIK CPP harus 16 digit").regex(/^\d+$/, "NIK CPP hanya angka").optional().or(z.literal("")).default(""),
-  contactNikCpw: z.string().length(16, "NIK CPW harus 16 digit").regex(/^\d+$/, "NIK CPW hanya angka").optional().or(z.literal("")).default(""),
+  contactIdTypeCpp: idTypeEnum.default("KTP"),
+  contactIdTypeCpw: idTypeEnum.default("KTP"),
+  contactNikCpp: z.string().optional().or(z.literal("")).default(""),
+  contactNikCpw: z.string().optional().or(z.literal("")).default(""),
   contactCppAddress: z.string().optional().default(""),
   contactCpwAddress: z.string().optional().default(""),
   contactBitrixId: z.string().optional().default(""),
   salesId: z.string().optional().nullable(),
   sourceOfInformationId: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  const nikCpp = data.contactNikCpp ?? "";
+  if (nikCpp !== "") {
+    if (data.contactIdTypeCpp === "KTP" && !/^\d{16}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPP harus 16 digit angka", path: ["contactNikCpp"] });
+    } else if (data.contactIdTypeCpp === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpp)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["contactNikCpp"] });
+    }
+  }
+  const nikCpw = data.contactNikCpw ?? "";
+  if (nikCpw !== "") {
+    if (data.contactIdTypeCpw === "KTP" && !/^\d{16}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPW harus 16 digit angka", path: ["contactNikCpw"] });
+    } else if (data.contactIdTypeCpw === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(nikCpw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["contactNikCpw"] });
+    }
+  }
 });
 
 /** Restore a past BookingRevision as the active version. Rolls the snapshot back

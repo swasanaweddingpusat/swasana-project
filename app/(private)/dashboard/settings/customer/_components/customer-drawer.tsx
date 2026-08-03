@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloseCircle } from "@solar-icons/react";
 import { Drawer } from "@/components/shared/drawer";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,10 @@ type OptionItem = { id: string; name: string };
 
 // Form type excludes mobileNumber — handled separately via state + manual validation
 // emailCpp/emailCpw are plain strings in the form (empty string = no email); Zod transforms them to undefined on submit
-type CustomerFormValues = Omit<CustomerInput, "mobileNumber" | "emailCpp" | "emailCpw"> & { emailCpp: string; emailCpw: string };
+type CustomerFormValues = Omit<CustomerInput, "mobileNumber" | "emailCpp" | "emailCpw"> & { emailCpp: string; emailCpw: string; cppIdType: "KTP" | "Paspor"; cpwIdType: "KTP" | "Paspor" };
 
 const DRAFT_KEY = "customer_drawer_draft";
-interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; emailCpp: string; emailCpw: string; cppNik: string; cpwNik: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
+interface CustomerDraft { name: string; mobileNumbers: MobileNumberEntry[]; emailCpp: string; emailCpw: string; cppNik: string; cpwNik: string; cppIdType: string; cpwIdType: string; ktpAddress: string; type: string; club: string; memberStatus: string; notes: string; }
 function saveDraft(d: CustomerDraft) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* noop */ } }
 function loadDraft(): CustomerDraft | null { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
@@ -65,8 +66,13 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   const [mobileError, setMobileError] = useState<string | null>(null);
 
   const form = useForm<CustomerFormValues>({
-    defaultValues: { name: "", emailCpp: "", emailCpw: "", cppNik: "", cpwNik: "", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
+    defaultValues: { name: "", emailCpp: "", emailCpw: "", cppNik: "", cpwNik: "", cppIdType: "KTP", cpwIdType: "KTP", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
+
+  // useWatch (subscription hook) instead of form.watch() — the React Compiler
+  // flags watch() as an incompatible-library call it can't safely memoize.
+  const cppIdType = useWatch({ control: form.control, name: "cppIdType" });
+  const cpwIdType = useWatch({ control: form.control, name: "cpwIdType" });
 
   const prevOpenRef = useRef(false);
 
@@ -85,7 +91,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         const draft = loadDraft();
         if (draft) {
           setMobileNumbers(draft.mobileNumbers ?? []);
-          form.reset({ name: draft.name, emailCpp: draft.emailCpp, emailCpw: draft.emailCpw, cppNik: draft.cppNik, cpwNik: draft.cpwNik, ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
+          form.reset({ name: draft.name, emailCpp: draft.emailCpp, emailCpw: draft.emailCpw, cppNik: draft.cppNik, cpwNik: draft.cpwNik, cppIdType: (draft.cppIdType as "KTP" | "Paspor") ?? "KTP", cpwIdType: (draft.cpwIdType as "KTP" | "Paspor") ?? "KTP", ktpAddress: draft.ktpAddress, type: draft.type, club: draft.club, memberStatus: draft.memberStatus, notes: draft.notes, bitrixId: "" });
           return;
         }
       }
@@ -96,6 +102,8 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
         emailCpw: editCustomer?.emailCpw ?? "",
         cppNik: editCustomer?.cppNik ?? "",
         cpwNik: editCustomer?.cpwNik ?? "",
+        cppIdType: (editCustomer?.cppIdType as "KTP" | "Paspor") ?? "KTP",
+        cpwIdType: (editCustomer?.cpwIdType as "KTP" | "Paspor") ?? "KTP",
         ktpAddress: editCustomer?.ktpAddress ?? "",
         type: tv,
         club: editCustomer?.club ?? "",
@@ -123,7 +131,7 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   useEffect(() => {
     if (!open || editCustomer) return;
     const values = form.getValues();
-    saveDraft({ name: values.name, mobileNumbers, emailCpp: values.emailCpp ?? "", emailCpw: values.emailCpw ?? "", cppNik: values.cppNik ?? "", cpwNik: values.cpwNik ?? "", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
+    saveDraft({ name: values.name, mobileNumbers, emailCpp: values.emailCpp ?? "", emailCpw: values.emailCpw ?? "", cppNik: values.cppNik ?? "", cpwNik: values.cpwNik ?? "", cppIdType: values.cppIdType ?? "KTP", cpwIdType: values.cpwIdType ?? "KTP", ktpAddress: values.ktpAddress ?? "", type: values.type, club: values.club ?? "", memberStatus: values.memberStatus, notes: values.notes ?? "" });
   }); // intentionally no deps
 
   async function handleAddSourceOfInfo(name: string) {
@@ -254,17 +262,71 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
                   <Input {...field} placeholder="email-cpw@contoh.com" />
                 </FormControl><FormMessage /></FormItem>
               )} />
+              <FormField control={form.control} name="cppIdType" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipe Identitas CPP</FormLabel>
+                  <Select value={field.value} onValueChange={(v) => { field.onChange(v); form.setValue("cppNik", ""); }}>
+                    <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="KTP">KTP</SelectItem>
+                      <SelectItem value="Paspor">Paspor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
               <FormField control={form.control} name="cppNik" render={({ field }) => (
-                <FormItem><FormLabel>NIK CPP (16 digit)</FormLabel><FormControl>
-                  <Input {...field} placeholder="3275010101010001" inputMode="numeric" maxLength={16}
-                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 16))} />
-                </FormControl><FormMessage /></FormItem>
+                <FormItem>
+                  <FormLabel>{cppIdType === "KTP" ? "NIK CPP (16 digit)" : "No. Paspor CPP"}</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder={cppIdType === "KTP" ? "3275010101010001" : "A1234567"}
+                      inputMode={cppIdType === "KTP" ? "numeric" : "text"}
+                      maxLength={cppIdType === "KTP" ? 16 : 9}
+                      onChange={(e) => {
+                        const v = cppIdType === "KTP"
+                          ? e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
+                          : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
+                        field.onChange(v);
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="cpwIdType" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipe Identitas CPW</FormLabel>
+                  <Select value={field.value} onValueChange={(v) => { field.onChange(v); form.setValue("cpwNik", ""); }}>
+                    <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="KTP">KTP</SelectItem>
+                      <SelectItem value="Paspor">Paspor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
               )} />
               <FormField control={form.control} name="cpwNik" render={({ field }) => (
-                <FormItem><FormLabel>NIK CPW (16 digit)</FormLabel><FormControl>
-                  <Input {...field} placeholder="3275010101010002" inputMode="numeric" maxLength={16}
-                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, "").slice(0, 16))} />
-                </FormControl><FormMessage /></FormItem>
+                <FormItem>
+                  <FormLabel>{cpwIdType === "KTP" ? "NIK CPW (16 digit)" : "No. Paspor CPW"}</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder={cpwIdType === "KTP" ? "3275010101010002" : "A1234567"}
+                      inputMode={cpwIdType === "KTP" ? "numeric" : "text"}
+                      maxLength={cpwIdType === "KTP" ? 16 : 9}
+                      onChange={(e) => {
+                        const v = cpwIdType === "KTP"
+                          ? e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
+                          : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
+                        field.onChange(v);
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )} />
               <FormField control={form.control} name="ktpAddress" render={({ field }) => (
                 <FormItem><FormLabel>Alamat KTP</FormLabel><FormControl>

@@ -28,7 +28,7 @@ const bookingListInclude = {
 const bookingDetailInclude = {
   ...bookingListInclude,
   snapCustomer: true,
-  customer: { select: { bitrixId: true, cppNik: true, cpwNik: true, cppAddress: true, cpwAddress: true } },
+  customer: { select: { bitrixId: true, cppNik: true, cpwNik: true, cppIdType: true, cpwIdType: true, cppAddress: true, cpwAddress: true } },
   snapVenue: true,
   snapPackage: true,
   // Re-added here (dropped from bookingListInclude for payload size): the detail

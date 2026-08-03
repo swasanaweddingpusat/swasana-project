@@ -36,7 +36,6 @@ import {
   MoneyBag,
   CardReceive,
   CardSend,
-  CalendarMark,
   BillList,
   BellBing,
   Wallet2,

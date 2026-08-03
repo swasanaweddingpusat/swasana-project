@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -82,14 +82,17 @@ export function VenueBudgetTab({ venues, addTrigger = 0 }: VenueBudgetTabProps):
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editItem, setEditItem] = useState<VenueBudgetItem | null>(null);
 
-  const prevTrigger = useRef(addTrigger);
-  useEffect(() => {
-    if (addTrigger > prevTrigger.current) {
+  // Buka drawer "Tambah" saat parent menaikkan addTrigger. Pakai pola
+  // adjust-state-during-render (bukan setState di dalam effect) supaya tidak
+  // memicu cascading render — React langsung re-render tanpa commit DOM antara.
+  const [prevTrigger, setPrevTrigger] = useState(addTrigger);
+  if (addTrigger !== prevTrigger) {
+    setPrevTrigger(addTrigger);
+    if (addTrigger > prevTrigger) {
       setEditItem(null);
       setDrawerOpen(true);
     }
-    prevTrigger.current = addTrigger;
-  }, [addTrigger]);
+  }
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<VenueBudgetItem | null>(null);

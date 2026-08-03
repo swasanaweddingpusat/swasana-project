@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { toDateOnly } from "@/lib/utils";
 import type { BookingListItem } from "@/lib/queries/bookings";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
-import { validateBookingField, type BookingFieldKey } from "@/lib/validations/booking-form";
+import { validateBookingField, validateIdNumber, type BookingFieldKey } from "@/lib/validations/booking-form";
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -71,6 +71,10 @@ export interface EditBookingForm {
   setContactNikCpp: (v: string) => void;
   contactNikCpw: string;
   setContactNikCpw: (v: string) => void;
+  contactIdTypeCpp: "KTP" | "Paspor";
+  setContactIdTypeCpp: (v: "KTP" | "Paspor") => void;
+  contactIdTypeCpw: "KTP" | "Paspor";
+  setContactIdTypeCpw: (v: "KTP" | "Paspor") => void;
   contactCppAddress: string;
   setContactCppAddress: (v: string) => void;
   contactCpwAddress: string;
@@ -194,6 +198,8 @@ export function useEditBookingForm(
   const [contactEmailCpw, setContactEmailCpw] = useState("");
   const [contactNikCpp, setContactNikCpp] = useState("");
   const [contactNikCpw, setContactNikCpw] = useState("");
+  const [contactIdTypeCpp, setContactIdTypeCpp] = useState<"KTP" | "Paspor">("KTP");
+  const [contactIdTypeCpw, setContactIdTypeCpw] = useState<"KTP" | "Paspor">("KTP");
   const [contactCppAddress, setContactCppAddress] = useState("");
   const [contactCpwAddress, setContactCpwAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
@@ -225,8 +231,8 @@ export function useEditBookingForm(
     const c = validateBookingField("customerName", customerName); if (c) next.customerName = c;
     const ec = validateBookingField("emailCpp", contactEmailCpp); if (ec) next.emailCpp = ec;
     const ew = validateBookingField("emailCpw", contactEmailCpw); if (ew) next.emailCpw = ew;
-    const nc = validateBookingField("nikCpp", contactNikCpp); if (nc) next.nikCpp = nc;
-    const nw = validateBookingField("nikCpw", contactNikCpw); if (nw) next.nikCpw = nw;
+    const nc = validateIdNumber(contactIdTypeCpp, "CPP", contactNikCpp); if (nc) next.nikCpp = nc;
+    const nw = validateIdNumber(contactIdTypeCpw, "CPW", contactNikCpw); if (nw) next.nikCpw = nw;
     // Bitrix ID is required when the source of information is Bitrix.
     if (isBitrixSource && !contactBitrixId.trim()) next.bitrixId = "Bitrix ID wajib diisi";
     setErrors(next);
@@ -356,6 +362,8 @@ export function useEditBookingForm(
     setContactEmailCpw((snapC?.emailCpw ?? custC?.emailCpw ?? "") as string);
     setContactNikCpp((snapC?.cppNik ?? custC?.cppNik ?? "") as string);
     setContactNikCpw((snapC?.cpwNik ?? custC?.cpwNik ?? "") as string);
+    setContactIdTypeCpp(((snapC?.cppIdType ?? custC?.cppIdType ?? "KTP") as "KTP" | "Paspor"));
+    setContactIdTypeCpw(((snapC?.cpwIdType ?? custC?.cpwIdType ?? "KTP") as "KTP" | "Paspor"));
     setContactCppAddress((snapC?.cppAddress ?? custC?.cppAddress ?? "") as string);
     setContactCpwAddress((snapC?.cpwAddress ?? custC?.cpwAddress ?? "") as string);
     setContactBitrixId((custC?.bitrixId ?? "") as string);
@@ -448,6 +456,8 @@ export function useEditBookingForm(
         contactEmailCpw,
         contactNikCpp,
         contactNikCpw,
+        contactIdTypeCpp,
+        contactIdTypeCpw,
         contactCppAddress,
         contactCpwAddress,
         contactBitrixId: isBitrixSource ? contactBitrixId : "",
@@ -476,6 +486,8 @@ export function useEditBookingForm(
         contactEmailCpw,
         contactNikCpp,
         contactNikCpw,
+        contactIdTypeCpp,
+        contactIdTypeCpw,
         contactCppAddress,
         contactCpwAddress,
         contactBitrixId: isBitrixSource ? contactBitrixId : "",
@@ -548,6 +560,10 @@ export function useEditBookingForm(
     setContactNikCpp,
     contactNikCpw,
     setContactNikCpw,
+    contactIdTypeCpp,
+    setContactIdTypeCpp,
+    contactIdTypeCpw,
+    setContactIdTypeCpw,
     contactCppAddress,
     setContactCppAddress,
     contactCpwAddress,

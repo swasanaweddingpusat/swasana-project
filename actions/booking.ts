@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
@@ -109,6 +109,8 @@ export async function createBooking(data: unknown) {
             emailCpw: null,
             cppNik: null,
             cpwNik: null,
+            cppIdType: "KTP",
+            cpwIdType: "KTP",
             ktpAddress: leadRecord.address ?? null,
             cppAddress: leadRecord.address ?? null,
             cpwAddress: null,
@@ -233,6 +235,8 @@ export async function createBooking(data: unknown) {
             emailCpw: null as string | null,
             cppNik: null as string | null,
             cpwNik: null as string | null,
+            cppIdType: "KTP",
+            cpwIdType: "KTP",
             ktpAddress: leadRecord.address ?? null,
             cppAddress: leadRecord.address ?? null,
             cpwAddress: null as string | null,
@@ -246,6 +250,8 @@ export async function createBooking(data: unknown) {
             emailCpw: input.contactEmailCpw || null,
             cppNik: input.contactNikCpp || null,
             cpwNik: input.contactNikCpw || null,
+            cppIdType: input.contactIdTypeCpp ?? "KTP",
+            cpwIdType: input.contactIdTypeCpw ?? "KTP",
             ktpAddress: null as string | null,
             cppAddress: input.contactCppAddress || null,
             cpwAddress: input.contactCpwAddress || null,
@@ -258,6 +264,8 @@ export async function createBooking(data: unknown) {
           emailCpw: existingCustomer!.emailCpw,
           cppNik: existingCustomer!.cppNik,
           cpwNik: existingCustomer!.cpwNik,
+          cppIdType: existingCustomer!.cppIdType,
+          cpwIdType: existingCustomer!.cpwIdType,
           ktpAddress: existingCustomer!.ktpAddress,
           cppAddress: existingCustomer!.cppAddress,
           cpwAddress: existingCustomer!.cpwAddress,
@@ -307,6 +315,8 @@ export async function createBooking(data: unknown) {
               emailCpw: null,
               cppNik: null,
               cpwNik: null,
+              cppIdType: "KTP",
+              cpwIdType: "KTP",
               ktpAddress: leadRecord.address ?? null,
               cppAddress: leadRecord.address ?? null,
               cpwAddress: null,
@@ -330,6 +340,8 @@ export async function createBooking(data: unknown) {
               emailCpw: input.contactEmailCpw || null,
               cppNik: input.contactNikCpp || null,
               cpwNik: input.contactNikCpw || null,
+              cppIdType: input.contactIdTypeCpp ?? "KTP",
+              cpwIdType: input.contactIdTypeCpw ?? "KTP",
               ktpAddress: null,
               cppAddress: input.contactCppAddress || null,
               cpwAddress: input.contactCpwAddress || null,
@@ -348,6 +360,8 @@ export async function createBooking(data: unknown) {
       if (input.contactEmailCpw !== undefined) updates.emailCpw = input.contactEmailCpw || null;
       if (input.contactNikCpp) updates.cppNik = input.contactNikCpp;
       if (input.contactNikCpw) updates.cpwNik = input.contactNikCpw;
+      if (input.contactIdTypeCpp) updates.cppIdType = input.contactIdTypeCpp;
+      if (input.contactIdTypeCpw) updates.cpwIdType = input.contactIdTypeCpw;
       if (input.contactCppAddress !== undefined) updates.cppAddress = input.contactCppAddress || null;
       if (input.contactCpwAddress !== undefined) updates.cpwAddress = input.contactCpwAddress || null;
       if (input.contactBitrixId) updates.bitrixId = input.contactBitrixId;
@@ -399,6 +413,8 @@ export async function createBooking(data: unknown) {
             : String(customerData.mobileNumber ?? ""),
           cppNik: customerData.cppNik,
           cpwNik: customerData.cpwNik,
+          cppIdType: customerData.cppIdType,
+          cpwIdType: customerData.cpwIdType,
           ktpAddress: customerData.ktpAddress,
           cppAddress: customerData.cppAddress,
           cpwAddress: customerData.cpwAddress,
@@ -986,7 +1002,7 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
   const parsed = updateBookingClientInfoSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Validasi gagal." };
 
-  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, salesId, sourceOfInformationId } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
@@ -1028,6 +1044,8 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
                 emailCpw: contactEmailCpw || null,
                 cppNik: contactNikCpp || null,
                 cpwNik: contactNikCpw || null,
+                cppIdType: contactIdTypeCpp ?? "KTP",
+                cpwIdType: contactIdTypeCpw ?? "KTP",
                 cppAddress: contactCppAddress || null,
                 cpwAddress: contactCpwAddress || null,
               },
@@ -1042,6 +1060,8 @@ export async function updateBookingClientInfo(data: unknown): Promise<{ success:
           emailCpw: contactEmailCpw || null,
           cppNik: contactNikCpp || null,
           cpwNik: contactNikCpw || null,
+          cppIdType: contactIdTypeCpp ?? "KTP",
+          cpwIdType: contactIdTypeCpw ?? "KTP",
           cppAddress: contactCppAddress || null,
           cpwAddress: contactCpwAddress || null,
           bitrixId: contactBitrixId || null,
@@ -1080,7 +1100,7 @@ export async function editBooking(data: unknown) {
   const parsed = editBookingSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, ...rest } = parsed.data;
+  const { id, customerName, contactNumbers, contactEmailCpp, contactEmailCpw, contactIdTypeCpp, contactIdTypeCpw, contactNikCpp, contactNikCpw, contactCppAddress, contactCpwAddress, contactBitrixId, ...rest } = parsed.data;
 
   if (!session!.user.profileId) return { success: false, error: "Sesi tidak valid, silakan login ulang." };
   const scope = await getProfileDataScope(session!.user.profileId);
@@ -1389,6 +1409,8 @@ export async function editBooking(data: unknown) {
                 emailCpw: contactEmailCpw || null,
                 cppNik: contactNikCpp || null,
                 cpwNik: contactNikCpw || null,
+                cppIdType: contactIdTypeCpp ?? "KTP",
+                cpwIdType: contactIdTypeCpw ?? "KTP",
                 ktpAddress: null,
                 cppAddress: contactCppAddress || null,
                 cpwAddress: contactCpwAddress || null,
@@ -1405,6 +1427,8 @@ export async function editBooking(data: unknown) {
           emailCpw: contactEmailCpw || null,
           cppNik: contactNikCpp || null,
           cpwNik: contactNikCpw || null,
+          cppIdType: contactIdTypeCpp ?? "KTP",
+          cpwIdType: contactIdTypeCpw ?? "KTP",
           ktpAddress: null,
           cppAddress: contactCppAddress || null,
           cpwAddress: contactCpwAddress || null,

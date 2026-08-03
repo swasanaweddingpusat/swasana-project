@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Plus_Jakarta_Sans, Quicksand, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { auth } from "@/lib/auth";
 import { QueryProvider } from "@/components/providers/query-provider";
-import { SessionProvider } from "@/components/providers/session-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
@@ -86,25 +84,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+// No `await auth()` here. Reading the session cookie is runtime data; under
+// Cache Components that would force every route (including the SW-precached
+// /offline shell and other static pages) out of static prerendering. Session
+// is a private concern — SessionProvider lives in (private)/layout.tsx, the
+// only subtree whose components call useSession.
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
-
   return (
     <html lang="id" className={`${jakarta.variable} ${fraunces.variable} ${quicksand.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full font-sans" suppressHydrationWarning>
-        <SessionProvider session={session}>
-          <QueryProvider>
-            <TooltipProvider>
-              {children}
-              <Toaster richColors position="top-center" />
-              <ServiceWorkerRegister />
-            </TooltipProvider>
-          </QueryProvider>
-        </SessionProvider>
+        <QueryProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster richColors position="top-center" />
+            <ServiceWorkerRegister />
+          </TooltipProvider>
+        </QueryProvider>
       </body>
     </html>
   );
