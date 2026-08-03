@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function PenggajianPerpajakanPage() {
   await requirePagePermission("hr-payroll");
   return (
-    <div className="flex flex-col gap-6 w-full mb-6">
+    <div className="flex flex-col gap-6 w-full min-w-0 mb-6">
       <PayrollManagement />
     </div>
   );

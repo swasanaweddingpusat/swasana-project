@@ -275,7 +275,7 @@ export function EmployeeSalaryManager() {
 
   return (
     <>
-      <Card className="rounded-2xl shadow-sm">
+      <Card className="rounded-2xl shadow-sm min-w-0 overflow-hidden">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-lg">Gaji Karyawan</CardTitle>
@@ -313,15 +313,15 @@ export function EmployeeSalaryManager() {
           )}
 
           {!isLoading && employeeRows.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="overflow-x-auto -mx-6 px-6">
+              <Table className="min-w-[700px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>No. Karyawan</TableHead>
                     <TableHead>Nama</TableHead>
                     <TableHead>Departemen</TableHead>
                     {activeComponents.map((comp) => (
-                      <TableHead key={comp.id} className="text-right">
+                      <TableHead key={comp.id} className="text-right whitespace-nowrap">
                         {comp.name}
                       </TableHead>
                     ))}

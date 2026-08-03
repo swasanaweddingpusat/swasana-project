@@ -67,6 +67,7 @@ export async function GET(req: Request): Promise<Response> {
         total: true,
         status: true,
         division: true,
+        penggunaan: true,
         keterangan: true,
         venue: { select: { name: true } },
         createdBy: { select: { fullName: true } },
@@ -88,6 +89,7 @@ export async function GET(req: Request): Promise<Response> {
       "Total",
       "Status",
       "Divisi",
+      "Penggunaan",
       "Keterangan",
       "Dibuat Oleh",
       "Disetujui Oleh",
@@ -105,6 +107,7 @@ export async function GET(req: Request): Promise<Response> {
       toSafeText(item.total ?? ""),
       toSafeText(item.status),
       toSafeText(item.division ?? ""),
+      toSafeText(item.penggunaan ?? ""),
       toSafeText(item.keterangan ?? ""),
       toSafeText(item.createdBy?.fullName ?? ""),
       toSafeText(item.approvedBy?.fullName ?? ""),
@@ -158,7 +161,7 @@ export async function GET(req: Request): Promise<Response> {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 24;
-        const colWidths = [45, 35, 70, 35, 35, 45, 45, 45, 45, 40, 35, 80, 60, 60];
+        const colWidths = [42, 34, 60, 30, 30, 42, 42, 42, 42, 38, 34, 55, 70, 55, 55];
         const tableTop = 70;
         const tableLeft = margin;
         const tableWidth = pageWidth - margin * 2;
