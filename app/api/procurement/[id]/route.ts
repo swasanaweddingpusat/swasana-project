@@ -27,7 +27,8 @@ export async function GET(
       return Response.json({ error: "Data pengadaan tidak ditemukan." }, { status: 404 });
     }
     return Response.json(item);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to get item by id:", err);
     return Response.json({ error: "Gagal mengambil data pengadaan" }, { status: 500 });
   }
 }
@@ -124,9 +125,11 @@ export async function PATCH(
     });
 
     revalidateTag("procurement", "max");
+    revalidateTag("procurement-budgets", "max");
 
     return Response.json(updated);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to update item:", err);
     return Response.json({ error: "Gagal mengupdate data pengadaan." }, { status: 500 });
   }
 }
@@ -170,9 +173,11 @@ export async function DELETE(
     });
 
     revalidateTag("procurement", "max");
+    revalidateTag("procurement-budgets", "max");
 
     return Response.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to delete item:", err);
     return Response.json({ error: "Gagal menghapus data pengadaan." }, { status: 500 });
   }
 }

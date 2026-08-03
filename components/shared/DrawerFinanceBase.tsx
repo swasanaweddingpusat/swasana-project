@@ -24,9 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { CloseCircle, AlignVerticalSpacing } from "@solar-icons/react";
-import { useCategories } from "@/hooks/use-categories";
-import { createCategory } from "@/actions/category";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCategories, useCreateCategory } from "@/hooks/use-categories";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -228,7 +226,7 @@ export function DrawerFinanceBase({
   const [state, setState] = useState<InternalState>(buildEmptyState);
   const [saving, setSaving] = useState(false);
   const { data: masterCategories = [] } = useCategories();
-  const qc = useQueryClient();
+  const createCategoryMut = useCreateCategory();
 
   // Re-initialise state whenever the drawer opens with fresh data.
   useEffect(() => {
@@ -381,12 +379,11 @@ export function DrawerFinanceBase({
               emptyText="Kategori tidak ditemukan"
               className="w-full"
               onAdd={async (name) => {
-                const res = await createCategory(name);
+                const res = await createCategoryMut.mutateAsync(name);
                 if (!res.success) {
                   toast.error(res.error ?? "Gagal menambahkan");
                   return;
                 }
-                await qc.invalidateQueries({ queryKey: ["categories"] });
                 if (!state.categories.includes(res.category.name)) {
                   setState((v) => ({ ...v, categories: [...v.categories, res.category.name] }));
                 }

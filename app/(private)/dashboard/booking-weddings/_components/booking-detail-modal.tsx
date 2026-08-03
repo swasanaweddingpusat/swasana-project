@@ -296,13 +296,13 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
 
                     {/* Identitas */}
                     <MobileCard title="Identitas (NIK & Alamat)" icon={<UserId weight="BoldDuotone" className="h-4 w-4" />}>
-                      <MobileField label="NIK CPP">
+                      <MobileField label={`${booking.snapCustomer?.cppIdType ?? "KTP"} CPP`}>
                         {booking.snapCustomer?.cppNik ?? "-"}
                       </MobileField>
                       <MobileField label="Alamat CPP">
                         {booking.snapCustomer?.cppAddress ?? "-"}
                       </MobileField>
-                      <MobileField label="NIK CPW">
+                      <MobileField label={`${booking.snapCustomer?.cpwIdType ?? "KTP"} CPW`}>
                         {booking.snapCustomer?.cpwNik ?? "-"}
                       </MobileField>
                       <MobileField label="Alamat CPW">
@@ -400,11 +400,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: Props) {
                       <p className={val}>{booking.poNumber ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Wedding Type</p>
                       <p className={val}>{booking.weddingType ?? "-"}</p>
-                      <p className={lbl + " mt-4"}>NIK CPP</p>
+                      <p className={lbl + " mt-4"}>{`${booking.snapCustomer?.cppIdType ?? "KTP"} CPP`}</p>
                       <p className={val}>{booking.snapCustomer?.cppNik ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Alamat CPP</p>
                       <p className={val}>{booking.snapCustomer?.cppAddress ?? "-"}</p>
-                      <p className={lbl + " mt-4"}>NIK CPW</p>
+                      <p className={lbl + " mt-4"}>{`${booking.snapCustomer?.cpwIdType ?? "KTP"} CPW`}</p>
                       <p className={val}>{booking.snapCustomer?.cpwNik ?? "-"}</p>
                       <p className={lbl + " mt-4"}>Alamat CPW</p>
                       <p className={val}>{booking.snapCustomer?.cpwAddress ?? "-"}</p>

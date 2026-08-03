@@ -79,7 +79,7 @@ function LoadingSkeleton(): React.ReactElement {
   return (
     <div>
       {/* desktop */}
-      <div className="hidden sm:block">
+      <div className="hidden lg:block">
         <Table className="table-fixed">
           <TableBody>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -95,7 +95,7 @@ function LoadingSkeleton(): React.ReactElement {
         </Table>
       </div>
       {/* mobile */}
-      <ul className="sm:hidden">
+      <ul className="lg:hidden">
         {Array.from({ length: 4 }).map((_, i) => (
           <li key={i} className="border-b border-border/60 px-4 py-3.5 last:border-0">
             <div className="flex items-start justify-between gap-3">
@@ -326,7 +326,7 @@ function RiwayatButton({
             onClick={() => onActivity(entry)}
             aria-label={`Lihat riwayat transaksi ${entry.clientName}`}
             className={cn(
-              "relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
+              "relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
               FOCUS_RING,
             )}
           >
@@ -368,7 +368,7 @@ function IconAction({
             onClick={onClick}
             aria-label={label}
             className={cn(
-              "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors",
+              "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors",
               danger
                 ? "text-muted-foreground hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
                 : "text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
@@ -407,6 +407,8 @@ function AksiCell({
   const isAcked = entry.ackStatus === "acknowledged" && !entry.voided;
   const isRejected = entry.ackStatus === "rejected" && !entry.voided;
 
+  // flex-wrap (bukan nowrap): di kolom sempit (tablet portrait) tombol turun ke
+  // baris berikutnya alih-alih kepotong keluar sel table-fixed.
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
       {isPending && (
@@ -416,7 +418,7 @@ function AksiCell({
             onClick={() => onAck(entry)}
             aria-label={`Verifikasi pembayaran ${entry.clientName}`}
             className={cn(
-              "inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15",
+              "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15",
               FOCUS_RING,
             )}
           >
@@ -473,6 +475,157 @@ function AksiCell({
           icon={Documents}
         />
       )}
+    </div>
+  );
+}
+
+/* ─── Mobile action tile (ikon di atas + label di bawah) ─────────────────────── */
+
+/**
+ * Tile aksi mobile — pola sama dgn tabel Booking Wedding: target sentuh besar,
+ * ikon `size-5` di atas + label pendek di bawah, biar jelas & accessible di HP.
+ * `badge` opsional (dipakai tile Riwayat utk activity count).
+ */
+function ActionTile({
+  onClick,
+  label,
+  caption,
+  icon: Icon,
+  tone = "primary",
+  badge,
+}: {
+  onClick: () => void;
+  label: string;
+  caption: string;
+  icon: typeof Documents;
+  tone?: "primary" | "muted" | "danger";
+  badge?: number;
+}): React.ReactElement {
+  const iconTone =
+    tone === "danger"
+      ? "text-destructive"
+      : tone === "muted"
+        ? "text-muted-foreground"
+        : "text-primary";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        "relative flex w-14 shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 transition-colors hover:bg-accent",
+        FOCUS_RING,
+      )}
+    >
+      <span className="relative inline-flex">
+        <Icon weight="BoldDuotone" className={cn("size-5", iconTone)} />
+        {badge != null && badge > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground">
+            {badge > 9 ? "9+" : badge}
+          </span>
+        )}
+      </span>
+      <span className="text-center text-[10px] font-medium leading-none text-muted-foreground">
+        {caption}
+      </span>
+    </button>
+  );
+}
+
+/* ─── Mobile action bar (footer record — tile list ala Booking Wedding) ──────── */
+
+function MobileActionBar({
+  entry,
+  onAck,
+  onReject,
+  onVoid,
+  onDelete,
+  onUnack,
+  onKwitansi,
+  onActivity,
+}: {
+  entry: LedgerRow;
+  onAck: (e: LedgerRow) => void;
+  onReject: (e: LedgerRow) => void;
+  onVoid: (e: LedgerRow) => void;
+  onDelete: (e: LedgerRow) => void;
+  onUnack: (e: LedgerRow) => void;
+  onKwitansi: (e: LedgerRow) => void;
+  onActivity: (e: LedgerRow) => void;
+}): React.ReactElement {
+  const isPending = entry.ackStatus === "pending" && !entry.voided;
+  const isAcked = entry.ackStatus === "acknowledged" && !entry.voided;
+  const isRejected = entry.ackStatus === "rejected" && !entry.voided;
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-1 border-t border-border/60 pt-2 sm:justify-end sm:gap-2">
+      {isPending && (
+        <>
+          <ActionTile
+            onClick={() => onAck(entry)}
+            label={`Verifikasi pembayaran ${entry.clientName}`}
+            caption="Verifikasi"
+            icon={CheckCircle}
+          />
+          <ActionTile
+            onClick={() => onReject(entry)}
+            label={`Tolak pembayaran ${entry.clientName}`}
+            caption="Tolak"
+            icon={Forbidden}
+            tone="danger"
+          />
+          <ActionTile
+            onClick={() => onDelete(entry)}
+            label={`Hapus pembayaran ${entry.clientName}`}
+            caption="Hapus"
+            icon={TrashBinTrash}
+            tone="danger"
+          />
+        </>
+      )}
+      {isRejected && (
+        <ActionTile
+          onClick={() => onDelete(entry)}
+          label={`Hapus pembayaran ditolak ${entry.clientName}`}
+          caption="Hapus"
+          icon={TrashBinTrash}
+          tone="danger"
+        />
+      )}
+      {isAcked && (
+        <>
+          <ActionTile
+            onClick={() => onUnack(entry)}
+            label={`Batalkan verifikasi ${entry.clientName}`}
+            caption="Reset"
+            icon={Refresh}
+            tone="muted"
+          />
+          <ActionTile
+            onClick={() => onVoid(entry)}
+            label={`Batalkan transaksi ${entry.clientName}`}
+            caption="Batalkan"
+            icon={MinusCircle}
+            tone="danger"
+          />
+        </>
+      )}
+      {entry.invoiceNumber && (
+        <ActionTile
+          onClick={() => onKwitansi(entry)}
+          label={`Preview & unduh kwitansi ${entry.clientName}`}
+          caption="Kwitansi"
+          icon={Documents}
+        />
+      )}
+      <ActionTile
+        onClick={() => onActivity(entry)}
+        label={`Lihat riwayat transaksi ${entry.clientName}`}
+        caption="Riwayat"
+        icon={History}
+        tone="muted"
+        badge={entry.activityCount}
+      />
     </div>
   );
 }
@@ -575,6 +728,7 @@ function MobileRecord({
         entry.voided && "bg-secondary/20",
       )}
     >
+      {/* Info utama: client + tanggal + meta di kiri, nominal + status di kanan */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -586,18 +740,6 @@ function MobileRecord({
           <div className="mt-1.5 text-xs text-muted-foreground">
             <EntryMeta entry={entry} />
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <RiwayatButton entry={entry} onActivity={onActivity} />
-            <AksiCell
-              entry={entry}
-              onAck={onAck}
-              onReject={onReject}
-              onVoid={onVoid}
-              onDelete={onDelete}
-              onUnack={onUnack}
-              onKwitansi={onKwitansi}
-            />
-          </div>
         </div>
         <div className="shrink-0 text-right">
           <NominalCell entry={entry} />
@@ -606,6 +748,18 @@ function MobileRecord({
           </div>
         </div>
       </div>
+
+      {/* Action bar full-width — tile ikon+label ala tabel Booking Wedding */}
+      <MobileActionBar
+        entry={entry}
+        onAck={onAck}
+        onReject={onReject}
+        onVoid={onVoid}
+        onDelete={onDelete}
+        onUnack={onUnack}
+        onKwitansi={onKwitansi}
+        onActivity={onActivity}
+      />
     </li>
   );
 }
@@ -650,18 +804,20 @@ export function LedgerTable({
   return (
     <TooltipProvider>
       <div className="flex flex-col">
-        {/* ── Desktop table (sm dan lebih besar) ── */}
-        <div className="hidden sm:block">
-          <Table className="table-fixed">
+        {/* ── Desktop table (lg ke atas / ≥1024px) — tablet & HP pakai record list
+              di bawah biar action tile-nya lega, bukan tabel 7 kolom yg kepotong.
+              overflow-x-auto tetap ada sbg jaring pengaman. ── */}
+        <div className="hidden overflow-x-auto lg:block">
+          <Table className="min-w-160 table-fixed">
             <TableCaption className="sr-only">Daftar transaksi cashbook</TableCaption>
             <colgroup>
               <col style={{ width: "9%" }} />
-              <col style={{ width: "20%" }} />
+              <col style={{ width: "19%" }} />
               <col style={{ width: "13%" }} />
-              <col style={{ width: "24%" }} />
+              <col style={{ width: "22%" }} />
               <col style={{ width: "12%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "15%" }} />
+              <col style={{ width: "18%" }} />
             </colgroup>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -706,8 +862,8 @@ export function LedgerTable({
           </Table>
         </div>
 
-        {/* ── Mobile list (di bawah sm) — record list, bukan tabel terkompres ── */}
-        <ul className="sm:hidden" aria-label="Daftar transaksi cashbook">
+        {/* ── Mobile & tablet list (di bawah lg) — record list, bukan tabel terkompres ── */}
+        <ul className="lg:hidden" aria-label="Daftar transaksi cashbook">
           {entries.map((e) => (
             <MobileRecord
               key={e.id}

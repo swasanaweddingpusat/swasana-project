@@ -2,6 +2,13 @@ import { mutationLimiter, rateLimitResponse } from "@/lib/rate-limit";
 import { uploadToStorage, generateStorageKey } from "@/lib/storage";
 import { requirePermissionForRoute } from "@/lib/permissions";
 
+const ALLOWED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+];
+
 const ALLOWED_VIDEO_TYPES = [
   "video/mp4",
   "video/webm",
@@ -19,6 +26,7 @@ const ALLOWED_DOC_TYPES = [
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ];
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;   // 10 MB
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
 const MAX_DOC_BYTES = 50 * 1024 * 1024;    // 50 MB
 
@@ -36,16 +44,17 @@ export async function POST(req: Request): Promise<Response> {
       return Response.json({ error: "File wajib disertakan." }, { status: 400 });
     }
 
+    const isImage = type === "image";
     const isVideo = type === "video";
     const isDoc = type === "document";
 
-    if (!isVideo && !isDoc) {
-      return Response.json({ error: "Tipe tidak valid. Gunakan 'video' atau 'document'." }, { status: 400 });
+    if (!isImage && !isVideo && !isDoc) {
+      return Response.json({ error: "Tipe tidak valid. Gunakan 'image', 'video', atau 'document'." }, { status: 400 });
     }
 
-    const allowedTypes = isVideo ? ALLOWED_VIDEO_TYPES : ALLOWED_DOC_TYPES;
-    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_DOC_BYTES;
-    const folder = isVideo ? "tutorial-videos" : "tutorial-docs";
+    const allowedTypes = isImage ? ALLOWED_IMAGE_TYPES : isVideo ? ALLOWED_VIDEO_TYPES : ALLOWED_DOC_TYPES;
+    const maxBytes = isImage ? MAX_IMAGE_BYTES : isVideo ? MAX_VIDEO_BYTES : MAX_DOC_BYTES;
+    const folder = isImage ? "tutorial-images" : isVideo ? "tutorial-videos" : "tutorial-docs";
 
     if (!allowedTypes.includes(file.type)) {
       return Response.json(

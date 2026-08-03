@@ -30,10 +30,12 @@ export function PushNotificationManager({ onClose }: PushNotificationManagerProp
     }
     setPermission(Notification.permission);
 
-    navigator.serviceWorker.ready.then((reg) => {
-      reg.pushManager.getSubscription().then((sub) => {
-        setIsSubscribed(!!sub);
-      });
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg) {
+        reg.pushManager.getSubscription().then((sub) => {
+          setIsSubscribed(!!sub);
+        });
+      }
     });
   }, []);
 
@@ -43,16 +45,51 @@ export function PushNotificationManager({ onClose }: PushNotificationManagerProp
       return;
     }
 
+    if (Notification.permission === "denied") {
+      toast.error("Notifikasi diblokir oleh browser", {
+        description:
+          "Klik ikon gembok/info di address bar → Site settings → Notifications → Allow, lalu refresh halaman.",
+        duration: 8000,
+      });
+      setPermission("denied");
+      return;
+    }
+
     setLoading(true);
     try {
       const perm = await Notification.requestPermission();
       setPermission(perm);
+      if (perm === "denied") {
+        toast.error("Notifikasi diblokir oleh browser", {
+          description:
+            "Klik ikon gembok/info di address bar → Site settings → Notifications → Allow, lalu refresh halaman.",
+          duration: 8000,
+        });
+        return;
+      }
       if (perm !== "granted") {
-        toast.error("Izin notifikasi ditolak");
+        toast.error("Izin notifikasi belum diberikan", {
+          description: "Klik tombol ini lagi dan pilih 'Allow' pada popup browser.",
+        });
         return;
       }
 
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+      ]);
+
+      if (!reg) {
+        toast.error("Service worker belum aktif", {
+          description:
+            process.env.NODE_ENV !== "production"
+              ? "Push notification hanya tersedia di production. Jalankan 'npm run build && npm start'."
+              : "Coba refresh halaman dan ulangi.",
+          duration: 6000,
+        });
+        return;
+      }
+
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidKey) {
         toast.error("Push notification belum dikonfigurasi");
@@ -115,11 +152,17 @@ export function PushNotificationManager({ onClose }: PushNotificationManagerProp
     return (
       <button
         type="button"
-        disabled
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground opacity-50"
+        onClick={() =>
+          toast.info("Cara mengaktifkan notifikasi", {
+            description:
+              "Klik ikon gembok/info di address bar → Site settings → Notifications → Allow, lalu refresh halaman.",
+            duration: 8000,
+          })
+        }
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
       >
         <BellOff weight="BoldDuotone" className="h-3.5 w-3.5" />
-        Notifikasi diblokir browser
+        Notifikasi diblokir browser — klik untuk panduan
       </button>
     );
   }

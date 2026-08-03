@@ -38,6 +38,11 @@ interface ProcurementTableProps {
   isLoading: boolean;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
+  totalPending?: number;
+  allPagesSelected?: boolean;
+  onSelectAllPages?: () => void;
+  onClearAllPages?: () => void;
+  isSelectingAll?: boolean;
   onPageChange: (page: number) => void;
   onView?: (id: string) => void;
   onEdit?: (id: string) => void;
@@ -109,6 +114,11 @@ export function ProcurementTable({
   isLoading,
   selectedIds = [],
   onSelectionChange,
+  totalPending,
+  allPagesSelected = false,
+  onSelectAllPages,
+  onClearAllPages,
+  isSelectingAll = false,
   onPageChange,
   onView,
   onEdit,
@@ -123,6 +133,10 @@ export function ProcurementTable({
 
   const toggleAll = (checked: boolean) => {
     if (!onSelectionChange) return;
+    if (!checked && allPagesSelected && onClearAllPages) {
+      onClearAllPages();
+      return;
+    }
     if (checked) {
       onSelectionChange(Array.from(new Set([...selectedIds, ...pendingIds])));
     } else {
@@ -132,12 +146,55 @@ export function ProcurementTable({
 
   const toggleRow = (id: string, checked: boolean) => {
     if (!onSelectionChange) return;
+    if (!checked && allPagesSelected && onClearAllPages) {
+      onClearAllPages();
+    }
     if (checked) {
       onSelectionChange(Array.from(new Set([...selectedIds, id])));
     } else {
       onSelectionChange(selectedIds.filter((selectedId) => selectedId !== id));
     }
   };
+
+  const showBanner =
+    !!onSelectionChange &&
+    allSelected &&
+    pendingIds.length > 0 &&
+    (allPagesSelected || (totalPending ?? 0) > pendingIds.length);
+
+  const selectAllBanner = showBanner ? (
+    <div className="bg-primary/5 border-b px-4 py-2.5 text-center text-sm">
+      {allPagesSelected ? (
+        <span className="text-foreground">
+          Semua{" "}
+          <span className="font-semibold">{selectedIds.length}</span>{" "}
+          pengajuan Menunggu dipilih.{" "}
+          <button
+            type="button"
+            onClick={onClearAllPages}
+            className="text-primary font-medium hover:underline"
+          >
+            Batalkan pilihan
+          </button>
+        </span>
+      ) : (
+        <span className="text-foreground">
+          <span className="font-semibold">{pendingIds.length}</span>{" "}
+          pengajuan dipilih di halaman ini.{" "}
+          <button
+            type="button"
+            onClick={onSelectAllPages}
+            disabled={isSelectingAll}
+            className="text-primary font-medium hover:underline disabled:opacity-50"
+          >
+            {isSelectingAll
+              ? "Memilih..."
+              : `Pilih semua ${totalPending ?? 0} pengajuan Menunggu`}
+          </button>
+        </span>
+      )}
+    </div>
+  ) : null;
 
   if (isLoading) {
     return (
@@ -162,6 +219,8 @@ export function ProcurementTable({
 
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+      {selectAllBanner}
+
       {/* Desktop table (sm+) */}
       <div className="hidden sm:block overflow-x-auto">
         <Table className="w-full text-sm">

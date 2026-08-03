@@ -68,9 +68,11 @@ export async function PATCH(req: Request): Promise<Response> {
     });
 
     revalidateTag("procurement", "max");
+    revalidateTag("procurement-budgets", "max");
 
     return Response.json(updatedItems);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to bulk approve items:", err);
     return Response.json({ error: "Gagal menyetujui pengajuan pengadaan." }, { status: 500 });
   }
 }

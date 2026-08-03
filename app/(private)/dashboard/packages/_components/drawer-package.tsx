@@ -18,10 +18,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCreatePackage, useUpdatePackage, useSaveVendorItems, useSaveInternalItems } from "@/hooks/use-packages";
 import { useVenues } from "@/hooks/use-venues";
-import { useCategories } from "@/hooks/use-categories";
+import { useCategories, useCreateCategory } from "@/hooks/use-categories";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createCategory } from "@/actions/category";
-import { useQueryClient } from "@tanstack/react-query";
 import type { PackageQueryItem } from "@/lib/queries/packages";
 import { SignaturePad } from "@/components/shared/signature-pad";
 
@@ -80,7 +78,7 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
   const saveInternalItemsMut = useSaveInternalItems();
   const { data: venues = [] } = useVenues();
   const { data: categories = [] } = useCategories();
-  const qc = useQueryClient();
+  const createCategoryMut = useCreateCategory();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -422,9 +420,8 @@ export function DrawerPackage({ isOpen, onClose, editingPackage }: DrawerPackage
                             emptyText="Kategori tidak ditemukan"
                             className="flex-1"
                             onAdd={async (name) => {
-                              const res = await createCategory(name);
+                              const res = await createCategoryMut.mutateAsync(name);
                               if (!res.success) { toast.error(res.error ?? "Gagal menambahkan"); return; }
-                              await qc.invalidateQueries({ queryKey: ["categories"] });
                               setVendorItemCategory(item.id, res.category.id, res.category.name);
                               toast.success(`Kategori "${res.category.name}" ditambahkan`);
                             }}

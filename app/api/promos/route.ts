@@ -16,7 +16,15 @@ export async function GET(req: Request): Promise<Response> {
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "500", 10)));
 
-  const where = activeOnly ? { isActive: true } : {};
+  // `activeOnly` = program yang lagi berlaku HARI INI: flag aktif + dalam window
+  // periode. `periodEnd` disimpan sebagai UTC midnight (date-only), jadi window
+  // dibandingkan terhadap awal hari ini (UTC) supaya inklusif sepanjang hari
+  // terakhir — bukan `now`, yang akan mencoret promo di siang hari terakhirnya.
+  const now = new Date();
+  const todayStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const where = activeOnly
+    ? { isActive: true, periodStart: { lte: now }, periodEnd: { gte: todayStartUtc } }
+    : {};
 
   const [items, total] = await Promise.all([
     db.discountProgram.findMany({

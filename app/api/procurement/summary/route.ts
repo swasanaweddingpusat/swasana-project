@@ -18,7 +18,8 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const summary = await getProcurementSummary(venueId);
     return Response.json(summary);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to get summary:", err);
     return Response.json({ error: "Gagal mengambil ringkasan pengadaan" }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { CalendarDate, UsersGroupRounded, CheckCircle, ClipboardText, Wallet } from "@solar-icons/react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { usePendingForManager } from "@/hooks/use-leave-requests";
 import { LeaveBalanceCards } from "./LeaveBalanceCards";
@@ -24,17 +25,32 @@ export function LeaveManagement() {
 
   return (
     <Tabs defaultValue="my-leave">
-      <TabsList className="mb-4 flex-wrap">
-        <TabsTrigger value="my-leave">Cuti Saya</TabsTrigger>
-        <TabsTrigger value="calendar">Kalender Tim</TabsTrigger>
+      <TabsList className="flex h-auto w-full flex-wrap gap-1 rounded-2xl p-1">
+        <TabsTrigger value="my-leave" className="rounded-xl gap-2">
+          <CalendarDate weight="BoldDuotone" className="h-4 w-4" />
+          Cuti Saya
+        </TabsTrigger>
+        <TabsTrigger value="calendar" className="rounded-xl gap-2">
+          <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4" />
+          Kalender Tim
+        </TabsTrigger>
         {showApproval && (
-          <TabsTrigger value="approval">Approval</TabsTrigger>
+          <TabsTrigger value="approval" className="rounded-xl gap-2">
+            <CheckCircle weight="BoldDuotone" className="h-4 w-4" />
+            Approval
+          </TabsTrigger>
         )}
         {showLeaveTypes && (
-          <TabsTrigger value="types">Jenis Cuti</TabsTrigger>
+          <TabsTrigger value="types" className="rounded-xl gap-2">
+            <ClipboardText weight="BoldDuotone" className="h-4 w-4" />
+            Jenis Cuti
+          </TabsTrigger>
         )}
         {showBalanceManager && (
-          <TabsTrigger value="balances">Saldo</TabsTrigger>
+          <TabsTrigger value="balances" className="rounded-xl gap-2">
+            <Wallet weight="BoldDuotone" className="h-4 w-4" />
+            Saldo
+          </TabsTrigger>
         )}
       </TabsList>
 

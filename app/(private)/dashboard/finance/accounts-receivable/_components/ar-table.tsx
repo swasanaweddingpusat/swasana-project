@@ -8,20 +8,13 @@ import {
   AltArrowRight,
   AltArrowDown,
   Eye,
-  Card,
-  Bell,
-  DownloadMinimalistic,
   Wallet,
   Copy,
-  Copy as CopyIcon,
   ChatRoundLine,
   VerifiedCheck,
   UndoLeft,
   AddSquare,
   Document,
-  Restart,
-  MenuDots,
-  TrashBinTrash,
 } from "@solar-icons/react";
 import {
   Table,
@@ -31,7 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,40 +36,26 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Drawer } from "@/components/shared/drawer";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { IssueInvoiceDrawer } from "./IssueInvoiceDrawer";
-import { useVoidInvoice } from "@/hooks/use-invoices";
 import {
   fmtRp,
   fmtDate,
   getTerminBadge,
   getInvoiceBadge,
-  getAckBadge,
   getBookingStatusBadge,
   getRecognizedRevenueBadge,
   StatusBadge,
 } from "./ar-format";
-import { KwitansiPreviewDrawer } from "./kwitansi-preview-drawer";
-import { InvoicePreviewDrawer } from "./invoice-preview-drawer";
 import type { ARBooking, ARTermin } from "@/types/finance";
-
-/** A preview target ties a termin back to its parent booking for the doc drawers. */
-interface DocTarget {
-  booking: ARBooking;
-  termin: ARTermin;
-}
 
 interface ARTableProps {
   bookings: ARBooking[];
   loading: boolean;
+  /** Toolbar row rendered inside the card, above the table (search + filters + count + toggle). */
+  toolbar?: React.ReactNode;
   expandedRows: Set<string>;
   onToggleRow: (id: string) => void;
   onOpenDetail: (booking: ARBooking) => void;
@@ -124,6 +102,7 @@ function genPages(current: number, total: number): (number | "...")[] {
 export function ARTable({
   bookings,
   loading,
+  toolbar,
   expandedRows,
   onToggleRow,
   onOpenDetail,
@@ -136,12 +115,7 @@ export function ARTable({
   onUndoRecognize,
   recognizedIds,
 }: ARTableProps) {
-  // Doc-preview drawers live at the table level so a single instance serves every row.
-  const [kwitansiTarget, setKwitansiTarget] = useState<DocTarget | null>(null);
-  const [invoiceTarget, setInvoiceTarget] = useState<DocTarget | null>(null);
-  const [rekapBooking, setRekapBooking] = useState<ARBooking | null>(null);
-
-  // Issue-invoice drawer state
+  // Issue-invoice drawer state — the only doc action left on this page.
   const [issueDrawerTarget, setIssueDrawerTarget] = useState<{
     termId: string;
     termName: string;
@@ -152,61 +126,67 @@ export function ARTable({
 
   if (loading) {
     return (
-      <>
-        {/* Desktop skeleton */}
-        <div className="hidden lg:block overflow-hidden rounded-2xl border border-border bg-card">
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                {["Customer Event", "Nama Event", "Total Price", "Outstanding", "Jatuh Tempo", "Status Booking", "Status Termin", "Aksi"].map((h) => (
-                  <TableHead key={h} className={TH}>{h}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <TableRow key={i} className="h-18">
-                  {Array.from({ length: 8 }).map((_, j) => (
-                    <TableCell key={j} className="px-4">
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
+      <Card>
+        <CardContent className="p-0">
+          {toolbar && <div className="border-b border-border px-4 pb-3">{toolbar}</div>}
+          {/* Desktop skeleton */}
+          <div className="hidden lg:block overflow-x-auto">
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  {["Customer Event", "Nama Event", "Total Price", "Outstanding", "Jatuh Tempo", "Status Booking", "Status Termin", "Aksi"].map((h) => (
+                    <TableHead key={h} className={TH}>{h}</TableHead>
                   ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        {/* Mobile skeleton */}
-        <div className="lg:hidden flex flex-col gap-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i} className="h-18">
+                    {Array.from({ length: 8 }).map((_, j) => (
+                      <TableCell key={j} className="px-4">
+                        <Skeleton className="h-4 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {/* Mobile skeleton */}
+          <div className="lg:hidden flex flex-col gap-3 p-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                  <Skeleton className="h-5 w-16 rounded-full" />
                 </div>
-                <Skeleton className="h-5 w-16 rounded-full" />
+                <div className="mt-3 space-y-2">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Skeleton className="h-10 w-10 rounded-xl" />
+                  <Skeleton className="h-10 w-10 rounded-xl" />
+                  <Skeleton className="h-10 w-10 rounded-xl" />
+                </div>
               </div>
-              <div className="mt-3 space-y-2">
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-2/3" />
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Skeleton className="h-10 w-10 rounded-xl" />
-                <Skeleton className="h-10 w-10 rounded-xl" />
-                <Skeleton className="h-10 w-10 rounded-xl" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <TooltipProvider>
+      <Card>
+        <CardContent className="p-0">
+      {toolbar && <div className="border-b border-border px-4 pb-3">{toolbar}</div>}
       {/* Desktop table */}
-      <div className="hidden lg:block overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="hidden lg:block overflow-x-auto">
         <Table className="table-fixed">
           <colgroup>
             <col style={{ width: "17%" }} />
@@ -247,9 +227,6 @@ export function ARTable({
                   onDetail={() => onOpenDetail(booking)}
                   onEditKeuangan={onEditKeuangan ? () => onEditKeuangan(booking) : undefined}
                   canEditKeuangan={canEditKeuangan}
-                  onRekap={() => setRekapBooking(booking)}
-                  onOpenInvoice={(termin) => setInvoiceTarget({ booking, termin })}
-                  onOpenKwitansi={(termin) => setKwitansiTarget({ booking, termin })}
                   onIssueInvoice={(termin) =>
                     setIssueDrawerTarget({
                       termId: termin.id,
@@ -270,7 +247,7 @@ export function ARTable({
       </div>
 
       {/* Mobile card list */}
-      <div className="lg:hidden flex flex-col gap-3">
+      <div className="lg:hidden flex flex-col gap-3 p-4">
         {bookings.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card p-8 text-center">
             <p className="text-sm text-muted-foreground">Tidak ada data piutang.</p>
@@ -285,9 +262,6 @@ export function ARTable({
               onDetail={() => onOpenDetail(booking)}
               onEditKeuangan={onEditKeuangan ? () => onEditKeuangan(booking) : undefined}
               canEditKeuangan={canEditKeuangan}
-              onRekap={() => setRekapBooking(booking)}
-              onOpenInvoice={(termin) => setInvoiceTarget({ booking, termin })}
-              onOpenKwitansi={(termin) => setKwitansiTarget({ booking, termin })}
               onIssueInvoice={(termin) =>
                 setIssueDrawerTarget({
                   termId: termin.id,
@@ -306,7 +280,7 @@ export function ARTable({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-3 border-t border-border px-4 py-4">
           <div className="flex flex-1 items-center">
             <Button
               variant="outline"
@@ -358,18 +332,9 @@ export function ARTable({
         </div>
       )}
 
-      <InvoicePreviewDrawer
-        isOpen={!!invoiceTarget}
-        onClose={() => setInvoiceTarget(null)}
-        booking={invoiceTarget?.booking ?? null}
-        termin={invoiceTarget?.termin ?? null}
-      />
-      <KwitansiPreviewDrawer
-        isOpen={!!kwitansiTarget}
-        onClose={() => setKwitansiTarget(null)}
-        booking={kwitansiTarget?.booking ?? null}
-        termin={kwitansiTarget?.termin ?? null}
-      />
+        </CardContent>
+      </Card>
+
       <IssueInvoiceDrawer
         open={!!issueDrawerTarget}
         onOpenChange={(open) => { if (!open) setIssueDrawerTarget(null); }}
@@ -379,16 +344,7 @@ export function ARTable({
         termDueDate={issueDrawerTarget?.termDueDate ?? null}
         bookingId={issueDrawerTarget?.bookingId ?? ""}
       />
-      <RekapKwitansiDrawer
-        isOpen={!!rekapBooking}
-        onClose={() => setRekapBooking(null)}
-        booking={rekapBooking}
-        onOpenKwitansi={(termin) => {
-          if (rekapBooking) setKwitansiTarget({ booking: rekapBooking, termin });
-          setRekapBooking(null);
-        }}
-      />
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -401,9 +357,6 @@ function BookingRow({
   onDetail,
   onEditKeuangan,
   canEditKeuangan,
-  onRekap,
-  onOpenInvoice,
-  onOpenKwitansi,
   onIssueInvoice,
   onRecognize,
   onUndoRecognize,
@@ -415,9 +368,6 @@ function BookingRow({
   onDetail: () => void;
   onEditKeuangan?: () => void;
   canEditKeuangan: boolean;
-  onRekap: () => void;
-  onOpenInvoice: (termin: ARTermin) => void;
-  onOpenKwitansi: (termin: ARTermin) => void;
   onIssueInvoice: (termin: ARTermin) => void;
   onRecognize?: () => void;
   onUndoRecognize?: () => void;
@@ -491,13 +441,6 @@ function BookingRow({
             >
               <Eye weight="BoldDuotone" className="size-4" />
             </button>
-            <button
-              className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={onRekap}
-              title="Rekap kwitansi booking"
-            >
-              <Card weight="BoldDuotone" className="size-4" />
-            </button>
             <ReminderPopover booking={booking} />
             {canEditKeuangan && onEditKeuangan && (
               <button
@@ -524,21 +467,22 @@ function BookingRow({
         <TableRow className="bg-secondary/30 hover:bg-secondary/30">
           <TableCell colSpan={8} className="p-0">
             {/* Inset panel: own card so it reads clearly as the row's child
-                detail. Single, even padding — no extra left indent. */}
+                detail. Scrolls horizontally only if the viewport is narrow —
+                a fixed min-width per column beats squeezing them into 100%. */}
             <div className="p-3">
-              <div className="overflow-hidden rounded-xl border border-border bg-card">
-                <Table className="table-fixed">
+              <div className="overflow-x-auto rounded-xl border border-border bg-card">
+                <Table className="min-w-[1040px] table-fixed">
                   <colgroup>
-                    <col style={{ width: "15%" }} />
-                    <col style={{ width: "10%" }} />
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "10%" }} />
-                    <col style={{ width: "10%" }} />
-                    <col style={{ width: "8%" }} />
-                    <col style={{ width: "9%" }} />
-                    <col style={{ width: "12%" }} />
-                    <col style={{ width: "8%" }} />
-                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "150px" }} />
+                    <col style={{ width: "100px" }} />
+                    <col style={{ width: "120px" }} />
+                    <col style={{ width: "110px" }} />
+                    <col style={{ width: "110px" }} />
+                    <col style={{ width: "80px" }} />
+                    <col style={{ width: "120px" }} />
+                    <col style={{ width: "130px" }} />
+                    <col style={{ width: "120px" }} />
+                    <col style={{ width: "100px" }} />
                   </colgroup>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -549,8 +493,8 @@ function BookingRow({
                       <TableHead className={TH}>Status Invoice</TableHead>
                       <TableHead className={THR}>Aging</TableHead>
                       <TableHead className={TH}>Via Rekening</TableHead>
-                      <TableHead className={TH}>Piutang Ack</TableHead>
                       <TableHead className={TH}>Note</TableHead>
+                      <TableHead className={TH}>Invoice</TableHead>
                       <TableHead className={cn(TH, "text-right")}>Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -559,8 +503,6 @@ function BookingRow({
                       <TerminRow
                         key={termin.id}
                         termin={termin}
-                        onOpenInvoice={() => onOpenInvoice(termin)}
-                        onOpenKwitansi={() => onOpenKwitansi(termin)}
                         onIssueInvoice={() => onIssueInvoice(termin)}
                       />
                     ))}
@@ -584,9 +526,6 @@ function BookingCard({
   onDetail,
   onEditKeuangan,
   canEditKeuangan,
-  onRekap,
-  onOpenInvoice,
-  onOpenKwitansi,
   onIssueInvoice,
   onRecognize,
   onUndoRecognize,
@@ -598,9 +537,6 @@ function BookingCard({
   onDetail: () => void;
   onEditKeuangan?: () => void;
   canEditKeuangan: boolean;
-  onRekap: () => void;
-  onOpenInvoice: (termin: ARTermin) => void;
-  onOpenKwitansi: (termin: ARTermin) => void;
   onIssueInvoice: (termin: ARTermin) => void;
   onRecognize?: () => void;
   onUndoRecognize?: () => void;
@@ -684,15 +620,6 @@ function BookingCard({
         >
           <Eye weight="BoldDuotone" className="size-4" />
         </button>
-        <button
-          type="button"
-          onClick={onRekap}
-          title="Rekap kwitansi"
-          aria-label="Rekap kwitansi booking"
-          className={MOBILE_ACTION_BTN}
-        >
-          <Card weight="BoldDuotone" className="size-4" />
-        </button>
         <ReminderPopover booking={booking} triggerClassName={MOBILE_ACTION_BTN} />
         {canEditKeuangan && onEditKeuangan && (
           <button
@@ -723,8 +650,6 @@ function BookingCard({
             <TerminCard
               key={termin.id}
               termin={termin}
-              onOpenInvoice={() => onOpenInvoice(termin)}
-              onOpenKwitansi={() => onOpenKwitansi(termin)}
               onIssueInvoice={() => onIssueInvoice(termin)}
             />
           ))}
@@ -738,13 +663,9 @@ function BookingCard({
 
 function TerminCard({
   termin,
-  onOpenInvoice,
-  onOpenKwitansi,
   onIssueInvoice,
 }: {
   termin: ARTermin;
-  onOpenInvoice: () => void;
-  onOpenKwitansi: () => void;
   onIssueInvoice: () => void;
 }): React.ReactElement {
   return (
@@ -764,7 +685,6 @@ function TerminCard({
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <StatusBadge config={getTerminBadge(termin.status)} />
         <StatusBadge config={getInvoiceBadge(termin.statusInvoice)} />
-        <StatusBadge config={getAckBadge(termin.ackStatus)} />
         <InvoiceEntityBadge invoice={termin.invoice} />
       </div>
 
@@ -796,13 +716,7 @@ function TerminCard({
 
       {/* Actions */}
       <div className="mt-2 flex justify-end">
-        <TerminActions
-          termin={termin}
-          onOpenInvoice={onOpenInvoice}
-          onOpenKwitansi={onOpenKwitansi}
-          onIssueInvoice={onIssueInvoice}
-          triggerClassName={MOBILE_ACTION_BTN}
-        />
+        <TerminActions termin={termin} onIssueInvoice={onIssueInvoice} />
       </div>
     </div>
   );
@@ -839,18 +753,13 @@ function InvoiceEntityBadge({ invoice }: { invoice: ARTermin["invoice"] }): Reac
 
 function TerminRow({
   termin,
-  onOpenInvoice,
-  onOpenKwitansi,
   onIssueInvoice,
 }: {
   termin: ARTermin;
-  onOpenInvoice: () => void;
-  onOpenKwitansi: () => void;
   onIssueInvoice: () => void;
 }) {
   const terminBadge = getTerminBadge(termin.status);
   const invoiceBadge = getInvoiceBadge(termin.statusInvoice);
-  const ackBadge = getAckBadge(termin.ackStatus);
 
   return (
     <TableRow className="bg-card align-middle transition-colors hover:bg-secondary/40">
@@ -876,16 +785,6 @@ function TerminRow({
       <TableCell className="px-4 py-3 align-middle">
         <ViaRekeningChip value={termin.viaRekening} />
       </TableCell>
-      <TableCell className="px-4 py-3 align-middle">
-        <div className="space-y-0.5">
-          <StatusBadge config={ackBadge} />
-          {termin.acknowledgedAt && termin.acknowledgedByName && (
-            <p className="truncate text-xs text-muted-foreground">
-              {termin.acknowledgedByName} · {fmtDate(termin.acknowledgedAt)}
-            </p>
-          )}
-        </div>
-      </TableCell>
       <TableCell className="truncate px-4 py-3 align-middle text-sm text-foreground">
         {termin.catatan || "-"}
       </TableCell>
@@ -893,13 +792,8 @@ function TerminRow({
       <TableCell className="px-4 py-3 align-middle">
         <InvoiceEntityBadge invoice={termin.invoice} />
       </TableCell>
-      <TableCell className="px-4 py-3 align-middle">
-        <TerminActions
-          termin={termin}
-          onOpenInvoice={onOpenInvoice}
-          onOpenKwitansi={onOpenKwitansi}
-          onIssueInvoice={onIssueInvoice}
-        />
+      <TableCell className="px-4 py-3 align-middle text-right">
+        <TerminActions termin={termin} onIssueInvoice={onIssueInvoice} />
       </TableCell>
     </TableRow>
   );
@@ -951,191 +845,62 @@ function CopyableInvoice({ value }: { value: string }) {
 
 function TerminActions({
   termin,
-  onOpenInvoice,
-  onOpenKwitansi,
   onIssueInvoice,
-  triggerClassName,
 }: {
   termin: ARTermin;
-  onOpenInvoice: () => void;
-  onOpenKwitansi: () => void;
   onIssueInvoice: () => void;
-  triggerClassName?: string;
-}) {
-  const { mutate: voidMutate, isPending: isVoiding } = useVoidInvoice();
-  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
-  const canKwitansi = termin.status === "paid";
+}): React.ReactElement {
   const hasActiveInvoice = termin.invoice?.status === "issued";
-  const hasVoidInvoice = termin.invoice?.status === "void";
 
-  function handleVoid(): void {
-    if (!termin.invoice) return;
-    voidMutate(termin.invoice.id, {
-      onSuccess: () => {
-        toast.success("Invoice berhasil dibatalkan");
-        setVoidConfirmOpen(false);
-      },
-      onError: (err) => {
-        toast.error(err.message ?? "Gagal membatalkan invoice");
-      },
-    });
+  // Once an invoice is issued there's nothing to do here — the Invoice column
+  // already shows its number. Only offer issuing while none is active.
+  if (hasActiveInvoice) {
+    return <span className="text-xs text-muted-foreground">—</span>;
   }
 
-  const btnClass = triggerClassName ?? "cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
-
   return (
-    <>
-      <div className="flex items-center justify-end gap-0.5">
-        {/* Kwitansi */}
-        {canKwitansi ? (
+    <Tooltip>
+      <TooltipTrigger
+        render={
           <button
             type="button"
-            className={btnClass}
-            onClick={onOpenKwitansi}
-            title="Preview kwitansi"
-            aria-label="Preview kwitansi"
+            onClick={onIssueInvoice}
+            aria-label="Terbitkan invoice"
+            className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
           >
-            <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
+            <AddSquare weight="BoldDuotone" className="size-4" />
           </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            className="cursor-not-allowed rounded-lg p-1.5 text-muted-foreground/40"
-            title="Kwitansi tersedia setelah lunas"
-          >
-            <DownloadMinimalistic weight="BoldDuotone" className="size-4" />
-          </button>
-        )}
-
-        {/* Invoice dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={btnClass}
-              title="Aksi invoice"
-              aria-label="Aksi invoice"
-            >
-              <MenuDots weight="BoldDuotone" className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={onOpenInvoice}>
-              <Eye weight="BoldDuotone" className="mr-2 size-4" />
-              Preview Invoice Lama
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            {!hasActiveInvoice && (
-              <DropdownMenuItem onClick={onIssueInvoice}>
-                {hasVoidInvoice ? (
-                  <Restart weight="BoldDuotone" className="mr-2 size-4" />
-                ) : (
-                  <AddSquare weight="BoldDuotone" className="mr-2 size-4" />
-                )}
-                {hasVoidInvoice ? "Terbitkan Ulang" : "Terbitkan Invoice"}
-              </DropdownMenuItem>
-            )}
-            {hasActiveInvoice && (
-              <DropdownMenuItem
-                onSelect={(e) => { e.preventDefault(); setVoidConfirmOpen(true); }}
-                className="text-destructive focus:text-destructive"
-              >
-                <TrashBinTrash weight="BoldDuotone" className="mr-2 size-4" />
-                Batalkan Invoice
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Void confirm dialog — outside dropdown to avoid nesting issues */}
-      <AlertDialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Batalkan Invoice?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Invoice {termin.invoice?.number} akan dibatalkan (void). Tindakan ini tidak bisa diurungkan. Invoice baru bisa diterbitkan ulang setelahnya.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isVoiding}>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleVoid}
-              disabled={isVoiding}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              {isVoiding ? "Membatalkan..." : "Ya, Batalkan"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+        }
+      />
+      <TooltipContent>Terbitkan Invoice</TooltipContent>
+    </Tooltip>
   );
 }
 
-/* ─── Reminder Popover (Bell) — collection reminder draft (PREVIEW) ─────────── */
+/* ─── WhatsApp reminder (direct) — opens WA with a draft from booking data ───── */
 
 function ReminderPopover({ booking, triggerClassName }: { booking: ARBooking; triggerClassName?: string }): React.ReactElement {
-  // Draft nyata dari data booking (nama, sisa, jatuh tempo). Pengiriman & log
-  // follow-up masih dummy — ditandai "preview" biar finance gak nyangka terkirim.
+  // Draft nyata dari data booking (nama, sisa, jatuh tempo). Klik langsung buka
+  // WhatsApp dengan pesan sudah terisi — user tinggal pilih kontak & kirim.
   const draft =
     `Halo ${booking.customerEvent}, mengingatkan pembayaran untuk ${booking.namaEvent} ` +
     `(${booking.noPo}) sebesar ${fmtRp(booking.outstanding)} yang jatuh tempo ` +
     `${fmtDate(booking.jatuhTempo)}. Mohon konfirmasinya, terima kasih. 🙏`;
 
-  function copyDraft(): void {
-    void navigator.clipboard.writeText(draft);
-    toast.success("Draft pesan disalin", { duration: 1500 });
-  }
-
   const btnClass = triggerClassName ?? "cursor-pointer rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
 
   return (
-    <Popover>
-      <PopoverTrigger
-        title="Ingatkan penagihan"
-        className={btnClass}
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      >
-        <Bell weight="BoldDuotone" className="size-4" />
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-80 p-4"
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">Ingatkan penagihan</p>
-          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-            PREVIEW
-          </span>
-        </div>
-        <p className="mt-2 rounded-xl bg-secondary/40 p-3 text-xs leading-relaxed text-foreground">
-          {draft}
-        </p>
-        <div className="mt-3 flex items-center gap-2">
-          <Button size="sm" className="flex-1 gap-1.5 rounded-full" onClick={copyDraft}>
-            <CopyIcon weight="BoldDuotone" className="size-3.5" />
-            Salin draft
-          </Button>
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(draft)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-border text-xs font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            <ChatRoundLine weight="BoldDuotone" className="size-3.5" />
-            WhatsApp
-          </a>
-        </div>
-        <p className="mt-2 text-[10px] text-muted-foreground">
-          * Pengiriman & log follow-up belum aktif — draft ini contoh dari data booking.
-        </p>
-      </PopoverContent>
-    </Popover>
+    <a
+      href={`https://wa.me/?text=${encodeURIComponent(draft)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Ingatkan via WhatsApp"
+      aria-label="Ingatkan via WhatsApp"
+      className={btnClass}
+      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+    >
+      <ChatRoundLine weight="BoldDuotone" className="size-4" />
+    </a>
   );
 }
 
@@ -1236,65 +1001,3 @@ function RecognizeRevenueAction({
   );
 }
 
-/* ─── Rekap Kwitansi Drawer (Card) — daftar termin sbagai shortcut kwitansi ── */
-
-function RekapKwitansiDrawer({
-  isOpen,
-  onClose,
-  booking,
-  onOpenKwitansi,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  booking: ARBooking | null;
-  onOpenKwitansi: (termin: ARTermin) => void;
-}): React.ReactElement {
-  return (
-    <Drawer isOpen={isOpen} onClose={onClose} title="Rekap Kwitansi" maxWidth="sm:max-w-lg">
-      {booking && (
-        <div className="flex flex-col gap-4 px-1 pb-6">
-          <div className="rounded-2xl border border-border bg-secondary/30 p-4">
-            <p className="text-sm font-semibold text-foreground">{booking.customerEvent}</p>
-            <p className="text-xs text-muted-foreground">
-              {booking.noPo} · {booking.namaEvent}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {booking.termins.map((termin) => {
-              const paid = termin.status === "paid";
-              return (
-                <div
-                  key={termin.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{termin.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {fmtRp(termin.amount)} · {fmtDate(termin.dueDate)}
-                    </p>
-                  </div>
-                  {paid ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 gap-1.5 rounded-full"
-                      onClick={() => onOpenKwitansi(termin)}
-                    >
-                      <DownloadMinimalistic weight="BoldDuotone" className="size-3.5" />
-                      Kwitansi
-                    </Button>
-                  ) : (
-                    <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                      Belum lunas
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </Drawer>
-  );
-}

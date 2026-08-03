@@ -2,6 +2,7 @@
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { usePermissions } from "@/hooks/use-permissions";
+import { CalendarDate, DocumentText, UsersGroupRounded, Settings } from "@solar-icons/react";
 import { PayrollPeriodTable } from "./PayrollPeriodTable";
 import { SalaryComponentManager } from "./SalaryComponentManager";
 import { EmployeeSalaryManager } from "./EmployeeSalaryManager";
@@ -14,12 +15,24 @@ export function PayrollManagement() {
 
   return (
     <Tabs defaultValue="periods">
-      <TabsList className="mb-4 flex-wrap">
-        <TabsTrigger value="periods">Periode Payroll</TabsTrigger>
-        <TabsTrigger value="components">Komponen Gaji</TabsTrigger>
-        <TabsTrigger value="salaries">Gaji Karyawan</TabsTrigger>
+      <TabsList className="flex h-auto w-full flex-col gap-1 rounded-2xl p-1 sm:grid sm:grid-cols-4 sm:gap-0">
+        <TabsTrigger value="periods" className="rounded-xl gap-2">
+          <CalendarDate weight="BoldDuotone" className="h-4 w-4" />
+          Periode Payroll
+        </TabsTrigger>
+        <TabsTrigger value="components" className="rounded-xl gap-2">
+          <DocumentText weight="BoldDuotone" className="h-4 w-4" />
+          Komponen Gaji
+        </TabsTrigger>
+        <TabsTrigger value="salaries" className="rounded-xl gap-2">
+          <UsersGroupRounded weight="BoldDuotone" className="h-4 w-4" />
+          Gaji Karyawan
+        </TabsTrigger>
         {showSettings && (
-          <TabsTrigger value="settings">Pengaturan</TabsTrigger>
+          <TabsTrigger value="settings" className="rounded-xl gap-2">
+            <Settings weight="BoldDuotone" className="h-4 w-4" />
+            Pengaturan
+          </TabsTrigger>
         )}
       </TabsList>
 

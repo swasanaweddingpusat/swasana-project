@@ -86,3 +86,22 @@ export function firstError(schema: z.ZodType, value: unknown): string | null {
 export function validateBookingField(field: BookingFieldKey, value: unknown): string | null {
   return firstError(bookingFieldSchemas[field], value);
 }
+
+/**
+ * Validate an identity document number based on its type.
+ * KTP    = exactly 16 digits (numeric only).
+ * Paspor = 6–9 alphanumeric characters.
+ * Blank value is always valid (field is optional).
+ * Returns the error message string, or null when valid.
+ */
+export function validateIdNumber(
+  type: "KTP" | "Paspor",
+  label: string,
+  value: string,
+): string | null {
+  if (!value) return null;
+  if (type === "KTP") {
+    return /^\d{16}$/.test(value) ? null : `NIK ${label} harus 16 digit angka`;
+  }
+  return /^[A-Za-z0-9]{6,9}$/.test(value) ? null : `Paspor ${label} harus 6–9 karakter alfanumerik`;
+}

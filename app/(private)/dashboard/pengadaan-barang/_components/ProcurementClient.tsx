@@ -5,19 +5,19 @@ import { toast } from "sonner";
 import { ProcurementStats } from "./ProcurementStats";
 import { ProcurementFilters } from "./ProcurementFilters";
 import { ProcurementTable } from "./ProcurementTable";
-import { AddProcurementDrawer } from "./AddProcurementDrawer";
 import { EditProcurementDrawer } from "./EditProcurementDrawer";
 import { ProcurementDetailDrawer } from "./ProcurementDetailDrawer";
 import { ApproveProcurementDialog } from "./ApproveProcurementDialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AddSquare, AltArrowDown } from "@solar-icons/react";
+import { AltArrowDown } from "@solar-icons/react";
 import {
   useProcurementList,
   useProcurementSummary,
   useDeleteProcurement,
   useBulkApproveProcurement,
+  useFetchAllPendingIds,
 } from "@/hooks/useProcurement";
 import type { ProcurementFilterInput } from "@/lib/validations/procurement";
 import type { ProcurementItem } from "@/lib/queries/procurement";
@@ -36,12 +36,12 @@ export function ProcurementClient({
   const { data, isLoading, isError, error } = useProcurementList(filters);
   const { data: summary } = useProcurementSummary(filters.venueId);
 
-  const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<ProcurementItem | null>(null);
   const [detailItem, setDetailItem] = useState<ProcurementItem | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [approveItem, setApproveItem] = useState<ProcurementItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [allPagesSelected, setAllPagesSelected] = useState(false);
   const [bulkApproveOpen, setBulkApproveOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -49,14 +49,19 @@ export function ProcurementClient({
     useDeleteProcurement();
   const { mutateAsync: bulkApproveMutation, isPending: isBulkApproving } =
     useBulkApproveProcurement();
+  const { mutateAsync: fetchPendingIds, isPending: isSelectingAll } =
+    useFetchAllPendingIds();
 
   const handleFilterChange = (newFilters: Partial<ProcurementFilterInput>): void => {
     setSelectedIds([]);
+    setAllPagesSelected(false);
     setFilters((prev) => ({ ...prev, ...newFilters, page: 1 }));
   };
 
   const handlePageChange = (page: number): void => {
-    setSelectedIds([]);
+    if (!allPagesSelected) {
+      setSelectedIds([]);
+    }
     setFilters((prev) => ({ ...prev, page }));
   };
 
@@ -91,6 +96,7 @@ export function ProcurementClient({
       await bulkApproveMutation(selectedIds);
       toast.success("Semua pengajuan terpilih berhasil disetujui.");
       setSelectedIds([]);
+      setAllPagesSelected(false);
       setBulkApproveOpen(false);
     } catch (err) {
       toast.error(
@@ -99,6 +105,27 @@ export function ProcurementClient({
           : "Gagal menyetujui pengajuan terpilih"
       );
     }
+  }
+
+  async function handleSelectAllPages(): Promise<void> {
+    try {
+      const ids = await fetchPendingIds({
+        search: filters.search,
+        venueId: filters.venueId,
+        division: filters.division,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+      });
+      setSelectedIds(ids);
+      setAllPagesSelected(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal memilih semua pengajuan");
+    }
+  }
+
+  function handleClearAllPages(): void {
+    setSelectedIds([]);
+    setAllPagesSelected(false);
   }
 
   async function handleExport(format: "pdf" | "excel" | "csv"): Promise<void> {
@@ -137,23 +164,8 @@ export function ProcurementClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
-            Pengadaan Barang
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Kelola pengajuan pengadaan dan pembelian barang
-          </p>
-        </div>
-        <Button onClick={() => setAddOpen(true)} className="rounded-full w-full sm:w-auto">
-          <AddSquare weight="BoldDuotone" className="h-4 w-4 mr-1.5" />
-          Tambah Pengajuan
-        </Button>
-      </div>
-
       <ProcurementStats summary={summary} isLoading={!summary} />
- 
+
       <ProcurementFilters
         venues={initialVenues}
         filters={filters}
@@ -167,7 +179,7 @@ export function ProcurementClient({
             : "Terjadi kesalahan saat memuat data pengadaan."}
         </div>
       )}
- 
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -205,11 +217,13 @@ export function ProcurementClient({
         </div>
         <p className="text-sm text-muted-foreground">
           {selectedIds.length > 0
-            ? `${selectedIds.length} pengajuan dipilih`
+            ? allPagesSelected
+              ? `Semua ${selectedIds.length} pengajuan Menunggu dipilih`
+              : `${selectedIds.length} pengajuan dipilih`
             : "Pilih pengajuan untuk aksi massal."}
         </p>
       </div>
- 
+
       <ProcurementTable
         items={data?.items ?? []}
         total={data?.total ?? 0}
@@ -218,17 +232,16 @@ export function ProcurementClient({
         isLoading={isLoading}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
+        totalPending={summary?.pending ?? 0}
+        allPagesSelected={allPagesSelected}
+        onSelectAllPages={() => { void handleSelectAllPages(); }}
+        onClearAllPages={handleClearAllPages}
+        isSelectingAll={isSelectingAll}
         onPageChange={handlePageChange}
         onView={(id) => setDetailItem(findItem(id))}
         onEdit={(id) => setEditItem(findItem(id))}
         onDelete={(id) => setDeleteId(id)}
         onApprove={(id) => setApproveItem(findItem(id))}
-      />
-
-      <AddProcurementDrawer
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        venues={initialVenues}
       />
 
       <EditProcurementDrawer

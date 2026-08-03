@@ -3,12 +3,14 @@
 import { toast } from "sonner";
 import { CloseCircle } from "@solar-icons/react";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { LBL } from "./useEditBookingForm";
+import { validateIdNumber } from "@/lib/validations/booking-form";
 import type { EditBookingForm } from "./useEditBookingForm";
 
 // ─── ClientInfoStep ───────────────────────────────────────────────────────────
@@ -23,6 +25,8 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
     contactEmailCpw, setContactEmailCpw,
     contactNikCpp, setContactNikCpp,
     contactNikCpw, setContactNikCpw,
+    contactIdTypeCpp, setContactIdTypeCpp,
+    contactIdTypeCpw, setContactIdTypeCpw,
     contactCppAddress, setContactCppAddress,
     contactCpwAddress, setContactCpwAddress,
     contactBitrixId, setContactBitrixId,
@@ -183,15 +187,31 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
         </div>
 
         <div>
-          <label className={LBL}>NIK CPP</label>
+          <label className={LBL}>Tipe Identitas CPP</label>
+          <Select value={contactIdTypeCpp} onValueChange={(v) => { setContactIdTypeCpp(v as "KTP" | "Paspor"); setContactNikCpp(""); clearError("nikCpp"); }}>
+            <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="KTP">KTP</SelectItem>
+              <SelectItem value="Paspor">Paspor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className={LBL}>{contactIdTypeCpp === "KTP" ? "NIK CPP" : "No. Paspor CPP"}</label>
           <Input
             className="mt-1"
             value={contactNikCpp}
-            onChange={(e) => { setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpp"); }}
-            onBlur={() => validateField("nikCpp", contactNikCpp)}
-            inputMode="numeric"
-            maxLength={16}
-            placeholder="NIK CPP"
+            onChange={(e) => {
+              const v = contactIdTypeCpp === "KTP"
+                ? e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
+                : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
+              setContactNikCpp(v);
+              clearError("nikCpp");
+            }}
+            onBlur={() => { const err = validateIdNumber(contactIdTypeCpp, "CPP", contactNikCpp); if (!err) clearError("nikCpp"); }}
+            inputMode={contactIdTypeCpp === "KTP" ? "numeric" : "text"}
+            maxLength={contactIdTypeCpp === "KTP" ? 16 : 9}
+            placeholder={contactIdTypeCpp === "KTP" ? "NIK CPP" : "No. Paspor CPP"}
           />
           {errors.nikCpp && <p className="mt-1 text-sm text-destructive">{errors.nikCpp}</p>}
         </div>
@@ -219,15 +239,31 @@ export function ClientInfoStep({ form }: { form: EditBookingForm }) {
         </div>
 
         <div>
-          <label className={LBL}>NIK CPW</label>
+          <label className={LBL}>Tipe Identitas CPW</label>
+          <Select value={contactIdTypeCpw} onValueChange={(v) => { setContactIdTypeCpw(v as "KTP" | "Paspor"); setContactNikCpw(""); clearError("nikCpw"); }}>
+            <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="KTP">KTP</SelectItem>
+              <SelectItem value="Paspor">Paspor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className={LBL}>{contactIdTypeCpw === "KTP" ? "NIK CPW" : "No. Paspor CPW"}</label>
           <Input
             className="mt-1"
             value={contactNikCpw}
-            onChange={(e) => { setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpw"); }}
-            onBlur={() => validateField("nikCpw", contactNikCpw)}
-            inputMode="numeric"
-            maxLength={16}
-            placeholder="NIK CPW"
+            onChange={(e) => {
+              const v = contactIdTypeCpw === "KTP"
+                ? e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
+                : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
+              setContactNikCpw(v);
+              clearError("nikCpw");
+            }}
+            onBlur={() => { const err = validateIdNumber(contactIdTypeCpw, "CPW", contactNikCpw); if (!err) clearError("nikCpw"); }}
+            inputMode={contactIdTypeCpw === "KTP" ? "numeric" : "text"}
+            maxLength={contactIdTypeCpw === "KTP" ? 16 : 9}
+            placeholder={contactIdTypeCpw === "KTP" ? "NIK CPW" : "No. Paspor CPW"}
           />
           {errors.nikCpw && <p className="mt-1 text-sm text-destructive">{errors.nikCpw}</p>}
         </div>

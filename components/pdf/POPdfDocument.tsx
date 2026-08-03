@@ -12,7 +12,7 @@ export interface POPdfBooking {
   signingLocation: string | null;
   /** Catatan tanggal event (booking.notes) — tampil di bawah panel detail acara. */
   notes?: string | null;
-  snapCustomer: { name: string; mobileNumber: string; cppNik?: string | null; cpwNik?: string | null; ktpAddress?: string | null; cppAddress?: string | null; cpwAddress?: string | null; emailCpp?: string | null; emailCpw?: string | null } | null;
+  snapCustomer: { name: string; mobileNumber: string; cppNik?: string | null; cpwNik?: string | null; cppIdType?: string | null; cpwIdType?: string | null; ktpAddress?: string | null; cppAddress?: string | null; cpwAddress?: string | null; emailCpp?: string | null; emailCpw?: string | null } | null;
   snapVenue: { venueName: string; address?: string | null; description?: string | null; brandName?: string | null; brandCode?: string | null } | null;
   snapPackage: { packageName: string; notes?: string | null } | null;
   snapPackagePricing: { packageName: string; pax: number; price: number } | null;
@@ -610,21 +610,35 @@ export function POPdfDocument({ booking, logoBase64, termAndConditionHtml, emate
               const jam = booking.eventTime?.trim() ? booking.eventTime.trim() : sessionJam;
               const tanggal = new Date(booking.bookingDate).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jakarta" });
               // Gabung nilai CPP & CPW jadi satu baris: "<cpp> (cpp), <cpw> (cpw)".
-              // Hanya sertakan sisi yang ada datanya; kalau dua-duanya kosong → "-".
+              // Hanya sertakan sisi yang ada datanya; kalau dua-duanya kosong → "" (auto-hidden by renderSide filter).
               const joinCppCpw = (cpp?: string | null, cpw?: string | null) => {
                 const parts: string[] = [];
                 if (cpp?.trim()) parts.push(`${cpp.trim()} (cpp)`);
                 if (cpw?.trim()) parts.push(`${cpw.trim()} (cpw)`);
-                return parts.length > 0 ? parts.join(", ") : "-";
+                return parts.join(", ");
               };
-              const ktp = joinCppCpw(booking.snapCustomer?.cppNik, booking.snapCustomer?.cpwNik);
               const email = joinCppCpw(booking.snapCustomer?.emailCpp, booking.snapCustomer?.emailCpw);
+              // Group identitas by tipe: "KTP" vs "Paspor"
+              const cppType = booking.snapCustomer?.cppIdType ?? "KTP";
+              const cpwType = booking.snapCustomer?.cpwIdType ?? "KTP";
+              const cppNikVal = booking.snapCustomer?.cppNik?.trim() ?? "";
+              const cpwNikVal = booking.snapCustomer?.cpwNik?.trim() ?? "";
+              // Build per-type id rows: each tipe collects the sides whose type matches
+              const idRowKtp = joinCppCpw(
+                cppType === "KTP" ? cppNikVal || null : null,
+                cpwType === "KTP" ? cpwNikVal || null : null,
+              );
+              const idRowPaspor = joinCppCpw(
+                cppType === "Paspor" ? cppNikVal || null : null,
+                cpwType === "Paspor" ? cpwNikVal || null : null,
+              );
               // Kolom kiri: data customer. Kolom kanan: detail acara.
               const leftItems: { label: string; value: string }[] = [
                 { label: "Nama", value: booking.snapCustomer?.name ?? "-" },
                 { label: "No. Telp", value: phone },
                 { label: "Email", value: email },
-                { label: "No. KTP", value: ktp },
+                { label: "KTP", value: idRowKtp },
+                { label: "Paspor", value: idRowPaspor },
                 { label: "Alamat CPP", value: booking.snapCustomer?.cppAddress ?? "-" },
                 { label: "Alamat CPW", value: booking.snapCustomer?.cpwAddress ?? "-" },
               ];

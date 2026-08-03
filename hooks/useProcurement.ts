@@ -11,12 +11,27 @@ import {
   approveProcurements,
   fetchProcurementSummary,
   exportProcurement,
+  fetchAllPendingIds,
   fetchAnnouncementList,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  fetchSummaryByVenue,
+  fetchVenueBudgetList,
+  createVenueBudget,
+  updateVenueBudget,
+  deleteVenueBudget,
 } from "@/services/procurementService";
-import type { ProcurementFilterInput, CreateProcurementInput, UpdateProcurementInput, ApproveProcurementInput, CreateAnnouncementInput, UpdateAnnouncementInput } from "@/lib/validations/procurement";
+import type {
+  ProcurementFilterInput,
+  CreateProcurementInput,
+  UpdateProcurementInput,
+  ApproveProcurementInput,
+  CreateAnnouncementInput,
+  UpdateAnnouncementInput,
+  CreateVenueBudgetInput,
+  UpdateVenueBudgetInput,
+} from "@/lib/validations/procurement";
 
 // ─── Procurement Items ────────────────────────────────────────────────────────
 
@@ -104,6 +119,13 @@ export function useExportProcurement() {
   });
 }
 
+export function useFetchAllPendingIds() {
+  return useMutation({
+    mutationFn: (params: Partial<Omit<ProcurementFilterInput, "page" | "limit">>) =>
+      fetchAllPendingIds(params),
+  });
+}
+
 // ─── Announcements ────────────────────────────────────────────────────────────
 
 export function useAnnouncementList(page = 1, limit = 20) {
@@ -137,5 +159,52 @@ export function useDeleteAnnouncement() {
   return useMutation({
     mutationFn: (id: string) => deleteAnnouncement(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["procurement-announcements"] }),
+  });
+}
+
+// ─── Summary by Venue ────────────────────────────────────────────────────────
+
+export function useSummaryByVenue(period?: string) {
+  return useQuery({
+    queryKey: ["procurement-summary-venue", period] as const,
+    queryFn: () => fetchSummaryByVenue(period),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+// ─── Venue Budgets ───────────────────────────────────────────────────────────
+
+export function useVenueBudgetList(period?: string, page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["procurement-budgets", period, page, limit] as const,
+    queryFn: () => fetchVenueBudgetList(period, page, limit),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useCreateVenueBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateVenueBudgetInput) => createVenueBudget(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["procurement-budgets"] }),
+  });
+}
+
+export function useUpdateVenueBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateVenueBudgetInput }) =>
+      updateVenueBudget(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["procurement-budgets"] }),
+  });
+}
+
+export function useDeleteVenueBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteVenueBudget(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["procurement-budgets"] }),
   });
 }

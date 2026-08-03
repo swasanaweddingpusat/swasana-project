@@ -40,7 +40,8 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const result = await getProcurementList(parsed.data);
     return Response.json(result);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to list items:", err);
     return Response.json({ error: "Gagal mengambil data pengadaan" }, { status: 500 });
   }
 }
@@ -104,9 +105,11 @@ export async function POST(req: Request): Promise<Response> {
     });
 
     revalidateTag("procurement", "max");
+    revalidateTag("procurement-budgets", "max");
 
     return Response.json(item, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to create item:", err);
     return Response.json({ error: "Gagal membuat data pengadaan" }, { status: 500 });
   }
 }

@@ -36,7 +36,9 @@ import {
   MoneyBag,
   CardReceive,
   CardSend,
-  CalendarMark,
+  BillList,
+  BellBing,
+  Wallet2,
 } from "@solar-icons/react";
 
 type SolarIcon = ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<SVGSVGElement>>;
@@ -199,19 +201,13 @@ export const navItems: NavItem[] = [
         ],
       },
       {
-        name: "Cashflow",
-        href: "/dashboard/finance/ledger",
+        name: "Income",
+        href: "/dashboard/finance/income",
         icon: Notebook,
         anyPermission: [
           { module: "finance-ar", action: "view" },
           { module: "finance-ap", action: "view" },
         ],
-      },
-      {
-        name: "AR",
-        href: "/dashboard/finance/accounts-receivable",
-        icon: CardReceive,
-        permission: { module: "finance-ar", action: "view" },
       },
       {
         name: "Expense",
@@ -220,15 +216,16 @@ export const navItems: NavItem[] = [
         permission: { module: "finance-ap", action: "view" },
       },
       {
-        name: "Accounts Payable",
+        name: "AR",
+        href: "/dashboard/finance/accounts-receivable",
+        icon: CardReceive,
+        permission: { module: "finance-ar", action: "view" },
+      },
+      {
+        name: "AP",
         href: "/dashboard/finance/accounts-payable",
         icon: CardSend,
         permission: { module: "finance-ap", action: "view" },
-        submenu: [
-          { name: "Outstanding", href: "/dashboard/finance/accounts-payable/outstanding", icon: Wallet },
-          { name: "Event", href: "/dashboard/finance/accounts-payable/event", icon: CalendarMark },
-          { name: "Customer Payout", href: "/dashboard/finance/accounts-payable/customer", icon: CardSend },
-        ],
       },
     ],
   },
@@ -243,6 +240,12 @@ export const navItems: NavItem[] = [
     href: "/dashboard/pengadaan-barang",
     icon: CartLarge,
     permission: { module: "procurement", action: "view" },
+    submenu: [
+      { name: "Pengadaan", href: "/dashboard/pengadaan-barang", icon: BillList, permission: { module: "procurement", action: "view" } },
+      { name: "Ringkasan", href: "/dashboard/pengadaan-barang/ringkasan", icon: ChartSquare, permission: { module: "procurement", action: "view" } },
+      { name: "Pengumuman", href: "/dashboard/pengadaan-barang/pengumuman", icon: BellBing, permission: { module: "procurement", action: "view" } },
+      { name: "Anggaran Venue", href: "/dashboard/pengadaan-barang/anggaran-venue", icon: Wallet2, permission: { module: "procurement", action: "view" } },
+    ],
   },
   {
     name: "Absensi",

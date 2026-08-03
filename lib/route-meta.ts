@@ -130,7 +130,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   },
   "/dashboard/finance/accounts-payable": {
     title: "Accounts Payable",
-    subtitle: "Kelola hutang dan pembayaran keluar",
+    subtitle: "Kewajiban uang keluar — outstanding & per event",
     parent: "/dashboard/finance",
   },
   "/dashboard/finance/accounts-payable/customer": {
@@ -138,19 +138,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
     subtitle: "Kewajiban uang keluar ke customer — cashback & refund overpay",
     parent: "/dashboard/finance/accounts-payable",
   },
-  "/dashboard/finance/accounts-payable/rekening-vendor": {
-    title: "Rekening Vendor",
-    subtitle: "Daftar rekening pembayaran vendor",
-    parent: "/dashboard/finance/accounts-payable",
-  },
-  "/dashboard/finance/accounts-payable/rekening-venue": {
-    title: "Rekening Venue",
-    subtitle: "Daftar rekening pembayaran venue",
-    parent: "/dashboard/finance/accounts-payable",
-  },
-  "/dashboard/finance/ledger": {
-    title: "Cashflow",
-    subtitle: "Buku besar cashflow — piutang, uang masuk, sampai pendapatan diakui.",
+  "/dashboard/finance/income": {
+    title: "Income",
+    subtitle: "Catatan kas masuk — uang riil yang sudah diterima & diverifikasi Finance.",
     parent: "/dashboard/finance",
   },
   "/dashboard/voucher": {
@@ -236,6 +226,21 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/dashboard/pengadaan-barang": {
     title: "Pengadaan Barang",
     subtitle: "Kelola pengajuan pengadaan dan pembelian barang",
+  },
+  "/dashboard/pengadaan-barang/ringkasan": {
+    title: "Ringkasan Pengadaan",
+    subtitle: "Statistik dan ringkasan pengadaan barang",
+    parent: "/dashboard/pengadaan-barang",
+  },
+  "/dashboard/pengadaan-barang/pengumuman": {
+    title: "Pengumuman Pengadaan",
+    subtitle: "Kelola pengumuman pengadaan barang",
+    parent: "/dashboard/pengadaan-barang",
+  },
+  "/dashboard/pengadaan-barang/anggaran-venue": {
+    title: "Anggaran Venue",
+    subtitle: "Kelola anggaran pengadaan per venue",
+    parent: "/dashboard/pengadaan-barang",
   },
 
   // ─── HR & Payroll ──────────────────────────────────────────────────────────

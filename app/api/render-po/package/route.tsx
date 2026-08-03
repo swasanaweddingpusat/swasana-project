@@ -97,6 +97,8 @@ export async function POST(req: Request) {
         mobileNumber: BLANK,
         cppNik: BLANK,
         cpwNik: BLANK,
+        cppIdType: "KTP",
+        cpwIdType: "KTP",
         ktpAddress: null,
         cppAddress: BLANK,
         cpwAddress: BLANK,

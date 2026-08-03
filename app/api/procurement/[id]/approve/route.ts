@@ -82,9 +82,11 @@ export async function PATCH(
     });
 
     revalidateTag("procurement", "max");
+    revalidateTag("procurement-budgets", "max");
 
     return Response.json(updated);
-  } catch {
+  } catch (err) {
+    console.error("[PROCUREMENT] Failed to approve item:", err);
     return Response.json({ error: "Gagal memproses persetujuan pengadaan." }, { status: 500 });
   }
 }
