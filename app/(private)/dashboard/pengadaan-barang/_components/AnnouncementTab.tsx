@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,14 +61,17 @@ export function AnnouncementTab({ venues, addTrigger = 0 }: AnnouncementTabProps
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<AnnouncementItem | null>(null);
 
-  const prevTrigger = useRef(addTrigger);
-  useEffect(() => {
-    if (addTrigger > prevTrigger.current) {
+  // Buka drawer "Tambah" saat parent menaikkan addTrigger. Pakai pola
+  // adjust-state-during-render (bukan setState di dalam effect) supaya tidak
+  // memicu cascading render — React langsung re-render tanpa commit DOM antara.
+  const [prevTrigger, setPrevTrigger] = useState(addTrigger);
+  if (addTrigger !== prevTrigger) {
+    setPrevTrigger(addTrigger);
+    if (addTrigger > prevTrigger) {
       setEditItem(null);
       setFormOpen(true);
     }
-    prevTrigger.current = addTrigger;
-  }, [addTrigger]);
+  }
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data, isLoading, isError, error } = useAnnouncementList(page, limit);
