@@ -364,10 +364,6 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
     const mm = (now.getMonth() + 1).toString().padStart(2, "0");
     const poNumber = `${poSeq.toString().padStart(3, "0")}/${venue?.brand?.code ?? ""}/${venue?.code ?? ""}/MICE/${dd}-${mm}-${year}`;
 
-    // FIX C Step 3: invoice numbers buat TOP sudah di-drop.
-    // Invoice number sekarang on-demand via Invoice entity (IssueInvoiceDrawer → actions/invoice.ts).
-    const terms = draft.termOfPayments;
-
     // Resolve approval steps: conditional Sales + Manager → Finance.
     // Auto-approve Sales only when the finalizer IS the assigned sales (and signed).
     const bookingApprovalSteps = await buildBookingApprovalSteps({

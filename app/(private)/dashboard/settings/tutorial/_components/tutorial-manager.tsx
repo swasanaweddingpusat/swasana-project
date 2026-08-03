@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { AddCircle, TrashBinTrash, PenNewSquare, Book, AltArrowDown } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
@@ -845,10 +846,13 @@ export function TutorialManager({ initialCategories }: Props) {
                 )}
               </div>
               {stepImage && (
-                <img
+                <Image
                   src={stepImage}
                   alt="Preview"
-                  className="mt-2 max-h-40 rounded-xl border border-border object-contain"
+                  width={320}
+                  height={160}
+                  className="mt-2 max-h-40 w-auto rounded-xl border border-border object-contain"
+                  unoptimized
                 />
               )}
             </div>

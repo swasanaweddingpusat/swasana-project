@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloseCircle } from "@solar-icons/react";
@@ -68,6 +68,11 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
   const form = useForm<CustomerFormValues>({
     defaultValues: { name: "", emailCpp: "", emailCpw: "", cppNik: "", cpwNik: "", cppIdType: "KTP", cpwIdType: "KTP", ktpAddress: "", type: "", club: "", memberStatus: "Non-Member", notes: "", bitrixId: "" },
   });
+
+  // useWatch (subscription hook) instead of form.watch() — the React Compiler
+  // flags watch() as an incompatible-library call it can't safely memoize.
+  const cppIdType = useWatch({ control: form.control, name: "cppIdType" });
+  const cpwIdType = useWatch({ control: form.control, name: "cpwIdType" });
 
   const prevOpenRef = useRef(false);
 
@@ -272,15 +277,15 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               )} />
               <FormField control={form.control} name="cppNik" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{form.watch("cppIdType") === "KTP" ? "NIK CPP (16 digit)" : "No. Paspor CPP"}</FormLabel>
+                  <FormLabel>{cppIdType === "KTP" ? "NIK CPP (16 digit)" : "No. Paspor CPP"}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder={form.watch("cppIdType") === "KTP" ? "3275010101010001" : "A1234567"}
-                      inputMode={form.watch("cppIdType") === "KTP" ? "numeric" : "text"}
-                      maxLength={form.watch("cppIdType") === "KTP" ? 16 : 9}
+                      placeholder={cppIdType === "KTP" ? "3275010101010001" : "A1234567"}
+                      inputMode={cppIdType === "KTP" ? "numeric" : "text"}
+                      maxLength={cppIdType === "KTP" ? 16 : 9}
                       onChange={(e) => {
-                        const v = form.watch("cppIdType") === "KTP"
+                        const v = cppIdType === "KTP"
                           ? e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
                           : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
                         field.onChange(v);
@@ -305,15 +310,15 @@ export function CustomerDrawer({ open, onOpenChange, editCustomer }: CustomerDra
               )} />
               <FormField control={form.control} name="cpwNik" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{form.watch("cpwIdType") === "KTP" ? "NIK CPW (16 digit)" : "No. Paspor CPW"}</FormLabel>
+                  <FormLabel>{cpwIdType === "KTP" ? "NIK CPW (16 digit)" : "No. Paspor CPW"}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder={form.watch("cpwIdType") === "KTP" ? "3275010101010002" : "A1234567"}
-                      inputMode={form.watch("cpwIdType") === "KTP" ? "numeric" : "text"}
-                      maxLength={form.watch("cpwIdType") === "KTP" ? 16 : 9}
+                      placeholder={cpwIdType === "KTP" ? "3275010101010002" : "A1234567"}
+                      inputMode={cpwIdType === "KTP" ? "numeric" : "text"}
+                      maxLength={cpwIdType === "KTP" ? 16 : 9}
                       onChange={(e) => {
-                        const v = form.watch("cpwIdType") === "KTP"
+                        const v = cpwIdType === "KTP"
                           ? e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
                           : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
                         field.onChange(v);

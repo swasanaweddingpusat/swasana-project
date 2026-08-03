@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Drawer } from "@/components/shared/drawer";
@@ -58,7 +58,6 @@ export function AnnouncementFormDrawer({
     handleSubmit,
     control,
     reset,
-    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(createAnnouncementSchema),
@@ -71,7 +70,9 @@ export function AnnouncementFormDrawer({
     },
   });
 
-  const targetAudience = watch("targetAudience");
+  // useWatch (subscription hook) instead of watch() — the React Compiler flags
+  // watch() as an incompatible-library call it can't safely memoize.
+  const targetAudience = useWatch({ control, name: "targetAudience" });
 
   useEffect(() => {
     if (open && item) {
