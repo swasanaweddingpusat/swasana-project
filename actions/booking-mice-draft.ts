@@ -412,6 +412,8 @@ export async function finalizeDraftMiceBooking(data: unknown): Promise<FinalizeM
           mobileNumber: mobileDisplay,
           cppNik: customer.cppNik,
           cpwNik: customer.cpwNik,
+          cppIdType: customer.cppIdType,
+          cpwIdType: customer.cpwIdType,
           ktpAddress: customer.ktpAddress,
           cppAddress: customer.cppAddress,
           cpwAddress: customer.cpwAddress,

@@ -10,14 +10,33 @@ export const customerSchema = z.object({
   mobileNumber: z.array(mobileNumberEntrySchema).min(1, "Minimal 1 nomor HP"),
   emailCpp: z.string().email("Email CPP tidak valid").optional().or(z.literal("")).transform((v) => v || undefined),
   emailCpw: z.string().email("Email CPW tidak valid").optional().or(z.literal("")).transform((v) => v || undefined),
-  cppNik: z.string().length(16, "NIK CPP harus 16 digit").regex(/^\d+$/, "Hanya angka").optional().or(z.literal("")),
-  cpwNik: z.string().length(16, "NIK CPW harus 16 digit").regex(/^\d+$/, "Hanya angka").optional().or(z.literal("")),
+  cppIdType: z.enum(["KTP", "Paspor"]).default("KTP"),
+  cpwIdType: z.enum(["KTP", "Paspor"]).default("KTP"),
+  cppNik: z.string().optional().or(z.literal("")),
+  cpwNik: z.string().optional().or(z.literal("")),
   ktpAddress: z.string().optional(),
   type: z.string().min(1, "Type wajib diisi"),
   club: z.string().optional(),
   memberStatus: z.string().min(1, "Member status wajib diisi").default("Non-Member"),
   notes: z.string().optional(),
   bitrixId: z.string().optional(),
+}).superRefine((data, ctx) => {
+  const cppNik = data.cppNik ?? "";
+  if (cppNik !== "") {
+    if (data.cppIdType === "KTP" && !/^\d{16}$/.test(cppNik)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPP harus 16 digit angka", path: ["cppNik"] });
+    } else if (data.cppIdType === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(cppNik)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPP harus 6–9 karakter alfanumerik", path: ["cppNik"] });
+    }
+  }
+  const cpwNik = data.cpwNik ?? "";
+  if (cpwNik !== "") {
+    if (data.cpwIdType === "KTP" && !/^\d{16}$/.test(cpwNik)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NIK CPW harus 16 digit angka", path: ["cpwNik"] });
+    } else if (data.cpwIdType === "Paspor" && !/^[A-Za-z0-9]{6,9}$/.test(cpwNik)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Paspor CPW harus 6–9 karakter alfanumerik", path: ["cpwNik"] });
+    }
+  }
 });
 
 export const updateCustomerSchema = customerSchema.partial().extend({

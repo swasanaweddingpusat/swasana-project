@@ -23,6 +23,8 @@ interface SnapCustomerData {
   mobileNumber: string;
   cppNik: string | null;
   cpwNik: string | null;
+  cppIdType: string;
+  cpwIdType: string;
   ktpAddress: string | null;
   cppAddress: string | null;
   cpwAddress: string | null;
@@ -196,6 +198,8 @@ export async function restoreBookingRevision(
           mobileNumber: c.mobileNumber,
           cppNik: c.cppNik,
           cpwNik: c.cpwNik,
+          cppIdType: c.cppIdType,
+          cpwIdType: c.cpwIdType,
           ktpAddress: c.ktpAddress,
           cppAddress: c.cppAddress,
           cpwAddress: c.cpwAddress,

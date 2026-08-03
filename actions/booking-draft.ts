@@ -80,6 +80,8 @@ export interface DraftBookingDetail {
   contactEmailCpw: string | null;
   contactNikCpp: string | null;
   contactNikCpw: string | null;
+  contactIdTypeCpp: string | null;
+  contactIdTypeCpw: string | null;
   contactCppAddress: string | null;
   contactCpwAddress: string | null;
   contactBitrixId: string | null;
@@ -267,6 +269,8 @@ export async function createDraftBooking(data: unknown): Promise<DraftResult> {
           emailCpw: input.contactEmailCpw || null,
           cppNik: input.contactNikCpp || null,
           cpwNik: input.contactNikCpw || null,
+          cppIdType: input.contactIdTypeCpp || "KTP",
+          cpwIdType: input.contactIdTypeCpw || "KTP",
           ktpAddress: null,
           cppAddress: input.contactCppAddress || null,
           cpwAddress: input.contactCpwAddress || null,
@@ -753,6 +757,8 @@ export async function finalizeDraftBooking(data: unknown): Promise<FinalizeDraft
           mobileNumber: mobileDisplay,
           cppNik: customer.cppNik,
           cpwNik: customer.cpwNik,
+          cppIdType: customer.cppIdType,
+          cpwIdType: customer.cpwIdType,
           ktpAddress: customer.ktpAddress,
           cppAddress: customer.cppAddress,
           cpwAddress: customer.cpwAddress,
@@ -1290,6 +1296,8 @@ export async function getDraftBookingDetail(
           emailCpw: true,
           cppNik: true,
           cpwNik: true,
+          cppIdType: true,
+          cpwIdType: true,
           cppAddress: true,
           cpwAddress: true,
           bitrixId: true,
@@ -1408,6 +1416,8 @@ export async function getDraftBookingDetail(
     contactEmailCpw: draft.customer?.emailCpw ?? null,
     contactNikCpp: draft.customer?.cppNik ?? null,
     contactNikCpw: draft.customer?.cpwNik ?? null,
+    contactIdTypeCpp: draft.customer?.cppIdType ?? "KTP",
+    contactIdTypeCpw: draft.customer?.cpwIdType ?? "KTP",
     contactCppAddress: draft.customer?.cppAddress ?? null,
     contactCpwAddress: draft.customer?.cpwAddress ?? null,
     contactBitrixId: draft.customer?.bitrixId ?? null,

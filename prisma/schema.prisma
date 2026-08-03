@@ -605,6 +605,8 @@ model Customer {
   emailCpw     String?
   cppNik       String?
   cpwNik       String?
+  cppIdType    String  @default("KTP")
+  cpwIdType    String  @default("KTP")
   ktpAddress   String?
   cppAddress   String?
   cpwAddress   String?
@@ -972,6 +974,8 @@ model SnapCustomer {
   mobileNumber String
   cppNik       String?
   cpwNik       String?
+  cppIdType    String  @default("KTP")
+  cpwIdType    String  @default("KTP")
   ktpAddress   String?
   cppAddress   String?
   cpwAddress   String?
@@ -3085,3 +3089,5 @@ model Kpi {
 
   @@map("kpis")
 }
+
+

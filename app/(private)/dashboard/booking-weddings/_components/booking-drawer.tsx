@@ -19,6 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ContactEntry, parseStoredPhone } from "@/components/shared/PhoneInput";
 import { TimeRangePicker } from "@/components/shared/time-range-picker";
 import { cn, formatRupiah, toDateOnly, parseDateOnly } from "@/lib/utils";
@@ -50,7 +51,7 @@ import {
 } from "@/components/shared/PackageItemsEditor";
 import type { BookingInput } from "@/lib/validations/booking";
 import type { MobileNumberEntry } from "@/lib/validations/customer";
-import { validateBookingField, type BookingFieldKey } from "@/lib/validations/booking-form";
+import { validateBookingField, validateIdNumber, type BookingFieldKey } from "@/lib/validations/booking-form";
 import type { BookingPrefillLead } from "@/types/lead";
 import {
   getWeddingTimeRange,
@@ -89,7 +90,7 @@ interface BookingDrawerProps {
 }
 
 type Option = { id: string; name: string };
-interface CustomerOption { id: string; name: string; mobileNumber: string; emailCpp: string | null; emailCpw: string | null; cppNik: string | null; cpwNik: string | null; cppAddress: string | null; cpwAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
+interface CustomerOption { id: string; name: string; mobileNumber: string; emailCpp: string | null; emailCpw: string | null; cppNik: string | null; cpwNik: string | null; cppIdType: string | null; cpwIdType: string | null; cppAddress: string | null; cpwAddress: string | null; sourceOfInformationId: string | null; bitrixId: string | null }
 interface LeadOption { id: string; name: string; email: string | null; contactNumbers: Array<{ label?: string; name?: string; number: string }>; address: string | null; sourceOfInformation: { id: string; name: string } | null; bitrixId: string | null; convertedToCustomerId: string | null; assignedTo: { id: string; fullName: string | null } | null }
 interface CategoryPriceEntry {
   id: string;
@@ -323,6 +324,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
   const [contactEmailCpw, setContactEmailCpw] = useState("");
   const [contactNikCpp, setContactNikCpp] = useState("");
   const [contactNikCpw, setContactNikCpw] = useState("");
+  const [contactIdTypeCpp, setContactIdTypeCpp] = useState<"KTP" | "Paspor">("KTP");
+  const [contactIdTypeCpw, setContactIdTypeCpw] = useState<"KTP" | "Paspor">("KTP");
   const [contactCppAddress, setContactCppAddress] = useState("");
   const [contactCpwAddress, setContactCpwAddress] = useState("");
   const [contactBitrixId, setContactBitrixId] = useState("");
@@ -500,7 +503,7 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setBonuses([]); setComplimentaries([]); setCollapsedComplimentaries(new Set()); setComplimentaryMode("none"); setCreateNewComp({ name: "", price: 0, description: "", isShowPrice: false }); setIsCreatingComp(false); setTerms(makeDefaultTerms()); setCreatePayments([]);
     setCurrentStep(1); setSignatureSales(""); setSigningLocation(""); setUseDefaultSignature(false);
     setSpecialBonusName("Discount"); setSpecialBonusAmount(0);
-    setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw("");
+    setContactNumbers([]); setContactEmailCpp(""); setContactEmailCpw(""); setContactNikCpp(""); setContactNikCpw(""); setContactIdTypeCpp("KTP"); setContactIdTypeCpw("KTP");
     setContactCppAddress(""); setContactCpwAddress(""); setContactBitrixId(""); setNoteDateEvent(""); setCustomerName(""); setSelectedLeadId("");
     setTakeoutPrices({}); setCategoryToggles({}); setTime("");
     setPackageInternalItems([]); setPackageVendorItems([]); setPackageItemsTab("internal");
@@ -548,9 +551,9 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     if (ec) next.emailCpp = ec;
     const ew = validateBookingField("emailCpw", contactEmailCpw);
     if (ew) next.emailCpw = ew;
-    const nc = validateBookingField("nikCpp", contactNikCpp);
+    const nc = validateIdNumber(contactIdTypeCpp, "CPP", contactNikCpp);
     if (nc) next.nikCpp = nc;
-    const nw = validateBookingField("nikCpw", contactNikCpw);
+    const nw = validateIdNumber(contactIdTypeCpw, "CPW", contactNikCpw);
     if (nw) next.nikCpw = nw;
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -955,6 +958,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
     setContactEmailCpw(resumeDraftDetail.contactEmailCpw ?? "");
     setContactNikCpp(resumeDraftDetail.contactNikCpp ?? "");
     setContactNikCpw(resumeDraftDetail.contactNikCpw ?? "");
+    setContactIdTypeCpp((resumeDraftDetail.contactIdTypeCpp ?? "KTP") as "KTP" | "Paspor");
+    setContactIdTypeCpw((resumeDraftDetail.contactIdTypeCpw ?? "KTP") as "KTP" | "Paspor");
     setContactCppAddress(resumeDraftDetail.contactCppAddress ?? "");
     setContactCpwAddress(resumeDraftDetail.contactCpwAddress ?? "");
     setContactBitrixId(resumeDraftDetail.contactBitrixId ?? "");
@@ -1179,6 +1184,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
           contactEmailCpw,
           contactNikCpp,
           contactNikCpw,
+          contactIdTypeCpp,
+          contactIdTypeCpw,
           contactCppAddress,
           contactCpwAddress,
           contactBitrixId: isBitrixSource ? contactBitrixId : "",
@@ -1477,6 +1484,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
       contactEmailCpw,
       contactNikCpp,
       contactNikCpw,
+      contactIdTypeCpp,
+      contactIdTypeCpw,
       contactCppAddress,
       contactCpwAddress,
       contactBitrixId: isBitrixSource ? contactBitrixId : "",
@@ -1698,6 +1707,8 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                                     if (c.emailCpw) setContactEmailCpw(c.emailCpw);
                                     if (c.cppNik) setContactNikCpp(c.cppNik);
                                     if (c.cpwNik) setContactNikCpw(c.cpwNik);
+                                    setContactIdTypeCpp((c.cppIdType as "KTP" | "Paspor") ?? "KTP");
+                                    setContactIdTypeCpw((c.cpwIdType as "KTP" | "Paspor") ?? "KTP");
                                     setContactCppAddress(c.cppAddress ?? "");
                                     setContactCpwAddress(c.cpwAddress ?? "");
                                     if (c.bitrixId) setContactBitrixId(c.bitrixId);
@@ -1844,10 +1855,34 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     {errors.emailCpp && <p className="mt-1 text-sm text-destructive">{errors.emailCpp}</p>}
                   </div>
 
-                  {/* NIK CPP */}
+                  {/* Tipe Identitas CPP + Nomor */}
                   <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPP</FormLabel>
-                    <Input placeholder="e.g. 3275010101010001" value={contactNikCpp} onChange={(e) => { setContactNikCpp(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpp"); }} onBlur={() => validateField("nikCpp", contactNikCpp)} inputMode="numeric" maxLength={16} className="mt-1" />
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Tipe Identitas CPP</FormLabel>
+                    <Select value={contactIdTypeCpp} onValueChange={(v) => { setContactIdTypeCpp(v as "KTP" | "Paspor"); setContactNikCpp(""); clearError("nikCpp"); }}>
+                      <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="KTP">KTP</SelectItem>
+                        <SelectItem value="Paspor">Paspor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>{contactIdTypeCpp === "KTP" ? "NIK CPP" : "No. Paspor CPP"}</FormLabel>
+                    <Input
+                      placeholder={contactIdTypeCpp === "KTP" ? "e.g. 3275010101010001" : "e.g. A1234567"}
+                      value={contactNikCpp}
+                      onChange={(e) => {
+                        const v = contactIdTypeCpp === "KTP"
+                          ? e.target.value.replace(/\D/g, "").slice(0, 16)
+                          : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
+                        setContactNikCpp(v);
+                        clearError("nikCpp");
+                      }}
+                      onBlur={() => { const err = validateIdNumber(contactIdTypeCpp, "CPP", contactNikCpp); if (err) setErrors((p) => ({ ...p, nikCpp: err })); else clearError("nikCpp"); }}
+                      inputMode={contactIdTypeCpp === "KTP" ? "numeric" : "text"}
+                      maxLength={contactIdTypeCpp === "KTP" ? 16 : 9}
+                      className="mt-1"
+                    />
                     {errors.nikCpp && <p className="mt-1 text-sm text-destructive">{errors.nikCpp}</p>}
                   </div>
 
@@ -1869,10 +1904,34 @@ export function BookingDrawer({ open, onOpenChange, onSuccess, prefillLead, init
                     {errors.emailCpw && <p className="mt-1 text-sm text-destructive">{errors.emailCpw}</p>}
                   </div>
 
-                  {/* NIK CPW */}
+                  {/* Tipe Identitas CPW + Nomor */}
                   <div>
-                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>NIK CPW</FormLabel>
-                    <Input placeholder="e.g. 3275010101010002" value={contactNikCpw} onChange={(e) => { setContactNikCpw(e.target.value.replace(/\D/g, "").slice(0, 16)); clearError("nikCpw"); }} onBlur={() => validateField("nikCpw", contactNikCpw)} inputMode="numeric" maxLength={16} className="mt-1" />
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>Tipe Identitas CPW</FormLabel>
+                    <Select value={contactIdTypeCpw} onValueChange={(v) => { setContactIdTypeCpw(v as "KTP" | "Paspor"); setContactNikCpw(""); clearError("nikCpw"); }}>
+                      <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="KTP">KTP</SelectItem>
+                        <SelectItem value="Paspor">Paspor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <FormLabel className={cn('text-sm', 'font-medium', 'text-foreground')}>{contactIdTypeCpw === "KTP" ? "NIK CPW" : "No. Paspor CPW"}</FormLabel>
+                    <Input
+                      placeholder={contactIdTypeCpw === "KTP" ? "e.g. 3275010101010002" : "e.g. A1234567"}
+                      value={contactNikCpw}
+                      onChange={(e) => {
+                        const v = contactIdTypeCpw === "KTP"
+                          ? e.target.value.replace(/\D/g, "").slice(0, 16)
+                          : e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 9).toUpperCase();
+                        setContactNikCpw(v);
+                        clearError("nikCpw");
+                      }}
+                      onBlur={() => { const err = validateIdNumber(contactIdTypeCpw, "CPW", contactNikCpw); if (err) setErrors((p) => ({ ...p, nikCpw: err })); else clearError("nikCpw"); }}
+                      inputMode={contactIdTypeCpw === "KTP" ? "numeric" : "text"}
+                      maxLength={contactIdTypeCpw === "KTP" ? 16 : 9}
+                      className="mt-1"
+                    />
                     {errors.nikCpw && <p className="mt-1 text-sm text-destructive">{errors.nikCpw}</p>}
                   </div>
 

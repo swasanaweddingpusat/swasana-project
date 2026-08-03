@@ -26,6 +26,8 @@ export async function createCustomer(data: unknown) {
         emailCpw: rest.emailCpw || null,
         cppNik: rest.cppNik || null,
         cpwNik: rest.cpwNik || null,
+        cppIdType: rest.cppIdType || "KTP",
+        cpwIdType: rest.cpwIdType || "KTP",
         updatedBy: session!.user.name ?? session!.user.email,
       },
     })]);
@@ -65,6 +67,8 @@ export async function updateCustomer(data: unknown) {
         emailCpw: rest.emailCpw || null,
         cppNik: rest.cppNik || null,
         cpwNik: rest.cpwNik || null,
+        ...(rest.cppIdType !== undefined && { cppIdType: rest.cppIdType || "KTP" }),
+        ...(rest.cpwIdType !== undefined && { cpwIdType: rest.cpwIdType || "KTP" }),
         updatedBy: session!.user.name ?? session!.user.email,
       },
     })]);
