@@ -1,7 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
 import { format } from "date-fns";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   CloseCircle,
@@ -12,14 +12,20 @@ import {
   ClockCircle,
   Pen,
   LinkMinimalistic,
+  Heart,
+  Suitcase,
+  type IconProps,
 } from "@solar-icons/react";
+import { cn } from "@/lib/utils";
 import type { LeadItem } from "@/lib/queries/leads";
 import type { ContactNumber } from "@/types/lead";
 
-/* ─── Helpers ──────────────────────────────────────────────────────────────── */
+/* ─── Field styling tokens ─────────────────────────────────────────────────── */
 
-const lbl = "text-xs font-medium text-muted-foreground uppercase tracking-wide";
-const val = "text-sm font-normal text-foreground mt-0.5";
+const LABEL = "text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
+const VALUE = "mt-1 text-sm text-foreground break-words";
+
+/* ─── Formatters ───────────────────────────────────────────────────────────── */
 
 function fmtPrice(v: number | null | undefined): string {
   if (v == null) return "-";
@@ -37,7 +43,7 @@ function fmtDateTime(d: Date | string | null | undefined): string {
   if (!d) return "-";
   const date = new Date(d);
   if (isNaN(date.getTime())) return "-";
-  return format(date, "dd MMM yyyy HH:mm");
+  return format(date, "dd MMM yyyy · HH:mm");
 }
 
 function fmtSession(session: string | null | undefined): string {
@@ -50,74 +56,60 @@ function fmtSession(session: string | null | undefined): string {
   return map[session] ?? session;
 }
 
-/* ─── Mobile section card ──────────────────────────────────────────────────── */
-
-function MobileCard({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">{icon}</span>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{title}</p>
-      </div>
-      <div className="space-y-2.5">{children}</div>
-    </div>
-  );
-}
-
-function MobileField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-sm font-medium text-muted-foreground">{label}</p>
-      <div className="text-sm font-normal text-foreground">{children}</div>
-    </div>
-  );
-}
-
-/* ─── Desktop field ────────────────────────────────────────────────────────── */
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className={lbl}>{label}</p>
-      <div className={val}>{children}</div>
-    </div>
-  );
-}
-
-/* ─── Contact Numbers renderer ─────────────────────────────────────────────── */
-
-function ContactNumbers({ raw }: { raw: unknown }) {
-  if (!raw) return <span>-</span>;
-  let nums: string[] = [];
-  try {
-    const arr = Array.isArray(raw) ? raw : JSON.parse(String(raw));
-    if (Array.isArray(arr)) {
-      nums = (arr as ContactNumber[]).map((e) =>
-        e.label ? `${e.label}: ${e.number}` : e.number,
-      );
+/** Parse the stored contactNumbers JSON into a typed list (empty when absent). */
+function parseContacts(raw: unknown): ContactNumber[] {
+  if (!raw) return [];
+  let arr: unknown = raw;
+  if (!Array.isArray(arr)) {
+    try {
+      arr = JSON.parse(String(raw));
+    } catch {
+      return [];
     }
-  } catch {
-    nums = String(raw)
-      .split(/[,\n]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
   }
-  if (nums.length === 0) return <span>-</span>;
-  if (nums.length === 1) return <span>{nums[0]}</span>;
+  if (!Array.isArray(arr)) return [];
+  return (arr as ContactNumber[])
+    .filter((e) => e && e.number)
+    .map((e) => ({ label: e.label ?? "", number: e.number }));
+}
+
+/* ─── Presence-aware section ───────────────────────────────────────────────── */
+
+type FieldDef = { label: string; value: React.ReactNode; full?: boolean };
+
+type SolarIcon = React.ForwardRefExoticComponent<
+  Omit<IconProps, "ref"> & React.RefAttributes<SVGSVGElement>
+>;
+
+/** Renders a titled card of fields. Returns null when it has nothing to show,
+ *  so category-irrelevant sections (e.g. wedding venue on a MICE lead) vanish. */
+function InfoSection({
+  icon: Icon,
+  title,
+  fields,
+}: {
+  icon: SolarIcon;
+  title: string;
+  fields: FieldDef[];
+}) {
+  if (fields.length === 0) return null;
   return (
-    <ul className="space-y-0.5">
-      {nums.map((n, i) => (
-        <li key={i}>• {n}</li>
-      ))}
-    </ul>
+    <section className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <Icon weight="BoldDuotone" aria-hidden className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
+      </div>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        {fields.map((f, i) => (
+          <div key={i} className={cn(f.full && "sm:col-span-2 lg:col-span-3")}>
+            <dt className={LABEL}>{f.label}</dt>
+            <dd className={VALUE}>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -133,383 +125,209 @@ interface Props {
 /* ─── Component ────────────────────────────────────────────────────────────── */
 
 export function LeadDetailModal({ open, lead, onClose, onEdit }: Props) {
+  // Escape-to-close — hook must run unconditionally (before any early return).
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open || !lead) return null;
 
   const isWedding = lead.category !== "MICE";
+  const CategoryIcon = isWedding ? Heart : Suitcase;
   const salesName = lead.assignedTo
     ? (lead.assignedTo.nickName ?? lead.assignedTo.fullName ?? "-")
     : (lead.createdBy.nickName ?? lead.createdBy.fullName ?? "-");
 
+  const contacts = parseContacts(lead.contactNumbers);
+  const evidenceLink = lead.bookingFeeEvidenceUrl ? (
+    <a
+      href={lead.bookingFeeEvidenceUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+    >
+      <LinkMinimalistic weight="BoldDuotone" aria-hidden className="h-3.5 w-3.5" />
+      Lihat bukti
+    </a>
+  ) : null;
+
+  // ── Client ──
+  const clientFields: FieldDef[] = [];
+  if (contacts.length > 0) {
+    clientFields.push({
+      label: "Kontak",
+      value: (
+        <ul className="space-y-1">
+          {contacts.map((c, i) => (
+            <li key={i} className="flex items-baseline gap-2">
+              {c.label && <span className="text-xs text-muted-foreground">{c.label}</span>}
+              <span className="font-medium tabular-nums">+{c.number}</span>
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+  }
+  if (isWedding) {
+    if (lead.emailCpp) clientFields.push({ label: "Email CPP", value: lead.emailCpp });
+    if (lead.emailCpw) clientFields.push({ label: "Email CPW", value: lead.emailCpw });
+    if (lead.nikCpp) clientFields.push({ label: "NIK CPP", value: <span className="font-mono">{lead.nikCpp}</span> });
+    if (lead.nikCpw) clientFields.push({ label: "NIK CPW", value: <span className="font-mono">{lead.nikCpw}</span> });
+    if (lead.addressCpp) clientFields.push({ label: "Alamat CPP", value: lead.addressCpp, full: true });
+    if (lead.addressCpw) clientFields.push({ label: "Alamat CPW", value: lead.addressCpw, full: true });
+  } else {
+    if (lead.email) clientFields.push({ label: "Email", value: lead.email });
+    if (lead.instansi) clientFields.push({ label: "Segment / Kategori", value: lead.instansi });
+    if (lead.address) clientFields.push({ label: "Alamat", value: lead.address, full: true });
+  }
+
+  // ── Event ──
+  const eventFields: FieldDef[] = [];
+  if (lead.eventDate) {
+    eventFields.push({
+      label: "Tanggal Event",
+      value: (
+        <>
+          {fmtDate(lead.eventDate)}
+          {lead.time ? <span className="text-muted-foreground"> · {lead.time}</span> : null}
+        </>
+      ),
+    });
+  }
+  if (isWedding && lead.weddingSession) {
+    eventFields.push({ label: "Sesi (Utama)", value: fmtSession(lead.weddingSession) });
+  }
+  if (lead.eventDateAlt) {
+    eventFields.push({
+      label: "Tanggal Alternatif",
+      value: (
+        <>
+          {fmtDate(lead.eventDateAlt)}
+          {isWedding && lead.weddingSessionAlt ? (
+            <span className="text-muted-foreground"> · {fmtSession(lead.weddingSessionAlt)}</span>
+          ) : null}
+        </>
+      ),
+    });
+  }
+  if (lead.eventType) eventFields.push({ label: "Event Type", value: lead.eventType.name });
+  if (lead.estimatedPax) {
+    eventFields.push({ label: "Estimasi Tamu", value: `${lead.estimatedPax.toLocaleString("id-ID")} pax` });
+  }
+  if (lead.budgetRange) eventFields.push({ label: "Budget Range", value: lead.budgetRange });
+
+  // ── Venue ──
+  const venueFields: FieldDef[] = [];
+  if (lead.venue) venueFields.push({ label: "Venue Utama", value: lead.venue.name });
+  if (lead.venueSecondary) venueFields.push({ label: "Venue Sekunder", value: lead.venueSecondary.name });
+  if (lead.package) venueFields.push({ label: "Paket", value: lead.package.packageName });
+
+  // ── Kunci Tanggal (only when locked) ──
+  const lockFields: FieldDef[] = [];
+  if (lead.isDateLocked) {
+    lockFields.push({
+      label: "Status",
+      value: (
+        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          Tanggal Dikunci
+        </span>
+      ),
+    });
+    if (lead.bookingFeeAmount) lockFields.push({ label: "Booking Fee", value: fmtPrice(lead.bookingFeeAmount) });
+    if (lead.bookingFeeDate) lockFields.push({ label: "Tanggal Bayar", value: fmtDate(lead.bookingFeeDate) });
+    if (evidenceLink) lockFields.push({ label: "Bukti Pembayaran", value: evidenceLink });
+  }
+
+  // ── Pipeline ──
+  const pipelineFields: FieldDef[] = [];
+  if (lead.sourceOfInformation) {
+    pipelineFields.push({ label: "Sumber Informasi", value: lead.sourceOfInformation.name });
+  }
+  pipelineFields.push({ label: "Sales / PIC", value: salesName });
+  pipelineFields.push({ label: "Dibuat", value: fmtDateTime(lead.createdAt) });
+  if (lead.updatedAt) pipelineFields.push({ label: "Diperbarui", value: fmtDateTime(lead.updatedAt) });
+  if (lead.convertedAt) pipelineFields.push({ label: "Converted", value: fmtDateTime(lead.convertedAt) });
+  if (lead.convertedToCustomer) pipelineFields.push({ label: "Customer", value: lead.convertedToCustomer.name });
+  if (lead.notes) pipelineFields.push({ label: "Catatan", value: lead.notes, full: true });
+
   return (
     <div className="fixed inset-0 z-[60] flex bg-black/40 sm:items-center sm:justify-center">
       <div
-        className="bg-background w-full h-full flex flex-col sm:rounded-xl sm:shadow-lg sm:w-[70%] sm:max-w-[70%] overflow-hidden sm:h-auto sm:max-h-[90vh]"
-        style={{ minWidth: 0 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lead-detail-title"
+        className="relative flex h-full w-full flex-col overflow-hidden bg-background sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-4xl sm:rounded-2xl sm:shadow-lg"
       >
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="flex justify-between items-start px-4 sm:px-8 py-4 border-b sticky top-0 bg-background z-10">
-          <div className="flex flex-col gap-1 flex-1 pr-4 min-w-0">
-            {/* Mobile: truncated */}
-            <h2 className="text-lg font-semibold truncate sm:hidden">{lead.name}</h2>
-            {/* Desktop: full */}
-            <h2 className="hidden sm:block text-xl font-semibold">{lead.name}</h2>
+        {/* Status spine — pipeline color at a glance (signature, matches table cards) */}
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 z-20 w-1.5"
+          style={{ backgroundColor: lead.status.color }}
+        />
 
-            {/* Status + category badges */}
-            <div className="flex items-center gap-2 flex-wrap">
+        {/* ── Header ── */}
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background px-5 py-4 pl-6 sm:px-8 sm:pl-9">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <h2
+              id="lead-detail-title"
+              className="truncate font-heading text-lg font-semibold text-foreground sm:text-xl"
+            >
+              {lead.name}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
                 style={{ backgroundColor: `${lead.status.color}1A`, color: lead.status.color }}
               >
                 <span
-                  aria-hidden="true"
-                  className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                  aria-hidden
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
                   style={{ backgroundColor: lead.status.color }}
                 />
                 {lead.status.name}
               </span>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full">
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+                <CategoryIcon weight="BoldDuotone" aria-hidden className="h-3 w-3" />
                 {isWedding ? "Wedding" : "MICE"}
-              </Badge>
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                Dibuat {fmtDateTime(lead.createdAt)}
               </span>
             </div>
           </div>
 
-          {/* Close button */}
           <button
             onClick={onClose}
-            className="shrink-0 h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center cursor-pointer bg-destructive/10 hover:bg-destructive/20 transition-colors"
-            aria-label="Tutup"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 transition-colors hover:bg-destructive/20 sm:h-11 sm:w-11"
+            aria-label="Tutup detail lead"
           >
-            <CloseCircle weight="BoldDuotone" className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
+            <CloseCircle weight="BoldDuotone" className="h-5 w-5 text-destructive sm:h-6 sm:w-6" />
           </button>
         </div>
 
-        {/* ── Scrollable body ──────────────────────────────────────────────── */}
-        <div className="overflow-y-auto flex-1 px-4 sm:px-8 py-4 pb-24 sm:pb-6 space-y-6">
-
-          {/* ── MOBILE: grouped cards ── */}
-          <div className="sm:hidden space-y-4">
-
-            {/* Client */}
-            <MobileCard
-              title="Client"
-              icon={<UserRounded weight="BoldDuotone" className="h-4 w-4" />}
-            >
-              <MobileField label="Nama">
-                {lead.name}
-              </MobileField>
-              <MobileField label="Kontak">
-                <ContactNumbers raw={lead.contactNumbers} />
-              </MobileField>
-              {isWedding ? (
-                <>
-                  {lead.emailCpp && (
-                    <MobileField label="Email CPP">{lead.emailCpp}</MobileField>
-                  )}
-                  {lead.emailCpw && (
-                    <MobileField label="Email CPW">{lead.emailCpw}</MobileField>
-                  )}
-                  {lead.nikCpp && (
-                    <MobileField label="NIK CPP">{lead.nikCpp}</MobileField>
-                  )}
-                  {lead.addressCpp && (
-                    <MobileField label="Alamat CPP">{lead.addressCpp}</MobileField>
-                  )}
-                  {lead.nikCpw && (
-                    <MobileField label="NIK CPW">{lead.nikCpw}</MobileField>
-                  )}
-                  {lead.addressCpw && (
-                    <MobileField label="Alamat CPW">{lead.addressCpw}</MobileField>
-                  )}
-                </>
-              ) : (
-                <>
-                  {lead.email && (
-                    <MobileField label="Email">{lead.email}</MobileField>
-                  )}
-                  {lead.instansi && (
-                    <MobileField label="Instansi">{lead.instansi}</MobileField>
-                  )}
-                  {lead.address && (
-                    <MobileField label="Alamat">{lead.address}</MobileField>
-                  )}
-                </>
-              )}
-            </MobileCard>
-
-            {/* Event */}
-            <MobileCard
-              title="Event"
-              icon={<CalendarMark weight="BoldDuotone" className="h-4 w-4" />}
-            >
-              {lead.eventDate && (
-                <MobileField label="Tanggal Event">
-                  {fmtDate(lead.eventDate)}
-                  {lead.time ? ` · ${lead.time}` : ""}
-                </MobileField>
-              )}
-              {lead.eventDateAlt && (
-                <MobileField label="Tanggal Alternatif">
-                  {fmtDate(lead.eventDateAlt)}
-                  {isWedding && lead.weddingSessionAlt
-                    ? ` · ${fmtSession(lead.weddingSessionAlt)}`
-                    : ""}
-                </MobileField>
-              )}
-              {isWedding && lead.weddingSession && (
-                <MobileField label="Session (Utama)">{fmtSession(lead.weddingSession)}</MobileField>
-              )}
-              {lead.eventType && (
-                <MobileField label="Event Type">{lead.eventType.name}</MobileField>
-              )}
-              {lead.estimatedPax && (
-                <MobileField label="Estimasi Tamu">
-                  {lead.estimatedPax.toLocaleString("id-ID")} pax
-                </MobileField>
-              )}
-              {lead.budgetRange && (
-                <MobileField label="Budget Range">{lead.budgetRange}</MobileField>
-              )}
-            </MobileCard>
-
-            {/* Venue */}
-            <MobileCard
-              title="Venue"
-              icon={<Buildings weight="BoldDuotone" className="h-4 w-4" />}
-            >
-              {lead.venue ? (
-                <MobileField label="Venue Utama">{lead.venue.name}</MobileField>
-              ) : (
-                <MobileField label="Venue Utama"><span className="text-muted-foreground">Belum dipilih</span></MobileField>
-              )}
-              {lead.venueSecondary && (
-                <MobileField label="Venue Sekunder">{lead.venueSecondary.name}</MobileField>
-              )}
-            </MobileCard>
-
-            {/* Kunci Tanggal / Booking Fee */}
-            <MobileCard
-              title="Kunci Tanggal"
-              icon={<Wallet weight="BoldDuotone" className="h-4 w-4" />}
-            >
-              {lead.isDateLocked ? (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary">
-                      Tanggal Dikunci
-                    </span>
-                  </div>
-                  {lead.bookingFeeAmount && (
-                    <MobileField label="Booking Fee">{fmtPrice(lead.bookingFeeAmount)}</MobileField>
-                  )}
-                  {lead.bookingFeeDate && (
-                    <MobileField label="Tanggal Bayar">{fmtDate(lead.bookingFeeDate)}</MobileField>
-                  )}
-                  {lead.bookingFeeEvidenceUrl && (
-                    <MobileField label="Bukti Pembayaran">
-                      <a
-                        href={lead.bookingFeeEvidenceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        <LinkMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
-                        Lihat bukti
-                      </a>
-                    </MobileField>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Belum dikunci</p>
-              )}
-            </MobileCard>
-
-            {/* Pipeline */}
-            <MobileCard
-              title="Pipeline"
-              icon={<ClockCircle weight="BoldDuotone" className="h-4 w-4" />}
-            >
-              <MobileField label="Status">{lead.status.name}</MobileField>
-              {lead.sourceOfInformation && (
-                <MobileField label="Sumber Informasi">{lead.sourceOfInformation.name}</MobileField>
-              )}
-              <MobileField label="Sales / PIC">{salesName}</MobileField>
-              {lead.notes && (
-                <MobileField label="Catatan">{lead.notes}</MobileField>
-              )}
-              {lead.convertedAt && (
-                <MobileField label="Converted">{fmtDateTime(lead.convertedAt)}</MobileField>
-              )}
-              {lead.convertedToCustomer && (
-                <MobileField label="Customer">{lead.convertedToCustomer.name}</MobileField>
-              )}
-              <MobileField label="Dibuat">{fmtDateTime(lead.createdAt)}</MobileField>
-              {lead.updatedAt && (
-                <MobileField label="Diperbarui">{fmtDateTime(lead.updatedAt)}</MobileField>
-              )}
-            </MobileCard>
-          </div>
-
-          {/* ── DESKTOP: 4-column grid sections ── */}
-          <div className="hidden sm:block space-y-8">
-
-            {/* Client */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <UserRounded weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Client</p>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4">
-                <Field label="Nama">{lead.name}</Field>
-                <Field label="Kontak">
-                  <ContactNumbers raw={lead.contactNumbers} />
-                </Field>
-                {isWedding ? (
-                  <>
-                    <Field label="Email CPP">{lead.emailCpp ?? "-"}</Field>
-                    <Field label="Email CPW">{lead.emailCpw ?? "-"}</Field>
-                    <Field label="NIK CPP">{lead.nikCpp ?? "-"}</Field>
-                    <Field label="Alamat CPP">{lead.addressCpp ?? "-"}</Field>
-                    <Field label="NIK CPW">{lead.nikCpw ?? "-"}</Field>
-                    <Field label="Alamat CPW">{lead.addressCpw ?? "-"}</Field>
-                  </>
-                ) : (
-                  <>
-                    <Field label="Email">{lead.email ?? "-"}</Field>
-                    <Field label="Instansi">{lead.instansi ?? "-"}</Field>
-                    <Field label="Alamat">{lead.address ?? "-"}</Field>
-                  </>
-                )}
-              </div>
-            </section>
-
-            <hr className="border-border" />
-
-            {/* Event */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <CalendarMark weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Event</p>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4">
-                <Field label="Tanggal Event">
-                  {fmtDate(lead.eventDate)}
-                  {lead.time ? <span className="text-muted-foreground"> · {lead.time}</span> : null}
-                </Field>
-                <Field label="Tanggal Alternatif">
-                  {fmtDate(lead.eventDateAlt)}
-                  {isWedding && lead.weddingSessionAlt && lead.eventDateAlt ? (
-                    <span className="text-muted-foreground"> · {fmtSession(lead.weddingSessionAlt)}</span>
-                  ) : null}
-                </Field>
-                {isWedding && (
-                  <Field label="Session (Utama)">{fmtSession(lead.weddingSession)}</Field>
-                )}
-                <Field label="Event Type">{lead.eventType?.name ?? "-"}</Field>
-                <Field label="Estimasi Tamu">
-                  {lead.estimatedPax ? `${lead.estimatedPax.toLocaleString("id-ID")} pax` : "-"}
-                </Field>
-                <Field label="Budget Range">{lead.budgetRange ?? "-"}</Field>
-              </div>
-            </section>
-
-            <hr className="border-border" />
-
-            {/* Venue */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Buildings weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Venue</p>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4">
-                <Field label="Venue Utama">{lead.venue?.name ?? "-"}</Field>
-                <Field label="Venue Sekunder">{lead.venueSecondary?.name ?? "-"}</Field>
-                {lead.package && (
-                  <Field label="Paket">{lead.package.packageName}</Field>
-                )}
-              </div>
-            </section>
-
-            <hr className="border-border" />
-
-            {/* Kunci Tanggal */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Wallet weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kunci Tanggal</p>
-              </div>
-              {lead.isDateLocked ? (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4">
-                  <Field label="Status">
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary">
-                      Tanggal Dikunci
-                    </span>
-                  </Field>
-                  <Field label="Booking Fee">{fmtPrice(lead.bookingFeeAmount)}</Field>
-                  <Field label="Tanggal Bayar">{fmtDate(lead.bookingFeeDate)}</Field>
-                  <Field label="Bukti Pembayaran">
-                    {lead.bookingFeeEvidenceUrl ? (
-                      <a
-                        href={lead.bookingFeeEvidenceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        <LinkMinimalistic weight="BoldDuotone" className="h-3.5 w-3.5" />
-                        Lihat bukti
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </Field>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Tanggal belum dikunci.</p>
-              )}
-            </section>
-
-            <hr className="border-border" />
-
-            {/* Pipeline */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <ClockCircle weight="BoldDuotone" className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline</p>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4">
-                <Field label="Status">{lead.status.name}</Field>
-                <Field label="Sumber Informasi">{lead.sourceOfInformation?.name ?? "-"}</Field>
-                <Field label="Sales / PIC">{salesName}</Field>
-                <Field label="Dibuat">{fmtDateTime(lead.createdAt)}</Field>
-                {lead.convertedAt && (
-                  <Field label="Converted">{fmtDateTime(lead.convertedAt)}</Field>
-                )}
-                {lead.convertedToCustomer && (
-                  <Field label="Customer">{lead.convertedToCustomer.name}</Field>
-                )}
-                {lead.notes && (
-                  <div className="col-span-2 lg:col-span-4">
-                    <Field label="Catatan">{lead.notes}</Field>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
+        {/* ── Body — single presence-aware tree, responsive across all breakpoints ── */}
+        <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-4 py-4 pb-24 pl-5 sm:px-8 sm:pb-6 sm:pl-9">
+          <InfoSection icon={UserRounded} title="Client" fields={clientFields} />
+          <InfoSection icon={CalendarMark} title="Event" fields={eventFields} />
+          <InfoSection icon={Buildings} title="Venue" fields={venueFields} />
+          <InfoSection icon={Wallet} title="Kunci Tanggal" fields={lockFields} />
+          <InfoSection icon={ClockCircle} title="Pipeline" fields={pipelineFields} />
         </div>
 
-        {/* ── Footer actions ─────────────────────────────────────────────────── */}
+        {/* ── Footer ── */}
         {onEdit && (
-          <div className="shrink-0 border-t px-4 sm:px-8 py-3 flex items-center justify-end gap-2 bg-background">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-background px-5 py-3 pl-6 sm:px-8 sm:pl-9">
             <Button
               variant="outline"
+              className="rounded-full"
               onClick={() => {
                 onClose();
                 onEdit(lead);
               }}
             >
-              <Pen weight="BoldDuotone" className="h-4 w-4 mr-2" />
+              <Pen weight="BoldDuotone" aria-hidden className="mr-2 h-4 w-4" />
               Edit Lead
             </Button>
           </div>

@@ -322,35 +322,9 @@ export function LeadsFilters({
 
       {/* ════════════════════════════════════════════════════════════════
           DESKTOP TOOLBAR  (visible sm+)
-          Single row: [view toggle] [count] | [refresh] [filter] [search] →→ [add]
+          Single row: [filter] [search] [refresh] →→ [add]
       ════════════════════════════════════════════════════════════════ */}
       <div className="hidden sm:flex items-center gap-2 px-6 pb-3">
-        {/* Count badge */}
-        <span className="text-xs font-medium bg-muted text-muted-foreground px-3 py-1 border border-border rounded-full shrink-0">
-          {totalFiltered} leads
-        </span>
-
-        {/* Divider */}
-        <div className="w-px h-5 bg-border shrink-0 mx-1" aria-hidden="true" />
-
-        {/* Refresh */}
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          aria-label="Muat ulang data lead"
-          title="Muat ulang"
-          className="shrink-0"
-        >
-          <Refresh
-            weight="BoldDuotone"
-            aria-hidden="true"
-            className={cn("h-4 w-4", isRefreshing && "animate-spin")}
-          />
-        </Button>
-
         {/* Filter popover */}
         <Popover>
           <PopoverTrigger
@@ -402,6 +376,24 @@ export function LeadsFilters({
             className="pl-9 w-48"
           />
         </div>
+
+        {/* Refresh — right of search, grouped with filter & search */}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          aria-label="Muat ulang data lead"
+          title="Muat ulang"
+          className="shrink-0"
+        >
+          <Refresh
+            weight="BoldDuotone"
+            aria-hidden="true"
+            className={cn("h-4 w-4", isRefreshing && "animate-spin")}
+          />
+        </Button>
 
         <Button onClick={onAdd} className="ml-auto shrink-0">
           <AddCircle weight="BoldDuotone" aria-hidden="true" className="h-4 w-4" />
